@@ -18,7 +18,7 @@ var configureCmd = &cobra.Command{
 		cfg := config.Load()
 
 		if url, _ := cmd.Flags().GetString("url"); url != "" {
-			cfg.ServerURL = url
+			cfg.AgentspanURL = url
 		}
 
 		if err := config.Save(cfg); err != nil {
@@ -26,7 +26,7 @@ var configureCmd = &cobra.Command{
 		}
 
 		color.Green("Configuration saved!")
-		fmt.Printf("  Server URL: %s\n", cfg.ServerURL)
+		fmt.Printf("  Agentspan URL: %s\n", cfg.AgentspanURL)
 		return nil
 	},
 }

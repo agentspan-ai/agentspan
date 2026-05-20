@@ -90,7 +90,7 @@ func New(version string) *AppModel {
 	}
 
 	m.dashboard = views.NewDashboard(c)
-	m.agents = views.NewAgentsWithConfig(c, cfg.ServerURL)
+	m.agents = views.NewAgentsWithConfig(c, cfg.AgentspanURL)
 	m.executions = views.NewExecutions(c)
 	m.status = views.NewStatus(c, "")
 	m.server = views.NewServer(c)
@@ -335,7 +335,7 @@ func (m *AppModel) checkViewNav(key string) *NavigateMsg {
 		if key == "s" && m.executions.WantsStream("s") {
 			if id := m.executions.SelectedExecutionID(); id != "" {
 				return &NavigateMsg{View: ViewAgents, ExecutionID: id,
-					AgentName: "stream:" + m.cfg.ServerURL}
+					AgentName: "stream:" + m.cfg.AgentspanURL}
 			}
 		}
 	}
@@ -371,9 +371,9 @@ func (m *AppModel) handleNavigation(nav NavigateMsg) (tea.Model, tea.Cmd) {
 			serverURL := strings.TrimPrefix(nav.AgentName, "stream:")
 			m.agents = views.NewAgentsStream(m.client, nav.ExecutionID, "", serverURL)
 		} else if nav.OpenRun {
-			m.agents = views.NewAgentsRunWithConfig(m.client, nav.AgentName, m.cfg.ServerURL)
+			m.agents = views.NewAgentsRunWithConfig(m.client, nav.AgentName, m.cfg.AgentspanURL)
 		} else {
-			m.agents = views.NewAgentsWithConfig(m.client, m.cfg.ServerURL)
+			m.agents = views.NewAgentsWithConfig(m.client, m.cfg.AgentspanURL)
 		}
 		m.agents, _ = m.agents.Update(sizeMsg)
 		initCmd = m.agents.Init()

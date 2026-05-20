@@ -11,7 +11,7 @@ import (
 func getConfig() *config.Config {
 	cfg := config.Load()
 	if serverURL != "" {
-		cfg.ServerURL = serverURL
+		cfg.AgentspanURL = serverURL
 	}
 	return cfg
 }

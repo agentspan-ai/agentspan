@@ -347,7 +347,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	cfg := getConfig()
-	serverAddr := cfg.ServerURL
+	serverAddr := cfg.AgentspanURL
 	serverOk := checkServer(serverAddr)
 	if serverOk {
 		green.Printf("  ✓ Server reachable at %s\n", serverAddr)

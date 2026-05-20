@@ -18,14 +18,21 @@ import (
 )
 
 type Client struct {
-	baseURL    string
+	baseURL    string // = AgentspanURL, e.g. http://localhost:6767/api
+	rootURL    string // server root without /api suffix, for /health
 	httpClient *http.Client
 	apiKey     string
 }
 
 func New(cfg *config.Config) *Client {
+	apiURL := strings.TrimRight(cfg.AgentspanURL, "/")
+	rootURL := apiURL
+	if strings.HasSuffix(apiURL, "/api") {
+		rootURL = strings.TrimSuffix(apiURL, "/api")
+	}
 	return &Client{
-		baseURL:    strings.TrimRight(cfg.ServerURL, "/"),
+		baseURL:    apiURL,
+		rootURL:    rootURL,
 		httpClient: &http.Client{Timeout: 120 * time.Second},
 		apiKey:     cfg.APIKey,
 	}
@@ -66,9 +73,13 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 
 // HealthCheck pings the server
 func (c *Client) HealthCheck() error {
-	resp, err := c.doRequest("GET", "/health", nil)
+	req, err := http.NewRequest("GET", c.rootURL+"/health", nil)
 	if err != nil {
 		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
 	}
 	resp.Body.Close()
 	return nil
@@ -89,7 +100,7 @@ type StartResponse struct {
 
 // Start compiles, registers, and starts an agent execution
 func (c *Client) Start(req *StartRequest) (*StartResponse, error) {
-	resp, err := c.doRequest("POST", "/api/agent/start", req)
+	resp, err := c.doRequest("POST", "/agent/start", req)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +115,7 @@ func (c *Client) Start(req *StartRequest) (*StartResponse, error) {
 // StartFramework starts a framework agent (skill, openai, etc.) with a raw payload.
 // Framework agents use top-level "framework" + "rawConfig" instead of "agentConfig".
 func (c *Client) StartFramework(payload map[string]interface{}) (*StartResponse, error) {
-	resp, err := c.doRequest("POST", "/api/agent/start", payload)
+	resp, err := c.doRequest("POST", "/agent/start", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +129,7 @@ func (c *Client) StartFramework(payload map[string]interface{}) (*StartResponse,
 
 // PollTask polls for a task of the given type. Returns nil if no task available.
 func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
-	resp, err := c.doRequest("GET", "/api/tasks/poll/"+url.PathEscape(taskType), nil)
+	resp, err := c.doRequest("GET", "/tasks/poll/"+url.PathEscape(taskType), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +146,7 @@ func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
 
 // UpdateTask reports the result of a completed task.
 func (c *Client) UpdateTask(result map[string]interface{}) error {
-	resp, err := c.doRequest("POST", "/api/tasks", result)
+	resp, err := c.doRequest("POST", "/tasks", result)
 	if err != nil {
 		return err
 	}
@@ -146,7 +157,7 @@ func (c *Client) UpdateTask(result map[string]interface{}) error {
 // Compile compiles an agent config to an execution plan
 func (c *Client) Compile(agentConfig map[string]interface{}) (map[string]interface{}, error) {
 	body := map[string]interface{}{"agentConfig": agentConfig}
-	resp, err := c.doRequest("POST", "/api/agent/compile", body)
+	resp, err := c.doRequest("POST", "/agent/compile", body)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +183,7 @@ type AgentSummary struct {
 
 // ListAgents returns all registered agents
 func (c *Client) ListAgents() ([]AgentSummary, error) {
-	resp, err := c.doRequest("GET", "/api/agent/list", nil)
+	resp, err := c.doRequest("GET", "/agent/list", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +197,7 @@ func (c *Client) ListAgents() ([]AgentSummary, error) {
 
 // GetAgent returns the definition for a named agent
 func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, error) {
-	path := "/api/agent/" + url.PathEscape(name)
+	path := "/agent/" + url.PathEscape(name)
 	if version != nil {
 		path += fmt.Sprintf("?version=%d", *version)
 	}
@@ -204,7 +215,7 @@ func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, er
 
 // DeleteAgent removes an agent definition
 func (c *Client) DeleteAgent(name string, version *int) error {
-	path := "/api/agent/" + url.PathEscape(name)
+	path := "/agent/" + url.PathEscape(name)
 	if version != nil {
 		path += fmt.Sprintf("?version=%d", *version)
 	}
@@ -252,7 +263,7 @@ func (c *Client) SearchExecutions(start, size int, agentName, status, freeText s
 	if freeText != "" {
 		params.Set("freeText", freeText)
 	}
-	resp, err := c.doRequest("GET", "/api/agent/executions?"+params.Encode(), nil)
+	resp, err := c.doRequest("GET", "/agent/executions?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +296,7 @@ type CurrentTask struct {
 
 // GetExecutionDetail returns detailed status for an execution
 func (c *Client) GetExecutionDetail(executionId string) (*ExecutionDetail, error) {
-	resp, err := c.doRequest("GET", "/api/agent/executions/"+url.PathEscape(executionId), nil)
+	resp, err := c.doRequest("GET", "/agent/executions/"+url.PathEscape(executionId), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +310,7 @@ func (c *Client) GetExecutionDetail(executionId string) (*ExecutionDetail, error
 
 // Status gets the execution status
 func (c *Client) Status(executionID string) (map[string]interface{}, error) {
-	resp, err := c.doRequest("GET", "/api/agent/"+url.PathEscape(executionID)+"/status", nil)
+	resp, err := c.doRequest("GET", "/agent/"+url.PathEscape(executionID)+"/status", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +329,7 @@ func (c *Client) Respond(executionID string, approved bool, reason, message stri
 		"reason":   reason,
 		"message":  message,
 	}
-	resp, err := c.doRequest("POST", "/api/agent/"+url.PathEscape(executionID)+"/respond", body)
+	resp, err := c.doRequest("POST", "/agent/"+url.PathEscape(executionID)+"/respond", body)
 	if err != nil {
 		return err
 	}
@@ -341,7 +352,7 @@ func (c *Client) Stream(executionID string, lastEventID string, events chan<- SS
 
 		streamClient := &http.Client{Timeout: 0} // no timeout for SSE
 
-		req, err := http.NewRequest("GET", c.baseURL+"/api/agent/stream/"+url.PathEscape(executionID), nil)
+		req, err := http.NewRequest("GET", c.baseURL+"/agent/stream/"+url.PathEscape(executionID), nil)
 		if err != nil {
 			done <- err
 			return
@@ -430,7 +441,7 @@ type LoginResponse struct {
 
 // Login authenticates with the server and returns a JWT.
 func (c *Client) Login(username, password string) (*LoginResponse, error) {
-	resp, err := c.doRequest("POST", "/api/auth/login", &LoginRequest{
+	resp, err := c.doRequest("POST", "/auth/login", &LoginRequest{
 		Username: username,
 		Password: password,
 	})
@@ -473,7 +484,7 @@ type BindingSetRequest struct {
 
 // ListCredentials returns all stored credential metadata.
 func (c *Client) ListCredentials() ([]CredentialMeta, error) {
-	resp, err := c.doRequest("GET", "/api/credentials", nil)
+	resp, err := c.doRequest("GET", "/credentials", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +498,7 @@ func (c *Client) ListCredentials() ([]CredentialMeta, error) {
 
 // SetCredential stores a credential value on the server.
 func (c *Client) SetCredential(name, value string) error {
-	resp, err := c.doRequest("POST", "/api/credentials", &CredentialSetRequest{
+	resp, err := c.doRequest("POST", "/credentials", &CredentialSetRequest{
 		Name:  name,
 		Value: value,
 	})
@@ -500,7 +511,7 @@ func (c *Client) SetCredential(name, value string) error {
 
 // DeleteCredential removes a stored credential by name.
 func (c *Client) DeleteCredential(name string) error {
-	resp, err := c.doRequest("DELETE", "/api/credentials/"+url.PathEscape(name), nil)
+	resp, err := c.doRequest("DELETE", "/credentials/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err
 	}
@@ -510,7 +521,7 @@ func (c *Client) DeleteCredential(name string) error {
 
 // ListBindings returns all logical key → store name bindings.
 func (c *Client) ListBindings() ([]BindingMeta, error) {
-	resp, err := c.doRequest("GET", "/api/credentials/bindings", nil)
+	resp, err := c.doRequest("GET", "/credentials/bindings", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +535,7 @@ func (c *Client) ListBindings() ([]BindingMeta, error) {
 
 // SetBinding sets (or updates) a logical key → store name binding.
 func (c *Client) SetBinding(logicalKey, storeName string) error {
-	resp, err := c.doRequest("PUT", "/api/credentials/bindings/"+url.PathEscape(logicalKey),
+	resp, err := c.doRequest("PUT", "/credentials/bindings/"+url.PathEscape(logicalKey),
 		&BindingSetRequest{StoreName: storeName})
 	if err != nil {
 		return err

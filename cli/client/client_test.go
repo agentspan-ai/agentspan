@@ -18,7 +18,7 @@ func newTestServer(t *testing.T, handler http.Handler) (*httptest.Server, *Clien
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	c := New(&config.Config{ServerURL: srv.URL})
+	c := New(&config.Config{AgentspanURL: srv.URL + "/api"})
 	return srv, c
 }
 
@@ -332,7 +332,7 @@ func TestDoRequest_SendsBearerToken(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := New(&config.Config{ServerURL: srv.URL, APIKey: "my-jwt"})
+	c := New(&config.Config{AgentspanURL: srv.URL + "/api", APIKey: "my-jwt"})
 	resp, err := c.doRequest("GET", "/health", nil)
 	if err != nil {
 		t.Fatalf("doRequest: %v", err)

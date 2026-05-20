@@ -11,7 +11,7 @@ import (
 )
 
 type Config struct {
-	ServerURL    string `json:"server_url"`
+	AgentspanURL string `json:"agentspan_url"`
 	APIKey       string `json:"api_key,omitempty"`
 	ConductorURL string `json:"conductor_url,omitempty"`
 	LLMModel     string `json:"llm_model,omitempty"`
@@ -21,7 +21,7 @@ type Config struct {
 // IsLocalhost returns true when the server URL points to a loopback address
 // (localhost, 127.0.0.1, or ::1) over any scheme (http or https).
 func (c *Config) IsLocalhost() bool {
-	u, err := url.Parse(c.ServerURL)
+	u, err := url.Parse(c.AgentspanURL)
 	if err != nil {
 		return false
 	}
@@ -30,14 +30,14 @@ func (c *Config) IsLocalhost() bool {
 }
 
 const (
-	DefaultServerURL    = "http://localhost:6767"
+	DefaultAgentspanURL = "http://localhost:6767/api"
 	DefaultConductorURL = "http://localhost:8080/api"
 	DefaultValkeyURL    = "redis://127.0.0.1:6379"
 )
 
 func DefaultConfig() *Config {
 	return &Config{
-		ServerURL:    DefaultServerURL,
+		AgentspanURL: DefaultAgentspanURL,
 		ConductorURL: DefaultConductorURL,
 		ValkeyURL:    DefaultValkeyURL,
 	}
@@ -57,9 +57,9 @@ func Load() *Config {
 
 	// Env vars override
 	if url := os.Getenv("AGENTSPAN_SERVER_URL"); url != "" {
-		cfg.ServerURL = url
+		cfg.AgentspanURL = url
 	} else if url := os.Getenv("AGENT_SERVER_URL"); url != "" {
-		cfg.ServerURL = url
+		cfg.AgentspanURL = url
 	}
 	if apiKey := os.Getenv("AGENTSPAN_API_KEY"); apiKey != "" {
 		cfg.APIKey = apiKey
@@ -78,8 +78,8 @@ func Load() *Config {
 	}
 	var fileCfg Config
 	if json.Unmarshal(data, &fileCfg) == nil {
-		if cfg.ServerURL == DefaultServerURL && fileCfg.ServerURL != "" {
-			cfg.ServerURL = fileCfg.ServerURL
+		if cfg.AgentspanURL == DefaultAgentspanURL && fileCfg.AgentspanURL != "" {
+			cfg.AgentspanURL = fileCfg.AgentspanURL
 		}
 		if cfg.APIKey == "" {
 			cfg.APIKey = fileCfg.APIKey

@@ -186,7 +186,7 @@ func TestPTYDashboardRunStartsAgentExecution(t *testing.T) {
 	defer srv.Close()
 
 	s := startPTYSession(t, bin, tuiRuntimeEnv(t, map[string]string{
-		"AGENTSPAN_SERVER_URL": srv.URL,
+		"AGENTSPAN_SERVER_URL": srv.URL + "/api",
 		"AGENTSPAN_THEME":      "light",
 	}))
 	defer s.close()
@@ -229,7 +229,7 @@ func TestPTYAgentsRunPromptsForInputImmediately(t *testing.T) {
 	defer srv.Close()
 
 	s := startPTYSession(t, bin, tuiRuntimeEnv(t, map[string]string{
-		"AGENTSPAN_SERVER_URL": srv.URL,
+		"AGENTSPAN_SERVER_URL": srv.URL + "/api",
 		"AGENTSPAN_THEME":      "light",
 	}))
 	defer s.close()

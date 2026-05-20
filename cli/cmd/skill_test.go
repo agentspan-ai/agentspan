@@ -596,7 +596,7 @@ func TestSkillRun_Integration(t *testing.T) {
 	skillModel = "openai/gpt-4o"
 	skillStream = false
 	skillTimeout = 10
-	serverURL = srv.URL
+	serverURL = srv.URL + "/api"
 
 	err := runSkillRun(nil, []string{dir, "test prompt"})
 	if err != nil {
@@ -644,7 +644,7 @@ func TestSkillLoad_Integration(t *testing.T) {
 	}()
 
 	skillModel = "openai/gpt-4o"
-	serverURL = srv.URL
+	serverURL = srv.URL + "/api"
 
 	err := runSkillLoad(nil, []string{dir})
 	if err != nil {

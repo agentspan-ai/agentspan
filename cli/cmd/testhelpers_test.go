@@ -18,10 +18,11 @@ func newTempHome(t *testing.T) string {
 }
 
 // saveTestConfig saves a config pointing at the given server URL with a test token.
+// serverURL should be the test server root (no /api suffix); /api is appended here.
 func saveTestConfig(t *testing.T, serverURL string) *config.Config {
 	t.Helper()
 	cfg := config.DefaultConfig()
-	cfg.ServerURL = serverURL
+	cfg.AgentspanURL = serverURL + "/api"
 	cfg.APIKey = "test-token"
 	if err := config.Save(cfg); err != nil {
 		t.Fatalf("saveTestConfig: %v", err)
@@ -30,9 +31,10 @@ func saveTestConfig(t *testing.T, serverURL string) *config.Config {
 }
 
 // newTestConfig returns a config pointing at the given server URL without writing to disk.
+// serverURL should be the test server root (no /api suffix); /api is appended here.
 func newTestConfig(t *testing.T, serverURL string) *config.Config {
 	t.Helper()
 	cfg := config.DefaultConfig()
-	cfg.ServerURL = serverURL
+	cfg.AgentspanURL = serverURL + "/api"
 	return cfg
 }

@@ -286,7 +286,7 @@ func TestNoAuthHeaderOnLocalhostAnonymous(t *testing.T) {
 
 	// Config with no api_key — anonymous mode
 	cfg := config.DefaultConfig()
-	cfg.ServerURL = srv.URL
+	cfg.AgentspanURL = srv.URL + "/api"
 	if err := config.Save(cfg); err != nil {
 		t.Fatalf("save: %v", err)
 	}
