@@ -134,29 +134,50 @@ public sealed class Generate
 
 /// <summary>
 /// A single tool invocation within a plan step. Exactly one of
-/// <c>Args</c> or <c>Generate</c> should be set.
+/// <c>Args</c> (literal call) or <c>Generate</c> (LLM-driven args) is
+/// set, enforced structurally by the constructor / factory.
+///
+/// <para>Construct via <c>new Op(tool, args)</c> for a deterministic
+/// call, or <c>Op.WithGenerate(tool, generate)</c> for an LLM-driven
+/// one. There is no bare <c>new Op(tool)</c> — that loophole let a
+/// neither-set Op exist and only fail server-side at PAC compile.</para>
 /// </summary>
 public sealed class Op
 {
     public string Tool { get; }
-    public Dictionary<string, object?>? Args { get; init; }
-    public Generate? Generate { get; init; }
+    public Dictionary<string, object?>? Args { get; }
+    public Generate? Generate { get; }
 
-    public Op(string tool)
+    /// <summary>Op with literal args — runs the tool deterministically.</summary>
+    public Op(string tool, Dictionary<string, object?> args)
     {
+        if (args is null)
+            throw new ArgumentNullException(
+                nameof(args),
+                $"Op('{tool}'): exactly one of args or generate must be set");
         Tool = tool;
+        Args = args;
     }
 
-    public Op(string tool, Dictionary<string, object?> args) : this(tool)
+    private Op(string tool, Generate generate)
     {
-        Args = args;
+        Tool = tool;
+        Generate = generate;
+    }
+
+    /// <summary>Op whose args are produced at runtime by an LLM call.</summary>
+    public static Op WithGenerate(string tool, Generate generate)
+    {
+        if (generate is null)
+            throw new ArgumentNullException(
+                nameof(generate),
+                $"Op('{tool}'): exactly one of args or generate must be set");
+        return new Op(tool, generate);
     }
 
     public JsonObject ToJson()
     {
-        if (Args is not null && Generate is not null)
-            throw new InvalidOperationException(
-                $"Op('{Tool}'): set exactly one of Args or Generate, not both");
+        // Invariant: exactly one of Args / Generate set — enforced by ctors.
         var obj = new JsonObject { ["tool"] = Tool };
         if (Args is not null) obj["args"] = PlanValues.SerializeArgs(Args);
         if (Generate is not null) obj["generate"] = Generate.ToJson();
