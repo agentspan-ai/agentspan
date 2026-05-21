@@ -298,8 +298,20 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
     /**
      * Create a fresh AIModel instance with a per-user API key and optional base URL.
+     *
+     * <p>The returned model is wrapped in {@link AuthClarifyingAIModel} so a
+     * 401 from the upstream provider (caused by a typo, expired, or revoked
+     * key) surfaces with a clear remediation message instead of Spring AI's
+     * misleading "cannot retry due to server authentication" mid-stream error.</p>
      */
     private AIModel createModelWithKey(String provider, String apiKey, String baseUrl) {
+        AIModel raw = createRawModelWithKey(provider, apiKey, baseUrl);
+        if (raw == null) return null;
+        String envVar = PROVIDER_TO_ENV_VAR.getOrDefault(provider.toLowerCase(), "<api key>");
+        return new AuthClarifyingAIModel(raw, provider, envVar);
+    }
+
+    private AIModel createRawModelWithKey(String provider, String apiKey, String baseUrl) {
         ModelConfiguration<? extends AIModel> config =
                 switch (provider.toLowerCase()) {
                     case "openai" -> new OpenAIConfiguration(apiKey, baseUrl, null);
