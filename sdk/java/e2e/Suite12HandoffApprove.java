@@ -89,9 +89,9 @@ class Suite12HandoffApprove extends BaseTest {
         try (AgentStream stream = runtime.stream(support,
                 "Please run: UPDATE users SET active = true WHERE id = 1")) {
 
-            String topWorkflowId = stream.getWorkflowId();
-            assertNotNull(topWorkflowId);
-            assertFalse(topWorkflowId.isEmpty());
+            String topExecutionId = stream.getExecutionId();
+            assertNotNull(topExecutionId);
+            assertFalse(topExecutionId.isEmpty());
 
             AgentEvent waiting = null;
             for (AgentEvent event : stream) {
@@ -104,12 +104,12 @@ class Suite12HandoffApprove extends BaseTest {
 
             assertNotNull(waiting, "expected a WAITING event from the sub-agent's approval-required tool");
 
-            String waitingExecId = waiting.getWorkflowId();
+            String waitingExecId = waiting.getExecutionId();
             assertNotNull(waitingExecId, "WAITING event must carry an execution id");
             assertFalse(waitingExecId.isEmpty(), "WAITING event execution id must not be empty");
-            assertNotEquals(topWorkflowId, waitingExecId,
+            assertNotEquals(topExecutionId, waitingExecId,
                 "under HANDOFF the HUMAN task lives in the sub-execution, "
-                + "so the WAITING event id must differ from the top-level workflow id");
+                + "so the WAITING event id must differ from the top-level execution id");
         }
     }
 
@@ -170,7 +170,7 @@ class Suite12HandoffApprove extends BaseTest {
                 /*args*/ null,
                 /*result*/ null,
                 /*output*/ null,
-                /*workflowId*/ "",
+                /*executionId*/ "",
                 /*guardrailName*/ null,
                 /*target*/ null
             );
@@ -180,8 +180,8 @@ class Suite12HandoffApprove extends BaseTest {
                 () -> stream.approve(eventWithNoId));
 
             assertNotNull(thrown.getMessage());
-            assertTrue(thrown.getMessage().contains("workflow id"),
-                "exception should mention the missing workflow id, got: " + thrown.getMessage());
+            assertTrue(thrown.getMessage().contains("execution id"),
+                "exception should mention the missing execution id, got: " + thrown.getMessage());
         }
     }
 }

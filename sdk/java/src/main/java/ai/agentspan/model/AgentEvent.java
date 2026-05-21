@@ -21,7 +21,7 @@ public class AgentEvent {
     private final Map<String, Object> args;
     private final Object result;
     private final Object output;
-    private final String workflowId;
+    private final String executionId;
     private final String guardrailName;
     private final String target;
 
@@ -32,7 +32,7 @@ public class AgentEvent {
             Map<String, Object> args,
             Object result,
             Object output,
-            String workflowId,
+            String executionId,
             String guardrailName,
             String target) {
         this.type = type;
@@ -41,7 +41,7 @@ public class AgentEvent {
         this.args = args;
         this.result = result;
         this.output = output;
-        this.workflowId = workflowId;
+        this.executionId = executionId;
         this.guardrailName = guardrailName;
         this.target = target;
     }
@@ -52,7 +52,7 @@ public class AgentEvent {
     public Map<String, Object> getArgs() { return args; }
     public Object getResult() { return result; }
     public Object getOutput() { return output; }
-    public String getWorkflowId() { return workflowId; }
+    public String getExecutionId() { return executionId; }
     public String getGuardrailName() { return guardrailName; }
     public String getTarget() { return target; }
 

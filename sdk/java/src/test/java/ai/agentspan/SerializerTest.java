@@ -791,4 +791,49 @@ class SerializerTest {
         assertEquals("external", gMap.get("guardrailType"));
         assertEquals("input", gMap.get("position"));
     }
+
+    // ── retry policy serialization ────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void tool_retry_policy_serialized_when_non_default() {
+        ToolDef t = ToolDef.builder()
+                .name("fetch_data")
+                .description("Fetch data")
+                .inputSchema(Map.of("type", "object", "properties", Map.of()))
+                .retryCount(5)
+                .retryDelaySeconds(10)
+                .retryPolicy("exponential_backoff")
+                .build();
+        Agent agent = Agent.builder()
+                .name("a").model("openai/gpt-4o")
+                .tools(List.of(t))
+                .build();
+        Map<String, Object> out = ser.serialize(agent);
+        List<Map<String, Object>> tools = (List<Map<String, Object>>) out.get("tools");
+        Map<String, Object> toolMap = tools.get(0);
+        assertEquals(5, toolMap.get("retryCount"));
+        assertEquals(10, toolMap.get("retryDelaySeconds"));
+        assertEquals("exponential_backoff", toolMap.get("retryPolicy"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void tool_retry_policy_omitted_when_default() {
+        ToolDef t = ToolDef.builder()
+                .name("fetch_data")
+                .description("Fetch data")
+                .inputSchema(Map.of("type", "object", "properties", Map.of()))
+                .build();
+        Agent agent = Agent.builder()
+                .name("a").model("openai/gpt-4o")
+                .tools(List.of(t))
+                .build();
+        Map<String, Object> out = ser.serialize(agent);
+        List<Map<String, Object>> tools = (List<Map<String, Object>>) out.get("tools");
+        Map<String, Object> toolMap = tools.get(0);
+        assertFalse(toolMap.containsKey("retryCount"));
+        assertFalse(toolMap.containsKey("retryDelaySeconds"));
+        assertFalse(toolMap.containsKey("retryPolicy"));
+    }
 }

@@ -265,6 +265,12 @@ export interface ToolDef {
   config?: Record<string, unknown>;
   /** Stateful tool — worker registers under execution's domain for isolation. */
   stateful?: boolean;
+  /** Number of times Conductor retries the task on failure. */
+  retryCount?: number;
+  /** Seconds between retries. */
+  retryDelaySeconds?: number;
+  /** Retry strategy: "fixed", "linear_backoff", or "exponential_backoff". */
+  retryPolicy?: string;
 }
 
 // ── Agent result ─────────────────────────────────────────

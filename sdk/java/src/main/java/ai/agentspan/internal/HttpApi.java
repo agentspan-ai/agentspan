@@ -42,7 +42,7 @@ public class HttpApi {
      * @param agentConfig serialized agent configuration
      * @param prompt      user prompt
      * @param sessionId   optional session ID
-     * @return server response containing workflowId
+     * @return server response containing executionId
      */
     public Map<String, Object> startAgent(Map<String, Object> agentConfig, String prompt, String sessionId) {
         return startAgent(agentConfig, prompt, sessionId, null);
@@ -60,7 +60,7 @@ public class HttpApi {
      * @param prompt      user prompt
      * @param sessionId   optional session ID
      * @param runId       optional per-execution UUID — set for stateful agents
-     * @return server response containing workflowId
+     * @return server response containing executionId
      */
     public Map<String, Object> startAgent(
             Map<String, Object> agentConfig, String prompt, String sessionId, String runId) {
@@ -94,29 +94,29 @@ public class HttpApi {
     }
 
     /**
-     * Get the current status of an agent workflow.
+     * Get the current status of an agent execution.
      *
-     * @param workflowId the workflow ID
+     * @param executionId the execution ID
      * @return status response map
      */
-    public Map<String, Object> getAgentStatus(String workflowId) {
-        return get("/api/agent/" + workflowId + "/status");
+    public Map<String, Object> getAgentStatus(String executionId) {
+        return get("/api/agent/" + executionId + "/status");
     }
 
     /**
      * Respond to a waiting agent (approve/reject a tool or send a message).
      *
-     * @param workflowId the workflow ID
-     * @param approved   whether to approve
-     * @param reason     optional rejection reason
+     * @param executionId the execution ID
+     * @param approved    whether to approve
+     * @param reason      optional rejection reason
      */
-    public void respondToAgent(String workflowId, boolean approved, String reason) {
+    public void respondToAgent(String executionId, boolean approved, String reason) {
         Map<String, Object> body = new HashMap<>();
         body.put("approved", approved);
         if (reason != null && !reason.isEmpty()) {
             body.put("reason", reason);
         }
-        post("/api/agent/" + workflowId + "/respond", body);
+        post("/api/agent/" + executionId + "/respond", body);
     }
 
     /**
@@ -125,11 +125,11 @@ public class HttpApi {
      * <p>Used for structured responses such as manual agent selection:
      * {@code {"selected": "writer"}}.
      *
-     * @param workflowId the workflow ID
-     * @param data       the response payload
+     * @param executionId the execution ID
+     * @param data        the response payload
      */
-    public void respondWithData(String workflowId, Map<String, Object> data) {
-        post("/api/agent/" + workflowId + "/respond", data);
+    public void respondWithData(String executionId, Map<String, Object> data) {
+        post("/api/agent/" + executionId + "/respond", data);
     }
 
     /**
@@ -252,13 +252,13 @@ public class HttpApi {
     }
 
     /**
-     * Get the workflow status for resume (extracts domain/run_id).
+     * Get the workflow data for an execution (extracts domain/run_id).
      *
-     * @param workflowId the workflow ID
+     * @param executionId the execution ID
      * @return workflow data map
      */
-    public Map<String, Object> getWorkflow(String workflowId) {
-        return get("/api/workflow/" + workflowId);
+    public Map<String, Object> getWorkflow(String executionId) {
+        return get("/api/workflow/" + executionId);
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────
@@ -328,9 +328,9 @@ public class HttpApi {
             if (responseBody.startsWith("{")) {
                 return JsonMapper.fromJson(responseBody, Map.class);
             } else if (responseBody.startsWith("\"") || (!responseBody.startsWith("[") && !responseBody.startsWith("{"))) {
-                // Plain string response (e.g., workflow ID)
+                // Plain string response (e.g., execution ID)
                 Map<String, Object> result = new HashMap<>();
-                result.put("workflowId", responseBody.replace("\"", ""));
+                result.put("executionId", responseBody.replace("\"", ""));
                 return result;
             } else {
                 return JsonMapper.fromJson(responseBody, Map.class);

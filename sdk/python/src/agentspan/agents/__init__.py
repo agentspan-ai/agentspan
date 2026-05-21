@@ -166,7 +166,7 @@ from agentspan.agents.runtime.discovery import discover_agents
 
 # MCP discovery utilities
 from agentspan.agents.runtime.mcp_discovery import clear_discovery_cache
-from agentspan.agents.runtime.runtime import AgentRuntime
+from agentspan.agents.runtime.runtime import VALID_RETRY_POLICIES, AgentRuntime
 from agentspan.agents.semantic_memory import MemoryEntry, MemoryStore, SemanticMemory
 
 # Termination conditions
@@ -221,6 +221,7 @@ __all__ = [
     "agent",
     "scatter_gather",
     "AgentRuntime",
+    "VALID_RETRY_POLICIES",
     "AgentConfig",
     # Extended agent types
     "UserProxyAgent",

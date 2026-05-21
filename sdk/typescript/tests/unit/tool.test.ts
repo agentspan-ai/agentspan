@@ -150,6 +150,31 @@ describe("tool() options", () => {
       properties: { result: { type: "string" } },
     });
   });
+
+  it("passes retry configuration to ToolDef", () => {
+    const t = tool(async (args: { x: string }) => args, {
+      description: "Retry tool",
+      inputSchema: { type: "object", properties: { x: { type: "string" } } },
+      retryCount: 5,
+      retryDelaySeconds: 10,
+      retryPolicy: "exponential_backoff",
+    });
+    const def = getToolDef(t);
+    expect(def.retryCount).toBe(5);
+    expect(def.retryDelaySeconds).toBe(10);
+    expect(def.retryPolicy).toBe("exponential_backoff");
+  });
+
+  it("omits retry fields when not specified", () => {
+    const t = tool(async (args: { x: string }) => args, {
+      description: "No retry config",
+      inputSchema: { type: "object", properties: { x: { type: "string" } } },
+    });
+    const def = getToolDef(t);
+    expect(def.retryCount).toBeUndefined();
+    expect(def.retryDelaySeconds).toBeUndefined();
+    expect(def.retryPolicy).toBeUndefined();
+  });
 });
 
 // ── getToolDef() with all 3 formats ────────────────────────

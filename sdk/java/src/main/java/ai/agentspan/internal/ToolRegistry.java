@@ -101,6 +101,7 @@ public class ToolRegistry {
                 .timeoutSeconds(ann.timeoutSeconds())
                 .retryCount(ann.retryCount())
                 .retryDelaySeconds(ann.retryDelaySeconds())
+                .retryPolicy(ann.retryPolicy())
                 .toolType("worker")
                 .credentials(credentials)
                 .build());

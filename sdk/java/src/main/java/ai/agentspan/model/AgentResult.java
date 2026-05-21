@@ -16,7 +16,7 @@ import java.util.Map;
  */
 public class AgentResult {
     private final Object output;
-    private final String workflowId;
+    private final String executionId;
     private final AgentStatus status;
     private final List<Map<String, Object>> toolCalls;
     private final List<AgentEvent> events;
@@ -25,14 +25,14 @@ public class AgentResult {
 
     public AgentResult(
             Object output,
-            String workflowId,
+            String executionId,
             AgentStatus status,
             List<Map<String, Object>> toolCalls,
             List<AgentEvent> events,
             TokenUsage tokenUsage,
             String error) {
         this.output = output;
-        this.workflowId = workflowId != null ? workflowId : "";
+        this.executionId = executionId != null ? executionId : "";
         this.status = status != null ? status : AgentStatus.COMPLETED;
         this.toolCalls = toolCalls != null ? toolCalls : new ArrayList<>();
         this.events = events != null ? events : new ArrayList<>();
@@ -41,7 +41,7 @@ public class AgentResult {
     }
 
     public Object getOutput() { return output; }
-    public String getWorkflowId() { return workflowId; }
+    public String getExecutionId() { return executionId; }
     public AgentStatus getStatus() { return status; }
     public List<Map<String, Object>> getToolCalls() { return toolCalls; }
     public List<AgentEvent> getEvents() { return events; }
@@ -143,8 +143,8 @@ public class AgentResult {
             System.out.println("Tokens: -");
         }
         System.out.println("Status: " + status);
-        if (!workflowId.isEmpty()) {
-            System.out.println("Workflow ID: " + workflowId);
+        if (!executionId.isEmpty()) {
+            System.out.println("Execution ID: " + executionId);
         }
         System.out.println();
     }
