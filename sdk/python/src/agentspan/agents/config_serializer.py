@@ -46,17 +46,12 @@ class AgentConfigSerializer:
         # and tools (scripts, read_skill_file) into the workflow.
         if getattr(agent, "_framework", None) == "skill":
             raw_config = getattr(agent, "_framework_config", {})
-            config = {
+            return {
                 "name": agent.name,
                 "model": agent.model or None,
                 "_framework": "skill",
                 **raw_config,
             }
-            config["maxTurns"] = agent.max_turns
-            config["timeoutSeconds"] = agent.timeout_seconds
-            if agent.max_tokens is not None:
-                config["maxTokens"] = agent.max_tokens
-            return config
 
         # Claude-code agents emit a passthrough stub — all config is consumed
         # by the worker closure, not sent to the server.

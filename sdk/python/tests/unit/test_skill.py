@@ -297,40 +297,6 @@ class TestLoadSkills:
         assert config["agentModels"]["gilfoyle"] == "anthropic/claude-sonnet-4-6"
 
 
-class TestSkillSerializationLimits:
-    """Skill framework serialization should preserve Agent execution limits."""
-
-    def test_framework_serializer_preserves_skill_limits(self):
-        from agentspan.agents.frameworks.serializer import serialize_agent
-        from agentspan.agents.skill import skill
-
-        agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
-        agent.max_turns = 6
-        agent.max_tokens = 3000
-        agent.timeout_seconds = 120
-
-        raw_config, _ = serialize_agent(agent)
-
-        assert raw_config["maxTurns"] == 6
-        assert raw_config["maxTokens"] == 3000
-        assert raw_config["timeoutSeconds"] == 120
-
-    def test_config_serializer_preserves_skill_limits(self):
-        from agentspan.agents.config_serializer import AgentConfigSerializer
-        from agentspan.agents.skill import skill
-
-        agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
-        agent.max_turns = 7
-        agent.max_tokens = 2500
-        agent.timeout_seconds = 90
-
-        config = AgentConfigSerializer().serialize(agent)
-
-        assert config["maxTurns"] == 7
-        assert config["maxTokens"] == 2500
-        assert config["timeoutSeconds"] == 90
-
-
 class TestCrossSkillResolution:
     """Test cross-skill reference resolution."""
 

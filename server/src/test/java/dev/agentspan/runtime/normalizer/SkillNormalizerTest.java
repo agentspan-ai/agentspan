@@ -70,20 +70,6 @@ class SkillNormalizerTest {
         assertTrue(config.getTools() == null || config.getTools().isEmpty());
     }
 
-    @Test
-    void simpleSkillPreservesExecutionLimits() throws Exception {
-        Map<String, Object> rawConfig = loadFixture("simple-skill");
-        rawConfig.put("maxTurns", 6);
-        rawConfig.put("maxTokens", 3000);
-        rawConfig.put("timeoutSeconds", 120);
-
-        AgentConfig config = normalizer.normalize(rawConfig);
-
-        assertEquals(6, config.getMaxTurns());
-        assertEquals(3000, config.getMaxTokens());
-        assertEquals(120, config.getTimeoutSeconds());
-    }
-
     // --- DG skill tests (sub-agents + resources) ---
 
     @Test
