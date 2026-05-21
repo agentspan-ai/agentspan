@@ -325,6 +325,12 @@ internal static class AgentConfigSerializer
 
         if (tool.ApprovalRequired)        t["approvalRequired"] = true;
         if (tool.TimeoutSeconds.HasValue)  t["timeoutSeconds"]   = tool.TimeoutSeconds.Value;
+        if (tool.RetryCount.HasValue && tool.RetryCount.Value != 2)
+            t["retryCount"] = tool.RetryCount.Value;
+        if (tool.RetryDelaySeconds.HasValue && tool.RetryDelaySeconds.Value != 2)
+            t["retryDelaySeconds"] = tool.RetryDelaySeconds.Value;
+        if (!string.IsNullOrEmpty(tool.RetryPolicy) && tool.RetryPolicy != "linear_backoff")
+            t["retryPolicy"] = tool.RetryPolicy;
 
         // For worker/external tools, credentials go at top level.
         // For all other tool types (http, mcp, media, rag), they go inside config.

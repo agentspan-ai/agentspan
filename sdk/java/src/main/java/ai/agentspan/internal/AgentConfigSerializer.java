@@ -391,6 +391,15 @@ public class AgentConfigSerializer {
         if (tool.getTimeoutSeconds() > 0) {
             toolMap.put("timeoutSeconds", tool.getTimeoutSeconds());
         }
+        if (tool.getRetryCount() != 2) {
+            toolMap.put("retryCount", tool.getRetryCount());
+        }
+        if (tool.getRetryDelaySeconds() != 2) {
+            toolMap.put("retryDelaySeconds", tool.getRetryDelaySeconds());
+        }
+        if (tool.getRetryPolicy() != null && !"linear_backoff".equals(tool.getRetryPolicy())) {
+            toolMap.put("retryPolicy", tool.getRetryPolicy());
+        }
 
         // Credentials must be nested inside config so the server includes them
         // in the execution token's declared_names (matches Python SDK behaviour).

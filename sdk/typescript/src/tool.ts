@@ -88,6 +88,9 @@ export interface ToolOptions {
   isolated?: boolean;
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
+  retryCount?: number;
+  retryDelaySeconds?: number;
+  retryPolicy?: string;
 }
 
 /**
@@ -123,6 +126,11 @@ export function tool<TInput = unknown, TOutput = unknown>(
       credentials: options.credentials,
     }),
     ...(options.guardrails !== undefined && { guardrails: options.guardrails }),
+    ...(options.retryCount !== undefined && { retryCount: options.retryCount }),
+    ...(options.retryDelaySeconds !== undefined && {
+      retryDelaySeconds: options.retryDelaySeconds,
+    }),
+    ...(options.retryPolicy !== undefined && { retryPolicy: options.retryPolicy }),
   };
 
   // Create the wrapper function

@@ -82,6 +82,7 @@ class ToolDef:
     stateful: bool = False
     retry_count: int = 2
     retry_delay_seconds: int = 2
+    retry_policy: str = "linear_backoff"
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -104,6 +105,7 @@ def tool(
     stateful: bool = False,
     retry_count: int = 2,
     retry_delay_seconds: int = 2,
+    retry_policy: str = "linear_backoff",
 ) -> Callable[[F], F]: ...
 
 
@@ -120,6 +122,7 @@ def tool(
     stateful: bool = False,
     retry_count: int = 2,
     retry_delay_seconds: int = 2,
+    retry_policy: str = "linear_backoff",
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -168,6 +171,7 @@ def tool(
             stateful=stateful,
             retry_count=retry_count,
             retry_delay_seconds=retry_delay_seconds,
+            retry_policy=retry_policy,
         )
 
         @functools.wraps(fn)

@@ -248,6 +248,22 @@ describe("serializeAgent() — tools", () => {
     expect(toolConfig.approvalRequired).toBe(true);
     expect(toolConfig.timeoutSeconds).toBe(120);
   });
+
+  it("serializes retry configuration on worker tools", () => {
+    const t = tool(async (args: { x: string }) => args, {
+      description: "Retry tool",
+      inputSchema: { type: "object", properties: { x: { type: "string" } } },
+      retryCount: 5,
+      retryDelaySeconds: 10,
+      retryPolicy: "exponential_backoff",
+    });
+    const a = new Agent({ name: "test", tools: [t] });
+    const config = serializer.serializeAgent(a);
+    const toolConfig = (config.tools as any[])[0];
+    expect(toolConfig.retryCount).toBe(5);
+    expect(toolConfig.retryDelaySeconds).toBe(10);
+    expect(toolConfig.retryPolicy).toBe("exponential_backoff");
+  });
 });
 
 // ── agent_tool serialization ───────────────────────────────

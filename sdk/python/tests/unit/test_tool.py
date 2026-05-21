@@ -85,6 +85,65 @@ class TestToolDecorator:
 
         assert my_tool._tool_def.description == ""
 
+    def test_default_retry_policy(self):
+        @tool
+        def my_func(x: str) -> str:
+            """Do something."""
+            return x
+
+        assert my_func._tool_def.retry_policy == "linear_backoff"
+
+    def test_custom_retry_policy(self):
+        @tool(retry_policy="exponential_backoff")
+        def my_func(x: str) -> str:
+            """Do something."""
+            return x
+
+        assert my_func._tool_def.retry_policy == "exponential_backoff"
+
+    def test_fixed_retry_policy(self):
+        @tool(retry_policy="fixed", retry_count=5, retry_delay_seconds=10)
+        def my_func(x: str) -> str:
+            """Do something."""
+            return x
+
+        td = my_func._tool_def
+        assert td.retry_policy == "fixed"
+        assert td.retry_count == 5
+        assert td.retry_delay_seconds == 10
+
+
+class TestRetryPolicyResolver:
+    """Test _resolve_retry_logic helper."""
+
+    def test_all_lowercase_names(self):
+        from agentspan.agents.runtime.runtime import _resolve_retry_logic
+
+        assert _resolve_retry_logic("fixed") == "FIXED"
+        assert _resolve_retry_logic("linear_backoff") == "LINEAR_BACKOFF"
+        assert _resolve_retry_logic("exponential_backoff") == "EXPONENTIAL_BACKOFF"
+
+    def test_uppercase_passthrough(self):
+        from agentspan.agents.runtime.runtime import _resolve_retry_logic
+
+        assert _resolve_retry_logic("FIXED") == "FIXED"
+        assert _resolve_retry_logic("LINEAR_BACKOFF") == "LINEAR_BACKOFF"
+        assert _resolve_retry_logic("EXPONENTIAL_BACKOFF") == "EXPONENTIAL_BACKOFF"
+
+    def test_case_insensitive(self):
+        from agentspan.agents.runtime.runtime import _resolve_retry_logic
+
+        assert _resolve_retry_logic("Fixed") == "FIXED"
+        assert _resolve_retry_logic("Linear_Backoff") == "LINEAR_BACKOFF"
+
+    def test_invalid_raises(self):
+        import pytest
+
+        from agentspan.agents.runtime.runtime import _resolve_retry_logic
+
+        with pytest.raises(ValueError, match="Invalid retry_policy"):
+            _resolve_retry_logic("invalid_policy")
+
 
 class TestHttpTool:
     """Test http_tool() constructor."""

@@ -49,6 +49,9 @@ public @interface Tool {
     /** Number of times Conductor retries the task on failure. Default matches SDK default of 2. */
     int retryCount() default 2;
 
-    /** Seconds between retries (LINEAR_BACKOFF). Default matches SDK default of 2. */
+    /** Seconds between retries. Default matches SDK default of 2. */
     int retryDelaySeconds() default 2;
+
+    /** Retry strategy: "fixed", "linear_backoff", or "exponential_backoff". */
+    String retryPolicy() default "linear_backoff";
 }
