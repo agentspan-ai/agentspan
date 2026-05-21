@@ -90,7 +90,12 @@ public class AgentRuntime implements AutoCloseable {
     public Map<String, Object> plan(Agent agent) {
         Map<String, Object> agentConfig = serializer.serialize(agent);
         logger.debug("Compiling agent '{}'", agent.getName());
-        Map<String, Object> result = httpApi.compileAgent(agentConfig);
+        // Same framework-dispatch as startAsync / deploy: framework-backed
+        // agents (openai / google_adk / langgraph) need to round-trip through
+        // the server normalizer or compile fails on a missing top-level model.
+        String framework = agent.getFramework();
+        boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
+        Map<String, Object> result = httpApi.compileAgent(isFramework ? framework : null, agentConfig);
         logger.info("Agent '{}' compiled successfully", agent.getName());
         return result;
     }
@@ -241,6 +246,9 @@ public class AgentRuntime implements AutoCloseable {
      * @return list of DeploymentInfo, one per deployed agent
      */
     public List<ai.agentspan.model.DeploymentInfo> deploy(Agent... agents) {
+        if (agents == null || agents.length == 0) {
+            throw new IllegalArgumentException("deploy() requires at least one agent");
+        }
         List<ai.agentspan.model.DeploymentInfo> results = new ArrayList<>();
         for (Agent agent : agents) {
             Map<String, Object> agentConfig = serializer.serialize(agent);
@@ -284,6 +292,11 @@ public class AgentRuntime implements AutoCloseable {
      * @param agents agents whose workers should be served
      */
     public void serve(Agent... agents) {
+        if (agents == null || agents.length == 0) {
+            throw new IllegalArgumentException(
+                    "serve() requires at least one agent — without one, no workers would "
+                    + "register and the call would block forever.");
+        }
         for (Agent agent : agents) {
             prepareWorkers(agent);
         }

@@ -127,8 +127,24 @@ public class HttpApi {
      * @return server response containing workflowDef and requiredWorkers
      */
     public Map<String, Object> compileAgent(Map<String, Object> agentConfig) {
+        return compileAgent(null, agentConfig);
+    }
+
+    /**
+     * Compile an agent configuration into a workflow definition, routing
+     * framework-backed configs (openai / google_adk / langgraph) through the
+     * server's {@code {framework, rawConfig}} envelope so the matching
+     * normalizer runs. Pass {@code null} {@code framework} for native
+     * Agentspan agents.
+     */
+    public Map<String, Object> compileAgent(String framework, Map<String, Object> rawConfig) {
         Map<String, Object> body = new HashMap<>();
-        body.put("agentConfig", agentConfig);
+        if (framework != null && !framework.isEmpty()) {
+            body.put("framework", framework);
+            body.put("rawConfig", rawConfig);
+        } else {
+            body.put("agentConfig", rawConfig);
+        }
         return post("/api/agent/compile", body);
     }
 

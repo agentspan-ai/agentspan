@@ -99,6 +99,15 @@ public final class AdkBridge {
         if (adk == null) {
             throw new IllegalArgumentException("AdkBridge.toAgentspan: agent is null");
         }
+        return toAgentspan(adk, new java.util.IdentityHashMap<>());
+    }
+
+    private static Agent toAgentspan(BaseAgent adk, java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
+        if (visited.putIfAbsent(adk, Boolean.TRUE) != null) {
+            throw new IllegalArgumentException(
+                    "AdkBridge: cycle detected in subAgents/AgentTool graph at agent '"
+                    + adk.name() + "'");
+        }
 
         Agent.Builder b = Agent.builder()
                 .name(adk.name())
@@ -113,7 +122,7 @@ public final class AdkBridge {
             String inst = extractInstruction(llm.instruction());
             if (inst != null && !inst.isEmpty()) b.instructions(inst);
 
-            List<ToolDef> tools = extractTopLevelTools(llm);
+            List<ToolDef> tools = extractTopLevelTools(llm, visited);
             if (!tools.isEmpty()) b.tools(tools.toArray(new ToolDef[0]));
         }
 
@@ -122,7 +131,7 @@ public final class AdkBridge {
         // sub_agents Map list below.
         List<Agent> subAgentChildren = new ArrayList<>();
         for (BaseAgent sub : safeSubAgents(adk)) {
-            subAgentChildren.add(toAgentspan(sub));
+            subAgentChildren.add(toAgentspan(sub, visited));
         }
         if (!subAgentChildren.isEmpty()) {
             b.agents(subAgentChildren.toArray(new Agent[0]));
@@ -137,7 +146,8 @@ public final class AdkBridge {
             if (handler != null) b.callbacks(handler);
         }
 
-        Map<String, Object> frameworkConfig = buildRawConfig(adk, /*topLevel=*/ true);
+        Map<String, Object> frameworkConfig = buildRawConfig(adk, /*topLevel=*/ true,
+                new java.util.IdentityHashMap<>());
         // Strip the simple scalars already set on the Agent.Builder — the
         // serializer emits them at the top level and frameworkConfig.putAll
         // would just overwrite with the same value.
@@ -158,9 +168,18 @@ public final class AdkBridge {
     /**
      * Serialize a single ADK {@link BaseAgent} into the wire Map shape the
      * server's {@code GoogleADKNormalizer.normalize(raw)} consumes. Recursive:
-     * nested sub-agents are serialized via the same path.
+     * nested sub-agents are serialized via the same path. The {@code visited}
+     * set guards against cycles in the {@code subAgents} / {@code AgentTool}
+     * graph that would otherwise blow the stack.
      */
-    private static Map<String, Object> buildRawConfig(BaseAgent adk, boolean topLevel) {
+    private static Map<String, Object> buildRawConfig(
+            BaseAgent adk, boolean topLevel,
+            java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
+        if (visited.putIfAbsent(adk, Boolean.TRUE) != null) {
+            throw new IllegalArgumentException(
+                    "AdkBridge: cycle detected in subAgents/AgentTool graph at agent '"
+                    + adk.name() + "'");
+        }
         Map<String, Object> raw = new LinkedHashMap<>();
 
         // Identity
@@ -229,7 +248,7 @@ public final class AdkBridge {
             });
 
             // Tools — full dispatch on BaseTool subclass.
-            List<Map<String, Object>> toolMaps = buildToolMaps(llm.tools().blockingGet());
+            List<Map<String, Object>> toolMaps = buildToolMaps(llm.tools().blockingGet(), visited);
             if (!toolMaps.isEmpty()) raw.put("tools", toolMaps);
 
             // Callbacks: emit `_worker_ref` placeholders for each non-empty
@@ -258,7 +277,7 @@ public final class AdkBridge {
         if (subs != null && !subs.isEmpty()) {
             List<Map<String, Object>> subMaps = new ArrayList<>();
             for (BaseAgent s : subs) {
-                subMaps.add(buildRawConfig(s, /*topLevel=*/ false));
+                subMaps.add(buildRawConfig(s, /*topLevel=*/ false, visited));
             }
             raw.put("sub_agents", subMaps);
         }
@@ -298,10 +317,11 @@ public final class AdkBridge {
      * the serializer emits the expected {@code _worker_ref} / {@code _type:
      * AgentTool} wire shape.
      */
-    private static List<ToolDef> extractTopLevelTools(LlmAgent llm) {
+    private static List<ToolDef> extractTopLevelTools(
+            LlmAgent llm, java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
         List<ToolDef> out = new ArrayList<>();
         for (BaseTool t : llm.tools().blockingGet()) {
-            ToolDef d = toToolDef(t);
+            ToolDef d = toToolDef(t, visited);
             if (d != null) out.add(d);
         }
         return out;
@@ -312,17 +332,20 @@ public final class AdkBridge {
      * emit for top-level tools — the server's recursive normalizer pulls them
      * from each sub_agent's {@code tools} array.
      */
-    private static List<Map<String, Object>> buildToolMaps(List<BaseTool> tools) {
+    private static List<Map<String, Object>> buildToolMaps(
+            List<BaseTool> tools, java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
         List<Map<String, Object>> out = new ArrayList<>();
         if (tools == null) return out;
 
         for (BaseTool t : tools) {
-            addToolMap(t, out);
+            addToolMap(t, out, visited);
         }
         return out;
     }
 
-    private static void addToolMap(BaseTool t, List<Map<String, Object>> out) {
+    private static void addToolMap(
+            BaseTool t, List<Map<String, Object>> out,
+            java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
         if (t instanceof FunctionTool ft) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("_worker_ref", ft.name());
@@ -334,7 +357,7 @@ public final class AdkBridge {
             m.put("_type", "AgentTool");
             m.put("name", at.name());
             m.put("description", nullToEmpty(at.description()));
-            m.put("agent", buildRawConfig(at.getAgent(), /*topLevel=*/ false));
+            m.put("agent", buildRawConfig(at.getAgent(), /*topLevel=*/ false, visited));
             out.add(m);
         } else if (t instanceof GoogleSearchTool) {
             // Server normalizer recognizes _type: GoogleSearchTool (line 279)
@@ -353,23 +376,33 @@ public final class AdkBridge {
             m.put("description", "Execute code in a sandboxed environment.");
             out.add(m);
         } else if (t instanceof BaseToolset bts) {
-            // A toolset is a lazy bundle of BaseTools. Resolve and emit each.
+            // A toolset is a lazy bundle of BaseTools. Resolve, emit each, then
+            // close — many toolsets (e.g. McpToolset) hold a network/process
+            // resource that we MUST release after extraction. Failure to
+            // expand is logged at error level so the user notices they lost
+            // tools rather than silently degrading the LLM's tool list.
             try {
                 for (BaseTool inner : bts.getTools(null).blockingIterable()) {
-                    addToolMap(inner, out);
+                    addToolMap(inner, out, visited);
                 }
             } catch (Throwable th) {
-                log.warn("AdkBridge: BaseToolset '{}' expansion failed: {}",
-                        t.getClass().getSimpleName(), th.getMessage());
+                log.error("AdkBridge: BaseToolset '{}' expansion failed; tools from this "
+                        + "toolset will NOT be available to the agent. Cause: {}",
+                        t.getClass().getName(), th.toString());
+            } finally {
+                try { bts.close(); }
+                catch (Throwable th) {
+                    log.debug("AdkBridge: BaseToolset.close() threw: {}", th.toString());
+                }
             }
         } else {
             log.warn("AdkBridge: dropping unsupported BaseTool subclass '{}'", t.getClass().getName());
         }
     }
 
-    private static ToolDef toToolDef(BaseTool t) {
+    private static ToolDef toToolDef(BaseTool t, java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
         if (t instanceof FunctionTool ft) return functionToolToDef(ft);
-        if (t instanceof AgentTool at)    return agentToolToDef(at);
+        if (t instanceof AgentTool at)    return agentToolToDef(at, visited);
         // GoogleSearchTool / BuiltInCodeExecutionTool / BaseToolset: server-side
         // builtin tools that don't need a local worker. Returning null is
         // intentional — extractTopLevelTools drops nulls and these still get
@@ -396,8 +429,17 @@ public final class AdkBridge {
             try {
                 Object[] args = buildArgs(finalMethod, inputData);
                 return finalMethod.invoke(null, args);
-            } catch (Exception e) {
-                throw new RuntimeException("ADK FunctionTool execution failed: " + name, e);
+            } catch (java.lang.reflect.InvocationTargetException ite) {
+                // Unwrap so the user sees their own exception, not a confusing
+                // double-wrapped stack trace.
+                Throwable cause = ite.getCause() != null ? ite.getCause() : ite;
+                if (cause instanceof RuntimeException re) throw re;
+                throw new RuntimeException("ADK FunctionTool '" + name + "' threw: "
+                        + cause.getMessage(), cause);
+            } catch (IllegalAccessException | IllegalArgumentException ex) {
+                throw new RuntimeException("ADK FunctionTool '" + name
+                        + "' invocation failed (check parameter types and the -parameters "
+                        + "compiler flag): " + ex.getMessage(), ex);
             }
         };
 
@@ -411,9 +453,9 @@ public final class AdkBridge {
                 .build();
     }
 
-    private static ToolDef agentToolToDef(AgentTool at) {
+    private static ToolDef agentToolToDef(AgentTool at, java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
         BaseAgent inner = at.getAgent();
-        Agent childAgent = toAgentspan(inner);
+        Agent childAgent = toAgentspan(inner, visited);
         // AgentTool produces an empty input schema in ADK by default; the
         // Agentspan serializer's AgentTool path builds a stock {request:
         // string} schema for us.
@@ -479,12 +521,31 @@ public final class AdkBridge {
      * server invoked the tool with the schema name. Honor {@code @Schema.name}
      * first.
      */
+    private static final java.util.Set<String> WARNED_ARG_METHODS =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private static String paramName(Parameter p) {
         Annotations.Schema ann = p.getAnnotation(Annotations.Schema.class);
         if (ann != null && ann.name() != null && !ann.name().isEmpty()) {
             return ann.name();
         }
-        return p.getName();
+        String name = p.getName();
+        // Compiler-retained parameter names require -parameters at javac time.
+        // Without it, getName() returns "arg0" / "arg1" / ... which the LLM
+        // then sees in the function schema — guaranteed garbage tool calls.
+        // Warn loudly once per method so the user notices and either adds
+        // -parameters or switches to @Schema(name=...).
+        if (name != null && name.matches("arg\\d+")) {
+            String key = p.getDeclaringExecutable().getDeclaringClass().getName()
+                    + "#" + p.getDeclaringExecutable().getName();
+            if (WARNED_ARG_METHODS.add(key)) {
+                log.warn("AdkBridge: method '{}' parameter names are not preserved "
+                        + "(got '{}'). The LLM will see meaningless parameter names. "
+                        + "Compile with javac -parameters, or use "
+                        + "@Schema(name=\"...\") on each parameter.", key, name);
+            }
+        }
+        return name;
     }
 
     private static java.util.Optional<String> schemaAnnotationDescription(Parameter p) {
@@ -532,38 +593,15 @@ public final class AdkBridge {
         for (int i = 0; i < params.length; i++) {
             String pn = paramName(params[i]);
             Object raw = inputData != null ? inputData.get(pn) : null;
-            args[i] = coerce(raw, params[i].getType());
+            // Share ToolRegistry's coercion table: handles primitives, String,
+            // java.time.*, enums, Optional, List<X>, Map, arrays via Jackson
+            // and the generic type. Keeps the bridge in lockstep with the
+            // @Tool fix from #236.
+            args[i] = ai.agentspan.internal.ToolRegistry.coerceArgument(
+                    raw, params[i].getType(), params[i].getParameterizedType());
         }
         return args;
     }
-
-    private static Object coerce(Object value, Class<?> type) {
-        if (value == null) {
-            if (type == int.class) return 0;
-            if (type == long.class) return 0L;
-            if (type == double.class) return 0.0;
-            if (type == boolean.class) return false;
-            return null;
-        }
-        if (type.isInstance(value)) return value;
-        String s = value.toString();
-        if (type == String.class) return s;
-        if (type == int.class || type == Integer.class) {
-            return value instanceof Number n ? n.intValue() : Integer.parseInt(s);
-        }
-        if (type == long.class || type == Long.class) {
-            return value instanceof Number n ? n.longValue() : Long.parseLong(s);
-        }
-        if (type == double.class || type == Double.class) {
-            return value instanceof Number n ? n.doubleValue() : Double.parseDouble(s);
-        }
-        if (type == boolean.class || type == Boolean.class) {
-            return value instanceof Boolean b ? b : Boolean.parseBoolean(s);
-        }
-        return value;
-    }
-
-    // ── Callback wiring ──────────────────────────────────────────────────────
 
     // ── Callback wiring ──────────────────────────────────────────────────────
 
@@ -813,10 +851,4 @@ public final class AdkBridge {
     private static String nullToEmpty(String s) {
         return s == null ? "" : s;
     }
-
-    // Reference an unused symbol so the IDE keeps the ThinkingConfig import.
-    @SuppressWarnings("unused")
-    private static final Class<?> THINKING_CONFIG_CLASS = ThinkingConfig.class;
-    @SuppressWarnings("unused")
-    private static final Class<?> GENERATE_CONTENT_CONFIG_CLASS = GenerateContentConfig.class;
 }

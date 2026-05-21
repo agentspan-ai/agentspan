@@ -299,24 +299,37 @@ public final class Agentspan {
     private static Agent[] coerceAgents(Object[] agents) {
         if (agents == null) return new Agent[0];
         Agent[] out = new Agent[agents.length];
-        for (int i = 0; i < agents.length; i++) out[i] = coerceAgent(agents[i]);
+        for (int i = 0; i < agents.length; i++) {
+            try {
+                out[i] = coerceAgent(agents[i]);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("agents[" + i + "]: " + e.getMessage(), e);
+            }
+        }
         return out;
     }
 
     /**
-     * Walk up the class/interface hierarchy looking for a type whose name
-     * matches {@code fqn}. Used instead of {@code instanceof} so the dispatcher
-     * compiles and runs without ADK on the classpath — only callers actually
-     * passing native ADK objects will trigger the loading of ADK classes.
+     * Walk the entire type hierarchy (superclasses, interfaces, and
+     * superinterfaces of both) looking for a type whose FQN matches.
+     *
+     * <p>Used instead of {@code instanceof} so the dispatcher compiles and
+     * runs without ADK on the classpath — only callers actually passing
+     * native ADK objects trigger the JVM to load ADK classes. The recursive
+     * walk also handles interface-typed frameworks (where the target is an
+     * interface inherited via a superclass) — important for future bridge
+     * targets even though ADK's {@code BaseAgent} is itself a class today.
      */
     private static boolean isInstanceOf(Object o, String fqn) {
-        Class<?> c = o.getClass();
-        while (c != null) {
-            if (fqn.equals(c.getName())) return true;
-            c = c.getSuperclass();
-        }
-        for (Class<?> i : o.getClass().getInterfaces()) {
-            if (fqn.equals(i.getName())) return true;
+        return matchesType(o.getClass(), fqn);
+    }
+
+    private static boolean matchesType(Class<?> c, String fqn) {
+        if (c == null) return false;
+        if (fqn.equals(c.getName())) return true;
+        if (matchesType(c.getSuperclass(), fqn)) return true;
+        for (Class<?> i : c.getInterfaces()) {
+            if (matchesType(i, fqn)) return true;
         }
         return false;
     }
