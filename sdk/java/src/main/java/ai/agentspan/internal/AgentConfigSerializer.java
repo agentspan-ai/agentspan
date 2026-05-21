@@ -94,6 +94,17 @@ public class AgentConfigSerializer {
                 }
                 map.put("tools", toolsList);
             }
+            // Guardrails — emit so framework normalizers can preserve
+            // Agentspan-side safety hooks. Without this, attaching
+            // .guardrails(...) to a bridged ADK / OpenAI agent silently
+            // drops them at the wire layer.
+            if (agent.getGuardrails() != null && !agent.getGuardrails().isEmpty()) {
+                List<Map<String, Object>> guardrailsList = new ArrayList<>();
+                for (GuardrailDef g : agent.getGuardrails()) {
+                    guardrailsList.add(serializeGuardrail(g, agent.getName()));
+                }
+                map.put("guardrails", guardrailsList);
+            }
             // Framework-specific extras (handoffs, sub_agents, output_type, etc.)
             Map<String, Object> cfg = agent.getFrameworkConfig();
             if (cfg != null) map.putAll(cfg);

@@ -96,13 +96,34 @@ public final class AdkBridge {
      * into an Agentspan {@link Agent} ready for {@code Agentspan.run(...)}.
      */
     public static Agent toAgentspan(BaseAgent adk) {
+        return agentBuilder(adk).build();
+    }
+
+    /**
+     * Same as {@link #toAgentspan} but returns the populated
+     * {@link Agent.Builder} so callers can attach Agentspan-only features
+     * (guardrails, gate, termination conditions, callbacks, …) on top of a
+     * native ADK agent before building.
+     *
+     * <pre>{@code
+     * Agent decorated = AdkBridge.agentBuilder(llmAgent)
+     *     .guardrails(piiGuard)
+     *     .build();
+     * Agentspan.run(decorated, "...");
+     * }</pre>
+     */
+    public static Agent.Builder agentBuilder(BaseAgent adk) {
         if (adk == null) {
-            throw new IllegalArgumentException("AdkBridge.toAgentspan: agent is null");
+            throw new IllegalArgumentException("AdkBridge.agentBuilder: agent is null");
         }
-        return toAgentspan(adk, new java.util.IdentityHashMap<>());
+        return agentBuilder(adk, new java.util.IdentityHashMap<>());
     }
 
     private static Agent toAgentspan(BaseAgent adk, java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
+        return agentBuilder(adk, visited).build();
+    }
+
+    private static Agent.Builder agentBuilder(BaseAgent adk, java.util.IdentityHashMap<BaseAgent, Boolean> visited) {
         if (visited.putIfAbsent(adk, Boolean.TRUE) != null) {
             throw new IllegalArgumentException(
                     "AdkBridge: cycle detected in subAgents/AgentTool graph at agent '"
@@ -160,7 +181,7 @@ public final class AdkBridge {
         // the serializer's worker-only list via map.putAll(cfg).
         if (!frameworkConfig.isEmpty()) b.frameworkConfig(frameworkConfig);
 
-        return b.build();
+        return b;
     }
 
     // ── Raw-config builder (used for top-level + every nested sub-agent) ─────

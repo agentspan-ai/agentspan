@@ -334,6 +334,12 @@ public class Agent {
             return this;
         }
 
+        /** Convenience: set guardrails via varargs. */
+        public Builder guardrails(GuardrailDef... guardrails) {
+            this.guardrails = guardrails == null ? null : java.util.Arrays.asList(guardrails);
+            return this;
+        }
+
         /** Set the maximum number of agent loop iterations. */
         public Builder maxTurns(int maxTurns) {
             this.maxTurns = maxTurns;
