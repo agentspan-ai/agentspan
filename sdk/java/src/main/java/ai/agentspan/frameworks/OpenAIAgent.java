@@ -160,8 +160,17 @@ public final class OpenAIAgent {
                     try {
                         Object[] args = buildMethodArgs(finalMethod, inputData);
                         return finalMethod.invoke(instance, args);
-                    } catch (Exception e) {
-                        throw new RuntimeException("OpenAI tool execution failed: " + finalName, e);
+                    } catch (java.lang.reflect.InvocationTargetException ite) {
+                        // Unwrap so the user sees their own exception, not a
+                        // confusing double-wrap.
+                        Throwable cause = ite.getCause() != null ? ite.getCause() : ite;
+                        if (cause instanceof RuntimeException re) throw re;
+                        throw new RuntimeException("OpenAI tool '" + finalName + "' threw: "
+                                + cause.getMessage(), cause);
+                    } catch (IllegalAccessException | IllegalArgumentException ex) {
+                        throw new RuntimeException("OpenAI tool '" + finalName
+                                + "' invocation failed (check parameter types and the "
+                                + "-parameters compiler flag): " + ex.getMessage(), ex);
                     }
                 };
 
@@ -240,6 +249,9 @@ public final class OpenAIAgent {
         return schema;
     }
 
+    private static final java.util.Set<String> WARNED_ARG_METHODS =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private static String resolveParamName(Parameter p, int idx) {
         for (java.lang.annotation.Annotation ann : p.getAnnotations()) {
             if (ann.annotationType().getName().equals("dev.langchain4j.agent.tool.P")) {
@@ -251,6 +263,18 @@ public final class OpenAIAgent {
         }
         String name = p.getName();
         if (name != null && !name.startsWith("arg")) return name;
+        // Compiler-retained names require javac -parameters. Without it the
+        // LLM sees meaningless arg0/arg1 — warn once-per-method so the user
+        // notices instead of silently shipping a garbage schema.
+        String key = p.getDeclaringExecutable().getDeclaringClass().getName()
+                + "#" + p.getDeclaringExecutable().getName();
+        if (WARNED_ARG_METHODS.add(key)) {
+            org.slf4j.LoggerFactory.getLogger(OpenAIAgent.class).warn(
+                    "OpenAIAgent: method '{}' parameter names are not preserved. "
+                    + "The LLM will see meaningless 'arg{}' parameter names. Compile "
+                    + "with javac -parameters or use @P(\"...\") on each parameter.",
+                    key, idx);
+        }
         return "arg" + idx;
     }
 
@@ -260,11 +284,21 @@ public final class OpenAIAgent {
         for (int i = 0; i < params.length; i++) {
             String pn = resolveParamName(params[i], i);
             Object raw = inputData != null ? inputData.get(pn) : null;
-            args[i] = coerce(raw, params[i].getType());
+            // Share ToolRegistry's coercion table: primitives + String +
+            // Boolean + java.time.* + enums + Optional + List<X>/Map/arrays
+            // via Jackson. Without this, declaring a LocalDate / List<Double>
+            // / enum param on an @Tool method would throw IllegalArgument at
+            // invoke time.
+            args[i] = ai.agentspan.internal.ToolRegistry.coerceArgument(
+                    raw, params[i].getType(), params[i].getParameterizedType());
         }
         return args;
     }
 
+    // The local coerce() / defaultFor() helpers below are retained as
+    // dead-code fallbacks in case ToolRegistry.coerceArgument throws; the
+    // primary path is the shared coercion table above.
+    @SuppressWarnings("unused")
     private static Object coerce(Object value, Class<?> targetType) {
         if (value == null) return defaultFor(targetType);
         if (targetType.isInstance(value)) return value;

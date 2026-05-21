@@ -8,10 +8,21 @@ all execute **server-side**.
 - **Last full run:** 2026-05-21 against a local server at `localhost:6767`
 - **Model:** `openai/gpt-4o-mini` for every example (configurable via
   `AGENTSPAN_LLM_MODEL`)
-- **Examples covered:** 78 (39 ADK + 28 LangChain + 11 LangGraph)
-- **Workflow-level pass rate:** 78 / 78 COMPLETED
+- **Examples covered:** 88 (39 ADK + 28 LangChain + 11 LangGraph + 10 OpenAI)
+- **Workflow-level pass rate:** 88 / 88 COMPLETED
 - **Sub-task error rate:** 1 example with errored sub-tasks
   (`adk.Example36BuiltInTools`, see Known Issues)
+
+> **Note on OpenAI Agents:** Unlike ADK / LangChain4j / LangGraph4j, there
+> is **no native OpenAI Agents Java SDK** at the time of this writing —
+> only the raw `com.openai:openai-java` HTTP client, which has zero agent
+> abstractions. The OpenAI examples therefore use Agentspan's own
+> `OpenAIAgent.builder()` (in `ai.agentspan.frameworks`) — that builder
+> IS the Java equivalent of the Python `openai-agents` library, not a
+> bridge over something native. The same bug-bounty fixes applied to
+> `AdkBridge` and `LangChain4jAgent` (rich coercion via
+> `ToolRegistry.coerceArgument`, `arg0` paramName warning, unwrapped
+> `InvocationTargetException`) have been applied to `OpenAIAgent`.
 
 ## What "server-side execution" means here
 
@@ -57,6 +68,7 @@ curl -s "http://localhost:6767/api/workflow/$EXEC?includeTasks=true" | jq
 - **39 / 39** ADK examples completed
 - **28 / 28** LangChain examples completed
 - **11 / 11** LangGraph examples completed
+- **10 / 10** OpenAI examples completed
 - **Largest workflows** (>200 tasks each): `langchain.Example25AdvancedOrchestration` (240), `langchain.Example10WebSearchAgent` (228), `adk.Example17FinancialAdvisor` (204), `adk.Example19SupplyChain` (204) — all completed cleanly
 - **Smallest workflows** (1 task): pure no-tool LLM calls, and `adk.Example23Callbacks` (callbacks-only — server does not yet compile callback hooks; see Known Issues)
 
@@ -174,6 +186,16 @@ not bridge-side. Tracked separately.
 | 76 | langgraph.Example09MathAgent | `1e5eec8a-3937-4682-b45b-ea28a803eec8` | langgraph_agent | COMPLETED | 27 | 0 |
 | 77 | langgraph.Example10ResearchAgent | `ece7bcaa-81a8-45a9-a309-125ef5d899bc` | langgraph_agent | COMPLETED | 25 | 0 |
 | 78 | langgraph.Example11CustomerSupport | `71b40b3a-533e-4ea8-8eec-a4b803e97100` | langgraph_agent | COMPLETED | 25 | 0 |
+| 79 | openai.Example01BasicAgent | `6329c9fe-0bd4-4dfd-92d8-ab1b3a5c0bf3` | greeter | COMPLETED | 1 | 0 |
+| 80 | openai.Example02FunctionTools | `ddd14d63-b016-4f90-b148-7e5ee39dc7f0` | multi_tool_agent | COMPLETED | 25 | 0 |
+| 81 | openai.Example03StructuredOutput | `02515522-3d75-4f56-9baa-fc03ffe44f45` | movie_recommender | COMPLETED | 1 | 0 |
+| 82 | openai.Example04Handoffs | `2ecca482-ff80-42dd-9393-27871d19901c` | customer_service_triage | COMPLETED | 17 | 0 |
+| 83 | openai.Example05Guardrails | `441c1666-7329-42fd-a5df-391684a500bf` | banking_assistant | COMPLETED | 15 | 0 |
+| 84 | openai.Example06ModelSettings | `dba7da6a-69ee-40a7-8cf9-31abc19ec5ff` | creative_writer | COMPLETED | 1 | 0 |
+| 85 | openai.Example07Streaming | `3eed1c84-13e8-46fe-a461-7d8ad23b580e` | support_agent | COMPLETED | 15 | 0 |
+| 86 | openai.Example08AgentAsTool | `d8329145-2951-4f32-87b8-67b4f90eb0d6` | text_analysis_manager | COMPLETED | 33 | 0 |
+| 87 | openai.Example09DynamicInstructions | `304cd678-4e5d-4ed9-ab8e-e2511aa7e324` | personal_assistant | COMPLETED | 16 | 0 |
+| 88 | openai.Example10MultiModel | `2c596a5c-e90d-4143-8386-bbab5cae37dc` | triage | COMPLETED | 17 | 0 |
 
 Execution IDs are stable for as long as the local server's database
 isn't reset. To re-verify any row, paste its ID into:
