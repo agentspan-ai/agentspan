@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -134,7 +133,7 @@ public class Example18OrderProcessing {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent orderProcessor = LlmAgent.builder()
             .name("order_processor")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -148,9 +147,7 @@ public class Example18OrderProcessing {
                 FunctionTool.create(Example18OrderProcessing.class, "placeOrder"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(orderProcessor,
             "I need a laptop for work. Show me what's available, check stock for your recommendation, "
             + "and calculate the total with express shipping.");
         System.out.println("Status: " + result.getStatus());

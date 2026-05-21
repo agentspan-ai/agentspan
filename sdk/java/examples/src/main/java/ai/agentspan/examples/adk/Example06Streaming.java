@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -54,7 +53,7 @@ public class Example06Streaming {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent techWriter = LlmAgent.builder()
             .name("docs_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -63,9 +62,7 @@ public class Example06Streaming {
             .tools(FunctionTool.create(Example06Streaming.class, "searchDocumentation"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent, "How do I authenticate with the API?");
+        AgentResult result = Agentspan.run(techWriter, "How do I authenticate with the API?");
         result.printResult();
 
         Agentspan.shutdown();

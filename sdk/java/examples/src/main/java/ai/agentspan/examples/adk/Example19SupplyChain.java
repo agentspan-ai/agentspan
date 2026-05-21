@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -143,9 +142,7 @@ public class Example19SupplyChain {
             .subAgents(inventoryAgent, logisticsAgent, demandAgent)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(coordinator);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(coordinator,
             "Give me a full supply chain status report. Check both warehouses, "
             + "identify any items below reorder points, and recommend restocking actions.");
         System.out.println("Status: " + result.getStatus());

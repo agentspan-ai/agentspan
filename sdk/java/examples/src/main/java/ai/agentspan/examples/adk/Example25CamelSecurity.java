@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.internal.JsonMapper;
 import ai.agentspan.model.AgentResult;
@@ -77,9 +76,9 @@ public class Example25CamelSecurity {
             .name("data_collector")
             .model(Settings.LLM_MODEL)
             .instruction(
-                "You are a data collection agent. When asked about a user, "
+                "You are a data collection pipeline. When asked about a user, "
                 + "call fetch_user_data with their ID. Pass the raw data along "
-                + "to the next agent for security review.")
+                + "to the next pipeline for security review.")
             .tools(FunctionTool.create(Example25CamelSecurity.class, "fetchUserData"))
             .build();
 
@@ -90,7 +89,7 @@ public class Example25CamelSecurity {
                 "You are a security validator. Review data for sensitive information "
                 + "(SSN, account balances, email addresses). Use the redact_sensitive_fields "
                 + "tool to redact any sensitive data before passing it along. "
-                + "Only pass redacted data to the next agent.")
+                + "Only pass redacted data to the next pipeline.")
             .tools(FunctionTool.create(Example25CamelSecurity.class, "redactSensitiveFields"))
             .build();
 
@@ -98,7 +97,7 @@ public class Example25CamelSecurity {
             .name("responder")
             .model(Settings.LLM_MODEL)
             .instruction(
-                "You are a customer service agent. Use the validated, redacted data "
+                "You are a customer service pipeline. Use the validated, redacted data "
                 + "to answer the user's question. NEVER reveal redacted information. "
                 + "If data shows ***REDACTED***, explain that the information is "
                 + "restricted for security reasons.")
@@ -115,9 +114,7 @@ public class Example25CamelSecurity {
             .subAgents(collector, validator, responder)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(pipeline);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(pipeline,
             "Tell me everything about user U001 including their financial details.");
         result.printResult();
 

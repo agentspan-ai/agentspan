@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -88,9 +87,7 @@ public class Example07OutputKeyState {
             .subAgents(analyst, visualizer)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(coordinator);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(coordinator,
             "Create a report on the sales_q4 dataset with visualization recommendations.");
         result.printResult();
 

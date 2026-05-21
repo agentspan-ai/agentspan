@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -154,7 +153,7 @@ public class Example35RagAgent {
     }
 
     public static void main(String[] args) {
-        LlmAgent ragAdk = LlmAgent.builder()
+        LlmAgent ragAgent = LlmAgent.builder()
             .name("rag_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -173,8 +172,6 @@ public class Example35RagAgent {
                 FunctionTool.create(Example35RagAgent.class, "searchKnowledgeBase"),
                 FunctionTool.create(Example35RagAgent.class, "indexDocument"))
             .build();
-
-        Agent ragAgent = AdkBridge.toAgentspan(ragAdk);
 
         // ── Phase 1: Index all documents ─────────────────────────────────
         System.out.println("============================================================");

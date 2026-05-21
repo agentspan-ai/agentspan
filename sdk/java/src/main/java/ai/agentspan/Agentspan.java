@@ -204,6 +204,123 @@ public final class Agentspan {
         }
     }
 
+    // ── Drop-in support for native framework agents (run / start / stream /
+    //    deploy / serve / plan / resume all accept the raw native object) ──
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static AgentResult run(Object agent, String prompt) {
+        return run(coerceAgent(agent), prompt);
+    }
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static CompletableFuture<AgentResult> runAsync(Object agent, String prompt) {
+        return runAsync(coerceAgent(agent), prompt);
+    }
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static AgentHandle start(Object agent, String prompt) {
+        return start(coerceAgent(agent), prompt);
+    }
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static CompletableFuture<AgentHandle> startAsync(Object agent, String prompt) {
+        return startAsync(coerceAgent(agent), prompt);
+    }
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static AgentStream stream(Object agent, String prompt) {
+        return stream(coerceAgent(agent), prompt);
+    }
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static CompletableFuture<AgentStream> streamAsync(Object agent, String prompt) {
+        return streamAsync(coerceAgent(agent), prompt);
+    }
+
+    /** Drop-in: accepts native ADK {@code BaseAgent} instances (or Agentspan {@link Agent}s). */
+    public static List<DeploymentInfo> deploy(Object... agents) {
+        return deploy(coerceAgents(agents));
+    }
+
+    /** Drop-in: accepts native ADK {@code BaseAgent} instances (or Agentspan {@link Agent}s). */
+    public static CompletableFuture<List<DeploymentInfo>> deployAsync(Object... agents) {
+        return deployAsync(coerceAgents(agents));
+    }
+
+    /** Drop-in: accepts native ADK {@code BaseAgent} instances (or Agentspan {@link Agent}s). */
+    public static void serve(Object... agents) {
+        serve(coerceAgents(agents));
+    }
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static Map<String, Object> plan(Object agent) {
+        return plan(coerceAgent(agent));
+    }
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static AgentHandle resume(String executionId, Object agent) {
+        return resume(executionId, coerceAgent(agent));
+    }
+
+    /** Drop-in: accepts a native ADK {@code BaseAgent} or any Agentspan {@link Agent}. */
+    public static CompletableFuture<AgentHandle> resumeAsync(String executionId, Object agent) {
+        return resumeAsync(executionId, coerceAgent(agent));
+    }
+
+    /**
+     * Internal: coerce a user-provided agent object to an Agentspan {@link Agent}.
+     *
+     * <p>Supports:
+     * <ul>
+     *   <li>{@link Agent} — returned as-is</li>
+     *   <li>{@code com.google.adk.agents.BaseAgent} — translated via
+     *       {@link ai.agentspan.frameworks.AdkBridge} (ADK must be on the
+     *       runtime classpath when this branch executes)</li>
+     * </ul>
+     */
+    private static Agent coerceAgent(Object agent) {
+        if (agent == null) {
+            throw new IllegalArgumentException("agent is null");
+        }
+        if (agent instanceof Agent a) {
+            return a;
+        }
+        if (isInstanceOf(agent, "com.google.adk.agents.BaseAgent")) {
+            // ADK is on the classpath (we just resolved BaseAgent), so loading
+            // AdkBridge here is safe — its direct ADK references will link.
+            return ai.agentspan.frameworks.AdkBridge.toAgentspan(
+                    (com.google.adk.agents.BaseAgent) agent);
+        }
+        throw new IllegalArgumentException(
+                "Unsupported agent type: " + agent.getClass().getName()
+                + ". Expected ai.agentspan.Agent or a native ADK BaseAgent.");
+    }
+
+    private static Agent[] coerceAgents(Object[] agents) {
+        if (agents == null) return new Agent[0];
+        Agent[] out = new Agent[agents.length];
+        for (int i = 0; i < agents.length; i++) out[i] = coerceAgent(agents[i]);
+        return out;
+    }
+
+    /**
+     * Walk up the class/interface hierarchy looking for a type whose name
+     * matches {@code fqn}. Used instead of {@code instanceof} so the dispatcher
+     * compiles and runs without ADK on the classpath — only callers actually
+     * passing native ADK objects will trigger the loading of ADK classes.
+     */
+    private static boolean isInstanceOf(Object o, String fqn) {
+        Class<?> c = o.getClass();
+        while (c != null) {
+            if (fqn.equals(c.getName())) return true;
+            c = c.getSuperclass();
+        }
+        for (Class<?> i : o.getClass().getInterfaces()) {
+            if (fqn.equals(i.getName())) return true;
+        }
+        return false;
+    }
+
     private static AgentRuntime getOrCreateRuntime() {
         if (defaultRuntime == null) {
             synchronized (lock) {

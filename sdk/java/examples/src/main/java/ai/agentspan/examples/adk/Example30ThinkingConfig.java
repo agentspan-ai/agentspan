@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -73,7 +72,7 @@ public class Example30ThinkingConfig {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent thinker = LlmAgent.builder()
             .name("deep_thinker")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -87,9 +86,7 @@ public class Example30ThinkingConfig {
             .tools(FunctionTool.create(Example30ThinkingConfig.class, "calculate"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(thinker,
             "If a train travels 120 km in 2 hours, then speeds up by 50% for "
             + "the next 3 hours, what is the total distance traveled?");
         result.printResult();

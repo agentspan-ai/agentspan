@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -65,7 +64,7 @@ public class Example08InstructionTemplating {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent concierge = LlmAgent.builder()
             .name("adaptive_tutor")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -78,9 +77,7 @@ public class Example08InstructionTemplating {
                 FunctionTool.create(Example08InstructionTemplating.class, "searchTutorials"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(concierge,
             "I want to learn Python. What tutorials do you recommend?");
         result.printResult();
 

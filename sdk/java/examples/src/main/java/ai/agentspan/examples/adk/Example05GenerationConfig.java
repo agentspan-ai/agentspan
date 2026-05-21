@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -23,7 +22,7 @@ import com.google.genai.types.GenerateContentConfig;
 public class Example05GenerationConfig {
     public static void main(String[] args) {
         // Precise agent — low temperature for factual responses
-        LlmAgent factualAdk = LlmAgent.builder()
+        LlmAgent factualAgent = LlmAgent.builder()
             .name("fact_checker")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -35,7 +34,7 @@ public class Example05GenerationConfig {
             .build();
 
         // Creative agent — high temperature for creative writing
-        LlmAgent creativeAdk = LlmAgent.builder()
+        LlmAgent creativeAgent = LlmAgent.builder()
             .name("storyteller")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -45,9 +44,6 @@ public class Example05GenerationConfig {
                 .temperature(0.9f)
                 .build())
             .build();
-
-        Agent factualAgent = AdkBridge.toAgentspan(factualAdk);
-        Agent creativeAgent = AdkBridge.toAgentspan(creativeAdk);
 
         System.out.println("=== Factual Agent (temp=0.1) ===");
         AgentResult result = Agentspan.run(factualAgent,

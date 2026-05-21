@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -19,7 +18,7 @@ import com.google.adk.agents.LlmAgent;
  * <p>Demonstrates: a multi-agent ML workflow combining sequential, parallel,
  * and loop strategies. The Java port encodes the strategy semantics inline
  * (sub-agents with instructions describing parallel/loop intent) since the
- * Agentspan {@link AdkBridge} currently translates {@link LlmAgent}s with
+ * Agentspan {@link ai.agentspan.Agentspan#run(Object, String)} currently translates {@link LlmAgent}s with
  * sub-agents but does not extract {@code ParallelAgent}/{@code LoopAgent}
  * primitives directly.
  */
@@ -170,9 +169,7 @@ public class Example34MlEngineering {
             .subAgents(dataAnalyst, parallelModeling, evaluator, refinementLoop, reporter)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(mlPipeline);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(mlPipeline,
             "Build a model to predict California housing prices. The dataset has 20,640 samples "
             + "with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, "
             + "Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). "

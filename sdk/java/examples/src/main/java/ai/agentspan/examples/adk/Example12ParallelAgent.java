@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -56,9 +55,7 @@ public class Example12ParallelAgent {
             .subAgents(marketAnalyst, techAnalyst, riskAnalyst)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(parallelAnalysis);
-
-        AgentResult result = Agentspan.run(agent, "Analyze Tesla's electric vehicle business");
+        AgentResult result = Agentspan.run(parallelAnalysis, "Analyze Tesla's electric vehicle business");
         System.out.println("Status: " + result.getStatus());
         result.printResult();
 

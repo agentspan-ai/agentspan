@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -54,9 +53,7 @@ public class Example13LoopAgent {
             .subAgents(writer, critic)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(refinementLoop);
-
-        AgentResult result = Agentspan.run(agent, "Write a haiku about autumn leaves");
+        AgentResult result = Agentspan.run(refinementLoop, "Write a haiku about autumn leaves");
         System.out.println("Status: " + result.getStatus());
         result.printResult();
 

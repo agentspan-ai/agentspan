@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -73,7 +72,7 @@ public class Example23Callbacks {
             return Maybe.empty();   // empty → use the LLM's response as-is
         };
 
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent callbackAgent = LlmAgent.builder()
                 .name("monitored_assistant")
                 .model(Settings.LLM_MODEL)
                 .instruction(
@@ -83,9 +82,7 @@ public class Example23Callbacks {
                 .afterModelCallback(afterModel)
                 .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(callbackAgent,
                 "Explain the difference between supervised and unsupervised machine learning.");
         result.printResult();
 

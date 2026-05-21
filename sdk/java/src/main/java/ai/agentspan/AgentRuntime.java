@@ -245,7 +245,18 @@ public class AgentRuntime implements AutoCloseable {
         for (Agent agent : agents) {
             Map<String, Object> agentConfig = serializer.serialize(agent);
             Map<String, Object> payload = new java.util.LinkedHashMap<>();
-            payload.put("agentConfig", agentConfig);
+            // Framework-backed agents (openai, google_adk, langgraph) ship via
+            // {framework, rawConfig} so the matching server-side normalizer
+            // runs — same dispatch as startAsync. Without this, the server
+            // tries to compile the agent as a native Agentspan agent and
+            // fails on a missing model / null taskDef name.
+            String framework = agent.getFramework();
+            if (framework != null && !framework.isEmpty() && !"skill".equals(framework)) {
+                payload.put("framework", framework);
+                payload.put("rawConfig", agentConfig);
+            } else {
+                payload.put("agentConfig", agentConfig);
+            }
             Map<String, Object> resp = httpApi.deployAgent(payload);
             String registeredName = resp.getOrDefault("agentName", agent.getName()).toString();
             results.add(new ai.agentspan.model.DeploymentInfo(registeredName, agent.getName()));

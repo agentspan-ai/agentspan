@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -25,7 +24,7 @@ import com.google.adk.agents.SequentialAgent;
 public class Example11SequentialAgent {
 
     public static void main(String[] args) {
-        // Step 1: Research agent gathers facts
+        // Step 1: Research pipeline gathers facts
         LlmAgent researcher = LlmAgent.builder()
             .name("researcher")
             .model(Settings.LLM_MODEL)
@@ -34,7 +33,7 @@ public class Example11SequentialAgent {
                 + "provide 3 key facts about it in a numbered list. Be concise.")
             .build();
 
-        // Step 2: Writer agent takes the research and writes a summary
+        // Step 2: Writer pipeline takes the research and writes a summary
         LlmAgent writer = LlmAgent.builder()
             .name("writer")
             .model(Settings.LLM_MODEL)
@@ -44,7 +43,7 @@ public class Example11SequentialAgent {
                 + "Keep it under 100 words.")
             .build();
 
-        // Step 3: Editor agent polishes the summary
+        // Step 3: Editor pipeline polishes the summary
         LlmAgent editor = LlmAgent.builder()
             .name("editor")
             .model(Settings.LLM_MODEL)
@@ -60,9 +59,7 @@ public class Example11SequentialAgent {
             .subAgents(researcher, writer, editor)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(pipeline);
-
-        AgentResult result = Agentspan.run(agent, "The history of the Internet");
+        AgentResult result = Agentspan.run(pipeline, "The history of the Internet");
         System.out.println("Status: " + result.getStatus());
         result.printResult();
 

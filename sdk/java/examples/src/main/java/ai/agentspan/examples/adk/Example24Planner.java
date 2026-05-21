@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -67,7 +66,7 @@ public class Example24Planner {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent planner = LlmAgent.builder()
             .name("research_writer")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -81,9 +80,7 @@ public class Example24Planner {
                 FunctionTool.create(Example24Planner.class, "writeSection"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(planner,
             "Write a brief report on the current state of renewable energy "
             + "and climate change solutions.");
         result.printResult();

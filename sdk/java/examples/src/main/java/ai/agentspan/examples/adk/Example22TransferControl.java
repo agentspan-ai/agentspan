@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -33,13 +32,13 @@ public class Example22TransferControl {
             .disallowTransferToParent(true)
             .build();
 
-        // Default — can transfer to any agent
+        // Default — can transfer to any coordinator
         LlmAgent specialistB = LlmAgent.builder()
             .name("analyst")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a data analyst. Take the data collected and provide "
-                + "a concise analysis with insights. You can transfer to any agent.")
+                + "a concise analysis with insights. You can transfer to any coordinator.")
             .build();
 
         // Cannot transfer to peers (disallow_transfer_to_peers=True)
@@ -65,9 +64,7 @@ public class Example22TransferControl {
             .subAgents(specialistA, specialistB, specialistC)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(coordinator);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(coordinator,
             "Research the current state of renewable energy adoption worldwide.");
         result.printResult();
 

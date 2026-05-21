@@ -3,7 +3,6 @@
 
 package ai.agentspan.examples.adk;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.examples.Settings;
 import ai.agentspan.model.AgentResult;
@@ -54,7 +53,7 @@ public class Example02FunctionTools {
     }
 
     public static void main(String[] args) {
-        LlmAgent adkAgent = LlmAgent.builder()
+        LlmAgent calculator = LlmAgent.builder()
                 .name("travel_assistant")
                 .model(Settings.LLM_MODEL)
                 .instruction("You are a travel assistant. Help users with weather and temperature conversions. "
@@ -65,9 +64,7 @@ public class Example02FunctionTools {
                 )
                 .build();
 
-        Agent agent = AdkBridge.toAgentspan(adkAgent);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(calculator,
                 "What's the weather in Tokyo? Convert the temperature to Fahrenheit.");
         result.printResult();
 

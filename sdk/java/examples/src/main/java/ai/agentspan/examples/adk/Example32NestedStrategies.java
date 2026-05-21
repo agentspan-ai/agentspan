@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -71,9 +70,7 @@ public class Example32NestedStrategies {
             .subAgents(parallelResearch, summarizer)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(pipeline);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(pipeline,
             "Launching an AI-powered healthcare diagnostics tool in the US");
         result.printResult();
 

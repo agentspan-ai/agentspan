@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -22,7 +21,7 @@ import com.google.adk.agents.LlmAgent;
 public class Example29IncludeContents {
 
     public static void main(String[] args) {
-        // Sub-agent with include_contents="none" — no parent context.
+        // Sub-coordinator with include_contents="none" — no parent context.
         LlmAgent independentSummarizer = LlmAgent.builder()
             .name("independent_summarizer")
             .model(Settings.LLM_MODEL)
@@ -30,7 +29,7 @@ public class Example29IncludeContents {
             .includeContents(LlmAgent.IncludeContents.NONE)
             .build();
 
-        // Sub-agent that sees parent context (default).
+        // Sub-coordinator that sees parent context (default).
         LlmAgent contextAwareHelper = LlmAgent.builder()
             .name("context_aware_helper")
             .model(Settings.LLM_MODEL)
@@ -47,9 +46,7 @@ public class Example29IncludeContents {
             .subAgents(independentSummarizer, contextAwareHelper)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(coordinator);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(coordinator,
             "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
             + "This sentence contains every letter of the alphabet and is commonly "
             + "used for typography testing.'");

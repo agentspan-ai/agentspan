@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -84,7 +83,7 @@ public class Example26SafetyGuardrails {
             .name("safety_checker")
             .model(Settings.LLM_MODEL)
             .instruction(
-                "You are a safety reviewer. Check the previous agent's response "
+                "You are a safety reviewer. Check the previous safePipeline's response "
                 + "for any PII (emails, phone numbers, SSNs, credit card numbers). "
                 + "Use check_pii on the response text. If PII is found, use "
                 + "sanitize_response to clean it. Pass the clean version along.")
@@ -103,9 +102,7 @@ public class Example26SafetyGuardrails {
             .subAgents(assistant, safetyChecker)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(safePipeline);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(safePipeline,
             "What are the contact details for our support team? "
             + "Include email support@company.com and phone 555-123-4567.");
         result.printResult();

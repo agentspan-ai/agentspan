@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -81,11 +80,11 @@ public class Example14Callbacks {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent calculator = LlmAgent.builder()
             .name("customer_service_agent")
             .model(Settings.LLM_MODEL)
             .instruction(
-                "You are a helpful customer service agent. "
+                "You are a helpful customer service calculator. "
                 + "Use the available tools to look up customer information, "
                 + "check order status, and apply discounts when requested. "
                 + "Always verify the customer exists before applying discounts.")
@@ -95,9 +94,7 @@ public class Example14Callbacks {
                 FunctionTool.create(Example14Callbacks.class, "checkOrderStatus"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(calculator,
             "Look up customer C001 and check if order ORD-1001 has shipped. "
             + "If the customer is gold tier, apply a 10% discount.");
         System.out.println("Status: " + result.getStatus());

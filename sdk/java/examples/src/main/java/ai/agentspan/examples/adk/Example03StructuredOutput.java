@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -111,7 +110,7 @@ public class Example03StructuredOutput {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent extractor = LlmAgent.builder()
             .name("recipe_generator")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -121,11 +120,9 @@ public class Example03StructuredOutput {
             .outputSchema(recipeSchema())
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
         // OpenAI's `json_object` response format requires the word "json" to
         // appear in the input messages. Gemini has no such constraint.
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(extractor,
             "Give me a recipe for classic Italian carbonara pasta. Return as JSON.");
         result.printResult();
 

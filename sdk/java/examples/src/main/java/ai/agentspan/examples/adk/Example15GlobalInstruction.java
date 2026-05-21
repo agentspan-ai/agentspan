@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -65,7 +64,7 @@ public class Example15GlobalInstruction {
             + "check availability, and provide store hours. "
             + "Always mention the current promotion when discussing electronics.";
 
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent supportAgent = LlmAgent.builder()
             .name("store_assistant")
             .model(Settings.LLM_MODEL)
             .globalInstruction(globalInstruction)
@@ -75,9 +74,7 @@ public class Example15GlobalInstruction {
                 FunctionTool.create(Example15GlobalInstruction.class, "getStoreHours"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(supportAgent,
             "I'm looking for the Widget Pro. Is it in stock? Also, what are the downtown store hours?");
         System.out.println("Status: " + result.getStatus());
         result.printResult();

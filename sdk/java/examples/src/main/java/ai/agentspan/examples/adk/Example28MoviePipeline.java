@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -152,9 +151,7 @@ public class Example28MoviePipeline {
             .subAgents(conceptDeveloper, scriptwriter, visualDirector, audioDesigner, producer)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(moviePipeline);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(moviePipeline,
             "Create a 3-scene short film about a robot discovering music "
             + "for the first time in a post-apocalyptic world.");
         result.printResult();

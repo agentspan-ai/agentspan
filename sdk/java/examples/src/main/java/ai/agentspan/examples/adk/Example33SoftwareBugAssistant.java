@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -213,9 +212,7 @@ public class Example33SoftwareBugAssistant {
                 AgentTool.create(searchAgent))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(softwareAssistant);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(softwareAssistant,
             "Review the latest open issues and PRs on conductor-oss/conductor. "
             + "Check if any of them relate to our internal tickets. "
             + "Pay attention to the DO_WHILE fix (PR #820) and the scheduler "

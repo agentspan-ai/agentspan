@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -50,7 +49,7 @@ public class Example31SharedState {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent stateAgent = LlmAgent.builder()
             .name("shopping_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -62,9 +61,7 @@ public class Example31SharedState {
                 FunctionTool.create(Example31SharedState.class, "clearList"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(stateAgent,
             "Add milk, eggs, and bread to my shopping list, then show me the list.");
         result.printResult();
 

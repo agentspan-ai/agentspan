@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -116,9 +115,7 @@ public class Example20BlogWriter {
             .subAgents(researcher, writer, editor)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(coordinator);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(coordinator,
             "Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era."
             + "Make sure to write at-least 5000 word and use markdown to format the content");
         System.out.println("Status: " + result.getStatus());

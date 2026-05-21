@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -29,7 +28,7 @@ import com.google.adk.tools.GoogleSearchTool;
 public class Example36BuiltInTools {
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent toolUser = LlmAgent.builder()
                 .name("research_assistant")
                 .model(Settings.LLM_MODEL)
                 .instruction(
@@ -39,9 +38,7 @@ public class Example36BuiltInTools {
                 .tools(GoogleSearchTool.INSTANCE)
                 .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(toolUser,
                 "What are the most recent developments in fusion energy research?");
         result.printResult();
 

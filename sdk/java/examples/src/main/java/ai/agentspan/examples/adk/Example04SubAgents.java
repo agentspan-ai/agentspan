@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -117,9 +116,7 @@ public class Example04SubAgents {
             .subAgents(flightAgent, hotelAgent, advisoryAgent)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(coordinator);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(coordinator,
             "I want to plan a trip to Japan. I need a flight from San Francisco "
             + "on 2025-04-15 and a hotel for 5 nights. Also, what's the travel advisory?");
         result.printResult();

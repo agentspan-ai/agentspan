@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -124,7 +123,7 @@ public class Example09MultiToolAgent {
     }
 
     public static void main(String[] args) {
-        LlmAgent adk = LlmAgent.builder()
+        LlmAgent shopper = LlmAgent.builder()
             .name("shopping_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -139,9 +138,7 @@ public class Example09MultiToolAgent {
                 FunctionTool.create(Example09MultiToolAgent.class, "applyCoupon"))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(adk);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(shopper,
             "I'm looking for electronics. Show me what you have, check if they're "
             + "in stock, and calculate shipping to San Francisco. I have coupon code SAVE10.");
         result.printResult();

@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -142,9 +141,7 @@ public class Example10HierarchicalAgents {
             .subAgents(reliabilityLead, securityLead)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(coordinator);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(coordinator,
             "Give me a full platform health assessment. Focus on the payments service "
             + "which seems to be having issues.");
         result.printResult();

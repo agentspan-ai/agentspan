@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -146,9 +145,7 @@ public class Example17FinancialAdvisor {
             .subAgents(portfolioAnalyst, marketResearcher, taxAdvisor)
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(coordinator);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(coordinator,
             "I'm client CLT-001. Review my portfolio and tell me if I should rebalance "
             + "given current market conditions. What would the tax impact be if I sold some AAPL?");
         System.out.println("Status: " + result.getStatus());

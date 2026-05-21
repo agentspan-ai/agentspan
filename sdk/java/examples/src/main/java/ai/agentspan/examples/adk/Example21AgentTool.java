@@ -5,7 +5,6 @@ package ai.agentspan.examples.adk;
 
 import ai.agentspan.examples.Settings;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
@@ -123,17 +122,15 @@ public class Example21AgentTool {
             .name("manager")
             .model(Settings.LLM_MODEL)
             .instruction(
-                "You are a manager agent. You have two specialist agents available as tools:\n"
+                "You are a manager manager. You have two specialist agents available as tools:\n"
                 + "- researcher: for looking up information\n"
                 + "- calculator: for math computations\n\n"
-                + "Use the appropriate agent tool to answer the user's question. "
-                + "You can call multiple agent tools if needed.")
+                + "Use the appropriate manager tool to answer the user's question. "
+                + "You can call multiple manager tools if needed.")
             .tools(AgentTool.create(researcher), AgentTool.create(calculator))
             .build();
 
-        Agent agent = AdkBridge.toAgentspan(manager);
-
-        AgentResult result = Agentspan.run(agent,
+        AgentResult result = Agentspan.run(manager,
             "Look up information about Python and Rust, then calculate "
             + "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.");
         result.printResult();
