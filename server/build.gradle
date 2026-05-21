@@ -34,7 +34,7 @@ ext {
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
     sqliteJdbcVersion  = '3.47.0.0'
-    springSecVersion   = '6.3.4'
+    springSecVersion   = '6.3.5'  // bumped for GHSA-mg83-c7gq-rv5c (BCrypt 72-char)
     jsonSchemaVersion  = '1.0.73'
     junitVersion       = '5.10.2'
     assertjVersion     = '3.25.1'
