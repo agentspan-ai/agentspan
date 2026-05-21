@@ -9,64 +9,87 @@ import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
+import com.google.adk.agents.Callbacks;
 import com.google.adk.agents.LlmAgent;
-import com.google.adk.tools.Annotations.Schema;
-import com.google.adk.tools.FunctionTool;
 
-import java.util.Map;
+import io.reactivex.rxjava3.core.Maybe;
 
 /**
  * Example Adk 23 — Callbacks (lifecycle hooks)
  *
  * <p>Java port of <code>sdk/python/examples/adk/23_callbacks.py</code>.
  *
- * <p>Demonstrates: lifecycle hooks (before/after_model_callback) modeled as
- * function tools that surface the callback payloads. Native ADK exposes
- * {@code beforeModelCallback}/{@code afterModelCallback} on the builder but
- * the Agentspan {@link AdkBridge} currently only translates
- * {@link FunctionTool}s, so we keep the tool-based representation that
- * mirrors the Python signatures.
+ * <p>Demonstrates: native ADK {@code beforeModelCallback} and
+ * {@code afterModelCallback} attached to an {@link LlmAgent}. The bridge
+ * forwards both as Agentspan {@code CallbackHandler} workers.
+ *
+ * <p><b>Server-side limitation</b> (matches Python's
+ * {@code 14_callbacks.py} comment): the server's workflow compiler does
+ * not yet emit Conductor hook tasks for the before/after model and tool
+ * callback fields on the simple-LLM agent shape. The bridge wire payload
+ * is correct (verifiable via
+ * {@code GET /api/workflow/{id}?includeTasks=false} — the
+ * {@code agentDef.before_model_callback._worker_ref} is present in the
+ * metadata) but no hook task is currently scheduled, so the worker is
+ * never polled and the counters below stay at zero. Once the server
+ * compiler honors callbacks, this example will start firing them
+ * automatically.
+ *
+ * <p>When that happens, note one further constraint: the
+ * {@code CallbackContext} passed to the callback is {@code null} —
+ * callbacks should base decisions on the {@code LlmRequest.Builder} /
+ * {@code LlmResponse} args only, not on session state. State access
+ * throws NPE, which the bridge catches and logs.
  */
 public class Example23Callbacks {
 
-    @Schema(description = "Called before each LLM invocation. Returns empty dict to continue normally.")
-    public static Map<String, Object> logBeforeModel(
-            @Schema(name = "callback_position", description = "Hook position") String callbackPosition,
-            @Schema(name = "agent_name", description = "Name of the agent invoking the LLM") String agentName) {
-        System.out.println("[CALLBACK] Before model call for agent '" + agentName + "'");
-        return Map.of();
-    }
-
-    @Schema(description = "Called after each LLM invocation. Inspects the response.")
-    public static Map<String, Object> inspectAfterModel(
-            @Schema(name = "callback_position", description = "Hook position") String callbackPosition,
-            @Schema(name = "agent_name", description = "Name of the agent invoking the LLM") String agentName,
-            @Schema(name = "llm_result", description = "Raw LLM response text") String llmResult) {
-        int wordCount = (llmResult == null || llmResult.isEmpty()) ? 0 : llmResult.split("\\s+").length;
-        System.out.println("[CALLBACK] After model call for '" + agentName + "': " + wordCount + " words generated");
-        if (wordCount > 500) {
-            System.out.println("[CALLBACK] Warning: Response exceeds 500 words (" + wordCount + ")");
-        }
-        return Map.of();
-    }
+    // Mutable counters that the callbacks bump so we can assert from main()
+    // that they actually fired end-to-end.
+    private static int beforeCount = 0;
+    private static int afterCount = 0;
 
     public static void main(String[] args) {
+        Callbacks.BeforeModelCallback beforeModel = (ctx, req) -> {
+            beforeCount++;
+            int parts = 0;
+            try {
+                // best-effort — req.contents() comes from the bridge's
+                // reconstruction (server-side hook payload).
+                if (req.config().isPresent()) parts++;
+            } catch (Throwable ignored) {}
+            System.out.println("[CALLBACK] beforeModel fired (call #" + beforeCount
+                    + ", req has config=" + parts + ")");
+            return Maybe.empty();   // empty → continue to the LLM
+        };
+
+        Callbacks.AfterModelCallback afterModel = (ctx, response) -> {
+            afterCount++;
+            String text = response == null ? "" : response.content().map(c -> {
+                try { return c.text(); } catch (Throwable t) { return ""; }
+            }).orElse("");
+            int words = text.isEmpty() ? 0 : text.split("\\s+").length;
+            System.out.println("[CALLBACK] afterModel fired (call #" + afterCount
+                    + ", " + words + " words in response)");
+            return Maybe.empty();   // empty → use the LLM's response as-is
+        };
+
         LlmAgent adk = LlmAgent.builder()
-            .name("monitored_assistant")
-            .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a helpful assistant. Answer questions concisely. "
-                + "Keep responses under 200 words.")
-            .tools(
-                FunctionTool.create(Example23Callbacks.class, "logBeforeModel"),
-                FunctionTool.create(Example23Callbacks.class, "inspectAfterModel"))
-            .build();
+                .name("monitored_assistant")
+                .model(Settings.LLM_MODEL)
+                .instruction(
+                        "You are a helpful assistant. Answer questions concisely. "
+                        + "Keep responses under 200 words.")
+                .beforeModelCallback(beforeModel)
+                .afterModelCallback(afterModel)
+                .build();
 
         Agent agent = AdkBridge.toAgentspan(adk);
 
         AgentResult result = Agentspan.run(agent,
-            "Explain the difference between supervised and unsupervised machine learning.");
+                "Explain the difference between supervised and unsupervised machine learning.");
         result.printResult();
+
+        System.out.println("\nCallback invocations: before=" + beforeCount + " after=" + afterCount);
 
         Agentspan.shutdown();
     }

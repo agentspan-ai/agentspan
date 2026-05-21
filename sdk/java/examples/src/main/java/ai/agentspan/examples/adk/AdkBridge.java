@@ -4,18 +4,27 @@
 package ai.agentspan.examples.adk;
 
 import ai.agentspan.Agent;
+import ai.agentspan.CallbackHandler;
 import ai.agentspan.model.ToolDef;
 
 import com.google.adk.agents.BaseAgent;
+import com.google.adk.agents.Callbacks;
 import com.google.adk.agents.Instruction;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.agents.LoopAgent;
+import com.google.adk.models.LlmRequest;
+import com.google.adk.models.LlmResponse;
 import com.google.adk.tools.AgentTool;
 import com.google.adk.tools.Annotations;
 import com.google.adk.tools.BaseTool;
+import com.google.adk.tools.BaseToolset;
+import com.google.adk.tools.BuiltInCodeExecutionTool;
 import com.google.adk.tools.FunctionTool;
+import com.google.adk.tools.GoogleSearchTool;
+import com.google.genai.types.Content;
 import com.google.genai.types.FunctionDeclaration;
 import com.google.genai.types.GenerateContentConfig;
+import com.google.genai.types.Part;
 import com.google.genai.types.Schema;
 import com.google.genai.types.ThinkingConfig;
 
@@ -67,6 +76,16 @@ public final class AdkBridge {
 
     private static final Logger log = LoggerFactory.getLogger(AdkBridge.class);
 
+    /** Map from ADK callback wire-field name to LlmAgent getter method. */
+    private static final String[][] CALLBACK_FIELDS = {
+            {"before_agent_callback", "beforeAgentCallback"},
+            {"after_agent_callback",  "afterAgentCallback"},
+            {"before_model_callback", "beforeModelCallback"},
+            {"after_model_callback",  "afterModelCallback"},
+            {"before_tool_callback",  "beforeToolCallback"},
+            {"after_tool_callback",   "afterToolCallback"},
+    };
+
     private AdkBridge() {}
 
     // ── Public entry ─────────────────────────────────────────────────────────
@@ -109,14 +128,26 @@ public final class AdkBridge {
             b.agents(subAgentChildren.toArray(new Agent[0]));
         }
 
+        // Callbacks: wrap ADK callbacks as an Agentspan CallbackHandler so the
+        // runtime registers worker handlers and the server schedules hook tasks
+        // at the right positions. Best-effort — contexts are stubbed; see
+        // wrapCallbacks() for the constraint matrix.
+        if (adk instanceof LlmAgent llmCb) {
+            CallbackHandler handler = wrapCallbacks(llmCb);
+            if (handler != null) b.callbacks(handler);
+        }
+
         Map<String, Object> frameworkConfig = buildRawConfig(adk, /*topLevel=*/ true);
-        // Strip fields already set on the Agent.Builder — the serializer puts
-        // them at the top level and frameworkConfig.putAll would just overwrite
-        // with the same value.
+        // Strip the simple scalars already set on the Agent.Builder — the
+        // serializer emits them at the top level and frameworkConfig.putAll
+        // would just overwrite with the same value.
         frameworkConfig.remove("name");
         frameworkConfig.remove("model");
         frameworkConfig.remove("instruction");
-        frameworkConfig.remove("tools");
+        // Intentionally keep `tools` in frameworkConfig: it contains the full
+        // wire-shape including built-in tools (GoogleSearchTool, code
+        // execution) that have no ToolDef representation, so it must override
+        // the serializer's worker-only list via map.putAll(cfg).
         if (!frameworkConfig.isEmpty()) b.frameworkConfig(frameworkConfig);
 
         return b.build();
@@ -201,17 +232,25 @@ public final class AdkBridge {
             List<Map<String, Object>> toolMaps = buildToolMaps(llm.tools().blockingGet());
             if (!toolMaps.isEmpty()) raw.put("tools", toolMaps);
 
-            // Callbacks: intentionally NOT emitted as `_worker_ref` placeholders.
-            // ADK callbacks take rich contexts (CallbackContext, LlmRequest.Builder,
-            // ToolContext) that can't be reconstructed from the Map<String,Object>
-            // the Agentspan worker poller receives. Emitting `_worker_ref` here
-            // would make the server schedule a before/after-hook task that no
-            // local handler can answer, leaving the workflow blocked. Users who
-            // need callbacks should register them via Agentspan's CallbackHandler
-            // API on the Agent.Builder directly.
+            // Callbacks: emit `_worker_ref` placeholders for each non-empty
+            // callback list. The matching CallbackHandler attached on the
+            // Agent.Builder (see toAgentspan) registers the local worker so
+            // any server-scheduled hook task lands somewhere.
             //
-            // TODO: build a thin adapter that synthesises an ADK CallbackContext
-            // from a Map and routes ADK callbacks through Agentspan workers.
+            // KNOWN SERVER LIMITATION (matches Python — see python ADK
+            // examples/14_callbacks.py): the server-side compiler currently
+            // does NOT translate `before_*/after_*_callback._worker_ref`
+            // into Conductor hook tasks. The wire field is recognized by
+            // GoogleADKNormalizer (CallbackConfig is built), but downstream
+            // workflow compilation drops it for the simple-LLM agent shape.
+            // Bridge stays ready: the moment the server emits the hook
+            // task, the registered worker dispatches the user's callback.
+            //
+            // Callback context limitations even when server fires hooks:
+            // CallbackContext/InvocationContext are passed as null. Callbacks
+            // that read session state / save artifacts will NPE (caught and
+            // logged). Inspection-only callbacks (the common case) work fine.
+            attachCallbackRefs(llm, raw);
         }
 
         // Sub-agents — full recursive serialization.
@@ -278,29 +317,68 @@ public final class AdkBridge {
         if (tools == null) return out;
 
         for (BaseTool t : tools) {
-            if (t instanceof FunctionTool ft) {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("_worker_ref", ft.name());
-                m.put("description", nullToEmpty(ft.description()));
-                m.put("parameters", buildInputSchema(ft));
-                out.add(m);
-            } else if (t instanceof AgentTool at) {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("_type", "AgentTool");
-                m.put("name", at.name());
-                m.put("description", nullToEmpty(at.description()));
-                m.put("agent", buildRawConfig(at.getAgent(), /*topLevel=*/ false));
-                out.add(m);
-            } else {
-                log.warn("AdkBridge: dropping unsupported BaseTool subclass '{}'", t.getClass().getName());
-            }
+            addToolMap(t, out);
         }
         return out;
+    }
+
+    private static void addToolMap(BaseTool t, List<Map<String, Object>> out) {
+        if (t instanceof FunctionTool ft) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("_worker_ref", ft.name());
+            m.put("description", nullToEmpty(ft.description()));
+            m.put("parameters", buildInputSchema(ft));
+            out.add(m);
+        } else if (t instanceof AgentTool at) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("_type", "AgentTool");
+            m.put("name", at.name());
+            m.put("description", nullToEmpty(at.description()));
+            m.put("agent", buildRawConfig(at.getAgent(), /*topLevel=*/ false));
+            out.add(m);
+        } else if (t instanceof GoogleSearchTool) {
+            // Server normalizer recognizes _type: GoogleSearchTool (line 279)
+            // and wires it as a builtin HTTP tool with config {builtin: google_search}.
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("_type", "GoogleSearchTool");
+            m.put("name", "google_search");
+            m.put("description", "Search the web using Google.");
+            out.add(m);
+        } else if (t instanceof BuiltInCodeExecutionTool) {
+            // Server normalizer recognizes _type: CodeExecutionTool (line 100,
+            // 288) and enables setCodeExecution(enabled=true) on the config.
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("_type", "CodeExecutionTool");
+            m.put("name", "code_execution");
+            m.put("description", "Execute code in a sandboxed environment.");
+            out.add(m);
+        } else if (t instanceof BaseToolset bts) {
+            // A toolset is a lazy bundle of BaseTools. Resolve and emit each.
+            try {
+                for (BaseTool inner : bts.getTools(null).blockingIterable()) {
+                    addToolMap(inner, out);
+                }
+            } catch (Throwable th) {
+                log.warn("AdkBridge: BaseToolset '{}' expansion failed: {}",
+                        t.getClass().getSimpleName(), th.getMessage());
+            }
+        } else {
+            log.warn("AdkBridge: dropping unsupported BaseTool subclass '{}'", t.getClass().getName());
+        }
     }
 
     private static ToolDef toToolDef(BaseTool t) {
         if (t instanceof FunctionTool ft) return functionToolToDef(ft);
         if (t instanceof AgentTool at)    return agentToolToDef(at);
+        // GoogleSearchTool / BuiltInCodeExecutionTool / BaseToolset: server-side
+        // builtin tools that don't need a local worker. Returning null is
+        // intentional — extractTopLevelTools drops nulls and these still get
+        // emitted into the wire format via buildToolMaps (frameworkConfig.tools).
+        if (t instanceof GoogleSearchTool
+                || t instanceof BuiltInCodeExecutionTool
+                || t instanceof BaseToolset) {
+            return null;
+        }
         log.warn("AdkBridge: dropping unsupported BaseTool subclass '{}'", t.getClass().getName());
         return null;
     }
@@ -486,6 +564,240 @@ public final class AdkBridge {
     }
 
     // ── Callback wiring ──────────────────────────────────────────────────────
+
+    // ── Callback wiring ──────────────────────────────────────────────────────
+
+    /**
+     * Emit a {@code _worker_ref} placeholder for every callback position that
+     * has at least one registered ADK callback. The matching
+     * {@link CallbackHandler} attached on the {@code Agent.Builder} registers
+     * the local worker handler.
+     */
+    private static void attachCallbackRefs(LlmAgent llm, Map<String, Object> raw) {
+        String agentName = llm.name();
+        for (String[] pair : CALLBACK_FIELDS) {
+            String field = pair[0];
+            String getter = pair[1];
+            if (callbackListIsNonEmpty(llm, getter)) {
+                String position = field.replace("_callback", "");
+                Map<String, Object> ref = new LinkedHashMap<>();
+                ref.put("_worker_ref", agentName + "_" + position);
+                raw.put(field, ref);
+            }
+        }
+    }
+
+    private static boolean callbackListIsNonEmpty(LlmAgent llm, String getter) {
+        return !callbackList(llm, getter).isEmpty();
+    }
+
+    /**
+     * Wrap any ADK callbacks attached to {@code llm} as a single
+     * {@link CallbackHandler} that the Agentspan runtime can dispatch to.
+     *
+     * <p>Returns {@code null} if no callbacks are attached.
+     *
+     * <p><b>Limitations:</b> the {@link com.google.adk.agents.CallbackContext}
+     * / {@link com.google.adk.agents.InvocationContext} passed to the user's
+     * callback is {@code null}. Callbacks that read session state, invoke
+     * {@code state()}, or call {@code saveArtifact} / {@code loadArtifact}
+     * will throw NPE — caught and logged. Callbacks that <em>inspect</em>
+     * the request/response shape (the common safety/guardrail / logging
+     * use case) work fine.
+     */
+    @SuppressWarnings("unchecked")
+    private static CallbackHandler wrapCallbacks(LlmAgent llm) {
+        List<Callbacks.BeforeAgentCallback> beforeAgent = callbackList(llm, "beforeAgentCallback");
+        List<Callbacks.AfterAgentCallback>  afterAgent  = callbackList(llm, "afterAgentCallback");
+        List<Callbacks.BeforeModelCallback> beforeModel = callbackList(llm, "beforeModelCallback");
+        List<Callbacks.AfterModelCallback>  afterModel  = callbackList(llm, "afterModelCallback");
+        List<Callbacks.BeforeToolCallback>  beforeTool  = callbackList(llm, "beforeToolCallback");
+        List<Callbacks.AfterToolCallback>   afterTool   = callbackList(llm, "afterToolCallback");
+
+        if (beforeAgent.isEmpty() && afterAgent.isEmpty()
+                && beforeModel.isEmpty() && afterModel.isEmpty()
+                && beforeTool.isEmpty() && afterTool.isEmpty()) {
+            return null;
+        }
+
+        return new CallbackHandler() {
+            @Override public Map<String, Object> onAgentStart(Map<String, Object> in) {
+                for (var cb : beforeAgent) {
+                    try {
+                        Content out = cb.call(null).blockingGet();
+                        if (out != null) return Map.of("content", textOf(out));
+                    } catch (Throwable t) {
+                        log.warn("ADK beforeAgentCallback failed: {}", t.getMessage());
+                    }
+                }
+                return Map.of();
+            }
+            @Override public Map<String, Object> onAgentEnd(Map<String, Object> in) {
+                for (var cb : afterAgent) {
+                    try {
+                        Content out = cb.call(null).blockingGet();
+                        if (out != null) return Map.of("content", textOf(out));
+                    } catch (Throwable t) {
+                        log.warn("ADK afterAgentCallback failed: {}", t.getMessage());
+                    }
+                }
+                return Map.of();
+            }
+            @Override public Map<String, Object> onModelStart(Map<String, Object> in) {
+                LlmRequest.Builder req = reconstructLlmRequest(in);
+                for (var cb : beforeModel) {
+                    try {
+                        LlmResponse resp = cb.call(null, req).blockingGet();
+                        if (resp != null) {
+                            return Map.of("content", resp.content().map(AdkBridge::textOf).orElse(""));
+                        }
+                    } catch (Throwable t) {
+                        log.warn("ADK beforeModelCallback failed: {}", t.getMessage());
+                    }
+                }
+                return Map.of();
+            }
+            @Override public Map<String, Object> onModelEnd(Map<String, Object> in) {
+                LlmResponse resp = reconstructLlmResponse(in);
+                for (var cb : afterModel) {
+                    try {
+                        LlmResponse rewritten = cb.call(null, resp).blockingGet();
+                        if (rewritten != null) {
+                            return Map.of("content", rewritten.content().map(AdkBridge::textOf).orElse(""));
+                        }
+                    } catch (Throwable t) {
+                        log.warn("ADK afterModelCallback failed: {}", t.getMessage());
+                    }
+                }
+                return Map.of();
+            }
+            @Override public Map<String, Object> onToolStart(Map<String, Object> in) {
+                String toolName = (String) in.getOrDefault("tool_name", "");
+                Map<String, Object> args = (Map<String, Object>) in.getOrDefault("args", Map.of());
+                for (var cb : beforeTool) {
+                    try {
+                        // BaseTool/ToolContext are null — user callbacks should
+                        // base decisions on the args/toolName they get here.
+                        Map<String, Object> out = cb.call(null, null, args, null).blockingGet();
+                        if (out != null) return out;
+                    } catch (Throwable t) {
+                        log.warn("ADK beforeToolCallback failed for '{}': {}", toolName, t.getMessage());
+                    }
+                }
+                return Map.of();
+            }
+            @Override public Map<String, Object> onToolEnd(Map<String, Object> in) {
+                String toolName = (String) in.getOrDefault("tool_name", "");
+                Map<String, Object> args = (Map<String, Object>) in.getOrDefault("args", Map.of());
+                Object result = in.get("result");
+                for (var cb : afterTool) {
+                    try {
+                        Map<String, Object> out = cb.call(null, null, args, null, result).blockingGet();
+                        if (out != null) return out;
+                    } catch (Throwable t) {
+                        log.warn("ADK afterToolCallback failed for '{}': {}", toolName, t.getMessage());
+                    }
+                }
+                return Map.of();
+            }
+        };
+    }
+
+    /**
+     * Read a callback list getter on {@link LlmAgent}. The static return type
+     * declares {@code Optional<List<...>>} but, depending on the ADK build,
+     * runtime sometimes returns the {@link List} directly (e.g. an
+     * {@code ImmutableList}). Handle both shapes — and an empty/null Optional —
+     * uniformly.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T> List<T> callbackList(LlmAgent llm, String getter) {
+        try {
+            Method m = LlmAgent.class.getMethod(getter);
+            Object v = m.invoke(llm);
+            if (v == null) return List.of();
+            if (v instanceof java.util.Optional<?> opt) {
+                if (!opt.isPresent()) return List.of();
+                v = opt.get();
+            }
+            if (v instanceof List<?> list) return (List<T>) list;
+        } catch (Throwable ignored) {}
+        return List.of();
+    }
+
+    /**
+     * Best-effort reconstruction of an {@link LlmRequest.Builder} from the
+     * hook task's input map. Server hook payload format may vary — we look
+     * for the common keys ({@code messages}, {@code prompt}). Empty contents
+     * are still safe: most safety callbacks call {@code req.contents()} just
+     * to inspect text and will see an empty list rather than NPE.
+     */
+    @SuppressWarnings("unchecked")
+    private static LlmRequest.Builder reconstructLlmRequest(Map<String, Object> in) {
+        LlmRequest.Builder b = LlmRequest.builder();
+        List<Content> contents = new ArrayList<>();
+
+        Object messagesObj = in.get("messages");
+        if (messagesObj instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map<?, ?>) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> msg = (Map<String, Object>) item;
+                    String role = String.valueOf(msg.getOrDefault("role", "user"));
+                    String text = String.valueOf(msg.getOrDefault("content", ""));
+                    contents.add(Content.builder()
+                            .role(role)
+                            .parts(List.of(Part.builder().text(text).build()))
+                            .build());
+                }
+            }
+        } else if (in.get("prompt") instanceof String s && !s.isEmpty()) {
+            contents.add(Content.builder()
+                    .role("user")
+                    .parts(List.of(Part.builder().text(s).build()))
+                    .build());
+        }
+        b.contents(contents);
+        return b;
+    }
+
+    /**
+     * Best-effort reconstruction of an {@link LlmResponse} from the
+     * after-model hook task input. Server typically posts the LLM's text
+     * output under {@code content} or {@code result}.
+     */
+    private static LlmResponse reconstructLlmResponse(Map<String, Object> in) {
+        Object text = in.get("content");
+        if (text == null) text = in.get("result");
+        if (text == null) text = "";
+
+        // LlmResponse.builder() is package-private in some ADK builds. Fall
+        // back to a minimal Content if direct construction isn't available.
+        try {
+            Method builder = LlmResponse.class.getMethod("builder");
+            Object b = builder.invoke(null);
+            Method content = b.getClass().getMethod("content", java.util.Optional.class);
+            Content c = Content.builder()
+                    .role("model")
+                    .parts(List.of(Part.builder().text(String.valueOf(text)).build()))
+                    .build();
+            content.invoke(b, java.util.Optional.of(c));
+            Method build = b.getClass().getMethod("build");
+            return (LlmResponse) build.invoke(b);
+        } catch (Throwable t) {
+            log.debug("AdkBridge: LlmResponse reconstruction failed, returning null. {}",
+                    t.getMessage());
+            return null;
+        }
+    }
+
+    private static String textOf(Content c) {
+        try {
+            return c.text();
+        } catch (Throwable t) {
+            return "";
+        }
+    }
 
     // ── Misc helpers ─────────────────────────────────────────────────────────
 
