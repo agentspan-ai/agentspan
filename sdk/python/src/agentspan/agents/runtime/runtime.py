@@ -51,6 +51,39 @@ def _is_local_server(server_url: str) -> bool:
     return host in ("localhost", "127.0.0.1", "::1", "0.0.0.0")
 
 
+def _sync_marker_path():
+    """Filesystem location of the env-sync marker file.
+
+    Maps ``server_url`` → ``{"instance_id", "env_hash"}`` so we sync iff the
+    server JVM has restarted **or** the local env values have changed.
+    Module-level so tests can monkeypatch it to a tmp_path.
+    """
+    from pathlib import Path
+
+    return Path.home() / ".agentspan" / "sync-marker.json"
+
+
+def _compute_env_hash() -> str:
+    """Stable SHA-256 hex of all known provider env vars.
+
+    Used in the sync marker to detect env-var changes between SDK invocations
+    even when the server JVM hasn't restarted. Without this, a user who fixes
+    a typo'd API key in their shell can't get the corrected value into the
+    server without restarting the JVM.
+    """
+    import hashlib
+
+    from agentspan.agents._internal.provider_registry import KNOWN_PROVIDER_ENV_VARS
+
+    digest = hashlib.sha256()
+    for name in sorted(KNOWN_PROVIDER_ENV_VARS):
+        digest.update(name.encode("utf-8"))
+        digest.update(b"=")
+        digest.update((os.environ.get(name, "") or "").encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
 _RETRY_POLICY_MAP = {
     "fixed": "FIXED",
     "linear_backoff": "LINEAR_BACKOFF",
@@ -2146,12 +2179,29 @@ class AgentRuntime:
     def _sync_provider_env_to_server(self) -> None:
         """Push every known provider env var into the server's credential store.
 
-        Runs once at AgentRuntime construction (localhost target only). Each
-        non-empty env var is upserted via :meth:`_push_credential_to_server`.
-        Failures are logged at debug and swallowed — this is a best-effort
-        convenience and should never block a runtime from starting.
+        Gated by ``(instance_id, env_hash)`` cached in
+        ``~/.agentspan/sync-marker.json``. Skip iff BOTH match — meaning the
+        same JVM AND the same shell env we already synced. Re-sync when the
+        server restarts OR the user corrects an env var, even within the same
+        JVM. Failures are logged at debug and swallowed.
         """
         from agentspan.agents._internal.provider_registry import KNOWN_PROVIDER_ENV_VARS
+
+        current_instance = self._fetch_server_instance_id()
+        current_env_hash = _compute_env_hash()
+        marker = self._read_sync_marker()
+        entry = marker.get(self._config.server_url)
+
+        # Legacy schema tolerance: entry used to be a bare string instance_id.
+        if isinstance(entry, dict) and current_instance is not None:
+            if (
+                entry.get("instance_id") == current_instance
+                and entry.get("env_hash") == current_env_hash
+            ):
+                logger.debug(
+                    "Skipping env sync — instance %s and env unchanged.", current_instance
+                )
+                return
 
         for name in sorted(KNOWN_PROVIDER_ENV_VARS):
             value = os.environ.get(name)
@@ -2162,6 +2212,54 @@ class AgentRuntime:
                 logger.debug("Synced %s into local server credential store", name)
             except Exception as e:
                 logger.debug("Could not sync %s into local server: %s", name, e)
+
+        if current_instance is not None:
+            marker[self._config.server_url] = {
+                "instance_id": current_instance,
+                "env_hash": current_env_hash,
+            }
+            self._write_sync_marker(marker)
+
+    def _fetch_server_instance_id(self) -> "Optional[str]":
+        """Return the running server's ``instance_id`` or ``None`` on any error.
+
+        Older servers without ``/api/info`` return ``None``; the caller falls
+        back to an unconditional sync (best-effort).
+        """
+        import httpx
+
+        base = self._config.server_url.rstrip("/")
+        try:
+            resp = httpx.get(f"{base}/info", timeout=2.0)
+            resp.raise_for_status()
+            return resp.json().get("instance_id")
+        except Exception as e:
+            logger.debug("Could not fetch /api/info: %s", e)
+            return None
+
+    @staticmethod
+    def _read_sync_marker() -> Dict[str, Any]:
+        """Return the marker file as a dict; empty dict if missing/corrupt.
+
+        Values can be either ``{"instance_id", "env_hash"}`` dicts (current
+        schema) or bare instance_id strings (legacy). The legacy form is
+        treated as a non-match so it forces a re-sync.
+        """
+        path = _sync_marker_path()
+        try:
+            return json.loads(path.read_text())
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _write_sync_marker(marker: Dict[str, Any]) -> None:
+        """Persist the marker, creating ``~/.agentspan`` if necessary."""
+        path = _sync_marker_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(marker))
+        except Exception as e:
+            logger.debug("Could not write sync marker: %s", e)
 
     def _ensure_models_for_agent(self, agent: Agent) -> None:
         """Walk the agent tree and ensure all referenced models are registered."""
