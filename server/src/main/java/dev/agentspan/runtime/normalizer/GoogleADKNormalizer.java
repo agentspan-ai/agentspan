@@ -365,9 +365,7 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
     // ── Guardrail helpers (mirrors OpenAINormalizer) ────────────────
 
     private void addGuardrails(
-            List<GuardrailConfig> guardrails,
-            List<Map<String, Object>> rawGuardrails,
-            String defaultPosition) {
+            List<GuardrailConfig> guardrails, List<Map<String, Object>> rawGuardrails, String defaultPosition) {
         if (rawGuardrails == null || rawGuardrails.isEmpty()) return;
         for (Map<String, Object> g : rawGuardrails) {
             GuardrailConfig gc = normalizeGuardrail(g, defaultPosition);
@@ -396,9 +394,7 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
         if (workerRef == null) workerRef = extractNestedWorkerRef(raw, "guardrailFunction");
 
         gc.setGuardrailType("custom");
-        gc.setTaskName(workerRef != null && !workerRef.isEmpty()
-                ? workerRef
-                : getString(raw, "name", "guardrail"));
+        gc.setTaskName(workerRef != null && !workerRef.isEmpty() ? workerRef : getString(raw, "name", "guardrail"));
         return gc;
     }
 
