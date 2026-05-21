@@ -286,6 +286,17 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
             }
         }
 
+        // Build a step-id → parallel flag map for downstream Ref-shape checks.
+        // A Ref to a parallel step resolves to an aggregator ARRAY at run
+        // time; a Ref to a sequential step resolves to that step's single
+        // result. Pass-2 uses this to catch type-mismatches between a
+        // producer's output shape and a consumer's declared inputSchema.
+        Map<String, Boolean> stepIsParallel = new HashMap<>();
+        for (Map<String, Object> s : steps) {
+            String sid = String.valueOf(s.get("id"));
+            stepIsParallel.put(sid, Boolean.TRUE.equals(s.get("parallel")));
+        }
+
         // Pass 2 — validate operations + filter dangling depends_on. A
         // fabricated dep is harmless: the step still runs in declared order.
         for (Map<String, Object> s : steps) {
@@ -312,6 +323,18 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                     }
                     if (op.get("args") == null && op.get("generate") == null) {
                         errors.add("Step " + id + " op " + oi + " needs args or generate");
+                    }
+                    // Parallel-Ref shape check: a top-level args.<argName> =
+                    // {"$ref": "<step>"} where <step> is parallel produces
+                    // an array; the consumer's inputSchema must accept array
+                    // (or be missing/unspecified, in which case we don't
+                    // know the shape and skip the check).
+                    if (toolName != null && op.get("args") instanceof Map<?, ?> argsMap) {
+                        String mismatch = checkParallelRefShape(
+                                toolName, argsMap, stepIsParallel, parentToolsByName);
+                        if (mismatch != null) {
+                            errors.add("Step " + id + " op " + oi + " " + mismatch);
+                        }
                     }
                 }
             }
@@ -1351,6 +1374,69 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 }
             }
             return null;
+        }
+        return null;
+    }
+
+    /**
+     * Top-level shape check: when an op's {@code args.<argName>} is a
+     * direct {@code $ref} to a parallel step, the consumer's tool
+     * inputSchema must declare the arg as {@code type: "array"} (or omit
+     * the type — we only fail on a known-bad mismatch). Returns a
+     * diagnostic suffix when the mismatch is detectable, or null when
+     * the shape is fine or unknown.
+     *
+     * <p>This catches the dg-review footgun where a user writes
+     * {@code args={"document": Ref("write_all")}} expecting a single
+     * dict but the parallel producer returns the FORK_JOIN aggregator
+     * array. The error surfaces at compile time with a clear suggestion.
+     */
+    @SuppressWarnings("unchecked")
+    private static String checkParallelRefShape(
+            String consumerToolName,
+            Map<?, ?> argsMap,
+            Map<String, Boolean> stepIsParallel,
+            Map<String, ToolConfig> parentToolsByName) {
+        ToolConfig consumer = parentToolsByName.get(consumerToolName);
+        if (consumer == null) return null; // unknown tool — handled elsewhere
+        Map<String, Object> inputSchema = consumer.getInputSchema();
+        if (inputSchema == null) return null; // no schema — can't type-check
+
+        Map<String, Object> properties =
+                inputSchema.get("properties") instanceof Map<?, ?> p
+                        ? (Map<String, Object>) p
+                        : null;
+        if (properties == null) return null;
+
+        for (Map.Entry<?, ?> entry : argsMap.entrySet()) {
+            if (!(entry.getKey() instanceof String argName)) continue;
+            if (!(entry.getValue() instanceof Map<?, ?> valMap)) continue;
+            // Direct top-level $ref only — nested cases are a different
+            // type model (LLM-composed values) and we don't claim to know
+            // their shapes.
+            if (valMap.size() != 1 || !valMap.containsKey("$ref")) continue;
+            Object target = valMap.get("$ref");
+            if (!(target instanceof String targetStepId)) continue;
+            if (!Boolean.TRUE.equals(stepIsParallel.get(targetStepId))) continue;
+
+            Object propSchema = properties.get(argName);
+            if (!(propSchema instanceof Map<?, ?> p2)) continue;
+            Object declaredType = ((Map<String, Object>) p2).get("type");
+            if (declaredType == null) continue;
+            String dt = String.valueOf(declaredType);
+            if ("array".equals(dt)) continue; // shape matches — fine.
+
+            return "$refs parallel step '"
+                    + targetStepId
+                    + "' (output is an array) into arg '"
+                    + argName
+                    + "' of tool '"
+                    + consumerToolName
+                    + "' which declares type='"
+                    + dt
+                    + "' — either remove parallel=true on '"
+                    + targetStepId
+                    + "', drop the Ref into an array-typed consumer, or aggregate first";
         }
         return null;
     }

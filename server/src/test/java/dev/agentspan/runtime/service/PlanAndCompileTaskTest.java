@@ -1688,6 +1688,144 @@ class PlanAndCompileTaskTest {
                 .contains("parallel_agg_a");
     }
 
+    // -----------------------------------------------------------------------
+    //  Parallel-Ref consumer-shape type check (dg-review #5)
+    // -----------------------------------------------------------------------
+    //
+    // A parallel step's primary output is an aggregator array. A downstream
+    // op that pipes that step's whole output via Ref into an arg whose
+    // ToolConfig.inputSchema declares a scalar/object type is a type error.
+    // PAC catches this at compile time so the user fails fast in the doc
+    // surface instead of 5 task-references deep at run time.
+
+    @Test
+    void testParallelRef_intoScalarArg_failsCompile() {
+        // Consumer 'consume_doc' declares args.document as type:object.
+        // Producer 's_fan' is parallel — its $ref resolves to an array.
+        // Compile must reject the plan with a clear diagnostic.
+        Map<String, Object> consumerInputSchema = Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "document", Map.of("type", "object")),
+                "required", List.of("document"));
+        Map<String, Object> consumerTool = Map.of(
+                "name", "consume_doc",
+                "toolType", "worker",
+                "inputSchema", consumerInputSchema);
+        Map<String, Object> producerTool = Map.of(
+                "name", "fan_op",
+                "toolType", "worker",
+                "inputSchema", Map.of("type", "object"));
+        List<Map<String, Object>> parentTools = List.of(consumerTool, producerTool);
+
+        String planJson =
+                """
+                {
+                  "steps": [
+                    {"id": "s_fan", "parallel": true, "operations": [
+                      {"tool": "fan_op", "args": {"i": 0}},
+                      {"tool": "fan_op", "args": {"i": 1}}
+                    ]},
+                    {"id": "s_consume", "depends_on": ["s_fan"], "operations": [
+                      {"tool": "consume_doc", "args": {"document": {"$ref": "s_fan"}}}
+                    ]}
+                  ]
+                }""";
+
+        Map<String, Object> output = runWithParentTools(
+                planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
+        Object error = output.get("error");
+        assertThat(error)
+                .as("parallel-Ref into scalar arg must fail compile")
+                .isNotNull();
+        assertThat(String.valueOf(error))
+                .contains("s_fan")
+                .contains("parallel")
+                .contains("consume_doc");
+    }
+
+    @Test
+    void testParallelRef_intoArrayArg_compilesOk() {
+        // Same producer/consumer wiring, but the consumer declares
+        // args.documents as type:array — that matches a parallel agg's
+        // shape, so the plan must compile.
+        Map<String, Object> consumerInputSchema = Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "documents", Map.of("type", "array")),
+                "required", List.of("documents"));
+        Map<String, Object> consumerTool = Map.of(
+                "name", "consume_docs",
+                "toolType", "worker",
+                "inputSchema", consumerInputSchema);
+        Map<String, Object> producerTool = Map.of(
+                "name", "fan_op",
+                "toolType", "worker",
+                "inputSchema", Map.of("type", "object"));
+        List<Map<String, Object>> parentTools = List.of(consumerTool, producerTool);
+
+        String planJson =
+                """
+                {
+                  "steps": [
+                    {"id": "s_fan", "parallel": true, "operations": [
+                      {"tool": "fan_op", "args": {"i": 0}},
+                      {"tool": "fan_op", "args": {"i": 1}}
+                    ]},
+                    {"id": "s_consume", "depends_on": ["s_fan"], "operations": [
+                      {"tool": "consume_docs", "args": {"documents": {"$ref": "s_fan"}}}
+                    ]}
+                  ]
+                }""";
+
+        Map<String, Object> output = runWithParentTools(
+                planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
+        assertThat(output.get("error"))
+                .as("array-typed consumer must accept parallel-Ref")
+                .isNull();
+    }
+
+    @Test
+    void testSequentialRef_intoScalarArg_compilesOk() {
+        // Producer 's_seq' is NOT parallel — its $ref resolves to a scalar
+        // (whatever shape the step's single op returns). Object-typed
+        // consumer must compile fine — only parallel producers trigger the
+        // type mismatch.
+        Map<String, Object> consumerInputSchema = Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "document", Map.of("type", "object")),
+                "required", List.of("document"));
+        Map<String, Object> consumerTool = Map.of(
+                "name", "consume_doc",
+                "toolType", "worker",
+                "inputSchema", consumerInputSchema);
+        Map<String, Object> producerTool = Map.of(
+                "name", "seq_op",
+                "toolType", "worker",
+                "inputSchema", Map.of("type", "object"));
+        List<Map<String, Object>> parentTools = List.of(consumerTool, producerTool);
+
+        String planJson =
+                """
+                {
+                  "steps": [
+                    {"id": "s_seq", "operations": [
+                      {"tool": "seq_op", "args": {"i": 0}}
+                    ]},
+                    {"id": "s_consume", "depends_on": ["s_seq"], "operations": [
+                      {"tool": "consume_doc", "args": {"document": {"$ref": "s_seq"}}}
+                    ]}
+                  ]
+                }""";
+
+        Map<String, Object> output = runWithParentTools(
+                planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
+        assertThat(output.get("error"))
+                .as("sequential-Ref into scalar arg must compile ok")
+                .isNull();
+    }
+
     /** Quick JSON string-encode for inlining into a plan literal. */
     private String jsonString(String s) {
         StringBuilder sb = new StringBuilder("\"");
