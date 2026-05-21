@@ -5,6 +5,7 @@ package ai.agentspan.internal;
 
 import ai.agentspan.AgentConfig;
 import ai.agentspan.exceptions.AgentAPIException;
+import ai.agentspan.exceptions.AgentNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,7 +85,7 @@ public class HttpApi {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() >= 400) {
-                throw new AgentAPIException(response.statusCode(), response.body());
+                throw apiError(response.statusCode(), response.body());
             }
 
             if (response.body() == null || response.body().isEmpty()) {
@@ -97,6 +98,13 @@ public class HttpApi {
         } catch (Exception e) {
             throw new RuntimeException("HTTP GET failed: " + path, e);
         }
+    }
+
+    private static AgentAPIException apiError(int statusCode, String body) {
+        if (statusCode == 404) {
+            return new AgentNotFoundException(statusCode, body);
+        }
+        return new AgentAPIException(statusCode, body);
     }
 
     @SuppressWarnings("unchecked")
@@ -121,7 +129,7 @@ public class HttpApi {
             logger.debug("POST {} -> {} {}", url, response.statusCode(), response.body());
 
             if (response.statusCode() >= 400) {
-                throw new AgentAPIException(response.statusCode(), response.body());
+                throw apiError(response.statusCode(), response.body());
             }
 
             if (response.body() == null || response.body().isEmpty()) {
