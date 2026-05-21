@@ -201,7 +201,7 @@ plan = Plan(steps=[
 
 Rules:
 
-- The referenced step must be declared in this step's `depends_on` — explicit beats implicit; the SDK compiler refuses plans that Ref a step they don't depend on.
+- The referenced step must be declared in this step's `depends_on` — explicit beats implicit. The server's PAC compile step rejects plans that Ref a step they don't depend on (the typed-Plan builders ship the Ref to the wire as-is; the failure surfaces at workflow start, not in your IDE).
 - The referenced step must exist in the plan.
 - Self-Refs (`Ref(stepId)` from inside `stepId`) are a compile error.
 - A step can Ref multiple upstream steps independently — `Op("report", args={"src": Ref("fetch"), "summary": Ref("summarize")})` works.
@@ -377,7 +377,7 @@ plan = Plan(
 | `fallback=` | Optional. Agentic recovery when a plan can't compile/exec. |
 | `tools=` | Required. Plan-executable tool set. PAC validates `op.tool` names against this list and propagates each tool's guardrails. |
 | `fallback_max_turns=` | Caps the fallback agent's turn count during recovery. |
-| `plan_source=` | Compile-time deterministic plan via a tool call. (Use `plan=` at run time instead — same effect, simpler.) |
+| `plan_source=` | **Deprecated.** Earlier mechanism for injecting a fixed plan via a tool call — use the run-time `plan=` argument instead. Slated for removal. |
 
 | Run-time kwarg | Purpose |
 |---|---|
