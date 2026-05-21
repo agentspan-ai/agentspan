@@ -89,6 +89,9 @@ export interface ToolOptions {
   credentials?: (string | CredentialFile)[];
   guardrails?: unknown[];
   maxCalls?: number;
+  retryCount?: number;
+  retryDelaySeconds?: number;
+  retryPolicy?: string;
 }
 
 /**
@@ -125,6 +128,11 @@ export function tool<TInput = unknown, TOutput = unknown>(
     }),
     ...(options.guardrails !== undefined && { guardrails: options.guardrails }),
     ...(options.maxCalls !== undefined && { maxCalls: options.maxCalls }),
+    ...(options.retryCount !== undefined && { retryCount: options.retryCount }),
+    ...(options.retryDelaySeconds !== undefined && {
+      retryDelaySeconds: options.retryDelaySeconds,
+    }),
+    ...(options.retryPolicy !== undefined && { retryPolicy: options.retryPolicy }),
     call: (args: Record<string, unknown>) => ({ toolName: name, arguments: args }),
   };
 

@@ -277,6 +277,12 @@ export interface ToolDef {
   stateful?: boolean;
   /** Maximum number of times this tool can be called. */
   maxCalls?: number;
+  /** Number of times Conductor retries the task on failure. */
+  retryCount?: number;
+  /** Seconds between retries. */
+  retryDelaySeconds?: number;
+  /** Retry strategy: "fixed", "linear_backoff", or "exponential_backoff". */
+  retryPolicy?: string;
   /** Create a pre-declared tool call for use with `Agent({ prefillTools: [...] })`.
    *  Optional — only tools intended to be usable as prefill (e.g. via the
    *  @tool decorator) supply this method. ToolDef literals constructed by

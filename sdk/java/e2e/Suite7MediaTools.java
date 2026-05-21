@@ -341,9 +341,9 @@ class Suite7MediaTools extends BaseTest {
             "Agent run did not succeed: status=" + result.getStatus()
             + ", error=" + result.getError());
 
-        Map<String, Object> wf = getWorkflow(result.getWorkflowId());
+        Map<String, Object> wf = getWorkflow(result.getExecutionId());
         List<Map<String, Object>> tasks = (List<Map<String, Object>>) wf.get("tasks");
-        assertNotNull(tasks, "Workflow has no tasks. wfId=" + result.getWorkflowId());
+        assertNotNull(tasks, "Workflow has no tasks. wfId=" + result.getExecutionId());
 
         Map<String, Object> imgTask = tasks.stream()
             .filter(t -> {

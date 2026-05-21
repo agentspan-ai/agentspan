@@ -90,7 +90,19 @@ public class AgentRuntime implements AutoCloseable {
     public Map<String, Object> plan(Agent agent) {
         Map<String, Object> agentConfig = serializer.serialize(agent);
         logger.debug("Compiling agent '{}'", agent.getName());
-        Map<String, Object> result = httpApi.compileAgent(agentConfig);
+        // Same framework-dispatch as startAsync / deploy: framework-backed
+        // agents (openai / google_adk / langgraph) need to round-trip through
+        // the server normalizer or compile fails on a missing top-level model.
+        String framework = agent.getFramework();
+        boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
+        Map<String, Object> payload = new java.util.HashMap<>();
+        if (isFramework) {
+            payload.put("framework", framework);
+            payload.put("rawConfig", agentConfig);
+        } else {
+            payload.put("agentConfig", agentConfig);
+        }
+        Map<String, Object> result = httpApi.compileAgent(payload);
         logger.info("Agent '{}' compiled successfully", agent.getName());
         return result;
     }
@@ -210,12 +222,28 @@ public class AgentRuntime implements AutoCloseable {
 
             logger.debug("Starting agent '{}' with prompt: {}", agent.getName(), prompt);
 
-            Map<String, Object> response =
-                httpApi.startAgent(agentConfig, prompt, sessionId, runId, staticPlan);
-            String workflowId = extractWorkflowId(response);
+            // Framework-backed agents (openai, google_adk, langgraph, vercel_ai)
+            // must be sent via the server's framework+rawConfig fields so the
+            // matching normalizer runs server-side. The "skill" framework keeps
+            // the legacy path because its serialized config still includes model.
+            String framework = agent.getFramework();
+            boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
+            Map<String, Object> payload = new java.util.HashMap<>();
+            if (isFramework) {
+                payload.put("framework", framework);
+                payload.put("rawConfig", agentConfig);
+            } else {
+                payload.put("agentConfig", agentConfig);
+            }
+            payload.put("prompt", prompt);
+            if (sessionId != null && !sessionId.isEmpty()) payload.put("sessionId", sessionId);
+            if (runId != null && !runId.isEmpty()) payload.put("runId", runId);
+            if (staticPlan != null) payload.put("static_plan", staticPlan);
+            Map<String, Object> response = httpApi.startAgent(payload);
+            String executionId = extractExecutionId(response);
 
-            logger.info("Agent '{}' started with workflow ID: {}", agent.getName(), workflowId);
-            return new AgentHandle(workflowId, httpApi);
+            logger.info("Agent '{}' started with execution ID: {}", agent.getName(), executionId);
+            return new AgentHandle(executionId, httpApi);
         });
     }
 
@@ -247,13 +275,13 @@ public class AgentRuntime implements AutoCloseable {
         workerManager.startAll();
 
         return startAsync(agent, prompt).thenApply(handle -> {
-            String workflowId = handle.getWorkflowId();
-            String sseUrl = config.getServerUrl() + "/api/agent/stream/" + workflowId;
+            String executionId = handle.getExecutionId();
+            String sseUrl = config.getServerUrl() + "/api/agent/stream/" + executionId;
 
             SseClient sseClient = new SseClient(sseUrl, config, httpApi.getHttpClient());
             sseClient.connect();
 
-            return new AgentStream(workflowId, sseClient, httpApi);
+            return new AgentStream(executionId, sseClient, httpApi);
         });
     }
 
@@ -270,11 +298,25 @@ public class AgentRuntime implements AutoCloseable {
      * @return list of DeploymentInfo, one per deployed agent
      */
     public List<ai.agentspan.model.DeploymentInfo> deploy(Agent... agents) {
+        if (agents == null || agents.length == 0) {
+            throw new IllegalArgumentException("deploy() requires at least one agent");
+        }
         List<ai.agentspan.model.DeploymentInfo> results = new ArrayList<>();
         for (Agent agent : agents) {
             Map<String, Object> agentConfig = serializer.serialize(agent);
             Map<String, Object> payload = new java.util.LinkedHashMap<>();
-            payload.put("agentConfig", agentConfig);
+            // Framework-backed agents (openai, google_adk, langgraph) ship via
+            // {framework, rawConfig} so the matching server-side normalizer
+            // runs — same dispatch as startAsync. Without this, the server
+            // tries to compile the agent as a native Agentspan agent and
+            // fails on a missing model / null taskDef name.
+            String framework = agent.getFramework();
+            if (framework != null && !framework.isEmpty() && !"skill".equals(framework)) {
+                payload.put("framework", framework);
+                payload.put("rawConfig", agentConfig);
+            } else {
+                payload.put("agentConfig", agentConfig);
+            }
             Map<String, Object> resp = httpApi.deployAgent(payload);
             String registeredName = resp.getOrDefault("agentName", agent.getName()).toString();
             results.add(new ai.agentspan.model.DeploymentInfo(registeredName, agent.getName()));
@@ -302,6 +344,11 @@ public class AgentRuntime implements AutoCloseable {
      * @param agents agents whose workers should be served
      */
     public void serve(Agent... agents) {
+        if (agents == null || agents.length == 0) {
+            throw new IllegalArgumentException(
+                    "serve() requires at least one agent — without one, no workers would "
+                    + "register and the call would block forever.");
+        }
         for (Agent agent : agents) {
             prepareWorkers(agent);
         }
@@ -783,11 +830,11 @@ public class AgentRuntime implements AutoCloseable {
         return result;
     }
 
-    private String extractWorkflowId(Map<String, Object> response) {
-        // Try several possible keys — server renamed workflowId → executionId
+    private String extractExecutionId(Map<String, Object> response) {
         Object id = response.get("executionId");
         if (id != null) return id.toString();
 
+        // Legacy fallback — older server versions may still return workflowId
         id = response.get("workflowId");
         if (id != null) return id.toString();
 
@@ -797,11 +844,10 @@ public class AgentRuntime implements AutoCloseable {
         id = response.get("correlationId");
         if (id != null) return id.toString();
 
-        // If only one value in the map, use it
         if (response.size() == 1) {
             return response.values().iterator().next().toString();
         }
 
-        throw new RuntimeException("Cannot extract workflow ID from response: " + response);
+        throw new RuntimeException("Cannot extract execution ID from response: " + response);
     }
 }

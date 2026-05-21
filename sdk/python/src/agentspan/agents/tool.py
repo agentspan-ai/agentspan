@@ -83,6 +83,7 @@ class ToolDef:
     max_calls: Optional[int] = None
     retry_count: int = 2
     retry_delay_seconds: int = 2
+    retry_policy: str = "linear_backoff"
 
     def call(self, **kwargs: Any) -> "PrefillToolCall":
         """Create a pre-declared tool call for use with ``Agent(prefill_tools=[...])``."""
@@ -131,6 +132,7 @@ def tool(
     max_calls: Optional[int] = None,
     retry_count: int = 2,
     retry_delay_seconds: int = 2,
+    retry_policy: str = "linear_backoff",
 ) -> Callable[[F], F]: ...
 
 
@@ -148,6 +150,7 @@ def tool(
     max_calls: Optional[int] = None,
     retry_count: int = 2,
     retry_delay_seconds: int = 2,
+    retry_policy: str = "linear_backoff",
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -197,6 +200,7 @@ def tool(
             max_calls=max_calls,
             retry_count=retry_count,
             retry_delay_seconds=retry_delay_seconds,
+            retry_policy=retry_policy,
         )
 
         @functools.wraps(fn)

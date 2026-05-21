@@ -160,8 +160,8 @@ public class Example108PlanExecuteRefs {
                 new AgentConfig(BASE_URL + "/api", null, null, 100, 1))) {
             AgentResult result = runtime.run(harness, "demo", plan);
             System.out.println("status=" + result.getStatus()
-                + " executionId=" + result.getWorkflowId());
-            showPipelineOutputs(result.getWorkflowId());
+                + " executionId=" + result.getExecutionId());
+            showPipelineOutputs(result.getExecutionId());
         }
     }
 

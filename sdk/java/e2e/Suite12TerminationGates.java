@@ -73,10 +73,10 @@ class Suite12TerminationGates extends BaseTest {
             + ". Termination gates complete the loop, not fail it.");
 
         // Fetch the workflow and count DO_WHILE iterations
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        Map<String, Object> workflow = getWorkflow(workflowId);
+        Map<String, Object> workflow = getWorkflow(executionId);
         List<Map<String, Object>> allTasks = (List<Map<String, Object>>) workflow.get("tasks");
         assertNotNull(allTasks, "workflow has no 'tasks' field");
 
@@ -151,10 +151,10 @@ class Suite12TerminationGates extends BaseTest {
             + ". Termination gates complete the loop, not fail it.");
 
         // Fetch the workflow and check iterations stayed low
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        Map<String, Object> workflow = getWorkflow(workflowId);
+        Map<String, Object> workflow = getWorkflow(executionId);
         List<Map<String, Object>> allTasks = (List<Map<String, Object>>) workflow.get("tasks");
         assertNotNull(allTasks, "workflow has no 'tasks' field");
 

@@ -91,7 +91,7 @@ public class Example32HumanGuardrail {
         AgentHandle handle = Agentspan.start(financeAgent,
             "What is the current price of AAPL and is it a good risk-free investment?");
 
-        System.out.println("Workflow ID: " + handle.getWorkflowId());
+        System.out.println("Execution ID: " + handle.getExecutionId());
         System.out.println("Waiting for compliance guardrail review...");
 
         // Poll for the WAITING state; auto-approve to simulate human approval

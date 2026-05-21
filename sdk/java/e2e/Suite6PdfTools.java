@@ -340,16 +340,16 @@ class Suite6PdfTools extends BaseTest {
             agent,
             "Convert the following markdown to a PDF. Pass it exactly to generate_pdf:\n\n" + sampleMarkdown);
 
-        assertNotNull(result.getWorkflowId(),
+        assertNotNull(result.getExecutionId(),
             "Agent run must produce an executionId. status=" + result.getStatus()
             + " error=" + result.getError());
         assertTrue(result.isSuccess(),
             "Agent run did not succeed: status=" + result.getStatus()
             + ", error=" + result.getError());
 
-        Map<String, Object> wf = getWorkflow(result.getWorkflowId());
+        Map<String, Object> wf = getWorkflow(result.getExecutionId());
         List<Map<String, Object>> tasks = (List<Map<String, Object>>) wf.get("tasks");
-        assertNotNull(tasks, "Workflow has no tasks array. wfId=" + result.getWorkflowId());
+        assertNotNull(tasks, "Workflow has no tasks array. wfId=" + result.getExecutionId());
 
         Map<String, Object> pdfTask = tasks.stream()
             .filter(t -> {

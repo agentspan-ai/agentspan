@@ -794,7 +794,7 @@ class PlanExecuteTest extends BaseTest {
         assertEquals(AgentStatus.COMPLETED, result.getStatus(),
             "workflow did not COMPLETE: status=" + result.getStatus() + " error=" + result.getError());
 
-        Map<String, Map<String, Object>> outputs = fetchStepOutputs(result.getWorkflowId());
+        Map<String, Map<String, Object>> outputs = fetchStepOutputs(result.getExecutionId());
 
         Map<String, Object> produce = outputs.get("j_s20_produce");
         assertNotNull(produce, "produce step did not run");
@@ -849,7 +849,7 @@ class PlanExecuteTest extends BaseTest {
         AgentResult result = runtime.run(harness, "go", plan);
         assertEquals(AgentStatus.COMPLETED, result.getStatus());
 
-        Map<String, Map<String, Object>> outputs = fetchStepOutputs(result.getWorkflowId());
+        Map<String, Map<String, Object>> outputs = fetchStepOutputs(result.getExecutionId());
         Map<String, Object> report = outputs.get("j_s20_report");
         assertNotNull(report, "report step did not run");
         assertEquals("r-001", report.get("id"));

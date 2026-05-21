@@ -319,21 +319,21 @@ class Suite14StatefulDomain extends BaseTest {
             "Run 1 must succeed; status=" + r1.getStatus() + " error=" + r1.getError());
         assertTrue(r2.isSuccess(),
             "Run 2 must succeed; status=" + r2.getStatus() + " error=" + r2.getError());
-        assertNotEquals(r1.getWorkflowId(), r2.getWorkflowId(),
+        assertNotEquals(r1.getExecutionId(), r2.getExecutionId(),
             "Concurrent runs must have distinct execution IDs.");
 
         Map<String, Object> ttd1 = (Map<String, Object>)
-            getWorkflow(r1.getWorkflowId()).getOrDefault("taskToDomain", Map.of());
+            getWorkflow(r1.getExecutionId()).getOrDefault("taskToDomain", Map.of());
         Map<String, Object> ttd2 = (Map<String, Object>)
-            getWorkflow(r2.getWorkflowId()).getOrDefault("taskToDomain", Map.of());
+            getWorkflow(r2.getExecutionId()).getOrDefault("taskToDomain", Map.of());
 
         assertFalse(ttd1.isEmpty(),
             "Run 1 taskToDomain is empty — stateful agent must have a domain "
-            + "assignment. wfId=" + r1.getWorkflowId()
+            + "assignment. wfId=" + r1.getExecutionId()
             + ". COUNTERFACTUAL: missing runId on start would produce an empty map.");
         assertFalse(ttd2.isEmpty(),
             "Run 2 taskToDomain is empty — stateful agent must have a domain "
-            + "assignment. wfId=" + r2.getWorkflowId());
+            + "assignment. wfId=" + r2.getExecutionId());
 
         Set<String> domains1 = new HashSet<>();
         for (Object v : ttd1.values()) if (v != null) domains1.add(v.toString());
@@ -442,12 +442,12 @@ class Suite14StatefulDomain extends BaseTest {
 
         assertTrue(r1.isSuccess(), "Run 1: " + r1.getStatus() + " " + r1.getError());
         assertTrue(r2.isSuccess(), "Run 2: " + r2.getStatus() + " " + r2.getError());
-        assertNotEquals(r1.getWorkflowId(), r2.getWorkflowId());
+        assertNotEquals(r1.getExecutionId(), r2.getExecutionId());
 
         Map<String, Object> ttd1 = (Map<String, Object>)
-            getWorkflow(r1.getWorkflowId()).getOrDefault("taskToDomain", Map.of());
+            getWorkflow(r1.getExecutionId()).getOrDefault("taskToDomain", Map.of());
         Map<String, Object> ttd2 = (Map<String, Object>)
-            getWorkflow(r2.getWorkflowId()).getOrDefault("taskToDomain", Map.of());
+            getWorkflow(r2.getExecutionId()).getOrDefault("taskToDomain", Map.of());
 
         assertFalse(ttd1.isEmpty(),
             "Per-tool stateful MUST cause a non-empty taskToDomain even when "

@@ -41,7 +41,37 @@ from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailable
 logger = logging.getLogger("agentspan.agents.runtime")
 
 
-def _default_task_def(name: str, *, response_timeout_seconds: int = 10, retry_count: int = 2, retry_delay_seconds: int = 2) -> Any:
+_RETRY_POLICY_MAP = {
+    "fixed": "FIXED",
+    "linear_backoff": "LINEAR_BACKOFF",
+    "exponential_backoff": "EXPONENTIAL_BACKOFF",
+}
+
+VALID_RETRY_POLICIES = frozenset(_RETRY_POLICY_MAP.keys())
+
+
+def _resolve_retry_logic(policy: str) -> str:
+    """Convert a user-friendly retry policy name to the Conductor retry logic constant."""
+    key = policy.lower().strip()
+    if key in _RETRY_POLICY_MAP:
+        return _RETRY_POLICY_MAP[key]
+    upper = key.upper()
+    if upper in _RETRY_POLICY_MAP.values():
+        return upper
+    raise ValueError(
+        f"Invalid retry_policy '{policy}'. "
+        f"Valid options: {', '.join(sorted(VALID_RETRY_POLICIES))}"
+    )
+
+
+def _default_task_def(
+    name: str,
+    *,
+    response_timeout_seconds: int = 10,
+    retry_count: int = 2,
+    retry_delay_seconds: int = 2,
+    retry_policy: str = "linear_backoff",
+) -> Any:
     """Create a TaskDef with standard retry policy for agent worker tasks.
 
     Timeout is 0 (no timeout) — the agent configuration controls execution
@@ -56,7 +86,7 @@ def _default_task_def(name: str, *, response_timeout_seconds: int = 10, retry_co
 
     td = TaskDef(name=name)
     td.retry_count = retry_count
-    td.retry_logic = "LINEAR_BACKOFF"
+    td.retry_logic = _resolve_retry_logic(retry_policy)
     td.retry_delay_seconds = retry_delay_seconds
     td.timeout_seconds = 0
     td.response_timeout_seconds = response_timeout_seconds

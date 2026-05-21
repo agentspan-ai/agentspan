@@ -26,7 +26,7 @@ public class WorkerManager {
     private static final int VIRTUAL_THREAD_MIN_VERSION = 21;
 
     private final AgentConfig config;
-    private final HttpApi httpApi;
+    private final WorkerHttp workerHttp;
     private final ConcurrentHashMap<String, Function<Map<String, Object>, Object>> handlers;
     /** Optional worker domain per task name. Tasks without an entry poll the default queue. */
     private final ConcurrentHashMap<String, String> taskDomains;
@@ -46,7 +46,7 @@ public class WorkerManager {
 
     public WorkerManager(AgentConfig config) {
         this.config = config;
-        this.httpApi = new HttpApi(config);
+        this.workerHttp = new WorkerHttp(new HttpApi(config));
         this.handlers = new ConcurrentHashMap<>();
         this.taskDomains = new ConcurrentHashMap<>();
         this.workerFutures = new ConcurrentHashMap<>();
@@ -105,7 +105,7 @@ public class WorkerManager {
 
         // Register task definition on the server
         try {
-            httpApi.registerTaskDef(taskName);
+            workerHttp.registerTaskDef(taskName);
         } catch (Exception e) {
             logger.debug("Could not register task def {} (may already exist): {}", taskName, e.getMessage());
         }
@@ -168,7 +168,7 @@ public class WorkerManager {
 
         try {
             String domain = taskDomains.get(taskName);
-            Map<String, Object> task = httpApi.pollTask(taskName, domain);
+            Map<String, Object> task = workerHttp.pollTask(taskName, domain);
             if (task == null) return;
 
             String taskId = (String) task.get("taskId");
@@ -204,11 +204,11 @@ public class WorkerManager {
             try {
                 Object result = handler.apply(inputData);
                 Map<String, Object> output = buildOutput(result);
-                httpApi.completeTask(taskId, workflowInstanceId, output);
+                workerHttp.completeTask(taskId, workflowInstanceId, output);
                 logger.debug("Completed task {} ({})", taskName, taskId);
             } catch (Exception e) {
                 logger.error("Task {} ({}) failed: {}", taskName, taskId, e.getMessage(), e);
-                httpApi.failTask(taskId, workflowInstanceId, e.getMessage());
+                workerHttp.failTask(taskId, workflowInstanceId, e.getMessage());
             }
         };
 

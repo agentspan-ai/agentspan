@@ -27,16 +27,16 @@ public class AgentHandle {
     private static final long DEFAULT_POLL_INTERVAL_MS = 2000;
     private static final long DEFAULT_TIMEOUT_MS = 600_000; // 10 minutes
 
-    private final String workflowId;
+    private final String executionId;
     private final HttpApi httpApi;
 
-    public AgentHandle(String workflowId, HttpApi httpApi) {
-        this.workflowId = workflowId;
+    public AgentHandle(String executionId, HttpApi httpApi) {
+        this.executionId = executionId;
         this.httpApi = httpApi;
     }
 
-    public String getWorkflowId() {
-        return workflowId;
+    public String getExecutionId() {
+        return executionId;
     }
 
     /**
@@ -62,15 +62,15 @@ public class AgentHandle {
 
         while (System.currentTimeMillis() - startTime < timeoutMs) {
             try {
-                Map<String, Object> status = httpApi.getAgentStatus(workflowId);
+                Map<String, Object> status = httpApi.getAgentStatus(executionId);
                 String workflowStatus = (String) status.get("status");
 
                 if (workflowStatus == null) {
-                    logger.debug("Waiting for agent {} — status unknown", workflowId);
+                    logger.debug("Waiting for agent {} — status unknown", executionId);
                 } else if (isTerminalStatus(workflowStatus)) {
                     return buildResult(status, workflowStatus);
                 } else {
-                    logger.debug("Waiting for agent {} — status: {}", workflowId, workflowStatus);
+                    logger.debug("Waiting for agent {} — status: {}", executionId, workflowStatus);
                 }
 
                 Thread.sleep(pollIntervalMs);
@@ -88,14 +88,14 @@ public class AgentHandle {
             }
         }
 
-        throw new RuntimeException("Agent timed out after " + timeoutMs + "ms: " + workflowId);
+        throw new RuntimeException("Agent timed out after " + timeoutMs + "ms: " + executionId);
     }
 
     /**
      * Approve a pending tool call that requires human approval.
      */
     public void approve() {
-        httpApi.respondToAgent(workflowId, true, null);
+        httpApi.respond(executionId, approveBody(null));
     }
 
     /**
@@ -104,7 +104,10 @@ public class AgentHandle {
      * @param reason rejection reason
      */
     public void reject(String reason) {
-        httpApi.respondToAgent(workflowId, false, reason);
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("approved", false);
+        if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+        httpApi.respond(executionId, body);
     }
 
     /**
@@ -116,7 +119,7 @@ public class AgentHandle {
      * @param data the response payload
      */
     public void respond(Map<String, Object> data) {
-        httpApi.respondWithData(workflowId, data);
+        httpApi.respond(executionId, data);
     }
 
     /**
@@ -125,7 +128,14 @@ public class AgentHandle {
      * @param message the message to send
      */
     public void send(String message) {
-        httpApi.respondToAgent(workflowId, true, null);
+        httpApi.respond(executionId, approveBody(null));
+    }
+
+    private static Map<String, Object> approveBody(String reason) {
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("approved", true);
+        if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+        return body;
     }
 
     /**
@@ -135,7 +145,7 @@ public class AgentHandle {
      */
     public boolean isWaiting() {
         try {
-            Map<String, Object> status = httpApi.getAgentStatus(workflowId);
+            Map<String, Object> status = httpApi.getAgentStatus(executionId);
             Object waiting = status.get("isWaiting");
             return Boolean.TRUE.equals(waiting);
         } catch (Exception e) {
@@ -153,7 +163,7 @@ public class AgentHandle {
         long start = System.currentTimeMillis();
         while (System.currentTimeMillis() - start < timeoutMs) {
             try {
-                Map<String, Object> status = httpApi.getAgentStatus(workflowId);
+                Map<String, Object> status = httpApi.getAgentStatus(executionId);
                 Object waiting = status.get("isWaiting");
                 if (Boolean.TRUE.equals(waiting)) return true;
                 String workflowStatus = (String) status.get("status");
@@ -213,7 +223,7 @@ public class AgentHandle {
         TokenUsage tokenUsage = null;
         List<Map<String, Object>> toolCalls = new ArrayList<>();
         try {
-            Map<String, Object> workflow = httpApi.getWorkflow(workflowId);
+            Map<String, Object> workflow = httpApi.getWorkflow(executionId);
             Object tasksRaw = workflow.get("tasks");
             if (tasksRaw instanceof List) {
                 int promptT = 0, completionT = 0, totalT = 0;
@@ -271,10 +281,10 @@ public class AgentHandle {
                 }
             }
         } catch (Exception e) {
-            logger.debug("Could not extract tokens/toolCalls for {}: {}", workflowId, e.getMessage());
+            logger.debug("Could not extract tokens/toolCalls for {}: {}", executionId, e.getMessage());
         }
 
-        return new AgentResult(output, workflowId, status, toolCalls, null, tokenUsage, error);
+        return new AgentResult(output, executionId, status, toolCalls, null, tokenUsage, error);
     }
 
     private int toInt(Object value) {
@@ -289,6 +299,6 @@ public class AgentHandle {
 
     @Override
     public String toString() {
-        return "AgentHandle{workflowId=" + workflowId + "}";
+        return "AgentHandle{executionId=" + executionId + "}";
     }
 }

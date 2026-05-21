@@ -36,21 +36,21 @@ import java.util.NoSuchElementException;
 public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(AgentStream.class);
 
-    private final String workflowId;
+    private final String executionId;
     private final SseClient sseClient;
     private final HttpApi httpApi;
     private final List<AgentEvent> capturedEvents = new ArrayList<>();
     private AgentResult result;
     private boolean exhausted = false;
 
-    public AgentStream(String workflowId, SseClient sseClient, HttpApi httpApi) {
-        this.workflowId = workflowId;
+    public AgentStream(String executionId, SseClient sseClient, HttpApi httpApi) {
+        this.executionId = executionId;
         this.sseClient = sseClient;
         this.httpApi = httpApi;
     }
 
-    public String getWorkflowId() {
-        return workflowId;
+    public String getExecutionId() {
+        return executionId;
     }
 
     @Override
@@ -98,7 +98,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
         long start = System.currentTimeMillis();
         while (System.currentTimeMillis() - start < timeoutMs) {
             try {
-                Map<String, Object> status = httpApi.getAgentStatus(workflowId);
+                Map<String, Object> status = httpApi.getAgentStatus(executionId);
                 String workflowStatus = (String) status.get("status");
                 if (workflowStatus != null && isTerminalStatus(workflowStatus)) {
                     result = buildResultFromStatus(status, workflowStatus);
@@ -109,7 +109,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("Interrupted while waiting for stream result", e);
             } catch (Exception e) {
-                logger.debug("Error polling stream status for {}: {}", workflowId, e.getMessage());
+                logger.debug("Error polling stream status for {}: {}", executionId, e.getMessage());
                 try {
                     Thread.sleep(pollIntervalMs);
                 } catch (InterruptedException ie) {
@@ -119,7 +119,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
             }
         }
         throw new RuntimeException(
-            "Timed out after " + timeoutMs + "ms waiting for stream result: " + workflowId);
+            "Timed out after " + timeoutMs + "ms waiting for stream result: " + executionId);
     }
 
     private static boolean isTerminalStatus(String status) {
@@ -154,7 +154,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
         }
 
         return new AgentResult(
-            output, workflowId, status,
+            output, executionId, status,
             new ArrayList<>(), new ArrayList<>(capturedEvents),
             null, error);
     }
@@ -162,7 +162,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     /**
      * Approve a pending HUMAN task on the <b>top-level</b> workflow.
      *
-     * <p>This targets the workflow id from {@link #getWorkflowId()} — i.e. the
+     * <p>This targets the execution id from {@link #getExecutionId()} — i.e. the
      * orchestrator/root execution. It is the right method when:
      * <ul>
      *   <li>You are running a single agent (HUMAN task lives at the top level).</li>
@@ -172,24 +172,24 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
      * <p>Under {@link ai.agentspan.enums.Strategy#HANDOFF}, {@code SEQUENTIAL}, or
      * {@code PARALLEL} the HUMAN task usually lives in a <b>sub</b>-execution (the
      * sub-agent's own workflow). In that case this method POSTs to the wrong
-     * workflow id and the server returns HTTP 500 ("No pending HUMAN task found"):
+     * execution id and the server returns HTTP 500 ("No pending HUMAN task found"):
      * use {@link #approve(AgentEvent)} with the {@code WAITING} event instead.
      */
     public void approve() {
-        httpApi.respondToAgent(workflowId, true, null);
+        httpApi.respond(executionId, approveBody(null));
     }
 
     /**
      * Approve the pending HUMAN task associated with the given {@code WAITING} event.
      *
-     * <p>Reads the owning execution id from {@link AgentEvent#getWorkflowId()} —
+     * <p>Reads the owning execution id from {@link AgentEvent#getExecutionId()} —
      * the sub-execution that emitted the event — and POSTs to it. Use this whenever
      * the HUMAN task may live below the top level (handoff/sequential/parallel).
      *
      * @param event the WAITING event whose pending HUMAN task should be approved
      */
     public void approve(AgentEvent event) {
-        httpApi.respondToAgent(targetExecutionId(event), true, null);
+        httpApi.respond(targetExecutionId(event), approveBody(null));
     }
 
     /**
@@ -198,7 +198,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
      * @param reason optional rejection reason
      */
     public void reject(String reason) {
-        httpApi.respondToAgent(workflowId, false, reason);
+        httpApi.respond(executionId, rejectBody(reason));
     }
 
     /**
@@ -208,7 +208,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
      * @param reason optional rejection reason
      */
     public void reject(AgentEvent event, String reason) {
-        httpApi.respondToAgent(targetExecutionId(event), false, reason);
+        httpApi.respond(targetExecutionId(event), rejectBody(reason));
     }
 
     /**
@@ -219,7 +219,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     public void send(String message) {
         java.util.Map<String, Object> body = new java.util.HashMap<>();
         body.put("message", message);
-        httpApi.respondWithData(workflowId, body);
+        httpApi.respond(executionId, body);
     }
 
     /**
@@ -231,16 +231,30 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     public void send(AgentEvent event, String message) {
         java.util.Map<String, Object> body = new java.util.HashMap<>();
         body.put("message", message);
-        httpApi.respondWithData(targetExecutionId(event), body);
+        httpApi.respond(targetExecutionId(event), body);
+    }
+
+    private static java.util.Map<String, Object> approveBody(String reason) {
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("approved", true);
+        if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+        return body;
+    }
+
+    private static java.util.Map<String, Object> rejectBody(String reason) {
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("approved", false);
+        if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+        return body;
     }
 
     private static String targetExecutionId(AgentEvent event) {
         if (event == null) {
             throw new IllegalArgumentException("event must not be null");
         }
-        String id = event.getWorkflowId();
+        String id = event.getExecutionId();
         if (id == null || id.isEmpty()) {
-            throw new IllegalArgumentException("event has no workflow id");
+            throw new IllegalArgumentException("event has no execution id");
         }
         return id;
     }
@@ -302,7 +316,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
             }
         }
 
-        return new AgentResult(output, workflowId, status, toolCalls, new ArrayList<>(capturedEvents), null, error);
+        return new AgentResult(output, executionId, status, toolCalls, new ArrayList<>(capturedEvents), null, error);
     }
 
     private class SseEventIterator implements Iterator<AgentEvent> {

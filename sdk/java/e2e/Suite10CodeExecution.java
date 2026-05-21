@@ -62,8 +62,8 @@ class Suite10CodeExecution extends BaseTest {
      * contains "execute_code".
      */
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> findExecuteCodeTasks(String workflowId) {
-        Map<String, Object> workflow = getWorkflow(workflowId);
+    private List<Map<String, Object>> findExecuteCodeTasks(String executionId) {
+        Map<String, Object> workflow = getWorkflow(executionId);
         List<Map<String, Object>> allTasks = (List<Map<String, Object>>) workflow.get("tasks");
         if (allTasks == null) return List.of();
         return allTasks.stream()
@@ -296,10 +296,10 @@ class Suite10CodeExecution extends BaseTest {
             + "Status: " + result.getStatus()
             + ". Error: " + result.getError());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        List<Map<String, Object>> execTasks = findExecuteCodeTasks(workflowId);
+        List<Map<String, Object>> execTasks = findExecuteCodeTasks(executionId);
 
         assertFalse(execTasks.isEmpty(),
             "No execute_code task found in workflow. "
@@ -350,10 +350,10 @@ class Suite10CodeExecution extends BaseTest {
             + "Status: " + result.getStatus()
             + ". Error: " + result.getError());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        List<Map<String, Object>> execTasks = findExecuteCodeTasks(workflowId);
+        List<Map<String, Object>> execTasks = findExecuteCodeTasks(executionId);
 
         assertFalse(execTasks.isEmpty(),
             "No execute_code task found in workflow. "
@@ -407,10 +407,10 @@ class Suite10CodeExecution extends BaseTest {
                 || result.getStatus() == AgentStatus.TERMINATED,
             "Expected a terminal status. Got: " + result.getStatus());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        List<Map<String, Object>> execTasks = findExecuteCodeTasks(workflowId);
+        List<Map<String, Object>> execTasks = findExecuteCodeTasks(executionId);
 
         if (!execTasks.isEmpty()) {
             // Verify that the timeout error message appears in at least one task

@@ -72,6 +72,12 @@ public sealed class ToolAttribute : Attribute
     /// worker domain on start. Mirrors Python's <c>@tool(stateful=True)</c>.
     /// </summary>
     public bool Stateful { get; set; }
+    /// <summary>Number of times Conductor retries the task on failure. Default 2.</summary>
+    public int RetryCount { get; set; } = 2;
+    /// <summary>Seconds between retries. Default 2.</summary>
+    public int RetryDelaySeconds { get; set; } = 2;
+    /// <summary>Retry strategy: "fixed", "linear_backoff", or "exponential_backoff". Default "linear_backoff".</summary>
+    public string RetryPolicy { get; set; } = "linear_backoff";
 
     public ToolAttribute() { }
     public ToolAttribute(string description) { Description = description; }
@@ -96,6 +102,12 @@ public sealed class ToolDef
     /// Python's <c>@tool(stateful=True)</c>.
     /// </summary>
     public bool Stateful { get; init; }
+    /// <summary>Number of times Conductor retries the task on failure.</summary>
+    public int? RetryCount { get; init; }
+    /// <summary>Seconds between retries.</summary>
+    public int? RetryDelaySeconds { get; init; }
+    /// <summary>Retry strategy: "fixed", "linear_backoff", or "exponential_backoff".</summary>
+    public string? RetryPolicy { get; init; }
     /// <summary>Tool type: "worker" (default), "agent_tool", "external", or media types.</summary>
     internal string? ToolType { get; init; }
     /// <summary>For agent_tool: the wrapped agent and its runtime config.</summary>
@@ -122,6 +134,9 @@ public sealed class ToolDef
         TimeoutSeconds             = TimeoutSeconds,
         Credentials                = Credentials,
         Stateful                   = Stateful,
+        RetryCount                 = RetryCount,
+        RetryDelaySeconds          = RetryDelaySeconds,
+        RetryPolicy                = RetryPolicy,
         ToolType                   = ToolType,
         WrappedAgent               = WrappedAgent,
         AgentToolRetryCount        = AgentToolRetryCount,
@@ -853,6 +868,9 @@ public static class ToolRegistry
                 TimeoutSeconds = attr.TimeoutSeconds > 0 ? attr.TimeoutSeconds : null,
                 Credentials = attr.Credentials,
                 Stateful = attr.Stateful,
+                RetryCount = attr.RetryCount,
+                RetryDelaySeconds = attr.RetryDelaySeconds,
+                RetryPolicy = attr.RetryPolicy,
                 Handler = BuildHandler(instance, method),
             });
         }
