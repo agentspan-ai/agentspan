@@ -25,22 +25,10 @@ public final class LangChainBridge {
     private LangChainBridge() {}
 
     /**
-     * Convert a name + native ChatModel + system prompt + {@code @Tool}
-     * POJOs into an Agentspan {@link Agent}.
-     */
-    public static Agent toAgentspan(String name, ChatModel model, String systemPrompt, Object... tools) {
-        return agentBuilder(name, model, systemPrompt, tools).build();
-    }
-
-    /** Same as {@link #toAgentspan(String, ChatModel, String, Object...)} with no tools. */
-    public static Agent toAgentspan(String name, ChatModel model, String systemPrompt) {
-        return agentBuilder(name, model, systemPrompt).build();
-    }
-
-    /**
-     * Same as {@link #toAgentspan} but returns the populated
-     * {@link Agent.Builder} so callers can attach Agentspan-only features
-     * (guardrails, gate, termination, callbacks) before {@code .build()}:
+     * Build an Agentspan {@link Agent.Builder} from a native LangChain4j
+     * {@link ChatModel} and {@code @Tool}-annotated POJOs. Returning the
+     * Builder lets callers attach Agentspan-only features (guardrails,
+     * gate, termination, callbacks) before {@code .build()}:
      *
      * <pre>{@code
      * Agent agent = LangChainBridge.agentBuilder("name", model, "prompt", new MyTools())
@@ -48,6 +36,9 @@ public final class LangChainBridge {
      *     .build();
      * Agentspan.run(agent, "...");
      * }</pre>
+     *
+     * <p>For the simple no-decoration case, prefer the direct drop-in:
+     * {@code Agentspan.run(model, prompt, tools)}.
      */
     public static Agent.Builder agentBuilder(String name, ChatModel model, String systemPrompt, Object... tools) {
         String modelString = providerSlashModel(model);

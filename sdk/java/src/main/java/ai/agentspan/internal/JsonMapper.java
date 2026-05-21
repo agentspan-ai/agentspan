@@ -35,17 +35,6 @@ public class JsonMapper {
     }
 
     /**
-     * Convert any object to a Map<String, Object> using Jackson.
-     *
-     * @param obj the object to convert
-     * @return the object as a map
-     */
-    @SuppressWarnings("unchecked")
-    public static Map<String, Object> toMap(Object obj) {
-        return INSTANCE.convertValue(obj, Map.class);
-    }
-
-    /**
      * Serialize an object to a JSON string.
      *
      * @param obj the object to serialize

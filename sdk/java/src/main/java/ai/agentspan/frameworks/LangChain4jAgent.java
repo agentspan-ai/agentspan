@@ -234,16 +234,9 @@ public class LangChain4jAgent {
             Parameter param = params[i];
             String paramName = resolveParamName(param, i);
             Map<String, Object> propSchema = ToolRegistry.typeToJsonSchema(param.getParameterizedType());
-
-            // Incorporate @P description if present
-            String pDesc = resolvePDescription(param);
-            if (pDesc != null && !pDesc.isEmpty()) {
-                // Clone and add description
-                Map<String, Object> withDesc = new LinkedHashMap<>(propSchema);
-                withDesc.put("description", pDesc);
-                propSchema = withDesc;
-            }
-
+            // @dev.langchain4j.agent.tool.P (1.x) only carries value() and
+            // required() — no description field — so there's nothing extra to
+            // pull out at the property level.
             props.put(paramName, propSchema);
             required.add(paramName);
         }
@@ -292,20 +285,6 @@ public class LangChain4jAgent {
                     key);
         }
         return "arg" + index;
-    }
-
-    /**
-     * Return the description from {@code @P(value="name")} when the annotation
-     * does not hold a param description, or {@code null} if not annotated.
-     *
-     * <p>Note: in LangChain4j, {@code @P.value()} is the parameter <em>name</em>
-     * used in the schema, not a separate description field.  We do not emit
-     * an extra description at the property level unless {@code @P} carries one.
-     */
-    private static String resolvePDescription(Parameter param) {
-        // @P in langchain4j 1.x has only value() (name) and required();
-        // there is no separate description field, so return null.
-        return null;
     }
 
     /**

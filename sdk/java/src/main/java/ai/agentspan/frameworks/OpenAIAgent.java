@@ -10,7 +10,6 @@ import ai.agentspan.model.ToolDef;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,19 +52,6 @@ public final class OpenAIAgent {
         return new Builder();
     }
 
-    /**
-     * Build an OpenAI Agent from a name + instructions + model + tool objects.
-     * Convenience shortcut for the common case.
-     */
-    public static Agent from(String name, String model, String instructions, Object... toolObjects) {
-        return builder()
-                .name(name)
-                .model(model)
-                .instructions(instructions)
-                .tools(toolObjects)
-                .build();
-    }
-
     public static final class Builder {
         private String name;
         private String model;
@@ -81,12 +67,6 @@ public final class OpenAIAgent {
         /** Add @Tool-annotated POJO(s); each annotated method becomes an Agentspan worker tool. */
         public Builder tools(Object... toolObjects) {
             this.tools.addAll(extractTools(toolObjects));
-            return this;
-        }
-
-        /** Add already-built {@link ToolDef}s. */
-        public Builder toolDefs(Collection<ToolDef> defs) {
-            this.tools.addAll(defs);
             return this;
         }
 
@@ -295,44 +275,4 @@ public final class OpenAIAgent {
         return args;
     }
 
-    // The local coerce() / defaultFor() helpers below are retained as
-    // dead-code fallbacks in case ToolRegistry.coerceArgument throws; the
-    // primary path is the shared coercion table above.
-    @SuppressWarnings("unused")
-    private static Object coerce(Object value, Class<?> targetType) {
-        if (value == null) return defaultFor(targetType);
-        if (targetType.isInstance(value)) return value;
-        if (targetType == String.class && (value instanceof Map || value instanceof List)) {
-            try { return ai.agentspan.internal.JsonMapper.get().writeValueAsString(value); }
-            catch (Exception e) { return value.toString(); }
-        }
-        String str = value.toString();
-        if (targetType == String.class) return str;
-        if (targetType == int.class || targetType == Integer.class) {
-            return value instanceof Number ? ((Number) value).intValue() : Integer.parseInt(str);
-        }
-        if (targetType == long.class || targetType == Long.class) {
-            return value instanceof Number ? ((Number) value).longValue() : Long.parseLong(str);
-        }
-        if (targetType == double.class || targetType == Double.class) {
-            return value instanceof Number ? ((Number) value).doubleValue() : Double.parseDouble(str);
-        }
-        if (targetType == float.class || targetType == Float.class) {
-            return value instanceof Number ? ((Number) value).floatValue() : Float.parseFloat(str);
-        }
-        if (targetType == boolean.class || targetType == Boolean.class) {
-            if (value instanceof Boolean) return value;
-            return Boolean.parseBoolean(str);
-        }
-        return value;
-    }
-
-    private static Object defaultFor(Class<?> type) {
-        if (type == int.class) return 0;
-        if (type == long.class) return 0L;
-        if (type == double.class) return 0.0;
-        if (type == float.class) return 0.0f;
-        if (type == boolean.class) return false;
-        return null;
-    }
 }

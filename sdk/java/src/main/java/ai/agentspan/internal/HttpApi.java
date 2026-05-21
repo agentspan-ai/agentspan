@@ -37,18 +37,6 @@ public class HttpApi {
     }
 
     /**
-     * Start an agent execution.
-     *
-     * @param agentConfig serialized agent configuration
-     * @param prompt      user prompt
-     * @param sessionId   optional session ID
-     * @return server response containing executionId
-     */
-    public Map<String, Object> startAgent(Map<String, Object> agentConfig, String prompt, String sessionId) {
-        return startAgent(agentConfig, prompt, sessionId, null);
-    }
-
-    /**
      * Start an agent execution with an optional runId for stateful domain routing.
      *
      * <p>When {@code runId} is non-null/non-empty, the server uses it as the
@@ -78,28 +66,22 @@ public class HttpApi {
     }
 
     /**
-     * Start a framework-backed agent execution.
+     * Start a framework-backed agent execution with an optional per-execution
+     * {@code runId} for stateful tool routing. Mirrors
+     * {@link #startAgent(Map, String, String, String)}.
      *
-     * <p>For agents whose config is normalized server-side by a framework normalizer
-     * (e.g. OpenAI Agents SDK, Google ADK, LangGraph). The server reads
-     * {@code framework} + {@code rawConfig} fields, dispatches to the matching
-     * {@code dev.agentspan.runtime.normalizer.*}, and produces an AgentConfig
-     * without requiring a typed model field on the SDK side.
+     * <p>For agents whose config is normalized server-side by a framework
+     * normalizer (e.g. OpenAI Agents SDK, Google ADK, LangGraph). The server
+     * reads {@code framework} + {@code rawConfig}, dispatches to the matching
+     * {@code dev.agentspan.runtime.normalizer.*}, and produces an
+     * {@code AgentConfig} without requiring a typed model field on the SDK side.
      *
      * @param framework framework identifier (e.g. {@code "openai"}, {@code "google_adk"})
      * @param rawConfig framework-specific raw config map
      * @param prompt    user prompt
      * @param sessionId optional session ID
-     * @return server response containing workflowId
-     */
-    public Map<String, Object> startFrameworkAgent(
-            String framework, Map<String, Object> rawConfig, String prompt, String sessionId) {
-        return startFrameworkAgent(framework, rawConfig, prompt, sessionId, null);
-    }
-
-    /**
-     * Start a framework-backed agent with an optional per-execution {@code runId}
-     * for stateful tool routing. Mirrors {@link #startAgent(Map, String, String, String)}.
+     * @param runId     optional per-execution UUID for stateful tool routing
+     * @return server response containing executionId
      */
     public Map<String, Object> startFrameworkAgent(
             String framework, Map<String, Object> rawConfig, String prompt, String sessionId, String runId) {
@@ -123,19 +105,14 @@ public class HttpApi {
      * and returns the server response containing {@code workflowDef} and
      * {@code requiredWorkers}.
      *
-     * @param agentConfig serialized agent configuration
+     * <p>Routes framework-backed configs (openai / google_adk / langgraph)
+     * through the server's {@code {framework, rawConfig}} envelope so the
+     * matching normalizer runs. Pass {@code null} {@code framework} for
+     * native Agentspan agents.
+     *
+     * @param framework framework identifier or {@code null} for native
+     * @param rawConfig serialized agent configuration
      * @return server response containing workflowDef and requiredWorkers
-     */
-    public Map<String, Object> compileAgent(Map<String, Object> agentConfig) {
-        return compileAgent(null, agentConfig);
-    }
-
-    /**
-     * Compile an agent configuration into a workflow definition, routing
-     * framework-backed configs (openai / google_adk / langgraph) through the
-     * server's {@code {framework, rawConfig}} envelope so the matching
-     * normalizer runs. Pass {@code null} {@code framework} for native
-     * Agentspan agents.
      */
     public Map<String, Object> compileAgent(String framework, Map<String, Object> rawConfig) {
         Map<String, Object> body = new HashMap<>();
@@ -185,17 +162,6 @@ public class HttpApi {
      */
     public void respondWithData(String executionId, Map<String, Object> data) {
         post("/api/agent/" + executionId + "/respond", data);
-    }
-
-    /**
-     * Poll for a pending task of the given type.
-     *
-     * @param taskType the task type to poll
-     * @return task data or null if no pending task
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> pollTask(String taskType) {
-        return pollTask(taskType, null);
     }
 
     /**
@@ -404,10 +370,6 @@ public class HttpApi {
         if (config.getAuthSecret() != null && !config.getAuthSecret().isEmpty()) {
             builder.header("X-Auth-Secret", config.getAuthSecret());
         }
-    }
-
-    public AgentConfig getConfig() {
-        return config;
     }
 
     public HttpClient getHttpClient() {

@@ -432,10 +432,6 @@ public class AgentConfigSerializer {
         return agentMap;
     }
 
-    private Map<String, Object> serializeTool(ToolDef tool) {
-        return serializeTool(tool, false);
-    }
-
     private Map<String, Object> serializeTool(ToolDef tool, boolean agentStateful) {
         Map<String, Object> toolMap = new LinkedHashMap<>();
         toolMap.put("name", tool.getName());
