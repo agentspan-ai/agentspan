@@ -7,19 +7,23 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
 
+import com.google.adk.agents.LlmAgent;
+import com.google.genai.types.Schema;
+import com.google.genai.types.Type;
+
 import java.util.List;
+import java.util.Map;
 
 /**
  * Example Adk 03 — Structured Output
  *
  * <p>Java port of <code>sdk/python/examples/adk/03_structured_output.py</code>.
  *
- * <p>Demonstrates: enforced JSON schema response via ADK's
- * {@code output_schema}. Java exposes this via {@code .outputType("Recipe")}
- * which the server normalizer maps to AgentConfig.outputType.
+ * <p>Demonstrates: enforced JSON schema response via native ADK's
+ * {@code outputSchema(...)}. The schema is built from
+ * {@code com.google.genai.types.Schema}.
  *
  * <p>Expected JSON output shape (mirrors the Python Pydantic models):
  * <pre>{@code
@@ -65,16 +69,59 @@ public class Example03StructuredOutput {
         public String difficulty;
     }
 
+    private static Schema strSchema() {
+        return Schema.builder().type(Type.Known.STRING).build();
+    }
+
+    private static Schema intSchema() {
+        return Schema.builder().type(Type.Known.INTEGER).build();
+    }
+
+    private static Schema recipeSchema() {
+        Schema ingredient = Schema.builder()
+            .type(Type.Known.OBJECT)
+            .properties(Map.of(
+                "name", strSchema(),
+                "quantity", strSchema(),
+                "unit", strSchema()
+            ))
+            .build();
+
+        Schema step = Schema.builder()
+            .type(Type.Known.OBJECT)
+            .properties(Map.of(
+                "step_number", intSchema(),
+                "instruction", strSchema(),
+                "duration_minutes", intSchema()
+            ))
+            .build();
+
+        return Schema.builder()
+            .type(Type.Known.OBJECT)
+            .properties(Map.of(
+                "name", strSchema(),
+                "servings", intSchema(),
+                "prep_time_minutes", intSchema(),
+                "cook_time_minutes", intSchema(),
+                "ingredients", Schema.builder().type(Type.Known.ARRAY).items(ingredient).build(),
+                "steps", Schema.builder().type(Type.Known.ARRAY).items(step).build(),
+                "difficulty", strSchema()
+            ))
+            .build();
+    }
+
     public static void main(String[] args) {
-        Agent agent = GoogleADKAgent.builder()
+        LlmAgent adk = LlmAgent.builder()
             .name("recipe_generator")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a professional chef assistant. When asked for a recipe, "
                 + "provide a complete, well-structured recipe with precise measurements, "
                 + "clear step-by-step instructions, and accurate timing.")
-            .outputType("Recipe")
+            .outputSchema(recipeSchema())
             .build();
+
+        Agent agent = AdkBridge.toAgentspan(adk);
 
         AgentResult result = Agentspan.run(agent,
             "Give me a recipe for classic Italian carbonara pasta.");

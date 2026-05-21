@@ -3,25 +3,25 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.annotations.Tool;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.internal.ToolRegistry;
 import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.ToolDef;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Example Lc4j 03 — LangChain4j Agent with Credential-Aware Tools
+ * Example Lc4j 03 — LangChain4j Agent with Credential-Aware Tools (native LangChain4j SDK)
  *
  * <p>Demonstrates mixing:
  * <ul>
- *   <li>LangChain4j {@code @Tool} methods that perform pure computation (no secrets)</li>
+ *   <li>Native LangChain4j {@code @Tool} methods that perform pure computation (no secrets)</li>
  *   <li>An Agentspan {@link Tool}-annotated method that reads a credential injected
  *       as an environment variable by the server (via the {@code credentials} field)</li>
  * </ul>
@@ -41,6 +41,8 @@ import java.util.List;
  * <ul>
  *   <li>{@code AGENTSPAN_SERVER_URL=http://localhost:6767}</li>
  *   <li>langchain4j on the classpath (see examples/build.gradle)</li>
+ *   <li>{@code OPENAI_API_KEY} set (only the model identifier matters; the
+ *       server makes the actual LLM call using its own credentials)</li>
  *   <li>Credential {@code WEATHER_API_KEY} registered in Agentspan (optional — example
  *       works without it, falling back to a stubbed response)</li>
  * </ul>
@@ -99,10 +101,15 @@ public class ExampleCredentials {
     }
 
     public static void main(String[] args) {
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
         // Build the LangChain4j-backed agent (unit conversion tools)
-        Agent lc4jAgent = LangChain4jAgent.from(
+        Agent lc4jAgent = LangChainBridge.toAgentspan(
             "lc4j_weather_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a weather assistant. You can fetch weather data and convert temperatures. "
             + "Always show temperatures in both Celsius and Fahrenheit.",
             new UnitTools()

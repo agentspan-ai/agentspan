@@ -3,19 +3,19 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Example Lc4j 10 — Web Search Agent
+ * Example Lc4j 10 — Web Search Agent (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/10_web_search_agent.py</code>.
  *
@@ -112,9 +112,14 @@ public class Example10WebSearchAgent {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "web_search_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a research assistant. Use search and retrieval tools to answer questions thoroughly.",
             new WebSearchTools()
         );

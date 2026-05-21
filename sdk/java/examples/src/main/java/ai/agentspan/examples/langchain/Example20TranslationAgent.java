@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Example Lc4j 20 — Translation Agent
+ * Example Lc4j 20 — Translation Agent (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/20_translation_agent.py</code>.
  *
@@ -152,9 +152,14 @@ public class Example20TranslationAgent {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "translation_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a multilingual translation assistant. Detect languages, provide translations, "
                 + "and share interesting linguistic context. Be accurate and culturally sensitive.",
             new TranslationTools()

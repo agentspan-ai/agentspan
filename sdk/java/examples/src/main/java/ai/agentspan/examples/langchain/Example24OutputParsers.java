@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -19,7 +19,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Example Lc4j 24 — Output Parsers
+ * Example Lc4j 24 — Output Parsers (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/24_output_parsers.py</code>.
  *
@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
  * {@code PydanticOutputParser}. The Java port uses prompt-based JSON return
  * shapes plus consumer-side Jackson deserialization — LangChain4j's
  * {@code AiServices} typed-return analog isn't applicable in
- * {@link LangChain4jAgent#from} extraction mode (server-side LLM loop).
+ * {@link LangChainBridge#toAgentspan} extraction mode (server-side LLM loop).
  */
 public class Example24OutputParsers {
 
@@ -153,10 +153,15 @@ public class Example24OutputParsers {
         @SuppressWarnings("unused")
         ExtractedFields example = new ExtractedFields("2025-03-15", "$249.99", "billing@example.com");
 
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
         // Python uses the shorter prompt below — match it for parity.
-        Agent agent = LangChain4jAgent.from(
+        Agent agent = LangChainBridge.toAgentspan(
             "output_parsers_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a data extraction and formatting assistant. "
                 + "Use tools to retrieve, parse, and structure information clearly.",
             new OutputParserTools()

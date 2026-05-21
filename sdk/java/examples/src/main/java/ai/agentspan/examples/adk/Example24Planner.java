@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,66 +22,66 @@ import java.util.Map;
  *
  * <p>Java port of <code>sdk/python/examples/adk/24_planner.py</code>.
  *
- * <p>Demonstrates: ADK's {@code BuiltInPlanner} with
- * {@code ThinkingConfig(thinking_budget=1024)} for adding a planning phase.
- * The Java {@link GoogleADKAgent} builder does not expose planner config;
- * we encode the planning intent in the agent instruction.
+ * <p>Demonstrates: ADK's planning phase via the native
+ * {@code planning(true)} builder flag.
  */
 public class Example24Planner {
 
-    static class ResearchWriterTools {
-
-        @Tool(name = "search_web", value = "Search the web for information.")
-        public Map<String, Object> searchWeb(@P("query") String query) {
-            Map<String, Map<String, Object>> results = new LinkedHashMap<>();
-            results.put("climate change solutions", Map.of(
-                "results", List.of(
-                    "Solar energy costs dropped 89% since 2010",
-                    "Wind power is now cheapest energy source in many regions",
-                    "Carbon capture technology advancing rapidly"
-                )
-            ));
-            results.put("renewable energy statistics", Map.of(
-                "results", List.of(
-                    "Renewables account for 30% of global electricity (2023)",
-                    "Solar capacity grew 50% year-over-year",
-                    "China leads in renewable energy investment"
-                )
-            ));
-            String q = query.toLowerCase();
-            for (Map.Entry<String, Map<String, Object>> entry : results.entrySet()) {
-                for (String word : entry.getKey().split(" ")) {
-                    if (q.contains(word)) {
-                        Map<String, Object> r = new LinkedHashMap<>();
-                        r.put("query", query);
-                        r.putAll(entry.getValue());
-                        return r;
-                    }
+    @Schema(description = "Search the web for information.")
+    public static Map<String, Object> searchWeb(
+            @Schema(name = "query", description = "Search query") String query) {
+        Map<String, Map<String, Object>> results = new LinkedHashMap<>();
+        results.put("climate change solutions", Map.of(
+            "results", List.of(
+                "Solar energy costs dropped 89% since 2010",
+                "Wind power is now cheapest energy source in many regions",
+                "Carbon capture technology advancing rapidly"
+            )
+        ));
+        results.put("renewable energy statistics", Map.of(
+            "results", List.of(
+                "Renewables account for 30% of global electricity (2023)",
+                "Solar capacity grew 50% year-over-year",
+                "China leads in renewable energy investment"
+            )
+        ));
+        String q = query.toLowerCase();
+        for (Map.Entry<String, Map<String, Object>> entry : results.entrySet()) {
+            for (String word : entry.getKey().split(" ")) {
+                if (q.contains(word)) {
+                    Map<String, Object> r = new LinkedHashMap<>();
+                    r.put("query", query);
+                    r.putAll(entry.getValue());
+                    return r;
                 }
             }
-            return Map.of("query", query, "results", List.of("No specific results found."));
         }
+        return Map.of("query", query, "results", List.of("No specific results found."));
+    }
 
-        @Tool(name = "write_section", value = "Write a section of a report.")
-        public Map<String, Object> writeSection(
-                @P("title") String title,
-                @P("content") String content) {
-            return Map.of("section", "## " + title + "\n\n" + content);
-        }
+    @Schema(description = "Write a section of a report.")
+    public static Map<String, Object> writeSection(
+            @Schema(name = "title", description = "Section title") String title,
+            @Schema(name = "content", description = "Section content") String content) {
+        return Map.of("section", "## " + title + "\n\n" + content);
     }
 
     public static void main(String[] args) {
-        // Planner intent: encode the "plan first, then act" instruction inline.
-        Agent agent = GoogleADKAgent.builder()
+        LlmAgent adk = LlmAgent.builder()
             .name("research_writer")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a research writer. When given a topic:\n"
-                + "1. First produce a brief step-by-step PLAN for the report (act as a planner).\n"
+                + "1. First produce a brief step-by-step PLAN for the report.\n"
                 + "2. Then execute the plan: research the topic thoroughly and write a "
                 + "structured report with multiple sections.")
-            .tools(new ResearchWriterTools())
+            .planning(true)
+            .tools(
+                FunctionTool.create(Example24Planner.class, "searchWeb"),
+                FunctionTool.create(Example24Planner.class, "writeSection"))
             .build();
+
+        Agent agent = AdkBridge.toAgentspan(adk);
 
         AgentResult result = Agentspan.run(agent,
             "Write a brief report on the current state of renewable energy "

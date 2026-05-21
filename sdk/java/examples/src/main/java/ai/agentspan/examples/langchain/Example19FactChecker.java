@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,7 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Example Lc4j 19 — Fact Checker
+ * Example Lc4j 19 — Fact Checker (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/19_fact_checker.py</code>.
  *
@@ -148,9 +148,14 @@ public class Example19FactChecker {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "fact_checker_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a rigorous fact-checker. Extract claims from text and verify them. "
                 + "Be precise about what is true, false, or nuanced. Always cite sources when available.",
             new FactCheckerTools()

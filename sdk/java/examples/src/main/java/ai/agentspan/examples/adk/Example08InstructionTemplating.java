@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,47 +27,45 @@ import java.util.Map;
  */
 public class Example08InstructionTemplating {
 
-    static class PrefTools {
+    @Schema(description = "Look up user preferences.")
+    public static Map<String, Object> getUserPreferences(
+            @Schema(name = "user_id", description = "User ID") String userId) {
+        Map<String, Map<String, Object>> users = new LinkedHashMap<>();
+        users.put("user_001", Map.of(
+            "name", "Alice",
+            "language", "English",
+            "expertise", "beginner",
+            "preferred_format", "bullet points"));
+        users.put("user_002", Map.of(
+            "name", "Bob",
+            "language", "English",
+            "expertise", "advanced",
+            "preferred_format", "detailed paragraphs"));
+        return users.getOrDefault(userId,
+            Map.of("name", "Guest", "expertise", "intermediate", "preferred_format", "concise"));
+    }
 
-        @Tool(name = "get_user_preferences", value = "Look up user preferences.")
-        public Map<String, Object> getUserPreferences(@P("user_id") String userId) {
-            Map<String, Map<String, Object>> users = new LinkedHashMap<>();
-            users.put("user_001", Map.of(
-                "name", "Alice",
-                "language", "English",
-                "expertise", "beginner",
-                "preferred_format", "bullet points"));
-            users.put("user_002", Map.of(
-                "name", "Bob",
-                "language", "English",
-                "expertise", "advanced",
-                "preferred_format", "detailed paragraphs"));
-            return users.getOrDefault(userId,
-                Map.of("name", "Guest", "expertise", "intermediate", "preferred_format", "concise"));
-        }
-
-        @Tool(name = "search_tutorials", value = "Search for tutorials matching a topic and skill level.")
-        public Map<String, Object> searchTutorials(
-                @P("topic") String topic,
-                @P("level") String level) {
-            String lvl = level == null ? "intermediate" : level.toLowerCase();
-            String key = topic.toLowerCase() + "::" + lvl;
-            Map<String, List<String>> tutorials = new LinkedHashMap<>();
-            tutorials.put("python::beginner", List.of(
-                "Python Basics: Variables and Types",
-                "Your First Python Function",
-                "Lists and Loops for Beginners"));
-            tutorials.put("python::advanced", List.of(
-                "Metaclasses and Descriptors",
-                "Async IO Deep Dive",
-                "CPython Internals"));
-            List<String> results = tutorials.getOrDefault(key, List.of("General " + topic + " tutorial"));
-            return Map.of("topic", topic, "level", lvl, "tutorials", results);
-        }
+    @Schema(description = "Search for tutorials matching a topic and skill level.")
+    public static Map<String, Object> searchTutorials(
+            @Schema(name = "topic", description = "Topic to search for") String topic,
+            @Schema(name = "level", description = "Skill level") String level) {
+        String lvl = level == null ? "intermediate" : level.toLowerCase();
+        String key = topic.toLowerCase() + "::" + lvl;
+        Map<String, List<String>> tutorials = new LinkedHashMap<>();
+        tutorials.put("python::beginner", List.of(
+            "Python Basics: Variables and Types",
+            "Your First Python Function",
+            "Lists and Loops for Beginners"));
+        tutorials.put("python::advanced", List.of(
+            "Metaclasses and Descriptors",
+            "Async IO Deep Dive",
+            "CPython Internals"));
+        List<String> results = tutorials.getOrDefault(key, List.of("General " + topic + " tutorial"));
+        return Map.of("topic", topic, "level", lvl, "tutorials", results);
     }
 
     public static void main(String[] args) {
-        Agent agent = GoogleADKAgent.builder()
+        LlmAgent adk = LlmAgent.builder()
             .name("adaptive_tutor")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -74,8 +73,12 @@ public class Example08InstructionTemplating {
                 + "The current user is {user_name} with {expertise_level} expertise. "
                 + "Adapt your explanations to their level. "
                 + "Use the search_tutorials tool to find appropriate learning resources.")
-            .tools(new PrefTools())
+            .tools(
+                FunctionTool.create(Example08InstructionTemplating.class, "getUserPreferences"),
+                FunctionTool.create(Example08InstructionTemplating.class, "searchTutorials"))
             .build();
+
+        Agent agent = AdkBridge.toAgentspan(adk);
 
         AgentResult result = Agentspan.run(agent,
             "I want to learn Python. What tutorials do you recommend?");

@@ -3,20 +3,19 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.Locale;
 
 /**
- * Example Lc4j 03 — Custom Tools
+ * Example Lc4j 03 — Custom Tools (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/03_custom_tools.py</code>.
  * Multi-argument tools with typed parameters — unit conversion and formatting
@@ -34,8 +33,8 @@ import java.util.Locale;
  * <p>Requirements:
  * <ul>
  *   <li>{@code AGENTSPAN_SERVER_URL=http://localhost:6767/api}</li>
- *   <li>{@code AGENTSPAN_LLM_MODEL=openai/gpt-4o} (or any provider supported by the server)</li>
- *   <li>OpenAI/provider key configured in server credentials</li>
+ *   <li>{@code OPENAI_API_KEY} set (only the model identifier matters; the
+ *       server makes the actual LLM call using its own credentials)</li>
  * </ul>
  */
 public class Example03CustomTools {
@@ -100,11 +99,16 @@ public class Example03CustomTools {
     }
 
     public static void main(String[] args) {
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
         // Python's create_agent(llm, tools=[...]) sends no system prompt unless
         // the caller provides one — match that by passing null instructions.
-        Agent agent = LangChain4jAgent.from(
+        Agent agent = LangChainBridge.toAgentspan(
             "custom_tools_agent",
-            Settings.LLM_MODEL,
+            model,
             null,
             new CustomTools()
         );

@@ -18,14 +18,24 @@ repositories {
 
 dependencies {
     implementation project(':')
-    // @Tool / @P annotations from LangChain4j are RUNTIME-retained; if the
-    // dependency is only on the compile classpath, the JVM silently drops them
-    // at class-load time and reflection-based tool extraction returns empty.
-    // Keep this on both classpaths. Used by examples in the langchain/, openai/,
-    // and adk/ subpackages (the bridges accept @dev.langchain4j.agent.tool.Tool or the
-    // Agentspan-native @ai.agentspan.annotations.Tool annotation interchangeably).
-    compileOnly 'dev.langchain4j:langchain4j:1.0.0'
-    runtimeOnly 'dev.langchain4j:langchain4j:1.0.0'
+
+    // Native Google ADK Java SDK — used by examples in the adk/ subpackage.
+    // Examples build LlmAgent objects and hand them to GoogleADKAgent.fromAdk(...).
+    implementation 'com.google.adk:google-adk:0.3.0'
+
+    // Native LangChain4j — used by examples in the langchain/ subpackage and as
+    // the @Tool annotation provider for the adk/, langchain/, and openai/ examples.
+    // @Tool / @P annotations are RUNTIME-retained so the dep must be on both
+    // classpaths — compileOnly alone drops them at class-load and reflection
+    // returns empty.
+    implementation 'dev.langchain4j:langchain4j:1.0.0'
+    implementation 'dev.langchain4j:langchain4j-open-ai:1.0.0'
+
+    // Native LangGraph4j — used by examples in the langgraph/ subpackage.
+    implementation 'org.bsc.langgraph4j:langgraph4j-core:1.6.0-beta5'
+    implementation 'org.bsc.langgraph4j:langgraph4j-langchain4j:1.6.0-beta5'
+    implementation 'org.bsc.langgraph4j:langgraph4j-agent-executor:1.6.0-beta5'
+
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
 }
 

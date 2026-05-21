@@ -3,27 +3,26 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * Example Lc4j 07 — Memory Agent
+ * Example Lc4j 07 — Memory Agent (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/07_memory_agent.py</code>.
  * The Python version uses LangChain's <code>create_agent</code> with native
  * conversational context — the agent recalls information from earlier turns.
  *
- * <p><b>LangChain4j adaptation:</b> with {@link LangChain4jAgent#from}, the
+ * <p><b>LangChain4j adaptation:</b> with {@link LangChainBridge#toAgentspan}, the
  * LLM loop runs server-side and there is no client-side
  * {@code MessageWindowChatMemory} that survives across {@link Agentspan#run}
  * calls. The closest semantically-equivalent shape is to mark the agent as
@@ -42,8 +41,8 @@ import java.util.Map;
  * <p>Requirements:
  * <ul>
  *   <li>{@code AGENTSPAN_SERVER_URL=http://localhost:6767/api}</li>
- *   <li>{@code AGENTSPAN_LLM_MODEL=openai/gpt-4o} (or any provider supported by the server)</li>
- *   <li>OpenAI/provider key configured in server credentials</li>
+ *   <li>{@code OPENAI_API_KEY} set (only the model identifier matters; the
+ *       server makes the actual LLM call using its own credentials)</li>
  * </ul>
  */
 public class Example07MemoryAgent {
@@ -71,18 +70,23 @@ public class Example07MemoryAgent {
         String instructions =
             "You are a helpful HR assistant. Remember information from earlier in the conversation.";
 
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
         // Extract LangChain4j tools, then rebuild as a stateful agent so the
         // server persists conversation history across runs.
-        Agent extracted = LangChain4jAgent.from(
+        Agent extracted = LangChainBridge.toAgentspan(
             "memory_agent",
-            Settings.LLM_MODEL,
+            model,
             instructions,
             new HrTools()
         );
 
         Agent agent = Agent.builder()
             .name(extracted.getName())
-            .model(Settings.LLM_MODEL)
+            .model(extracted.getModel())
             .instructions(instructions)
             .tools(extracted.getTools())
             .stateful(true)

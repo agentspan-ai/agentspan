@@ -3,15 +3,15 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
 
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
+
 /**
- * Example Lc4j 09 — Math Calculator
+ * Example Lc4j 09 — Math Calculator (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/09_math_calculator.py</code>.
  *
@@ -235,9 +235,14 @@ public class Example09MathCalculator {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "math_calculator_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a precise math assistant. Always use tools to compute exact answers.",
             new MathTools()
         );

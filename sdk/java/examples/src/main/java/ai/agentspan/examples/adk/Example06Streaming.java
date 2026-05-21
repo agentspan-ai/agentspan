@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,43 +27,43 @@ import java.util.Map;
  */
 public class Example06Streaming {
 
-    static class DocsTools {
+    @Schema(description = "Search the product documentation.")
+    public static Map<String, Object> searchDocumentation(
+            @Schema(name = "query", description = "Search query") String query) {
+        Map<String, Map<String, Object>> docs = new LinkedHashMap<>();
+        docs.put("installation", Map.of(
+            "title", "Installation Guide",
+            "content", "Run `pip install mypackage`. Requires Python 3.9+."));
+        docs.put("authentication", Map.of(
+            "title", "Authentication",
+            "content", "Use API keys via the X-API-Key header. Keys are managed in the dashboard."));
+        docs.put("rate limits", Map.of(
+            "title", "Rate Limiting",
+            "content", "Free tier: 100 req/min. Pro: 1000 req/min. Enterprise: unlimited."));
 
-        @Tool(name = "search_documentation", value = "Search the product documentation.")
-        public Map<String, Object> searchDocumentation(@P("query") String query) {
-            Map<String, Map<String, Object>> docs = new LinkedHashMap<>();
-            docs.put("installation", Map.of(
-                "title", "Installation Guide",
-                "content", "Run `pip install mypackage`. Requires Python 3.9+."));
-            docs.put("authentication", Map.of(
-                "title", "Authentication",
-                "content", "Use API keys via the X-API-Key header. Keys are managed in the dashboard."));
-            docs.put("rate limits", Map.of(
-                "title", "Rate Limiting",
-                "content", "Free tier: 100 req/min. Pro: 1000 req/min. Enterprise: unlimited."));
-
-            String q = query.toLowerCase();
-            for (Map.Entry<String, Map<String, Object>> entry : docs.entrySet()) {
-                if (q.contains(entry.getKey())) {
-                    Map<String, Object> r = new LinkedHashMap<>();
-                    r.put("found", true);
-                    r.putAll(entry.getValue());
-                    return r;
-                }
+        String q = query.toLowerCase();
+        for (Map.Entry<String, Map<String, Object>> entry : docs.entrySet()) {
+            if (q.contains(entry.getKey())) {
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("found", true);
+                r.putAll(entry.getValue());
+                return r;
             }
-            return Map.of("found", false, "message", "No matching documentation found.");
         }
+        return Map.of("found", false, "message", "No matching documentation found.");
     }
 
     public static void main(String[] args) {
-        Agent agent = GoogleADKAgent.builder()
+        LlmAgent adk = LlmAgent.builder()
             .name("docs_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a documentation assistant. Use the search tool to find "
                 + "relevant docs and provide clear, well-formatted answers.")
-            .tools(new DocsTools())
+            .tools(FunctionTool.create(Example06Streaming.class, "searchDocumentation"))
             .build();
+
+        Agent agent = AdkBridge.toAgentspan(adk);
 
         AgentResult result = Agentspan.run(agent, "How do I authenticate with the API?");
         result.printResult();

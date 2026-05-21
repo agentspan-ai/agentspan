@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -19,7 +19,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Example Lc4j 25 — Advanced Orchestration
+ * Example Lc4j 25 — Advanced Orchestration (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/25_advanced_orchestration.py</code>.
  *
@@ -224,9 +224,14 @@ public class Example25AdvancedOrchestration {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "advanced_orchestration_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a senior business intelligence analyst. When given a research request, "
                 + "systematically gather company data, market trends, and compute relevant metrics. "
                 + "Then synthesize everything into a structured report with findings and recommendations.",

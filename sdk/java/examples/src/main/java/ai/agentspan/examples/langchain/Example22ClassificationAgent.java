@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Example Lc4j 22 — Classification Agent
+ * Example Lc4j 22 — Classification Agent (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/22_classification_agent.py</code>.
  *
@@ -145,9 +145,14 @@ public class Example22ClassificationAgent {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "classification_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a text classification assistant. Analyze text for topic and intent, "
                 + "provide confidence-scored categories, and explain your classifications.",
             new ClassificationTools()

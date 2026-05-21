@@ -3,21 +3,20 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * Example Lc4j 05 — Prompt Templates / Persona Injection
+ * Example Lc4j 05 — Prompt Templates / Persona Injection (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/05_prompt_templates.py</code>.
  * Injects a rich persona (Professor Lex) via the system prompt and exposes two
@@ -25,7 +24,7 @@ import java.util.Map;
  *
  * <p>Demonstrates:
  * <ul>
- *   <li>Passing a rich system prompt to {@link LangChain4jAgent#from}</li>
+ *   <li>Passing a rich system prompt to {@link LangChainBridge#toAgentspan}</li>
  *   <li>Injecting persona, tone, and constraints into the agent</li>
  *   <li>Using tools alongside a custom persona</li>
  * </ul>
@@ -33,8 +32,8 @@ import java.util.Map;
  * <p>Requirements:
  * <ul>
  *   <li>{@code AGENTSPAN_SERVER_URL=http://localhost:6767/api}</li>
- *   <li>{@code AGENTSPAN_LLM_MODEL=openai/gpt-4o} (or any provider supported by the server)</li>
- *   <li>OpenAI/provider key configured in server credentials</li>
+ *   <li>{@code OPENAI_API_KEY} set (only the model identifier matters; the
+ *       server makes the actual LLM call using its own credentials)</li>
  * </ul>
  */
 public class Example05PromptTemplates {
@@ -94,9 +93,14 @@ public class Example05PromptTemplates {
         + "Always use the available tools to look up definitions and synonyms before answering.";
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "prompt_templates_agent",
-            Settings.LLM_MODEL,
+            model,
             SYSTEM_PROMPT,
             new LexiconTools()
         );

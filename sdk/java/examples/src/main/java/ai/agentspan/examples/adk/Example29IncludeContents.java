@@ -7,37 +7,38 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
+
+import com.google.adk.agents.LlmAgent;
 
 /**
  * Example Adk 29 — Include Contents
  *
  * <p>Java port of <code>sdk/python/examples/adk/29_include_contents.py</code>.
  *
- * <p>Demonstrates: ADK's {@code include_contents="none"} prevents a sub-agent
- * from inheriting the parent's conversation history. The Java
- * {@link GoogleADKAgent} builder does not expose include_contents directly;
- * the intent is documented in each agent's instruction.
+ * <p>Demonstrates: ADK's native {@code includeContents(NONE)} prevents a
+ * sub-agent from inheriting the parent's conversation history.
  */
 public class Example29IncludeContents {
 
     public static void main(String[] args) {
-        // Sub-agent that would normally have include_contents="none" — no parent context.
-        Agent independentSummarizer = GoogleADKAgent.builder()
+        // Sub-agent with include_contents="none" — no parent context.
+        LlmAgent independentSummarizer = LlmAgent.builder()
             .name("independent_summarizer")
             .model(Settings.LLM_MODEL)
             .instruction("You are a summarizer. Summarize any text given to you concisely.")
+            .includeContents(LlmAgent.IncludeContents.NONE)
             .build();
 
         // Sub-agent that sees parent context (default).
-        Agent contextAwareHelper = GoogleADKAgent.builder()
+        LlmAgent contextAwareHelper = LlmAgent.builder()
             .name("context_aware_helper")
             .model(Settings.LLM_MODEL)
             .instruction("You are a helpful assistant that builds on prior conversation context.")
+            .includeContents(LlmAgent.IncludeContents.DEFAULT)
             .build();
 
-        Agent coordinator = GoogleADKAgent.builder()
+        LlmAgent coordinator = LlmAgent.builder()
             .name("coordinator")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -46,7 +47,9 @@ public class Example29IncludeContents {
             .subAgents(independentSummarizer, contextAwareHelper)
             .build();
 
-        AgentResult result = Agentspan.run(coordinator,
+        Agent agent = AdkBridge.toAgentspan(coordinator);
+
+        AgentResult result = Agentspan.run(agent,
             "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
             + "This sentence contains every letter of the alphabet and is commonly "
             + "used for typography testing.'");

@@ -7,38 +7,47 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.genai.types.GenerateContentConfig;
 
 /**
  * Example Adk 05 — Generation Config
  *
  * <p>Java port of <code>sdk/python/examples/adk/05_generation_config.py</code>.
  *
- * <p>Demonstrates: temperature and output control. The Python version uses
- * ADK's {@code generate_content_config} dict for tuning. The Java
- * {@link GoogleADKAgent} builder does not expose generation config directly,
- * so we document the intent in the instruction and rely on server defaults.
+ * <p>Demonstrates: temperature and output control via native ADK's
+ * {@code generateContentConfig(...)}.
  */
 public class Example05GenerationConfig {
     public static void main(String[] args) {
-        // Precise agent — low temperature for factual responses (temperature: 0.1)
-        Agent factualAgent = GoogleADKAgent.builder()
+        // Precise agent — low temperature for factual responses
+        LlmAgent factualAdk = LlmAgent.builder()
             .name("fact_checker")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a precise fact-checker. Provide accurate, well-sourced "
                 + "answers. Be concise and avoid speculation.")
+            .generateContentConfig(GenerateContentConfig.builder()
+                .temperature(0.1f)
+                .build())
             .build();
 
-        // Creative agent — high temperature for creative writing (temperature: 0.9)
-        Agent creativeAgent = GoogleADKAgent.builder()
+        // Creative agent — high temperature for creative writing
+        LlmAgent creativeAdk = LlmAgent.builder()
             .name("storyteller")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are an imaginative storyteller. Create vivid, engaging "
                 + "narratives with rich descriptions and unexpected twists.")
+            .generateContentConfig(GenerateContentConfig.builder()
+                .temperature(0.9f)
+                .build())
             .build();
+
+        Agent factualAgent = AdkBridge.toAgentspan(factualAdk);
+        Agent creativeAgent = AdkBridge.toAgentspan(creativeAdk);
 
         System.out.println("=== Factual Agent (temp=0.1) ===");
         AgentResult result = Agentspan.run(factualAgent,

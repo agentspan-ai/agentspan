@@ -3,86 +3,72 @@
 
 package ai.agentspan.examples.adk;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
+import ai.agentspan.examples.Settings;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
 
-import java.util.LinkedHashMap;
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
+
 import java.util.Map;
 
 /**
- * Example Adk 02 — Function Tools
+ * Example Adk 02 — Native ADK {@link FunctionTool}s wired through Agentspan.
  *
- * <p>Java port of <code>sdk/python/examples/adk/02_function_tools.py</code>.
- *
- * <p>Demonstrates: multiple Google ADK tools with typed parameters. The
- * runtime reflects {@code @Tool}-annotated methods and registers them as
- * workers; the server normalizes them into worker tasks.
+ * <p>Tools are static methods annotated with {@code @Schema} — the idiomatic
+ * ADK pattern — and packaged via {@code FunctionTool.create(Class, "methodName")}.
+ * No Agentspan-specific annotations.
  */
 public class Example02FunctionTools {
 
-    static class TravelTools {
-
-        @Tool(name = "get_weather", value = "Get the current weather for a city.")
-        public Map<String, Object> getWeather(@P("city") String city) {
-            Map<String, Map<String, Object>> weatherData = new LinkedHashMap<>();
-            weatherData.put("tokyo", Map.of("temp_c", 22, "condition", "Clear", "humidity", 65));
-            weatherData.put("paris", Map.of("temp_c", 18, "condition", "Partly Cloudy", "humidity", 72));
-            weatherData.put("sydney", Map.of("temp_c", 25, "condition", "Sunny", "humidity", 58));
-            weatherData.put("mumbai", Map.of("temp_c", 32, "condition", "Humid", "humidity", 85));
-            Map<String, Object> data = weatherData.getOrDefault(city.toLowerCase(),
+    @Schema(description = "Get the current weather for a city")
+    public static Map<String, Object> getWeather(
+            @Schema(name = "city", description = "Name of the city") String city) {
+        Map<String, Map<String, Object>> data = Map.of(
+                "tokyo",  Map.of("temp_c", 22, "condition", "Clear",         "humidity", 65),
+                "paris",  Map.of("temp_c", 18, "condition", "Partly Cloudy", "humidity", 72),
+                "sydney", Map.of("temp_c", 25, "condition", "Sunny",         "humidity", 58),
+                "mumbai", Map.of("temp_c", 32, "condition", "Humid",         "humidity", 85)
+        );
+        Map<String, Object> row = data.getOrDefault(city.toLowerCase(),
                 Map.of("temp_c", 20, "condition", "Unknown", "humidity", 50));
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("city", city);
-            result.putAll(data);
-            return result;
-        }
+        return Map.of("city", city, "temp_c", row.get("temp_c"),
+                "condition", row.get("condition"), "humidity", row.get("humidity"));
+    }
 
-        @Tool(name = "convert_temperature", value = "Convert temperature between Celsius and Fahrenheit.")
-        public Map<String, Object> convertTemperature(
-                @P("temp_celsius") double tempCelsius,
-                @P("to_unit") String toUnit) {
-            String unit = toUnit == null ? "fahrenheit" : toUnit.toLowerCase();
-            if ("fahrenheit".equals(unit)) {
-                double converted = tempCelsius * 9.0 / 5.0 + 32;
-                return Map.of("celsius", tempCelsius, "fahrenheit", Math.round(converted * 10.0) / 10.0);
-            } else if ("kelvin".equals(unit)) {
-                double converted = tempCelsius + 273.15;
-                return Map.of("celsius", tempCelsius, "kelvin", Math.round(converted * 10.0) / 10.0);
-            }
-            return Map.of("error", "Unknown unit: " + toUnit);
+    @Schema(description = "Convert temperature between Celsius and Fahrenheit")
+    public static Map<String, Object> convertTemperature(
+            @Schema(name = "temp_celsius", description = "Temperature in Celsius") double tempCelsius,
+            @Schema(name = "to_unit",      description = "Target unit (fahrenheit or kelvin)") String toUnit) {
+        if ("fahrenheit".equalsIgnoreCase(toUnit)) {
+            double f = tempCelsius * 9 / 5 + 32;
+            return Map.of("celsius", tempCelsius, "fahrenheit", Math.round(f * 10.0) / 10.0);
         }
-
-        @Tool(name = "get_time_zone", value = "Get the timezone for a city.")
-        public Map<String, Object> getTimeZone(@P("city") String city) {
-            Map<String, Map<String, Object>> timezones = new LinkedHashMap<>();
-            timezones.put("tokyo", Map.of("timezone", "JST", "utc_offset", "+9:00"));
-            timezones.put("paris", Map.of("timezone", "CET", "utc_offset", "+1:00"));
-            timezones.put("sydney", Map.of("timezone", "AEST", "utc_offset", "+10:00"));
-            timezones.put("mumbai", Map.of("timezone", "IST", "utc_offset", "+5:30"));
-            return timezones.getOrDefault(city.toLowerCase(),
-                Map.of("timezone", "Unknown", "utc_offset", "Unknown"));
+        if ("kelvin".equalsIgnoreCase(toUnit)) {
+            double k = tempCelsius + 273.15;
+            return Map.of("celsius", tempCelsius, "kelvin", Math.round(k * 10.0) / 10.0);
         }
+        return Map.of("error", "Unknown unit: " + toUnit);
     }
 
     public static void main(String[] args) {
-        Agent agent = GoogleADKAgent.builder()
-            .name("travel_assistant")
-            .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a travel assistant. Help users with weather information, "
-                + "temperature conversions, and timezone lookups. Be concise and accurate.")
-            .tools(new TravelTools())
-            .build();
+        LlmAgent adkAgent = LlmAgent.builder()
+                .name("travel_assistant")
+                .model(Settings.LLM_MODEL)
+                .instruction("You are a travel assistant. Help users with weather and temperature conversions. "
+                        + "Be concise and accurate.")
+                .tools(
+                        FunctionTool.create(Example02FunctionTools.class, "getWeather"),
+                        FunctionTool.create(Example02FunctionTools.class, "convertTemperature")
+                )
+                .build();
+
+        Agent agent = AdkBridge.toAgentspan(adkAgent);
 
         AgentResult result = Agentspan.run(agent,
-            "What's the weather in Tokyo right now? Convert the temperature to "
-            + "Fahrenheit and tell me what timezone they're in.");
+                "What's the weather in Tokyo? Convert the temperature to Fahrenheit.");
         result.printResult();
 
         Agentspan.shutdown();

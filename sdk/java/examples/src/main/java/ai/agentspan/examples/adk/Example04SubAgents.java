@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,90 +22,90 @@ import java.util.Map;
  *
  * <p>Java port of <code>sdk/python/examples/adk/04_sub_agents.py</code>.
  *
- * <p>Demonstrates: multi-agent orchestration via ADK {@code sub_agents}. A
- * coordinator delegates to specialist sub-agents (flight, hotel, advisory).
- * The server normalizer maps sub_agents to agents + strategy="handoff".
+ * <p>Demonstrates: multi-agent orchestration via native ADK
+ * {@code subAgents(...)}. A coordinator delegates to specialist sub-agents
+ * (flight, hotel, advisory). Tools are static methods registered via
+ * {@link FunctionTool#create(Class, String)}.
  */
 public class Example04SubAgents {
 
-    // ── Specialist tools ──────────────────────────────────────────────────
+    // ── Flight tools ──────────────────────────────────────────────────────
 
-    public static class FlightTools {
-        @Tool(name = "search_flights", value = "Search for available flights.")
-        public Map<String, Object> searchFlights(
-                @P("origin") String origin,
-                @P("destination") String destination,
-                @P("date") String date) {
-            return Map.of(
-                "flights", List.of(
-                    Map.of("airline", "SkyLine", "departure", "08:00", "arrival", "11:30", "price", "$320"),
-                    Map.of("airline", "AirGlobe", "departure", "14:00", "arrival", "17:45", "price", "$285")
-                ),
-                "route", origin + " → " + destination,
-                "date", date
-            );
-        }
+    @Schema(description = "Search for available flights.")
+    public static Map<String, Object> searchFlights(
+            @Schema(name = "origin", description = "Origin city") String origin,
+            @Schema(name = "destination", description = "Destination city") String destination,
+            @Schema(name = "date", description = "Travel date") String date) {
+        return Map.of(
+            "flights", List.of(
+                Map.of("airline", "SkyLine", "departure", "08:00", "arrival", "11:30", "price", "$320"),
+                Map.of("airline", "AirGlobe", "departure", "14:00", "arrival", "17:45", "price", "$285")
+            ),
+            "route", origin + " → " + destination,
+            "date", date
+        );
     }
 
-    public static class HotelTools {
-        @Tool(name = "search_hotels", value = "Search for available hotels.")
-        public Map<String, Object> searchHotels(
-                @P("city") String city,
-                @P("checkin") String checkin,
-                @P("checkout") String checkout) {
-            return Map.of(
-                "hotels", List.of(
-                    Map.of("name", "Grand Plaza", "rating", 4.5, "price", "$180/night"),
-                    Map.of("name", "City Comfort Inn", "rating", 4.0, "price", "$95/night"),
-                    Map.of("name", "Boutique Lux", "rating", 4.8, "price", "$250/night")
-                ),
-                "city", city,
-                "dates", checkin + " to " + checkout
-            );
-        }
+    // ── Hotel tools ───────────────────────────────────────────────────────
+
+    @Schema(description = "Search for available hotels.")
+    public static Map<String, Object> searchHotels(
+            @Schema(name = "city", description = "City name") String city,
+            @Schema(name = "checkin", description = "Check-in date") String checkin,
+            @Schema(name = "checkout", description = "Check-out date") String checkout) {
+        return Map.of(
+            "hotels", List.of(
+                Map.of("name", "Grand Plaza", "rating", 4.5, "price", "$180/night"),
+                Map.of("name", "City Comfort Inn", "rating", 4.0, "price", "$95/night"),
+                Map.of("name", "Boutique Lux", "rating", 4.8, "price", "$250/night")
+            ),
+            "city", city,
+            "dates", checkin + " to " + checkout
+        );
     }
 
-    public static class AdvisoryTools {
-        @Tool(name = "get_travel_advisory", value = "Get travel advisory information for a country.")
-        public Map<String, Object> getTravelAdvisory(@P("country") String country) {
-            Map<String, Map<String, Object>> advisories = new LinkedHashMap<>();
-            advisories.put("japan", Map.of("level", "Level 1 - Exercise Normal Precautions", "visa", "Visa-free for 90 days"));
-            advisories.put("france", Map.of("level", "Level 2 - Exercise Increased Caution", "visa", "Schengen visa required"));
-            advisories.put("australia", Map.of("level", "Level 1 - Exercise Normal Precautions", "visa", "eVisitor visa required"));
-            return advisories.getOrDefault(country.toLowerCase(),
-                Map.of("level", "Unknown", "visa", "Check embassy website"));
-        }
+    // ── Advisory tools ────────────────────────────────────────────────────
+
+    @Schema(description = "Get travel advisory information for a country.")
+    public static Map<String, Object> getTravelAdvisory(
+            @Schema(name = "country", description = "Country name") String country) {
+        Map<String, Map<String, Object>> advisories = new LinkedHashMap<>();
+        advisories.put("japan", Map.of("level", "Level 1 - Exercise Normal Precautions", "visa", "Visa-free for 90 days"));
+        advisories.put("france", Map.of("level", "Level 2 - Exercise Increased Caution", "visa", "Schengen visa required"));
+        advisories.put("australia", Map.of("level", "Level 1 - Exercise Normal Precautions", "visa", "eVisitor visa required"));
+        return advisories.getOrDefault(country.toLowerCase(),
+            Map.of("level", "Unknown", "visa", "Check embassy website"));
     }
 
     public static void main(String[] args) {
-        Agent flightAgent = GoogleADKAgent.builder()
+        LlmAgent flightAgent = LlmAgent.builder()
             .name("flight_specialist")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a flight specialist. Search for flights and present "
                 + "options clearly with prices and schedules.")
-            .tools(new FlightTools())
+            .tools(FunctionTool.create(Example04SubAgents.class, "searchFlights"))
             .build();
 
-        Agent hotelAgent = GoogleADKAgent.builder()
+        LlmAgent hotelAgent = LlmAgent.builder()
             .name("hotel_specialist")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a hotel specialist. Search for hotels and present "
                 + "options with ratings and prices.")
-            .tools(new HotelTools())
+            .tools(FunctionTool.create(Example04SubAgents.class, "searchHotels"))
             .build();
 
-        Agent advisoryAgent = GoogleADKAgent.builder()
+        LlmAgent advisoryAgent = LlmAgent.builder()
             .name("travel_advisory_specialist")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a travel advisory specialist. Provide safety levels "
                 + "and visa requirements for destinations.")
-            .tools(new AdvisoryTools())
+            .tools(FunctionTool.create(Example04SubAgents.class, "getTravelAdvisory"))
             .build();
 
-        Agent coordinator = GoogleADKAgent.builder()
+        LlmAgent coordinator = LlmAgent.builder()
             .name("travel_coordinator")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -116,7 +117,9 @@ public class Example04SubAgents {
             .subAgents(flightAgent, hotelAgent, advisoryAgent)
             .build();
 
-        AgentResult result = Agentspan.run(coordinator,
+        Agent agent = AdkBridge.toAgentspan(coordinator);
+
+        AgentResult result = Agentspan.run(agent,
             "I want to plan a trip to Japan. I need a flight from San Francisco "
             + "on 2025-04-15 and a hotel for 5 nights. Also, what's the travel advisory?");
         result.printResult();

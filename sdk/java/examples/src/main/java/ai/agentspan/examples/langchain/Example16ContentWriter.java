@@ -3,18 +3,18 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Example Lc4j 16 — Content Writer
+ * Example Lc4j 16 — Content Writer (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/16_content_writer.py</code>.
  *
@@ -137,9 +137,14 @@ public class Example16ContentWriter {
             + "for web development. If you want to learn Python programming, start with the basics.\n";
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "content_writer_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a professional content strategist and writer. "
             + "Help users create clear, engaging, SEO-friendly content. "
             + "Use tools to analyze and improve content quality.",

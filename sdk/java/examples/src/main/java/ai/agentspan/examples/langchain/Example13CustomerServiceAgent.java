@@ -3,19 +3,19 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Example Lc4j 13 — Customer Service Agent
+ * Example Lc4j 13 — Customer Service Agent (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/13_customer_service_agent.py</code>.
  *
@@ -90,9 +90,14 @@ public class Example13CustomerServiceAgent {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "customer_service_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are Alex, a friendly and professional customer service agent for ShopEasy. "
             + "Always greet the customer warmly. Use tools to look up orders and answer questions. "
             + "If you cannot resolve the issue, escalate by creating a support ticket. "

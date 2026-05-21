@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,38 +21,37 @@ import java.util.Map;
  *
  * <p>Java port of <code>sdk/python/examples/adk/15_global_instruction.py</code>.
  *
- * <p>Demonstrates: ADK's {@code global_instruction} for system-wide context.
- * Java's {@link GoogleADKAgent} builder exposes a single {@code instruction};
- * we concatenate the global + per-agent instruction to preserve the intent.
+ * <p>Demonstrates: ADK's native {@code globalInstruction} for system-wide
+ * context. Native {@link LlmAgent} accepts a separate
+ * {@code globalInstruction(...)} alongside the per-agent {@code instruction}.
  */
 public class Example15GlobalInstruction {
 
-    static class StoreTools {
+    @Schema(description = "Look up product information.")
+    public static Map<String, Object> getProductInfo(
+            @Schema(name = "product_name", description = "Product name") String productName) {
+        Map<String, Map<String, Object>> products = new LinkedHashMap<>();
+        products.put("widget pro", Map.of(
+            "name", "Widget Pro", "price", 49.99, "category", "electronics",
+            "in_stock", true, "rating", 4.7));
+        products.put("gadget max", Map.of(
+            "name", "Gadget Max", "price", 89.99, "category", "electronics",
+            "in_stock", false, "rating", 4.2));
+        products.put("smart lamp", Map.of(
+            "name", "Smart Lamp", "price", 34.99, "category", "home",
+            "in_stock", true, "rating", 4.5));
+        return products.getOrDefault(productName.toLowerCase(),
+            Map.of("error", "Product '" + productName + "' not found"));
+    }
 
-        @Tool(name = "get_product_info", value = "Look up product information.")
-        public Map<String, Object> getProductInfo(@P("product_name") String productName) {
-            Map<String, Map<String, Object>> products = new LinkedHashMap<>();
-            products.put("widget pro", Map.of(
-                "name", "Widget Pro", "price", 49.99, "category", "electronics",
-                "in_stock", true, "rating", 4.7));
-            products.put("gadget max", Map.of(
-                "name", "Gadget Max", "price", 89.99, "category", "electronics",
-                "in_stock", false, "rating", 4.2));
-            products.put("smart lamp", Map.of(
-                "name", "Smart Lamp", "price", 34.99, "category", "home",
-                "in_stock", true, "rating", 4.5));
-            return products.getOrDefault(productName.toLowerCase(),
-                Map.of("error", "Product '" + productName + "' not found"));
-        }
-
-        @Tool(name = "get_store_hours", value = "Get store hours for a location.")
-        public Map<String, Object> getStoreHours(@P("location") String location) {
-            Map<String, Map<String, Object>> stores = new LinkedHashMap<>();
-            stores.put("downtown", Map.of("hours", "9 AM - 9 PM", "open_today", true));
-            stores.put("mall", Map.of("hours", "10 AM - 8 PM", "open_today", true));
-            return stores.getOrDefault(location.toLowerCase(),
-                Map.of("error", "Location '" + location + "' not found"));
-        }
+    @Schema(description = "Get store hours for a location.")
+    public static Map<String, Object> getStoreHours(
+            @Schema(name = "location", description = "Store location") String location) {
+        Map<String, Map<String, Object>> stores = new LinkedHashMap<>();
+        stores.put("downtown", Map.of("hours", "9 AM - 9 PM", "open_today", true));
+        stores.put("mall", Map.of("hours", "10 AM - 8 PM", "open_today", true));
+        return stores.getOrDefault(location.toLowerCase(),
+            Map.of("error", "Location '" + location + "' not found"));
     }
 
     public static void main(String[] args) {
@@ -65,12 +65,17 @@ public class Example15GlobalInstruction {
             + "check availability, and provide store hours. "
             + "Always mention the current promotion when discussing electronics.";
 
-        Agent agent = GoogleADKAgent.builder()
+        LlmAgent adk = LlmAgent.builder()
             .name("store_assistant")
             .model(Settings.LLM_MODEL)
-            .instruction(globalInstruction + "\n\n" + perAgentInstruction)
-            .tools(new StoreTools())
+            .globalInstruction(globalInstruction)
+            .instruction(perAgentInstruction)
+            .tools(
+                FunctionTool.create(Example15GlobalInstruction.class, "getProductInfo"),
+                FunctionTool.create(Example15GlobalInstruction.class, "getStoreHours"))
             .build();
+
+        Agent agent = AdkBridge.toAgentspan(adk);
 
         AgentResult result = Agentspan.run(agent,
             "I'm looking for the Widget Pro. Is it in stock? Also, what are the downtown store hours?");

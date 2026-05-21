@@ -7,8 +7,9 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
+
+import com.google.adk.agents.LlmAgent;
 
 /**
  * Example Adk 13 — Loop Agent
@@ -17,14 +18,14 @@ import ai.agentspan.model.AgentResult;
  *
  * <p>Demonstrates: Python's {@code LoopAgent} repeats sub-agents for
  * iterative refinement (up to 3 iterations of write → critique). The Java
- * {@link GoogleADKAgent} models the same intent through a coordinator
- * instructed to loop write/critique cycles.
+ * port uses an {@link LlmAgent} coordinator whose instruction expresses
+ * the loop semantics.
  */
 public class Example13LoopAgent {
 
     public static void main(String[] args) {
         // Writer drafts content
-        Agent writer = GoogleADKAgent.builder()
+        LlmAgent writer = LlmAgent.builder()
             .name("draft_writer")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -34,7 +35,7 @@ public class Example13LoopAgent {
             .build();
 
         // Critic reviews and provides feedback
-        Agent critic = GoogleADKAgent.builder()
+        LlmAgent critic = LlmAgent.builder()
             .name("critic")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -45,7 +46,7 @@ public class Example13LoopAgent {
             .build();
 
         // Each iteration: write → critique. Repeat up to 3 times.
-        Agent refinementLoop = GoogleADKAgent.builder()
+        LlmAgent refinementLoop = LlmAgent.builder()
             .name("refinement_loop")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -56,7 +57,9 @@ public class Example13LoopAgent {
             .subAgents(writer, critic)
             .build();
 
-        AgentResult result = Agentspan.run(refinementLoop, "Write a haiku about autumn leaves");
+        Agent agent = AdkBridge.toAgentspan(refinementLoop);
+
+        AgentResult result = Agentspan.run(agent, "Write a haiku about autumn leaves");
         System.out.println("Status: " + result.getStatus());
         result.printResult();
 

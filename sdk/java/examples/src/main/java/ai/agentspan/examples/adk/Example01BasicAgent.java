@@ -7,8 +7,9 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
+
+import com.google.adk.agents.LlmAgent;
 
 /**
  * Example Adk 01 — Basic Agent
@@ -16,15 +17,18 @@ import ai.agentspan.model.AgentResult;
  * <p>Java port of <code>sdk/python/examples/adk/01_basic_agent.py</code>.
  *
  * <p>Demonstrates: the simplest Google ADK agent — defined via the
- * {@link GoogleADKAgent} builder and executed on the Conductor runtime.
+ * native {@link LlmAgent} builder and bridged to the Agentspan durable
+ * runtime via {@link AdkBridge}.
  */
 public class Example01BasicAgent {
     public static void main(String[] args) {
-        Agent agent = GoogleADKAgent.builder()
+        LlmAgent adk = LlmAgent.builder()
             .name("greeter")
             .model(Settings.LLM_MODEL)
             .instruction("You are a friendly assistant. Keep your responses concise and helpful.")
             .build();
+
+        Agent agent = AdkBridge.toAgentspan(adk);
 
         AgentResult result = Agentspan.run(agent,
             "Say hello and tell me a fun fact about machine learning.");

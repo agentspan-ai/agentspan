@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Example Lc4j 23 — Recommendation Agent
+ * Example Lc4j 23 — Recommendation Agent (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/23_recommendation_agent.py</code>.
  *
@@ -180,9 +180,14 @@ public class Example23RecommendationAgent {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "recommendation_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a personalized book recommendation assistant. Use tools to find, score, "
                 + "and explain book recommendations based on the user's preferences.",
             new RecommendationTools()

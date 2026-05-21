@@ -3,18 +3,18 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Example Lc4j 14 — Research Assistant
+ * Example Lc4j 14 — Research Assistant (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/14_research_assistant.py</code>.
  *
@@ -105,9 +105,14 @@ public class Example14ResearchAssistant {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "research_assistant_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a thorough research assistant. When answering questions, "
             + "search academic sources, recent news, and statistics to provide well-rounded answers. "
             + "Always cite your sources.",

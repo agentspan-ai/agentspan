@@ -7,8 +7,9 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
+
+import com.google.adk.agents.LlmAgent;
 
 /**
  * Example Adk 12 — Parallel Agent
@@ -16,13 +17,13 @@ import ai.agentspan.model.AgentResult;
  * <p>Java port of <code>sdk/python/examples/adk/12_parallel_agent.py</code>.
  *
  * <p>Demonstrates: Python's {@code ParallelAgent} runs sub-agents concurrently
- * and aggregates results. The Java {@link GoogleADKAgent} models the same
- * intent through a coordinator delegating to multiple analysts in parallel.
+ * and aggregates results. The Java port uses an {@link LlmAgent} coordinator
+ * with sub-agents whose instructions express parallel intent.
  */
 public class Example12ParallelAgent {
 
     public static void main(String[] args) {
-        Agent marketAnalyst = GoogleADKAgent.builder()
+        LlmAgent marketAnalyst = LlmAgent.builder()
             .name("market_analyst")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -30,7 +31,7 @@ public class Example12ParallelAgent {
                 + "provide a brief 2-3 sentence market analysis. Focus on trends and competition.")
             .build();
 
-        Agent techAnalyst = GoogleADKAgent.builder()
+        LlmAgent techAnalyst = LlmAgent.builder()
             .name("tech_analyst")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -38,7 +39,7 @@ public class Example12ParallelAgent {
                 + "provide a brief 2-3 sentence technical evaluation. Focus on innovation and capabilities.")
             .build();
 
-        Agent riskAnalyst = GoogleADKAgent.builder()
+        LlmAgent riskAnalyst = LlmAgent.builder()
             .name("risk_analyst")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -47,7 +48,7 @@ public class Example12ParallelAgent {
             .build();
 
         // All three should run in parallel; aggregation happens at the orchestrator
-        Agent parallelAnalysis = GoogleADKAgent.builder()
+        LlmAgent parallelAnalysis = LlmAgent.builder()
             .name("parallel_analysis")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -57,7 +58,9 @@ public class Example12ParallelAgent {
             .subAgents(marketAnalyst, techAnalyst, riskAnalyst)
             .build();
 
-        AgentResult result = Agentspan.run(parallelAnalysis, "Analyze Tesla's electric vehicle business");
+        Agent agent = AdkBridge.toAgentspan(parallelAnalysis);
+
+        AgentResult result = Agentspan.run(agent, "Analyze Tesla's electric vehicle business");
         System.out.println("Status: " + result.getStatus());
         result.printResult();
 

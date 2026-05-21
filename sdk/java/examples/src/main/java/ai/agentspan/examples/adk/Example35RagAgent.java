@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,7 +30,7 @@ import java.util.Map;
  *
  * <p>Did not port cleanly: no equivalent Java {@code search_tool} /
  * {@code index_tool} factory helpers in this SDK, so the Java port stubs
- * the same tool names + signatures as in-process functions that record
+ * the same tool names + signatures as in-process static functions that record
  * the request and return canned shapes — preserving the example flow.
  */
 public class Example35RagAgent {
@@ -111,53 +112,49 @@ public class Example35RagAgent {
             + "with a corrected version). Guardrails can be applied at input or output position.")
     );
 
-    // ── RAG tool stubs ───────────────────────────────────────────────────
+    // ── RAG tool stubs (static — FunctionTool.create requires static methods) ──
 
-    public static class RagTools {
+    // In-memory index that simulates Conductor's LLM_INDEX_TEXT / LLM_SEARCH_INDEX.
+    private static final Map<String, String> STORE = new LinkedHashMap<>();
 
-        // In-memory index that simulates Conductor's LLM_INDEX_TEXT / LLM_SEARCH_INDEX.
-        private final Map<String, String> store = new LinkedHashMap<>();
-
-        @Tool(name = "search_knowledge_base",
-              value = "Search the product documentation knowledge base. "
-                    + "Use this to find relevant documentation before answering questions.")
-        public Map<String, Object> searchKnowledgeBase(@P("query") String query) {
-            String q = query.toLowerCase();
-            List<Map<String, Object>> hits = new ArrayList<>();
-            for (Map.Entry<String, String> e : store.entrySet()) {
-                if (e.getValue().toLowerCase().contains(q)) {
-                    hits.add(Map.of("docId", e.getKey(), "text", e.getValue()));
-                }
+    @Schema(description = "Search the product documentation knowledge base. "
+                       + "Use this to find relevant documentation before answering questions.")
+    public static Map<String, Object> searchKnowledgeBase(
+            @Schema(name = "query", description = "Search query") String query) {
+        String q = query.toLowerCase();
+        List<Map<String, Object>> hits = new ArrayList<>();
+        for (Map.Entry<String, String> e : STORE.entrySet()) {
+            if (e.getValue().toLowerCase().contains(q)) {
+                hits.add(Map.of("docId", e.getKey(), "text", e.getValue()));
             }
-            return Map.of(
-                "vector_db", "pgvectordb",
-                "index", "product_docs",
-                "query", query,
-                "max_results", 5,
-                "results", hits.subList(0, Math.min(5, hits.size()))
-            );
         }
+        return Map.of(
+            "vector_db", "pgvectordb",
+            "index", "product_docs",
+            "query", query,
+            "max_results", 5,
+            "results", hits.subList(0, Math.min(5, hits.size()))
+        );
+    }
 
-        @Tool(name = "index_document",
-              value = "Add a new document to the product documentation knowledge base. "
-                    + "Use this when the user provides new information that should be stored.")
-        public Map<String, Object> indexDocument(
-                @P("docId") String docId,
-                @P("text") String text) {
-            store.put(docId, text);
-            return Map.of(
-                "vector_db", "pgvectordb",
-                "index", "product_docs",
-                "embedding_model_provider", "openai",
-                "embedding_model", "text-embedding-3-small",
-                "docId", docId,
-                "status", "indexed"
-            );
-        }
+    @Schema(description = "Add a new document to the product documentation knowledge base. "
+                       + "Use this when the user provides new information that should be stored.")
+    public static Map<String, Object> indexDocument(
+            @Schema(name = "docId", description = "Document ID") String docId,
+            @Schema(name = "text", description = "Document text") String text) {
+        STORE.put(docId, text);
+        return Map.of(
+            "vector_db", "pgvectordb",
+            "index", "product_docs",
+            "embedding_model_provider", "openai",
+            "embedding_model", "text-embedding-3-small",
+            "docId", docId,
+            "status", "indexed"
+        );
     }
 
     public static void main(String[] args) {
-        Agent ragAgent = GoogleADKAgent.builder()
+        LlmAgent ragAdk = LlmAgent.builder()
             .name("rag_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -172,8 +169,12 @@ public class Example35RagAgent {
                 + "2. If relevant documents are found, use them to provide an accurate answer\n"
                 + "3. If no relevant documents are found, say so honestly\n\n"
                 + "Always cite which documents (by docId) you used in your answer.")
-            .tools(new RagTools())
+            .tools(
+                FunctionTool.create(Example35RagAgent.class, "searchKnowledgeBase"),
+                FunctionTool.create(Example35RagAgent.class, "indexDocument"))
             .build();
+
+        Agent ragAgent = AdkBridge.toAgentspan(ragAdk);
 
         // ── Phase 1: Index all documents ─────────────────────────────────
         System.out.println("============================================================");

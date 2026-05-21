@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Example Lc4j 11 — Code Review Agent
+ * Example Lc4j 11 — Code Review Agent (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/11_code_review_agent.py</code>.
  *
@@ -152,9 +152,14 @@ public class Example11CodeReviewAgent {
             + "    return 'adult'\n";
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "code_review_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are an expert code reviewer. Analyze code thoroughly using the available tools. "
             + "Report findings clearly and suggest improvements.",
             new CodeReviewTools()

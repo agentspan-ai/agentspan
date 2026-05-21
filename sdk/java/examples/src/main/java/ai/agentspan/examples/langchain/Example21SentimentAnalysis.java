@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Example Lc4j 21 — Sentiment Analysis
+ * Example Lc4j 21 — Sentiment Analysis (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/21_sentiment_analysis.py</code>.
  *
@@ -154,9 +154,14 @@ public class Example21SentimentAnalysis {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "sentiment_analysis_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a sentiment analysis assistant. Analyze text for sentiment and emotions, "
                 + "providing clear scores and insights. Use tools for accurate analysis.",
             new SentimentTools()

@@ -7,24 +7,26 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
+
+import com.google.adk.agents.LlmAgent;
 
 /**
  * Example Adk 11 — Sequential Agent Pipeline
  *
  * <p>Java port of <code>sdk/python/examples/adk/11_sequential_agent.py</code>.
  *
- * <p>Demonstrates: Python's {@code SequentialAgent} runs sub-agents in fixed
- * order with outputs flowing to the next. Java's {@link GoogleADKAgent} models
- * the same intent through a coordinator with sub-agents and instructions that
- * dictate the execution order.
+ * <p>Demonstrates: a sequential pipeline coordinator (researcher → writer →
+ * editor). Native ADK has a {@code SequentialAgent}, but the Agentspan
+ * {@link AdkBridge} extracts {@link LlmAgent}s and their sub-agents, so the
+ * pipeline is modeled as a coordinator {@code LlmAgent} whose instruction
+ * dictates ordered execution.
  */
 public class Example11SequentialAgent {
 
     public static void main(String[] args) {
         // Step 1: Research agent gathers facts
-        Agent researcher = GoogleADKAgent.builder()
+        LlmAgent researcher = LlmAgent.builder()
             .name("researcher")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -33,7 +35,7 @@ public class Example11SequentialAgent {
             .build();
 
         // Step 2: Writer agent takes the research and writes a summary
-        Agent writer = GoogleADKAgent.builder()
+        LlmAgent writer = LlmAgent.builder()
             .name("writer")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -43,7 +45,7 @@ public class Example11SequentialAgent {
             .build();
 
         // Step 3: Editor agent polishes the summary
-        Agent editor = GoogleADKAgent.builder()
+        LlmAgent editor = LlmAgent.builder()
             .name("editor")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -52,7 +54,7 @@ public class Example11SequentialAgent {
             .build();
 
         // Pipeline: researcher → writer → editor
-        Agent pipeline = GoogleADKAgent.builder()
+        LlmAgent pipeline = LlmAgent.builder()
             .name("content_pipeline")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -64,7 +66,9 @@ public class Example11SequentialAgent {
             .subAgents(researcher, writer, editor)
             .build();
 
-        AgentResult result = Agentspan.run(pipeline, "The history of the Internet");
+        Agent agent = AdkBridge.toAgentspan(pipeline);
+
+        AgentResult result = Agentspan.run(agent, "The history of the Internet");
         System.out.println("Status: " + result.getStatus());
         result.printResult();
 

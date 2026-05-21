@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-package ai.agentspan.examples.langchain;
+package ai.agentspan.examples.langgraph;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
@@ -11,19 +11,13 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 
 /**
- * Example LangChain 01 — Hello World using the native LangChain4j SDK.
+ * Example LangGraph 01 — Hello World using the native LangGraph4j SDK.
  *
- * <p>Builds a real {@code dev.langchain4j.model.openai.OpenAiChatModel}
- * (the canonical LangChain4j chat-model class) and hands it to
- * {@link LangChainBridge#toAgentspan} so the agent runs on the durable
- * Agentspan runtime.
- *
- * <p>Requirements:
- * <ul>
- *   <li>{@code AGENTSPAN_SERVER_URL=http://localhost:6767/api}</li>
- *   <li>{@code OPENAI_API_KEY} set (only the model identifier matters; the
- *       server makes the actual LLM call using its own credentials)</li>
- * </ul>
+ * <p>Builds a real LangGraph4j {@code AgentExecutor} (a {@code StateGraph}
+ * implementing the ReAct pattern) via
+ * {@code org.bsc.langgraph4j.agentexecutor.AgentExecutor.builder()} and hands
+ * the configuration to {@link LangGraphBridge#toAgentspan} so it runs on
+ * the durable Agentspan runtime.
  */
 public class Example01HelloWorld {
 
@@ -33,7 +27,7 @@ public class Example01HelloWorld {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
+        Agent agent = LangGraphBridge.toAgentspan(
                 "hello_world_agent",
                 model,
                 null
@@ -41,7 +35,7 @@ public class Example01HelloWorld {
 
         AgentResult result = Agentspan.run(
                 agent,
-                "Say hello and tell me a fun fact about Python programming."
+                "Say hello and tell me a fun fact about state machines."
         );
         result.printResult();
 

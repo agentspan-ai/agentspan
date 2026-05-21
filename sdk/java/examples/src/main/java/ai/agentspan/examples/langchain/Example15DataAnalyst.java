@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Example Lc4j 15 — Data Analyst
+ * Example Lc4j 15 — Data Analyst (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/15_data_analyst.py</code>.
  *
@@ -185,9 +185,14 @@ public class Example15DataAnalyst {
             + "Super Widget,8,400.00,0.50";
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "data_analyst_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a data analyst. Analyze the provided data using statistical tools "
             + "and present your findings clearly with insights and recommendations.",
             new DataAnalystTools()

@@ -7,8 +7,9 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
+
+import com.google.adk.agents.LlmAgent;
 
 /**
  * Example Adk 32 — Nested Strategies
@@ -17,14 +18,15 @@ import ai.agentspan.model.AgentResult;
  *
  * <p>Demonstrates: composing agent strategies — Python uses
  * {@code SequentialAgent} containing a {@code ParallelAgent} research phase
- * followed by a summarizer. The Java {@link GoogleADKAgent} encodes the
- * same intent via nested sub-agent groupings.
+ * followed by a summarizer. The Java port models this through nested
+ * {@link LlmAgent} coordinators whose instructions express the parallel/
+ * sequential intent.
  */
 public class Example32NestedStrategies {
 
     public static void main(String[] args) {
         // ── Parallel research agents ────────────────────────────────────
-        Agent marketAnalyst = GoogleADKAgent.builder()
+        LlmAgent marketAnalyst = LlmAgent.builder()
             .name("market_analyst")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -32,7 +34,7 @@ public class Example32NestedStrategies {
                 + "and key players for the given topic. Be concise (3-4 bullet points).")
             .build();
 
-        Agent riskAnalyst = GoogleADKAgent.builder()
+        LlmAgent riskAnalyst = LlmAgent.builder()
             .name("risk_analyst")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -40,7 +42,7 @@ public class Example32NestedStrategies {
                 + "technical, and competitive. Be concise.")
             .build();
 
-        Agent parallelResearch = GoogleADKAgent.builder()
+        LlmAgent parallelResearch = LlmAgent.builder()
             .name("research_phase")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -51,7 +53,7 @@ public class Example32NestedStrategies {
             .build();
 
         // ── Summarizer ───────────────────────────────────────────────────
-        Agent summarizer = GoogleADKAgent.builder()
+        LlmAgent summarizer = LlmAgent.builder()
             .name("summarizer")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -60,7 +62,7 @@ public class Example32NestedStrategies {
             .build();
 
         // ── Pipeline: parallel → sequential ──────────────────────────────
-        Agent pipeline = GoogleADKAgent.builder()
+        LlmAgent pipeline = LlmAgent.builder()
             .name("analysis_pipeline")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -69,7 +71,9 @@ public class Example32NestedStrategies {
             .subAgents(parallelResearch, summarizer)
             .build();
 
-        AgentResult result = Agentspan.run(pipeline,
+        Agent agent = AdkBridge.toAgentspan(pipeline);
+
+        AgentResult result = Agentspan.run(agent,
             "Launching an AI-powered healthcare diagnostics tool in the US");
         result.printResult();
 

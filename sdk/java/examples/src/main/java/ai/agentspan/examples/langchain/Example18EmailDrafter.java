@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Example Lc4j 18 — Email Drafter
+ * Example Lc4j 18 — Email Drafter (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/18_email_drafter.py</code>.
  *
@@ -104,9 +104,14 @@ public class Example18EmailDrafter {
     }
 
     public static void main(String[] args) {
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "email_drafter_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a professional email writing assistant. Help users draft clear, "
                 + "appropriate, and effective emails. Always check tone and suggest subject lines.",
             new EmailTools()

@@ -1,0 +1,67 @@
+// Copyright (c) 2025 Agentspan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
+package ai.agentspan.examples.langgraph;
+
+import ai.agentspan.Agent;
+import ai.agentspan.examples.langchain.LangChainBridge;
+import ai.agentspan.frameworks.LangChain4jAgent;
+
+import dev.langchain4j.model.chat.ChatModel;
+
+import org.bsc.langgraph4j.CompiledGraph;
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
+
+/**
+ * Adapter that takes a native LangGraph4j {@link AgentExecutor} configuration and
+ * produces an Agentspan {@link Agent} ready for {@code Agentspan.run(...)}.
+ *
+ * <p>LangGraph4j builds ReAct-style agents as {@code StateGraph<AgentExecutor.State>}.
+ * For Agentspan execution, we extract the {@link ChatModel} + {@code @Tool} POJOs
+ * (the same inputs the LangGraph4j {@code AgentExecutor.Builder} accepts) and let
+ * the durable Agentspan runtime drive the ReAct loop server-side.
+ *
+ * <p>The compiled local graph remains available — callers can choose to run
+ * the graph in-process via {@link CompiledGraph#stream}, or hand it off to
+ * Agentspan; the example author writes idiomatic LangGraph4j code either way.
+ */
+public final class LangGraphBridge {
+
+    private LangGraphBridge() {}
+
+    /**
+     * Build a LangGraph4j {@link AgentExecutor} StateGraph from the given
+     * {@link ChatModel} and {@code @Tool} POJOs, then produce an Agentspan
+     * {@link Agent}. This mirrors {@code AgentExecutor.builder().chatModel(...)
+     * .toolsFromObject(...).build()}.
+     */
+    public static Agent toAgentspan(String name, ChatModel model, String systemPrompt, Object... tools) {
+        // Build the native LangGraph4j StateGraph to validate the configuration
+        // would compile under LangGraph4j. We don't run the local graph — Agentspan
+        // does — but constructing it proves the user's tools/model are valid for
+        // LangGraph4j's expectations (tool specs extractable, model is a ChatModel).
+        AgentExecutor.Builder builder = AgentExecutor.builder().chatModel(model);
+        if (tools != null) {
+            for (Object t : tools) {
+                if (t != null) builder.toolsFromObject(t);
+            }
+        }
+        try {
+            builder.build(); // throws GraphStateException if mis-wired
+        } catch (Exception e) {
+            throw new RuntimeException("LangGraph4j AgentExecutor configuration is invalid: "
+                    + e.getMessage(), e);
+        }
+
+        // Extract the model string and build an Agentspan Agent. The server-side
+        // LangGraphNormalizer will run the ReAct loop using the configured LLM
+        // + the tool workers the SDK registers from these POJOs.
+        String modelString = LangChainBridge.providerSlashModel(model);
+        return LangChain4jAgent.from(name, modelString, systemPrompt, tools);
+    }
+
+    /** Same as {@link #toAgentspan(String, ChatModel, String, Object...)} with no tools. */
+    public static Agent toAgentspan(String name, ChatModel model, String systemPrompt) {
+        return toAgentspan(name, model, systemPrompt, (Object[]) null);
+    }
+}

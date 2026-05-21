@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -25,134 +26,124 @@ import java.util.Map;
  */
 public class Example28MoviePipeline {
 
-    static class ConceptTools {
-        @Tool(name = "create_concept", value = "Create a movie concept document.")
-        public Map<String, Object> createConcept(
-                @P("title") String title,
-                @P("genre") String genre,
-                @P("logline") String logline) {
-            return Map.of("concept", Map.of(
-                "title", title,
-                "genre", genre,
-                "logline", logline,
-                "status", "approved"
-            ));
-        }
+    @Schema(description = "Create a movie concept document.")
+    public static Map<String, Object> createConcept(
+            @Schema(name = "title", description = "Title of the film") String title,
+            @Schema(name = "genre", description = "Film genre") String genre,
+            @Schema(name = "logline", description = "One-sentence summary") String logline) {
+        return Map.of("concept", Map.of(
+            "title", title,
+            "genre", genre,
+            "logline", logline,
+            "status", "approved"
+        ));
     }
 
-    static class ScriptTools {
-        @Tool(name = "write_scene", value = "Write a single scene for the script.")
-        public Map<String, Object> writeScene(
-                @P("scene_number") int sceneNumber,
-                @P("location") String location,
-                @P("action") String action,
-                @P("dialogue") String dialogue) {
-            Map<String, Object> scene = new LinkedHashMap<>();
-            scene.put("scene", sceneNumber);
-            scene.put("location", location);
-            scene.put("action", action);
-            if (dialogue != null && !dialogue.isEmpty()) {
-                scene.put("dialogue", dialogue);
-            }
-            return Map.of("scene", scene);
+    @Schema(description = "Write a single scene for the script.")
+    public static Map<String, Object> writeScene(
+            @Schema(name = "scene_number", description = "Scene number") int sceneNumber,
+            @Schema(name = "location", description = "Scene location") String location,
+            @Schema(name = "action", description = "Action description") String action,
+            @Schema(name = "dialogue", description = "Dialogue text (optional)") String dialogue) {
+        Map<String, Object> scene = new LinkedHashMap<>();
+        scene.put("scene", sceneNumber);
+        scene.put("location", location);
+        scene.put("action", action);
+        if (dialogue != null && !dialogue.isEmpty()) {
+            scene.put("dialogue", dialogue);
         }
+        return Map.of("scene", scene);
     }
 
-    static class VisualTools {
-        @Tool(name = "describe_visual", value = "Describe visual direction for a scene.")
-        public Map<String, Object> describeVisual(
-                @P("scene_number") int sceneNumber,
-                @P("shot_type") String shotType,
-                @P("description") String description) {
-            return Map.of("visual", Map.of(
-                "scene", sceneNumber,
-                "shot_type", shotType,
-                "description", description
-            ));
-        }
+    @Schema(description = "Describe visual direction for a scene.")
+    public static Map<String, Object> describeVisual(
+            @Schema(name = "scene_number", description = "Scene number") int sceneNumber,
+            @Schema(name = "shot_type", description = "Camera shot type") String shotType,
+            @Schema(name = "description", description = "Visual description") String description) {
+        return Map.of("visual", Map.of(
+            "scene", sceneNumber,
+            "shot_type", shotType,
+            "description", description
+        ));
     }
 
-    static class AudioTools {
-        @Tool(name = "specify_audio", value = "Specify audio direction for a scene.")
-        public Map<String, Object> specifyAudio(
-                @P("scene_number") int sceneNumber,
-                @P("music_mood") String musicMood,
-                @P("sound_effects") String soundEffects) {
-            return Map.of("audio", Map.of(
-                "scene", sceneNumber,
-                "music_mood", musicMood,
-                "sound_effects", soundEffects
-            ));
-        }
+    @Schema(description = "Specify audio direction for a scene.")
+    public static Map<String, Object> specifyAudio(
+            @Schema(name = "scene_number", description = "Scene number") int sceneNumber,
+            @Schema(name = "music_mood", description = "Music mood") String musicMood,
+            @Schema(name = "sound_effects", description = "Sound effects") String soundEffects) {
+        return Map.of("audio", Map.of(
+            "scene", sceneNumber,
+            "music_mood", musicMood,
+            "sound_effects", soundEffects
+        ));
     }
 
-    static class ProducerTools {
-        @Tool(name = "assemble_production", value = "Assemble final production notes.")
-        public Map<String, Object> assembleProduction(
-                @P("title") String title,
-                @P("total_scenes") int totalScenes,
-                @P("estimated_runtime") String estimatedRuntime) {
-            return Map.of("production", Map.of(
-                "title", title,
-                "total_scenes", totalScenes,
-                "estimated_runtime", estimatedRuntime,
-                "status", "ready_for_production"
-            ));
-        }
+    @Schema(description = "Assemble final production notes.")
+    public static Map<String, Object> assembleProduction(
+            @Schema(name = "title", description = "Film title") String title,
+            @Schema(name = "total_scenes", description = "Number of scenes") int totalScenes,
+            @Schema(name = "estimated_runtime", description = "Estimated runtime") String estimatedRuntime) {
+        return Map.of("production", Map.of(
+            "title", title,
+            "total_scenes", totalScenes,
+            "estimated_runtime", estimatedRuntime,
+            "status", "ready_for_production"
+        ));
     }
 
     public static void main(String[] args) {
-        Agent conceptDeveloper = GoogleADKAgent.builder()
+        LlmAgent conceptDeveloper = LlmAgent.builder()
             .name("concept_developer")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a creative director. Develop a concept for a short film "
                 + "based on the given theme. Use create_concept to document the "
                 + "title, genre, and logline. Keep it concise and compelling.")
-            .tools(new ConceptTools())
+            .tools(FunctionTool.create(Example28MoviePipeline.class, "createConcept"))
             .build();
 
-        Agent scriptwriter = GoogleADKAgent.builder()
+        LlmAgent scriptwriter = LlmAgent.builder()
             .name("scriptwriter")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a scriptwriter. Based on the concept from the previous "
                 + "stage, write 3 short scenes using write_scene for each. "
                 + "Include location, action, and brief dialogue.")
-            .tools(new ScriptTools())
+            .tools(FunctionTool.create(Example28MoviePipeline.class, "writeScene"))
             .build();
 
-        Agent visualDirector = GoogleADKAgent.builder()
+        LlmAgent visualDirector = LlmAgent.builder()
             .name("visual_director")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a visual director. For each scene written by the "
                 + "scriptwriter, use describe_visual to specify camera shots, "
                 + "lighting, and visual mood. Create one visual spec per scene.")
-            .tools(new VisualTools())
+            .tools(FunctionTool.create(Example28MoviePipeline.class, "describeVisual"))
             .build();
 
-        Agent audioDesigner = GoogleADKAgent.builder()
+        LlmAgent audioDesigner = LlmAgent.builder()
             .name("audio_designer")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are an audio designer. For each scene, use specify_audio "
                 + "to define the music mood and key sound effects. Match the "
                 + "audio to the visual mood described by the visual director.")
-            .tools(new AudioTools())
+            .tools(FunctionTool.create(Example28MoviePipeline.class, "specifyAudio"))
             .build();
 
-        Agent producer = GoogleADKAgent.builder()
+        LlmAgent producer = LlmAgent.builder()
             .name("producer")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are the producer. Review all previous stages and use "
                 + "assemble_production to create final production notes. "
                 + "Summarize the complete short film with all creative elements.")
-            .tools(new ProducerTools())
+            .tools(FunctionTool.create(Example28MoviePipeline.class, "assembleProduction"))
             .build();
 
-        Agent moviePipeline = GoogleADKAgent.builder()
+        LlmAgent moviePipeline = LlmAgent.builder()
             .name("short_movie_pipeline")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -161,7 +152,9 @@ public class Example28MoviePipeline {
             .subAgents(conceptDeveloper, scriptwriter, visualDirector, audioDesigner, producer)
             .build();
 
-        AgentResult result = Agentspan.run(moviePipeline,
+        Agent agent = AdkBridge.toAgentspan(moviePipeline);
+
+        AgentResult result = Agentspan.run(agent,
             "Create a 3-scene short film about a robot discovering music "
             + "for the first time in a post-apocalyptic world.");
         result.printResult();

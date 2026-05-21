@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,42 +24,45 @@ import java.util.Map;
  *
  * <p>Demonstrates: tools sharing state across tool calls within the same
  * agent execution. The Python source uses ADK's {@code ToolContext.state};
- * the Java port keeps the same shopping-list semantics via an in-memory
- * instance field on the tool class.
+ * the Java port keeps the same shopping-list semantics via a static collection
+ * since {@link FunctionTool#create(Class, String)} requires static methods.
  */
 public class Example31SharedState {
 
-    static class ShoppingListTools {
+    private static final List<String> SHOPPING_LIST = new ArrayList<>();
 
-        private final List<String> shoppingList = new ArrayList<>();
+    @Schema(description = "Add an item to the shared shopping list.")
+    public static Map<String, Object> addItem(
+            @Schema(name = "item", description = "Item to add") String item) {
+        SHOPPING_LIST.add(item);
+        return Map.of("added", item, "total_items", SHOPPING_LIST.size());
+    }
 
-        @Tool(name = "add_item", value = "Add an item to the shared shopping list.")
-        public Map<String, Object> addItem(@P("item") String item) {
-            shoppingList.add(item);
-            return Map.of("added", item, "total_items", shoppingList.size());
-        }
+    @Schema(description = "Get the current shopping list from shared state.")
+    public static Map<String, Object> getList() {
+        return Map.of("items", List.copyOf(SHOPPING_LIST), "total_items", SHOPPING_LIST.size());
+    }
 
-        @Tool(name = "get_list", value = "Get the current shopping list from shared state.")
-        public Map<String, Object> getList() {
-            return Map.of("items", List.copyOf(shoppingList), "total_items", shoppingList.size());
-        }
-
-        @Tool(name = "clear_list", value = "Clear the shopping list.")
-        public Map<String, Object> clearList() {
-            shoppingList.clear();
-            return Map.of("status", "cleared");
-        }
+    @Schema(description = "Clear the shopping list.")
+    public static Map<String, Object> clearList() {
+        SHOPPING_LIST.clear();
+        return Map.of("status", "cleared");
     }
 
     public static void main(String[] args) {
-        Agent agent = GoogleADKAgent.builder()
+        LlmAgent adk = LlmAgent.builder()
             .name("shopping_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You help manage a shopping list. Use add_item to add items, "
                 + "get_list to view the list, and clear_list to reset it.")
-            .tools(new ShoppingListTools())
+            .tools(
+                FunctionTool.create(Example31SharedState.class, "addItem"),
+                FunctionTool.create(Example31SharedState.class, "getList"),
+                FunctionTool.create(Example31SharedState.class, "clearList"))
             .build();
+
+        Agent agent = AdkBridge.toAgentspan(adk);
 
         AgentResult result = Agentspan.run(agent,
             "Add milk, eggs, and bread to my shopping list, then show me the list.");

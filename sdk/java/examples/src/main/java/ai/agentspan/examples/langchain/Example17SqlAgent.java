@@ -3,12 +3,12 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.examples.Settings;
-
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.LangChain4jAgent;
 import ai.agentspan.model.AgentResult;
+
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,7 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Example Lc4j 17 — SQL Agent
+ * Example Lc4j 17 — SQL Agent (native LangChain4j SDK)
  *
  * <p>Java port of <code>sdk/python/examples/langchain/17_sql_agent.py</code>.
  *
@@ -418,9 +418,14 @@ public class Example17SqlAgent {
         @SuppressWarnings("unused")
         List<String> _unused = Arrays.asList("ref");
 
-        Agent agent = LangChain4jAgent.from(
+        ChatModel model = OpenAiChatModel.builder()
+            .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+            .modelName("gpt-4o-mini")
+            .build();
+
+        Agent agent = LangChainBridge.toAgentspan(
             "sql_agent",
-            Settings.LLM_MODEL,
+            model,
             "You are a SQL assistant. Always inspect the schema first, then write and execute a SELECT query. "
                 + "Translate natural language questions into correct SQL.",
             new SqlTools()

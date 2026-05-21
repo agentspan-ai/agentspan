@@ -6,13 +6,13 @@ package ai.agentspan.examples.adk;
 import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
-import ai.agentspan.AgentTool;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.model.ToolDef;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.AgentTool;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -25,10 +25,10 @@ import java.util.Map;
  *
  * <p>Java port of <code>sdk/python/examples/adk/33_software_bug_assistant.py</code>.
  *
- * <p>Demonstrates: agent_tool + local CRUD tools for bug triage. The Python
- * source also uses an MCP tool for live GitHub access; the Java port omits
- * the MCP wiring (no Java MCP helper in scope) and keeps a {@code search_web}
- * sub-agent + local ticket store.
+ * <p>Demonstrates: native ADK {@link AgentTool} + local CRUD function tools
+ * for bug triage. The Python source also uses an MCP tool for live GitHub
+ * access; the Java port omits the MCP wiring (no Java MCP helper in scope)
+ * and keeps a {@code search_web} sub-agent + local ticket store.
  *
  * <p>Did not port cleanly: {@code mcp_tool(server_url=...)} GitHub MCP
  * connector — there is no Java MCP factory in this SDK, so the GitHub
@@ -78,111 +78,107 @@ public class Example33SoftwareBugAssistant {
         TICKETS.put("COND-003", t3);
     }
 
-    // ── Function tools ─────────────────────────────────────────────────────
+    // ── Ticket function tools ─────────────────────────────────────────────
 
-    public static class TicketTools {
-
-        @Tool(name = "get_current_date", value = "Get today's date.")
-        public Map<String, Object> getCurrentDate() {
-            return Map.of("date", LocalDate.now().toString());
-        }
-
-        @Tool(name = "search_tickets", value = "Search the internal bug ticket database for Conductor issues.")
-        public Map<String, Object> searchTickets(@P("query") String query) {
-            String q = query.toLowerCase();
-            List<Map<String, Object>> matches = new ArrayList<>();
-            for (Map<String, Object> t : TICKETS.values()) {
-                String title = ((String) t.get("title")).toLowerCase();
-                String desc = ((String) t.get("description")).toLowerCase();
-                if (title.contains(q) || desc.contains(q)) {
-                    matches.add(t);
-                }
-            }
-            return Map.of("query", query, "count", matches.size(), "tickets", matches);
-        }
-
-        @Tool(name = "create_ticket", value = "Create a new bug ticket in the internal tracker.")
-        public Map<String, Object> createTicket(
-                @P("title") String title,
-                @P("description") String description,
-                @P("priority") String priority) {
-            String ticketId = String.format("COND-%03d", nextId++);
-            String p = priority == null || priority.isEmpty() ? "medium" : priority;
-            Map<String, Object> ticket = new LinkedHashMap<>();
-            ticket.put("id", ticketId);
-            ticket.put("title", title);
-            ticket.put("status", "open");
-            ticket.put("priority", p);
-            ticket.put("description", description);
-            ticket.put("created", LocalDate.now().toString());
-            TICKETS.put(ticketId, ticket);
-            return Map.of("created", true, "ticket", ticket);
-        }
-
-        @Tool(name = "update_ticket", value = "Update an existing bug ticket's status or priority.")
-        public Map<String, Object> updateTicket(
-                @P("ticket_id") String ticketId,
-                @P("status") String status,
-                @P("priority") String priority) {
-            Map<String, Object> ticket = TICKETS.get(ticketId.toUpperCase());
-            if (ticket == null) {
-                return Map.of("error", "Ticket " + ticketId + " not found");
-            }
-            if (status != null && !status.isEmpty()) {
-                ticket.put("status", status);
-            }
-            if (priority != null && !priority.isEmpty()) {
-                ticket.put("priority", priority);
-            }
-            return Map.of("updated", true, "ticket", ticket);
-        }
+    @Schema(description = "Get today's date.")
+    public static Map<String, Object> getCurrentDate() {
+        return Map.of("date", LocalDate.now().toString());
     }
 
-    public static class SearchAgentTools {
-
-        @Tool(name = "search_web", value = "Search the web for information about a Conductor bug or workflow issue.")
-        public Map<String, Object> searchWeb(@P("query") String query) {
-            Map<String, Map<String, Object>> results = new LinkedHashMap<>();
-            results.put("task status listener", Map.of(
-                "source", "Conductor Docs",
-                "answer", "TaskStatusListener is only wired for SIMPLE tasks. System "
-                    + "tasks like HTTP, INLINE, SUB_WORKFLOW bypass the listener "
-                    + "because they complete synchronously within the decider loop."
-            ));
-            results.put("do_while loop", Map.of(
-                "source", "GitHub PR #820",
-                "answer", "DO_WHILE tasks with 'items' now pass validation without "
-                    + "loopCondition. Fixed in PR #820 — the validator was "
-                    + "unconditionally requiring loopCondition for all DO_WHILE tasks."
-            ));
-            results.put("event handler fail", Map.of(
-                "source", "GitHub Issue #858",
-                "answer", "Event handlers with action: fail_task cannot set "
-                    + "reasonForIncompletion. A proposed fix adds an optional "
-                    + "'reason' field to the fail_task action configuration."
-            ));
-            results.put("workflow def pagination", Map.of(
-                "source", "GitHub Issue #781",
-                "answer", "The /metadata/workflow endpoint returns all versions of all "
-                    + "workflows causing slow UI loads. A pagination API for "
-                    + "latest-versions is proposed to fix this."
-            ));
-            String q = query.toLowerCase();
-            for (Map.Entry<String, Map<String, Object>> entry : results.entrySet()) {
-                if (q.contains(entry.getKey())) {
-                    Map<String, Object> r = new LinkedHashMap<>();
-                    r.put("query", query);
-                    r.put("found", true);
-                    r.putAll(entry.getValue());
-                    return r;
-                }
+    @Schema(description = "Search the internal bug ticket database for Conductor issues.")
+    public static Map<String, Object> searchTickets(
+            @Schema(name = "query", description = "Search query") String query) {
+        String q = query.toLowerCase();
+        List<Map<String, Object>> matches = new ArrayList<>();
+        for (Map<String, Object> t : TICKETS.values()) {
+            String title = ((String) t.get("title")).toLowerCase();
+            String desc = ((String) t.get("description")).toLowerCase();
+            if (title.contains(q) || desc.contains(q)) {
+                matches.add(t);
             }
-            return Map.of("query", query, "found", false, "summary", "No specific results found.");
         }
+        return Map.of("query", query, "count", matches.size(), "tickets", matches);
+    }
+
+    @Schema(description = "Create a new bug ticket in the internal tracker.")
+    public static Map<String, Object> createTicket(
+            @Schema(name = "title", description = "Ticket title") String title,
+            @Schema(name = "description", description = "Ticket description") String description,
+            @Schema(name = "priority", description = "Priority (low, medium, high)") String priority) {
+        String ticketId = String.format("COND-%03d", nextId++);
+        String p = priority == null || priority.isEmpty() ? "medium" : priority;
+        Map<String, Object> ticket = new LinkedHashMap<>();
+        ticket.put("id", ticketId);
+        ticket.put("title", title);
+        ticket.put("status", "open");
+        ticket.put("priority", p);
+        ticket.put("description", description);
+        ticket.put("created", LocalDate.now().toString());
+        TICKETS.put(ticketId, ticket);
+        return Map.of("created", true, "ticket", ticket);
+    }
+
+    @Schema(description = "Update an existing bug ticket's status or priority.")
+    public static Map<String, Object> updateTicket(
+            @Schema(name = "ticket_id", description = "Ticket ID") String ticketId,
+            @Schema(name = "status", description = "New status (optional)") String status,
+            @Schema(name = "priority", description = "New priority (optional)") String priority) {
+        Map<String, Object> ticket = TICKETS.get(ticketId.toUpperCase());
+        if (ticket == null) {
+            return Map.of("error", "Ticket " + ticketId + " not found");
+        }
+        if (status != null && !status.isEmpty()) {
+            ticket.put("status", status);
+        }
+        if (priority != null && !priority.isEmpty()) {
+            ticket.put("priority", priority);
+        }
+        return Map.of("updated", true, "ticket", ticket);
+    }
+
+    @Schema(description = "Search the web for information about a Conductor bug or workflow issue.")
+    public static Map<String, Object> searchWeb(
+            @Schema(name = "query", description = "Search query") String query) {
+        Map<String, Map<String, Object>> results = new LinkedHashMap<>();
+        results.put("task status listener", Map.of(
+            "source", "Conductor Docs",
+            "answer", "TaskStatusListener is only wired for SIMPLE tasks. System "
+                + "tasks like HTTP, INLINE, SUB_WORKFLOW bypass the listener "
+                + "because they complete synchronously within the decider loop."
+        ));
+        results.put("do_while loop", Map.of(
+            "source", "GitHub PR #820",
+            "answer", "DO_WHILE tasks with 'items' now pass validation without "
+                + "loopCondition. Fixed in PR #820 — the validator was "
+                + "unconditionally requiring loopCondition for all DO_WHILE tasks."
+        ));
+        results.put("event handler fail", Map.of(
+            "source", "GitHub Issue #858",
+            "answer", "Event handlers with action: fail_task cannot set "
+                + "reasonForIncompletion. A proposed fix adds an optional "
+                + "'reason' field to the fail_task action configuration."
+        ));
+        results.put("workflow def pagination", Map.of(
+            "source", "GitHub Issue #781",
+            "answer", "The /metadata/workflow endpoint returns all versions of all "
+                + "workflows causing slow UI loads. A pagination API for "
+                + "latest-versions is proposed to fix this."
+        ));
+        String q = query.toLowerCase();
+        for (Map.Entry<String, Map<String, Object>> entry : results.entrySet()) {
+            if (q.contains(entry.getKey())) {
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("query", query);
+                r.put("found", true);
+                r.putAll(entry.getValue());
+                return r;
+            }
+        }
+        return Map.of("query", query, "found", false, "summary", "No specific results found.");
     }
 
     public static void main(String[] args) {
-        Agent searchAgent = GoogleADKAgent.builder()
+        LlmAgent searchAgent = LlmAgent.builder()
             .name("search_agent")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -190,13 +186,10 @@ public class Example33SoftwareBugAssistant {
                 + "(conductor-oss/conductor) workflow orchestration. Use the search_web "
                 + "tool to find relevant information about bugs, errors, and Conductor "
                 + "configuration issues. Provide concise, actionable answers.")
-            .tools(new SearchAgentTools())
+            .tools(FunctionTool.create(Example33SoftwareBugAssistant.class, "searchWeb"))
             .build();
 
-        TicketTools ticketTools = new TicketTools();
-        ToolDef searchAgentTool = AgentTool.from(searchAgent);
-
-        Agent softwareAssistant = GoogleADKAgent.builder()
+        LlmAgent softwareAssistant = LlmAgent.builder()
             .name("software_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -212,11 +205,17 @@ public class Example33SoftwareBugAssistant {
                 + "- Research any unfamiliar issues with the search_agent\n"
                 + "- Create internal tickets for new issues not yet tracked\n"
                 + "- Suggest next steps, referencing GitHub issue/PR numbers")
-            .tools(ticketTools)
-            .toolDefs(List.of(searchAgentTool))
+            .tools(
+                FunctionTool.create(Example33SoftwareBugAssistant.class, "getCurrentDate"),
+                FunctionTool.create(Example33SoftwareBugAssistant.class, "searchTickets"),
+                FunctionTool.create(Example33SoftwareBugAssistant.class, "createTicket"),
+                FunctionTool.create(Example33SoftwareBugAssistant.class, "updateTicket"),
+                AgentTool.create(searchAgent))
             .build();
 
-        AgentResult result = Agentspan.run(softwareAssistant,
+        Agent agent = AdkBridge.toAgentspan(softwareAssistant);
+
+        AgentResult result = Agentspan.run(agent,
             "Review the latest open issues and PRs on conductor-oss/conductor. "
             + "Check if any of them relate to our internal tickets. "
             + "Pay attention to the DO_WHILE fix (PR #820) and the scheduler "

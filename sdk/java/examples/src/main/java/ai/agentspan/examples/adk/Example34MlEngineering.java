@@ -7,8 +7,9 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
+
+import com.google.adk.agents.LlmAgent;
 
 /**
  * Example Adk 34 — ML Engineering Pipeline
@@ -18,14 +19,15 @@ import ai.agentspan.model.AgentResult;
  * <p>Demonstrates: a multi-agent ML workflow combining sequential, parallel,
  * and loop strategies. The Java port encodes the strategy semantics inline
  * (sub-agents with instructions describing parallel/loop intent) since the
- * {@link GoogleADKAgent} builder doesn't expose ParallelAgent/LoopAgent
+ * Agentspan {@link AdkBridge} currently translates {@link LlmAgent}s with
+ * sub-agents but does not extract {@code ParallelAgent}/{@code LoopAgent}
  * primitives directly.
  */
 public class Example34MlEngineering {
 
     public static void main(String[] args) {
         // ── Phase 1: Data Analysis ────────────────────────────────────────
-        Agent dataAnalyst = GoogleADKAgent.builder()
+        LlmAgent dataAnalyst = LlmAgent.builder()
             .name("data_analyst")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -39,7 +41,7 @@ public class Example34MlEngineering {
             .build();
 
         // ── Phase 2: Parallel Model Strategy Exploration ─────────────────
-        Agent linearModeler = GoogleADKAgent.builder()
+        LlmAgent linearModeler = LlmAgent.builder()
             .name("linear_modeler")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -52,7 +54,7 @@ public class Example34MlEngineering {
                 + "Keep it to 4-5 bullet points.")
             .build();
 
-        Agent treeModeler = GoogleADKAgent.builder()
+        LlmAgent treeModeler = LlmAgent.builder()
             .name("tree_modeler")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -65,7 +67,7 @@ public class Example34MlEngineering {
                 + "Keep it to 4-5 bullet points.")
             .build();
 
-        Agent nnModeler = GoogleADKAgent.builder()
+        LlmAgent nnModeler = LlmAgent.builder()
             .name("nn_modeler")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -78,7 +80,7 @@ public class Example34MlEngineering {
                 + "Keep it to 4-5 bullet points.")
             .build();
 
-        Agent parallelModeling = GoogleADKAgent.builder()
+        LlmAgent parallelModeling = LlmAgent.builder()
             .name("model_exploration")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -89,7 +91,7 @@ public class Example34MlEngineering {
             .build();
 
         // ── Phase 3: Evaluation & Selection ──────────────────────────────
-        Agent evaluator = GoogleADKAgent.builder()
+        LlmAgent evaluator = LlmAgent.builder()
             .name("evaluator")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -104,7 +106,7 @@ public class Example34MlEngineering {
             .build();
 
         // ── Phase 4: Iterative Refinement (LoopAgent intent) ─────────────
-        Agent optimizer = GoogleADKAgent.builder()
+        LlmAgent optimizer = LlmAgent.builder()
             .name("optimizer")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -116,7 +118,7 @@ public class Example34MlEngineering {
                 + "If this is a subsequent iteration, refine based on the validator's feedback.")
             .build();
 
-        Agent validator = GoogleADKAgent.builder()
+        LlmAgent validator = LlmAgent.builder()
             .name("validator")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -127,7 +129,7 @@ public class Example34MlEngineering {
                 + "Provide brief, actionable feedback.")
             .build();
 
-        Agent refinementLoop = GoogleADKAgent.builder()
+        LlmAgent refinementLoop = LlmAgent.builder()
             .name("refinement_loop")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -138,7 +140,7 @@ public class Example34MlEngineering {
             .build();
 
         // ── Phase 5: Final Report ────────────────────────────────────────
-        Agent reporter = GoogleADKAgent.builder()
+        LlmAgent reporter = LlmAgent.builder()
             .name("reporter")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -155,7 +157,7 @@ public class Example34MlEngineering {
             .build();
 
         // ── Full Pipeline ────────────────────────────────────────────────
-        Agent mlPipeline = GoogleADKAgent.builder()
+        LlmAgent mlPipeline = LlmAgent.builder()
             .name("ml_pipeline")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -168,7 +170,9 @@ public class Example34MlEngineering {
             .subAgents(dataAnalyst, parallelModeling, evaluator, refinementLoop, reporter)
             .build();
 
-        AgentResult result = Agentspan.run(mlPipeline,
+        Agent agent = AdkBridge.toAgentspan(mlPipeline);
+
+        AgentResult result = Agentspan.run(agent,
             "Build a model to predict California housing prices. The dataset has 20,640 samples "
             + "with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, "
             + "Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). "

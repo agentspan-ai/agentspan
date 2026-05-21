@@ -7,10 +7,11 @@ import ai.agentspan.examples.Settings;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.frameworks.GoogleADKAgent;
 import ai.agentspan.model.AgentResult;
-import dev.langchain4j.agent.tool.P;
-import dev.langchain4j.agent.tool.Tool;
+
+import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.Annotations.Schema;
+import com.google.adk.tools.FunctionTool;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -27,52 +28,50 @@ import java.util.regex.Pattern;
  */
 public class Example26SafetyGuardrails {
 
-    static class SafetyTools {
+    private static final Map<String, Pattern> PATTERNS = new LinkedHashMap<>();
+    static {
+        PATTERNS.put("email", Pattern.compile("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b"));
+        PATTERNS.put("phone", Pattern.compile("\\b\\d{3}[-.]?\\d{3}[-.]?\\d{4}\\b"));
+        PATTERNS.put("ssn", Pattern.compile("\\b\\d{3}-\\d{2}-\\d{4}\\b"));
+        PATTERNS.put("credit_card", Pattern.compile("\\b\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}\\b"));
+    }
 
-        private static final Map<String, Pattern> PATTERNS = new LinkedHashMap<>();
-        static {
-            PATTERNS.put("email", Pattern.compile("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b"));
-            PATTERNS.put("phone", Pattern.compile("\\b\\d{3}[-.]?\\d{3}[-.]?\\d{4}\\b"));
-            PATTERNS.put("ssn", Pattern.compile("\\b\\d{3}-\\d{2}-\\d{4}\\b"));
-            PATTERNS.put("credit_card", Pattern.compile("\\b\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?\\d{4}\\b"));
-        }
-
-        @Tool(name = "check_pii", value = "Check text for personally identifiable information (PII).")
-        public Map<String, Object> checkPii(@P("text") String text) {
-            Map<String, Integer> found = new LinkedHashMap<>();
-            for (Map.Entry<String, Pattern> entry : PATTERNS.entrySet()) {
-                Matcher m = entry.getValue().matcher(text);
-                int count = 0;
-                while (m.find()) count++;
-                if (count > 0) {
-                    found.put(entry.getKey(), count);
-                }
+    @Schema(description = "Check text for personally identifiable information (PII).")
+    public static Map<String, Object> checkPii(
+            @Schema(name = "text", description = "Text to scan for PII") String text) {
+        Map<String, Integer> found = new LinkedHashMap<>();
+        for (Map.Entry<String, Pattern> entry : PATTERNS.entrySet()) {
+            Matcher m = entry.getValue().matcher(text);
+            int count = 0;
+            while (m.find()) count++;
+            if (count > 0) {
+                found.put(entry.getKey(), count);
             }
-            return Map.of(
-                "has_pii", !found.isEmpty(),
-                "pii_types", found,
-                "text_length", text.length()
-            );
         }
+        return Map.of(
+            "has_pii", !found.isEmpty(),
+            "pii_types", found,
+            "text_length", text.length()
+        );
+    }
 
-        @Tool(name = "sanitize_response", value = "Remove or mask PII from a response before delivering to user.")
-        public Map<String, Object> sanitizeResponse(
-                @P("text") String text,
-                @P("pii_types") String piiTypes) {
-            String sanitized = text;
-            sanitized = PATTERNS.get("email").matcher(sanitized).replaceAll("[EMAIL REDACTED]");
-            sanitized = PATTERNS.get("phone").matcher(sanitized).replaceAll("[PHONE REDACTED]");
-            sanitized = PATTERNS.get("ssn").matcher(sanitized).replaceAll("[SSN REDACTED]");
-            sanitized = PATTERNS.get("credit_card").matcher(sanitized).replaceAll("[CARD REDACTED]");
-            return Map.of(
-                "sanitized_text", sanitized,
-                "was_modified", !sanitized.equals(text)
-            );
-        }
+    @Schema(description = "Remove or mask PII from a response before delivering to user.")
+    public static Map<String, Object> sanitizeResponse(
+            @Schema(name = "text", description = "Text to sanitize") String text,
+            @Schema(name = "pii_types", description = "Comma-separated PII categories to redact") String piiTypes) {
+        String sanitized = text;
+        sanitized = PATTERNS.get("email").matcher(sanitized).replaceAll("[EMAIL REDACTED]");
+        sanitized = PATTERNS.get("phone").matcher(sanitized).replaceAll("[PHONE REDACTED]");
+        sanitized = PATTERNS.get("ssn").matcher(sanitized).replaceAll("[SSN REDACTED]");
+        sanitized = PATTERNS.get("credit_card").matcher(sanitized).replaceAll("[CARD REDACTED]");
+        return Map.of(
+            "sanitized_text", sanitized,
+            "was_modified", !sanitized.equals(text)
+        );
     }
 
     public static void main(String[] args) {
-        Agent assistant = GoogleADKAgent.builder()
+        LlmAgent assistant = LlmAgent.builder()
             .name("helpful_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -81,7 +80,7 @@ public class Example26SafetyGuardrails {
                 + "When providing information, include relevant details.")
             .build();
 
-        Agent safetyChecker = GoogleADKAgent.builder()
+        LlmAgent safetyChecker = LlmAgent.builder()
             .name("safety_checker")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -89,10 +88,12 @@ public class Example26SafetyGuardrails {
                 + "for any PII (emails, phone numbers, SSNs, credit card numbers). "
                 + "Use check_pii on the response text. If PII is found, use "
                 + "sanitize_response to clean it. Pass the clean version along.")
-            .tools(new SafetyTools())
+            .tools(
+                FunctionTool.create(Example26SafetyGuardrails.class, "checkPii"),
+                FunctionTool.create(Example26SafetyGuardrails.class, "sanitizeResponse"))
             .build();
 
-        Agent safePipeline = GoogleADKAgent.builder()
+        LlmAgent safePipeline = LlmAgent.builder()
             .name("safe_assistant")
             .model(Settings.LLM_MODEL)
             .instruction(
@@ -102,7 +103,9 @@ public class Example26SafetyGuardrails {
             .subAgents(assistant, safetyChecker)
             .build();
 
-        AgentResult result = Agentspan.run(safePipeline,
+        Agent agent = AdkBridge.toAgentspan(safePipeline);
+
+        AgentResult result = Agentspan.run(agent,
             "What are the contact details for our support team? "
             + "Include email support@company.com and phone 555-123-4567.");
         result.printResult();
