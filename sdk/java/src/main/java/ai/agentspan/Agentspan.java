@@ -6,7 +6,6 @@ package ai.agentspan;
 import ai.agentspan.model.AgentHandle;
 import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.AgentStream;
-import ai.agentspan.model.AsyncAgentStream;
 import ai.agentspan.model.DeploymentInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

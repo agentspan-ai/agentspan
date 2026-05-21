@@ -34,16 +34,6 @@ public class UserProxyAgent {
 
     private UserProxyAgent() {}
 
-    /** Create a UserProxyAgent that always pauses for human input. */
-    public static Agent create() {
-        return create("user", ALWAYS, "Continue.", "openai/gpt-4o");
-    }
-
-    /** Create a UserProxyAgent with a custom name that always pauses for human input. */
-    public static Agent create(String name) {
-        return create(name, ALWAYS, "Continue.", "openai/gpt-4o");
-    }
-
     /**
      * Create a UserProxyAgent.
      *

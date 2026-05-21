@@ -27,19 +27,8 @@ public class ClaudeCode {
         public String getValue() { return value; }
     }
 
-    private static final java.util.Map<String, String> MODEL_ALIASES = new java.util.HashMap<>();
-    static {
-        MODEL_ALIASES.put("opus", "claude-opus-4-6");
-        MODEL_ALIASES.put("sonnet", "claude-sonnet-4-6");
-        MODEL_ALIASES.put("haiku", "claude-haiku-4-5");
-    }
-
     private final String modelName;
     private final PermissionMode permissionMode;
-
-    public ClaudeCode() {
-        this("", PermissionMode.ACCEPT_EDITS);
-    }
 
     public ClaudeCode(String modelName) {
         this(modelName, PermissionMode.ACCEPT_EDITS);
@@ -54,12 +43,6 @@ public class ClaudeCode {
     public String toModelString() {
         if (modelName == null || modelName.isEmpty()) return "claude-code";
         return "claude-code/" + modelName;
-    }
-
-    /** Resolve a short alias (opus, sonnet, haiku) to the full model ID. */
-    public static String resolveModel(String alias) {
-        if (alias == null || alias.isEmpty()) return null;
-        return MODEL_ALIASES.getOrDefault(alias, alias);
     }
 
     public String getModelName() { return modelName; }
