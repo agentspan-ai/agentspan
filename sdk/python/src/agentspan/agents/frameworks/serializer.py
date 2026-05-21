@@ -447,7 +447,12 @@ def _serialize_skill(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     """
     from agentspan.agents.skill import create_skill_workers
 
-    raw_config = agent_obj._framework_config
+    raw_config = dict(agent_obj._framework_config)
+    raw_config["maxTurns"] = getattr(agent_obj, "max_turns", 25)
+    raw_config["timeoutSeconds"] = getattr(agent_obj, "timeout_seconds", 0)
+    max_tokens = getattr(agent_obj, "max_tokens", None)
+    if max_tokens is not None:
+        raw_config["maxTokens"] = max_tokens
 
     # Convert SkillWorkers to WorkerInfo for the framework worker registration path
     skill_workers = create_skill_workers(agent_obj)
