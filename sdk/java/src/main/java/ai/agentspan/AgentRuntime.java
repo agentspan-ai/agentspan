@@ -95,7 +95,14 @@ public class AgentRuntime implements AutoCloseable {
         // the server normalizer or compile fails on a missing top-level model.
         String framework = agent.getFramework();
         boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
-        Map<String, Object> result = httpApi.compileAgent(isFramework ? framework : null, agentConfig);
+        Map<String, Object> payload = new java.util.HashMap<>();
+        if (isFramework) {
+            payload.put("framework", framework);
+            payload.put("rawConfig", agentConfig);
+        } else {
+            payload.put("agentConfig", agentConfig);
+        }
+        Map<String, Object> result = httpApi.compileAgent(payload);
         logger.info("Agent '{}' compiled successfully", agent.getName());
         return result;
     }
@@ -181,13 +188,19 @@ public class AgentRuntime implements AutoCloseable {
             // must be sent via the server's framework+rawConfig fields so the
             // matching normalizer runs server-side. The "skill" framework keeps
             // the legacy path because its serialized config still includes model.
-            Map<String, Object> response;
             String framework = agent.getFramework();
-            if (framework != null && !framework.isEmpty() && !"skill".equals(framework)) {
-                response = httpApi.startFrameworkAgent(framework, agentConfig, prompt, sessionId, runId);
+            boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
+            Map<String, Object> payload = new java.util.HashMap<>();
+            if (isFramework) {
+                payload.put("framework", framework);
+                payload.put("rawConfig", agentConfig);
             } else {
-                response = httpApi.startAgent(agentConfig, prompt, sessionId, runId);
+                payload.put("agentConfig", agentConfig);
             }
+            payload.put("prompt", prompt);
+            if (sessionId != null && !sessionId.isEmpty()) payload.put("sessionId", sessionId);
+            if (runId != null && !runId.isEmpty()) payload.put("runId", runId);
+            Map<String, Object> response = httpApi.startAgent(payload);
             String executionId = extractExecutionId(response);
 
             logger.info("Agent '{}' started with execution ID: {}", agent.getName(), executionId);

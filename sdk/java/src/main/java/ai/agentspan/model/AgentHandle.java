@@ -95,7 +95,7 @@ public class AgentHandle {
      * Approve a pending tool call that requires human approval.
      */
     public void approve() {
-        httpApi.respondToAgent(executionId, true, null);
+        httpApi.respond(executionId, approveBody(null));
     }
 
     /**
@@ -104,7 +104,10 @@ public class AgentHandle {
      * @param reason rejection reason
      */
     public void reject(String reason) {
-        httpApi.respondToAgent(executionId, false, reason);
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("approved", false);
+        if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+        httpApi.respond(executionId, body);
     }
 
     /**
@@ -116,7 +119,7 @@ public class AgentHandle {
      * @param data the response payload
      */
     public void respond(Map<String, Object> data) {
-        httpApi.respondWithData(executionId, data);
+        httpApi.respond(executionId, data);
     }
 
     /**
@@ -125,7 +128,14 @@ public class AgentHandle {
      * @param message the message to send
      */
     public void send(String message) {
-        httpApi.respondToAgent(executionId, true, null);
+        httpApi.respond(executionId, approveBody(null));
+    }
+
+    private static Map<String, Object> approveBody(String reason) {
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("approved", true);
+        if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+        return body;
     }
 
     /**
