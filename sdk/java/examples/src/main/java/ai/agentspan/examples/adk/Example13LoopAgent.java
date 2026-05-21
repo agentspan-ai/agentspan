@@ -10,16 +10,17 @@ import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
 import com.google.adk.agents.LlmAgent;
+import com.google.adk.agents.LoopAgent;
 
 /**
  * Example Adk 13 — Loop Agent
  *
  * <p>Java port of <code>sdk/python/examples/adk/13_loop_agent.py</code>.
  *
- * <p>Demonstrates: Python's {@code LoopAgent} repeats sub-agents for
- * iterative refinement (up to 3 iterations of write → critique). The Java
- * port uses an {@link LlmAgent} coordinator whose instruction expresses
- * the loop semantics.
+ * <p>Demonstrates: native ADK {@link LoopAgent} repeats sub-agents for
+ * iterative refinement (up to 3 iterations of write → critique). The
+ * {@code maxIterations} setting is propagated via the bridge so the server
+ * compiles a Conductor DO_WHILE with the correct upper bound.
  */
 public class Example13LoopAgent {
 
@@ -45,15 +46,11 @@ public class Example13LoopAgent {
                 + "Provide 1-2 sentences of constructive feedback for improvement.")
             .build();
 
-        // Each iteration: write → critique. Repeat up to 3 times.
-        LlmAgent refinementLoop = LlmAgent.builder()
+        // Each iteration: write → critique. Native LoopAgent with maxIterations=3.
+        LoopAgent refinementLoop = LoopAgent.builder()
             .name("refinement_loop")
-            .model(Settings.LLM_MODEL)
-            .instruction(
-                "You orchestrate an iterative refinement loop. Run the cycle "
-                + "[draft_writer → critic] up to 3 times (max_iterations=3), "
-                + "feeding the critic's feedback back to the writer each pass. "
-                + "Return the final polished haiku.")
+            .description("Iteratively refine a haiku until the critic is satisfied.")
+            .maxIterations(3)
             .subAgents(writer, critic)
             .build();
 

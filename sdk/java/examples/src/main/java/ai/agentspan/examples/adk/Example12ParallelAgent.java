@@ -10,15 +10,17 @@ import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
 import com.google.adk.agents.LlmAgent;
+import com.google.adk.agents.ParallelAgent;
 
 /**
  * Example Adk 12 — Parallel Agent
  *
  * <p>Java port of <code>sdk/python/examples/adk/12_parallel_agent.py</code>.
  *
- * <p>Demonstrates: Python's {@code ParallelAgent} runs sub-agents concurrently
- * and aggregates results. The Java port uses an {@link LlmAgent} coordinator
- * with sub-agents whose instructions express parallel intent.
+ * <p>Demonstrates: native ADK {@link ParallelAgent} runs sub-agents
+ * concurrently — market / tech / risk analysts dispatched in parallel.
+ * The bridge emits {@code _type: ParallelAgent} so the server compiles
+ * this as a Conductor fan-out workflow.
  */
 public class Example12ParallelAgent {
 
@@ -47,14 +49,10 @@ public class Example12ParallelAgent {
                 + "provide a brief 2-3 sentence risk assessment. Focus on potential challenges.")
             .build();
 
-        // All three should run in parallel; aggregation happens at the orchestrator
-        LlmAgent parallelAnalysis = LlmAgent.builder()
+        // All three analysts dispatched concurrently by native ParallelAgent.
+        ParallelAgent parallelAnalysis = ParallelAgent.builder()
             .name("parallel_analysis")
-            .model(Settings.LLM_MODEL)
-            .instruction(
-                "You orchestrate three parallel analysts: market_analyst, tech_analyst, "
-                + "and risk_analyst. Dispatch the user's topic to all three concurrently, "
-                + "then aggregate their findings into a combined report.")
+            .description("Fan-out to three analysts running in parallel.")
             .subAgents(marketAnalyst, techAnalyst, riskAnalyst)
             .build();
 

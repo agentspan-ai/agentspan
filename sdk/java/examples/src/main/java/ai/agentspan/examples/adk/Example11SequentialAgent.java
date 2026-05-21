@@ -10,17 +10,17 @@ import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
 
 import com.google.adk.agents.LlmAgent;
+import com.google.adk.agents.SequentialAgent;
 
 /**
  * Example Adk 11 — Sequential Agent Pipeline
  *
  * <p>Java port of <code>sdk/python/examples/adk/11_sequential_agent.py</code>.
  *
- * <p>Demonstrates: a sequential pipeline coordinator (researcher → writer →
- * editor). Native ADK has a {@code SequentialAgent}, but the Agentspan
- * {@link AdkBridge} extracts {@link LlmAgent}s and their sub-agents, so the
- * pipeline is modeled as a coordinator {@code LlmAgent} whose instruction
- * dictates ordered execution.
+ * <p>Demonstrates: native ADK {@link SequentialAgent} runs sub-agents in
+ * order — researcher → writer → editor. The bridge emits
+ * {@code _type: SequentialAgent} so the server compiles this as a Conductor
+ * sequential workflow rather than the default handoff strategy.
  */
 public class Example11SequentialAgent {
 
@@ -53,16 +53,10 @@ public class Example11SequentialAgent {
                 + "Fix any issues with clarity, grammar, or flow. Output only the final polished paragraph.")
             .build();
 
-        // Pipeline: researcher → writer → editor
-        LlmAgent pipeline = LlmAgent.builder()
+        // Pipeline: researcher → writer → editor. Native SequentialAgent.
+        SequentialAgent pipeline = SequentialAgent.builder()
             .name("content_pipeline")
-            .model(Settings.LLM_MODEL)
-            .instruction(
-                "You orchestrate a content pipeline. Execute the steps in this order:\n"
-                + "1. researcher gathers 3 key facts\n"
-                + "2. writer composes a paragraph from those facts\n"
-                + "3. editor polishes the paragraph\n"
-                + "Return the editor's final paragraph.")
+            .description("Research → write → edit pipeline.")
             .subAgents(researcher, writer, editor)
             .build();
 

@@ -116,15 +116,17 @@ public class Example03StructuredOutput {
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a professional chef assistant. When asked for a recipe, "
-                + "provide a complete, well-structured recipe with precise measurements, "
-                + "clear step-by-step instructions, and accurate timing.")
+                + "provide a complete, well-structured recipe in JSON format with precise "
+                + "measurements, clear step-by-step instructions, and accurate timing.")
             .outputSchema(recipeSchema())
             .build();
 
         Agent agent = AdkBridge.toAgentspan(adk);
 
+        // OpenAI's `json_object` response format requires the word "json" to
+        // appear in the input messages. Gemini has no such constraint.
         AgentResult result = Agentspan.run(agent,
-            "Give me a recipe for classic Italian carbonara pasta.");
+            "Give me a recipe for classic Italian carbonara pasta. Return as JSON.");
         result.printResult();
 
         Agentspan.shutdown();
