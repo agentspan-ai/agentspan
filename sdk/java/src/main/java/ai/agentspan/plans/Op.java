@@ -20,9 +20,9 @@ public final class Op {
     private final Generate generate;
 
     private Op(Builder b) {
-        if (b.args != null && b.generate != null) {
+        if ((b.args == null) == (b.generate == null)) {
             throw new IllegalArgumentException(
-                    "Op('" + b.tool + "'): set exactly one of args or generate, not both");
+                    "Op('" + b.tool + "'): exactly one of args or generate must be set");
         }
         this.tool = b.tool;
         this.args = b.args;
