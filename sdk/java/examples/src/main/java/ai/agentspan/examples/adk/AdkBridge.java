@@ -104,13 +104,14 @@ public final class AdkBridge {
             Map<String, Object> outputSchema = new LinkedHashMap<>();
             outputSchema.put("type", "object");
 
+            // ADK's FunctionTool.create(Class, "method") only resolves static
+            // methods, so reflective invocation always passes a null receiver.
             final Method finalMethod = method;
             final String name = ft.name();
             Function<Map<String, Object>, Object> func = inputData -> {
                 try {
                     Object[] args = buildArgs(finalMethod, inputData);
-                    Object target = java.lang.reflect.Modifier.isStatic(finalMethod.getModifiers()) ? null : null;
-                    return finalMethod.invoke(target, args);
+                    return finalMethod.invoke(null, args);
                 } catch (Exception e) {
                     throw new RuntimeException("ADK FunctionTool execution failed: " + name, e);
                 }
