@@ -82,12 +82,14 @@ public class Example14Callbacks {
     public static void main(String[] args) {
         LlmAgent calculator = LlmAgent.builder()
             .name("customer_service_agent")
+            .description("Handles customer service lookups, order status checks, and discount application.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a helpful customer service calculator. "
-                + "Use the available tools to look up customer information, "
-                + "check order status, and apply discounts when requested. "
-                + "Always verify the customer exists before applying discounts.")
+            .instruction("""
+                You are a helpful customer service calculator.
+                Use the available tools to look up customer information,
+                check order status, and apply discounts when requested.
+                Always verify the customer exists before applying discounts.
+                """)
             .tools(
                 FunctionTool.create(Example14Callbacks.class, "lookupCustomer"),
                 FunctionTool.create(Example14Callbacks.class, "applyDiscount"),

@@ -125,12 +125,14 @@ public class Example09MultiToolAgent {
     public static void main(String[] args) {
         LlmAgent shopper = LlmAgent.builder()
             .name("shopping_assistant")
+            .description("Helps users search products, check stock, calculate shipping, and apply coupons.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a helpful shopping assistant. Help users find products, "
-                + "check availability, calculate shipping, and apply coupons. "
-                + "Always check inventory before recommending products. "
-                + "Present information in a clear, organized format.")
+            .instruction("""
+                You are a helpful shopping assistant. Help users find products,
+                check availability, calculate shipping, and apply coupons.
+                Always check inventory before recommending products.
+                Present information in a clear, organized format.
+                """)
             .tools(
                 FunctionTool.create(Example09MultiToolAgent.class, "searchProducts"),
                 FunctionTool.create(Example09MultiToolAgent.class, "checkInventory"),

@@ -79,6 +79,7 @@ public class Example04SubAgents {
     public static void main(String[] args) {
         LlmAgent flightAgent = LlmAgent.builder()
             .name("flight_specialist")
+            .description("Searches for flights and presents options with prices and schedules.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a flight specialist. Search for flights and present "
@@ -88,6 +89,7 @@ public class Example04SubAgents {
 
         LlmAgent hotelAgent = LlmAgent.builder()
             .name("hotel_specialist")
+            .description("Searches for hotels and presents options with ratings and prices.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a hotel specialist. Search for hotels and present "
@@ -97,6 +99,7 @@ public class Example04SubAgents {
 
         LlmAgent advisoryAgent = LlmAgent.builder()
             .name("travel_advisory_specialist")
+            .description("Provides safety levels and visa requirements for destinations.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a travel advisory specialist. Provide safety levels "
@@ -106,13 +109,15 @@ public class Example04SubAgents {
 
         LlmAgent coordinator = LlmAgent.builder()
             .name("travel_coordinator")
+            .description("Coordinates flight, hotel, and travel-advisory specialists to plan a trip.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a travel planning coordinator. When a user wants to plan a trip:\n"
-                + "1. Use the travel advisory specialist to check safety and visa info\n"
-                + "2. Use the flight specialist to find flights\n"
-                + "3. Use the hotel specialist to find accommodation\n"
-                + "Route the user's request to the appropriate specialist.")
+            .instruction("""
+                You are a travel planning coordinator. When a user wants to plan a trip:
+                1. Use the travel advisory specialist to check safety and visa info
+                2. Use the flight specialist to find flights
+                3. Use the hotel specialist to find accommodation
+                Route the user's request to the appropriate specialist.
+                """)
             .subAgents(flightAgent, hotelAgent, advisoryAgent)
             .build();
 

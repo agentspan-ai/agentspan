@@ -26,6 +26,7 @@ public class Example12ParallelAgent {
     public static void main(String[] args) {
         LlmAgent marketAnalyst = LlmAgent.builder()
             .name("market_analyst")
+            .description("Provides a brief market analysis focused on trends and competition.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a market analyst. Given the company or product topic, "
@@ -34,6 +35,7 @@ public class Example12ParallelAgent {
 
         LlmAgent techAnalyst = LlmAgent.builder()
             .name("tech_analyst")
+            .description("Provides a brief technical evaluation focused on innovation and capabilities.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a technology analyst. Given the company or product topic, "
@@ -42,6 +44,7 @@ public class Example12ParallelAgent {
 
         LlmAgent riskAnalyst = LlmAgent.builder()
             .name("risk_analyst")
+            .description("Provides a brief risk assessment focused on potential challenges.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a risk analyst. Given the company or product topic, "

@@ -55,6 +55,7 @@ public class Example02FunctionTools {
     public static void main(String[] args) {
         LlmAgent calculator = LlmAgent.builder()
                 .name("travel_assistant")
+                .description("Answers weather and temperature-conversion questions for travelers.")
                 .model(Settings.LLM_MODEL)
                 .instruction("You are a travel assistant. Help users with weather and temperature conversions. "
                         + "Be concise and accurate.")

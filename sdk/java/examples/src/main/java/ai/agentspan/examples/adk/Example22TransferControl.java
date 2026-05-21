@@ -24,6 +24,7 @@ public class Example22TransferControl {
         // Cannot return to coordinator directly (disallow_transfer_to_parent=True)
         LlmAgent specialistA = LlmAgent.builder()
             .name("data_collector")
+            .description("Gathers raw data points and forwards them to the analyst (cannot return to parent).")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a data collection specialist. Gather relevant data points "
@@ -35,6 +36,7 @@ public class Example22TransferControl {
         // Default — can transfer to any coordinator
         LlmAgent specialistB = LlmAgent.builder()
             .name("analyst")
+            .description("Analyzes collected data and produces concise insights (free transfer).")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a data analyst. Take the data collected and provide "
@@ -44,6 +46,7 @@ public class Example22TransferControl {
         // Cannot transfer to peers (disallow_transfer_to_peers=True)
         LlmAgent specialistC = LlmAgent.builder()
             .name("summarizer")
+            .description("Creates an executive summary and returns to the coordinator (no peer transfer).")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a summarizer. Take the analysis and create a brief "
@@ -54,13 +57,16 @@ public class Example22TransferControl {
 
         LlmAgent coordinator = LlmAgent.builder()
             .name("research_coordinator")
+            .description("Coordinates a constrained team of collector, analyst, and summarizer specialists.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a research coordinator managing a team of specialists:\n"
-                + "- data_collector: gathers raw data (cannot return to you directly)\n"
-                + "- analyst: analyzes data (can transfer freely)\n"
-                + "- summarizer: creates executive summaries (cannot transfer to peers)\n\n"
-                + "Route the user's request through the appropriate workflow.")
+            .instruction("""
+                You are a research coordinator managing a team of specialists:
+                - data_collector: gathers raw data (cannot return to you directly)
+                - analyst: analyzes data (can transfer freely)
+                - summarizer: creates executive summaries (cannot transfer to peers)
+
+                Route the user's request through the appropriate workflow.
+                """)
             .subAgents(specialistA, specialistB, specialistC)
             .build();
 

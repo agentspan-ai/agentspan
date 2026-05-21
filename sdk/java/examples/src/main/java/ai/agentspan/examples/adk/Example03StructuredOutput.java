@@ -112,11 +112,13 @@ public class Example03StructuredOutput {
     public static void main(String[] args) {
         LlmAgent extractor = LlmAgent.builder()
             .name("recipe_generator")
+            .description("Generates complete, structured recipes as JSON matching the Recipe schema.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a professional chef assistant. When asked for a recipe, "
-                + "provide a complete, well-structured recipe in JSON format with precise "
-                + "measurements, clear step-by-step instructions, and accurate timing.")
+            .instruction("""
+                You are a professional chef assistant. When asked for a recipe,
+                provide a complete, well-structured recipe in JSON format with precise
+                measurements, clear step-by-step instructions, and accurate timing.
+                """)
             .outputSchema(recipeSchema())
             .build();
 

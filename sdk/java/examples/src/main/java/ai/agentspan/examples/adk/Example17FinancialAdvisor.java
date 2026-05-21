@@ -112,6 +112,7 @@ public class Example17FinancialAdvisor {
     public static void main(String[] args) {
         LlmAgent portfolioAnalyst = LlmAgent.builder()
             .name("portfolio_analyst")
+            .description("Retrieves client portfolios and computes returns on their holdings.")
             .model(Settings.LLM_MODEL)
             .instruction("You are a portfolio analyst. Use tools to retrieve and analyze client portfolios.")
             .tools(
@@ -121,6 +122,7 @@ public class Example17FinancialAdvisor {
 
         LlmAgent marketResearcher = LlmAgent.builder()
             .name("market_researcher")
+            .description("Provides sector analysis and economic outlook using market data tools.")
             .model(Settings.LLM_MODEL)
             .instruction("You are a market researcher. Provide sector analysis and economic outlook.")
             .tools(
@@ -130,6 +132,7 @@ public class Example17FinancialAdvisor {
 
         LlmAgent taxAdvisor = LlmAgent.builder()
             .name("tax_advisor")
+            .description("Estimates the tax impact of proposed investment changes.")
             .model(Settings.LLM_MODEL)
             .instruction("You are a tax advisor. Estimate tax impacts of proposed changes.")
             .tools(FunctionTool.create(Example17FinancialAdvisor.class, "estimateTaxImpact"))
@@ -137,11 +140,13 @@ public class Example17FinancialAdvisor {
 
         LlmAgent coordinator = LlmAgent.builder()
             .name("financial_advisor")
+            .description("Senior financial advisor coordinating portfolio, market, and tax specialists.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a senior financial advisor. Help clients with investment advice. "
-                + "Use the portfolio analyst to review holdings, market researcher for conditions, "
-                + "and tax advisor for tax implications. Provide a comprehensive recommendation.")
+            .instruction("""
+                You are a senior financial advisor. Help clients with investment advice.
+                Use the portfolio analyst to review holdings, market researcher for conditions,
+                and tax advisor for tax implications. Provide a comprehensive recommendation.
+                """)
             .subAgents(portfolioAnalyst, marketResearcher, taxAdvisor)
             .build();
 

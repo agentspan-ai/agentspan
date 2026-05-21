@@ -66,12 +66,14 @@ public class Example08InstructionTemplating {
     public static void main(String[] args) {
         LlmAgent concierge = LlmAgent.builder()
             .name("adaptive_tutor")
+            .description("A programming tutor that adapts its explanations to the user's expertise level.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a personalized programming tutor. "
-                + "The current user is {user_name} with {expertise_level} expertise. "
-                + "Adapt your explanations to their level. "
-                + "Use the search_tutorials tool to find appropriate learning resources.")
+            .instruction("""
+                You are a personalized programming tutor.
+                The current user is {user_name} with {expertise_level} expertise.
+                Adapt your explanations to their level.
+                Use the search_tutorials tool to find appropriate learning resources.
+                """)
             .tools(
                 FunctionTool.create(Example08InstructionTemplating.class, "getUserPreferences"),
                 FunctionTool.create(Example08InstructionTemplating.class, "searchTutorials"))

@@ -55,6 +55,7 @@ public class Example06Streaming {
     public static void main(String[] args) {
         LlmAgent techWriter = LlmAgent.builder()
             .name("docs_assistant")
+            .description("Looks up product documentation and answers user questions about it.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a documentation assistant. Use the search tool to find "

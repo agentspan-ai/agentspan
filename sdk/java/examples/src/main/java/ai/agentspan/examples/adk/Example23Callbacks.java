@@ -74,6 +74,7 @@ public class Example23Callbacks {
 
         LlmAgent callbackAgent = LlmAgent.builder()
                 .name("monitored_assistant")
+                .description("Assistant instrumented with beforeModel/afterModel callbacks for monitoring.")
                 .model(Settings.LLM_MODEL)
                 .instruction(
                         "You are a helpful assistant. Answer questions concisely. "

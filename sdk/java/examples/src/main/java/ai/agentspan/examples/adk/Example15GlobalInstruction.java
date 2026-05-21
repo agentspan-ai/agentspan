@@ -66,6 +66,7 @@ public class Example15GlobalInstruction {
 
         LlmAgent supportAgent = LlmAgent.builder()
             .name("store_assistant")
+            .description("In-store assistant for TechStore that finds products and looks up store hours.")
             .model(Settings.LLM_MODEL)
             .globalInstruction(globalInstruction)
             .instruction(perAgentInstruction)

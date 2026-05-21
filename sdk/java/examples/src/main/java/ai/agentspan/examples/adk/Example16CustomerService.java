@@ -105,12 +105,14 @@ public class Example16CustomerService {
     public static void main(String[] args) {
         LlmAgent customerService = LlmAgent.builder()
             .name("customer_service_rep")
+            .description("CloudServe customer service rep handling accounts, billing, plans, and support tickets.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a customer service representative for CloudServe Inc. "
-                + "Help customers with account inquiries, billing questions, plan changes, "
-                + "and support tickets. Always verify the account exists before making changes. "
-                + "Be professional and empathetic.")
+            .instruction("""
+                You are a customer service representative for CloudServe Inc.
+                Help customers with account inquiries, billing questions, plan changes,
+                and support tickets. Always verify the account exists before making changes.
+                Be professional and empathetic.
+                """)
             .tools(
                 FunctionTool.create(Example16CustomerService.class, "getAccountDetails"),
                 FunctionTool.create(Example16CustomerService.class, "getBillingHistory"),

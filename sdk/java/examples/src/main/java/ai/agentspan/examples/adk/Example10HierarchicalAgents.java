@@ -86,6 +86,7 @@ public class Example10HierarchicalAgents {
         // ── Level 2: Team specialists ────────────────────────────────────
         LlmAgent opsAgent = LlmAgent.builder()
             .name("ops_specialist")
+            .description("Checks API health and error logs to identify service issues.")
             .model(Settings.LLM_MODEL)
             .instruction("Check service health and error logs. Identify issues and their severity.")
             .tools(
@@ -95,6 +96,7 @@ public class Example10HierarchicalAgents {
 
         LlmAgent securityAgent = LlmAgent.builder()
             .name("security_specialist")
+            .description("Runs security vulnerability scans and reports remediation recommendations.")
             .model(Settings.LLM_MODEL)
             .instruction("Run security scans and report findings with recommendations.")
             .tools(FunctionTool.create(Example10HierarchicalAgents.class, "runSecurityScan"))
@@ -102,6 +104,7 @@ public class Example10HierarchicalAgents {
 
         LlmAgent performanceAgent = LlmAgent.builder()
             .name("performance_specialist")
+            .description("Checks performance metrics and identifies latency issues for services.")
             .model(Settings.LLM_MODEL)
             .instruction("Check performance metrics and identify latency issues.")
             .tools(FunctionTool.create(Example10HierarchicalAgents.class, "checkPerformanceMetrics"))
@@ -110,6 +113,7 @@ public class Example10HierarchicalAgents {
         // ── Level 1: Team leads ──────────────────────────────────────────
         LlmAgent reliabilityLead = LlmAgent.builder()
             .name("reliability_team_lead")
+            .description("Leads ops and performance specialists to produce a consolidated reliability report.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You lead the reliability team. Coordinate the ops specialist "
@@ -120,6 +124,7 @@ public class Example10HierarchicalAgents {
 
         LlmAgent securityLead = LlmAgent.builder()
             .name("security_team_lead")
+            .description("Leads security specialists to produce risk assessments and remediation plans.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You lead the security team. Use the security specialist to "
@@ -130,14 +135,17 @@ public class Example10HierarchicalAgents {
         // ── Top level: Platform coordinator ──────────────────────────────
         LlmAgent coordinator = LlmAgent.builder()
             .name("platform_coordinator")
+            .description("Top-level platform engineering coordinator that orchestrates reliability and security teams.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are the platform engineering coordinator. When asked to assess "
-                + "platform health:\n"
-                + "1. Have the reliability team check service health and performance\n"
-                + "2. Have the security team assess vulnerabilities\n"
-                + "3. Compile a comprehensive platform status report\n\n"
-                + "Prioritize critical issues and provide an executive summary.")
+            .instruction("""
+                You are the platform engineering coordinator. When asked to assess
+                platform health:
+                1. Have the reliability team check service health and performance
+                2. Have the security team assess vulnerabilities
+                3. Compile a comprehensive platform status report
+
+                Prioritize critical issues and provide an executive summary.
+                """)
             .subAgents(reliabilityLead, securityLead)
             .build();
 

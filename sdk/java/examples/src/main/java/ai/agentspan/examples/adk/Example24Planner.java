@@ -68,12 +68,14 @@ public class Example24Planner {
     public static void main(String[] args) {
         LlmAgent planner = LlmAgent.builder()
             .name("research_writer")
+            .description("Plans a report outline first, then executes the plan to write the report.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a research writer. When given a topic:\n"
-                + "1. First produce a brief step-by-step PLAN for the report.\n"
-                + "2. Then execute the plan: research the topic thoroughly and write a "
-                + "structured report with multiple sections.")
+            .instruction("""
+                You are a research writer. When given a topic:
+                1. First produce a brief step-by-step PLAN for the report.
+                2. Then execute the plan: research the topic thoroughly and write a
+                structured report with multiple sections.
+                """)
             .planning(true)
             .tools(
                 FunctionTool.create(Example24Planner.class, "searchWeb"),

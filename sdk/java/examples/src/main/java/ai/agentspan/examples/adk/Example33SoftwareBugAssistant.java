@@ -179,31 +179,36 @@ public class Example33SoftwareBugAssistant {
     public static void main(String[] args) {
         LlmAgent searchAgent = LlmAgent.builder()
             .name("search_agent")
+            .description("Technical search assistant for Conductor workflow orchestration issues.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a technical search assistant specializing in Conductor "
-                + "(conductor-oss/conductor) workflow orchestration. Use the search_web "
-                + "tool to find relevant information about bugs, errors, and Conductor "
-                + "configuration issues. Provide concise, actionable answers.")
+            .instruction("""
+                You are a technical search assistant specializing in Conductor
+                (conductor-oss/conductor) workflow orchestration. Use the search_web
+                tool to find relevant information about bugs, errors, and Conductor
+                configuration issues. Provide concise, actionable answers.
+                """)
             .tools(FunctionTool.create(Example33SoftwareBugAssistant.class, "searchWeb"))
             .build();
 
         LlmAgent softwareAssistant = LlmAgent.builder()
             .name("software_assistant")
+            .description("Triages Conductor bug tickets and cross-references them against known issues.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a software bug triage assistant for the Conductor workflow "
-                + "orchestration engine (https://github.com/conductor-oss/conductor).\n\n"
-                + "Your capabilities:\n"
-                + "1. Search and manage internal bug tickets (search_tickets, create_ticket, "
-                + "update_ticket)\n"
-                + "2. Research Conductor issues using the search_agent tool\n"
-                + "3. Cross-reference internal tickets against known issues\n\n"
-                + "When triaging:\n"
-                + "- Cross-reference with internal tickets (search_tickets)\n"
-                + "- Research any unfamiliar issues with the search_agent\n"
-                + "- Create internal tickets for new issues not yet tracked\n"
-                + "- Suggest next steps, referencing GitHub issue/PR numbers")
+            .instruction("""
+                You are a software bug triage assistant for the Conductor workflow
+                orchestration engine (https://github.com/conductor-oss/conductor).
+
+                Your capabilities:
+                1. Search and manage internal bug tickets (search_tickets, create_ticket, update_ticket)
+                2. Research Conductor issues using the search_agent tool
+                3. Cross-reference internal tickets against known issues
+
+                When triaging:
+                - Cross-reference with internal tickets (search_tickets)
+                - Research any unfamiliar issues with the search_agent
+                - Create internal tickets for new issues not yet tracked
+                - Suggest next steps, referencing GitHub issue/PR numbers
+                """)
             .tools(
                 FunctionTool.create(Example33SoftwareBugAssistant.class, "getCurrentDate"),
                 FunctionTool.create(Example33SoftwareBugAssistant.class, "searchTickets"),

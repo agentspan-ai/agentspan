@@ -75,6 +75,7 @@ public class Example20BlogWriter {
     public static void main(String[] args) {
         LlmAgent researcher = LlmAgent.builder()
             .name("blog_researcher")
+            .description("Gathers research notes and SEO keywords for the requested blog topic.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a research assistant. Use the search tool to gather information "
@@ -87,31 +88,37 @@ public class Example20BlogWriter {
 
         LlmAgent writer = LlmAgent.builder()
             .name("blog_writer")
+            .description("Drafts a short blog post from the researcher's notes, weaving in SEO keywords.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a blog writer. Based on the research notes provided, "
-                + "write a short blog post (3-4 paragraphs). Include a catchy title. "
-                + "Incorporate SEO keywords naturally.")
+            .instruction("""
+                You are a blog writer. Based on the research notes provided,
+                write a short blog post (3-4 paragraphs). Include a catchy title.
+                Incorporate SEO keywords naturally.
+                """)
             .outputKey("blog_draft")
             .build();
 
         LlmAgent editor = LlmAgent.builder()
             .name("blog_editor")
+            .description("Polishes the blog draft for clarity, flow, and engagement.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a blog editor. Review and polish the blog draft. "
-                + "Improve clarity, flow, and engagement. Keep the same length. "
-                + "Output only the final polished blog post.")
+            .instruction("""
+                You are a blog editor. Review and polish the blog draft.
+                Improve clarity, flow, and engagement. Keep the same length.
+                Output only the final polished blog post.
+                """)
             .outputKey("final_post")
             .build();
 
         LlmAgent coordinator = LlmAgent.builder()
             .name("content_coordinator")
+            .description("Runs the researcher, writer, and editor in order to produce a final blog post.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a content coordinator. First use the researcher to gather information, "
-                + "then the writer to create a draft, and finally the editor to polish it. "
-                + "Present the final blog post to the user.")
+            .instruction("""
+                You are a content coordinator. First use the researcher to gather information,
+                then the writer to create a draft, and finally the editor to polish it.
+                Present the final blog post to the user.
+                """)
             .subAgents(researcher, writer, editor)
             .build();
 

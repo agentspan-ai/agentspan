@@ -27,29 +27,35 @@ public class Example11SequentialAgent {
         // Step 1: Research pipeline gathers facts
         LlmAgent researcher = LlmAgent.builder()
             .name("researcher")
+            .description("Gathers 3 key research facts on the user's topic.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a research assistant. Given the user's topic, "
                 + "provide 3 key facts about it in a numbered list. Be concise.")
+            .outputKey("research_findings")
             .build();
 
         // Step 2: Writer pipeline takes the research and writes a summary
         LlmAgent writer = LlmAgent.builder()
             .name("writer")
+            .description("Writes an engaging summary paragraph from the researcher's findings.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a skilled writer. Take the research provided in the conversation "
                 + "and write a single engaging paragraph summarizing the key points. "
                 + "Keep it under 100 words.")
+            .outputKey("draft_summary")
             .build();
 
         // Step 3: Editor pipeline polishes the summary
         LlmAgent editor = LlmAgent.builder()
             .name("editor")
+            .description("Polishes the writer's draft for clarity, grammar, and flow.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are an editor. Review the paragraph from the writer and improve it. "
                 + "Fix any issues with clarity, grammar, or flow. Output only the final polished paragraph.")
+            .outputKey("final_paragraph")
             .build();
 
         // Pipeline: researcher → writer → editor. Native SequentialAgent.

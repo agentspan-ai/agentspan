@@ -24,6 +24,7 @@ public class Example29IncludeContents {
         // Sub-coordinator with include_contents="none" — no parent context.
         LlmAgent independentSummarizer = LlmAgent.builder()
             .name("independent_summarizer")
+            .description("Summarizes text without inheriting the parent's conversation history.")
             .model(Settings.LLM_MODEL)
             .instruction("You are a summarizer. Summarize any text given to you concisely.")
             .includeContents(LlmAgent.IncludeContents.NONE)
@@ -32,6 +33,7 @@ public class Example29IncludeContents {
         // Sub-coordinator that sees parent context (default).
         LlmAgent contextAwareHelper = LlmAgent.builder()
             .name("context_aware_helper")
+            .description("Answers using the full parent conversation context.")
             .model(Settings.LLM_MODEL)
             .instruction("You are a helpful assistant that builds on prior conversation context.")
             .includeContents(LlmAgent.IncludeContents.DEFAULT)
@@ -39,6 +41,7 @@ public class Example29IncludeContents {
 
         LlmAgent coordinator = LlmAgent.builder()
             .name("coordinator")
+            .description("Routes summarization to the independent summarizer and questions to the helper.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You coordinate tasks. Route summarization to independent_summarizer "

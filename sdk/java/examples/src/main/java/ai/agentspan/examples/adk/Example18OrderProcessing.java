@@ -135,11 +135,13 @@ public class Example18OrderProcessing {
     public static void main(String[] args) {
         LlmAgent orderProcessor = LlmAgent.builder()
             .name("order_processor")
+            .description("End-to-end TechMart order processor: search, stock check, totals, and order placement.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are an order processing assistant for TechMart. "
-                + "Help customers search products, check availability, calculate totals, and place orders. "
-                + "Always verify stock before confirming an order. Provide clear pricing breakdowns.")
+            .instruction("""
+                You are an order processing assistant for TechMart.
+                Help customers search products, check availability, calculate totals, and place orders.
+                Always verify stock before confirming an order. Provide clear pricing breakdowns.
+                """)
             .tools(
                 FunctionTool.create(Example18OrderProcessing.class, "searchCatalog"),
                 FunctionTool.create(Example18OrderProcessing.class, "checkStock"),

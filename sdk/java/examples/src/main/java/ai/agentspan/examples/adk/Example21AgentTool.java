@@ -104,6 +104,7 @@ public class Example21AgentTool {
     public static void main(String[] args) {
         LlmAgent researcher = LlmAgent.builder()
             .name("researcher")
+            .description("Looks up factual information from the internal knowledge base.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a research assistant. Use the knowledge base tool to find "
@@ -113,6 +114,7 @@ public class Example21AgentTool {
 
         LlmAgent calculator = LlmAgent.builder()
             .name("calculator")
+            .description("Evaluates simple math expressions with the compute tool.")
             .model(Settings.LLM_MODEL)
             .instruction("You are a math assistant. Use the compute tool for calculations.")
             .tools(FunctionTool.create(Example21AgentTool.class, "compute"))
@@ -120,13 +122,16 @@ public class Example21AgentTool {
 
         LlmAgent manager = LlmAgent.builder()
             .name("manager")
+            .description("Manager that delegates to the researcher and calculator agents as AgentTools.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a manager manager. You have two specialist agents available as tools:\n"
-                + "- researcher: for looking up information\n"
-                + "- calculator: for math computations\n\n"
-                + "Use the appropriate manager tool to answer the user's question. "
-                + "You can call multiple manager tools if needed.")
+            .instruction("""
+                You are a manager manager. You have two specialist agents available as tools:
+                - researcher: for looking up information
+                - calculator: for math computations
+
+                Use the appropriate manager tool to answer the user's question.
+                You can call multiple manager tools if needed.
+                """)
             .tools(AgentTool.create(researcher), AgentTool.create(calculator))
             .build();
 

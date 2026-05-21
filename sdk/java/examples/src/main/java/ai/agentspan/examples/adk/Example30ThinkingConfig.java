@@ -74,6 +74,7 @@ public class Example30ThinkingConfig {
     public static void main(String[] args) {
         LlmAgent thinker = LlmAgent.builder()
             .name("deep_thinker")
+            .description("Analytical assistant with extended thinking enabled for step-by-step reasoning.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are an analytical assistant. Think carefully through complex "

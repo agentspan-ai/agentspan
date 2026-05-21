@@ -72,21 +72,25 @@ public class Example26SafetyGuardrails {
     public static void main(String[] args) {
         LlmAgent assistant = LlmAgent.builder()
             .name("helpful_assistant")
+            .description("Answers customer service questions with relevant details.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a helpful customer service assistant. Answer questions "
-                + "about account details, contact information, and general inquiries. "
-                + "When providing information, include relevant details.")
+            .instruction("""
+                You are a helpful customer service assistant. Answer questions
+                about account details, contact information, and general inquiries.
+                When providing information, include relevant details.
+                """)
             .build();
 
         LlmAgent safetyChecker = LlmAgent.builder()
             .name("safety_checker")
+            .description("Scans the assistant's reply for PII and sanitizes it before delivery.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a safety reviewer. Check the previous safePipeline's response "
-                + "for any PII (emails, phone numbers, SSNs, credit card numbers). "
-                + "Use check_pii on the response text. If PII is found, use "
-                + "sanitize_response to clean it. Pass the clean version along.")
+            .instruction("""
+                You are a safety reviewer. Check the previous safePipeline's response
+                for any PII (emails, phone numbers, SSNs, credit card numbers).
+                Use check_pii on the response text. If PII is found, use
+                sanitize_response to clean it. Pass the clean version along.
+                """)
             .tools(
                 FunctionTool.create(Example26SafetyGuardrails.class, "checkPii"),
                 FunctionTool.create(Example26SafetyGuardrails.class, "sanitizeResponse"))
@@ -94,11 +98,13 @@ public class Example26SafetyGuardrails {
 
         LlmAgent safePipeline = LlmAgent.builder()
             .name("safe_assistant")
+            .description("Sequential pipeline: assistant answers, then safety_checker redacts PII.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You orchestrate a safe assistant pipeline. Run sub-agents sequentially: "
-                + "1) helpful_assistant answers the user, 2) safety_checker reviews the "
-                + "response, scans for PII, and sanitizes if needed.")
+            .instruction("""
+                You orchestrate a safe assistant pipeline. Run sub-agents sequentially:
+                1) helpful_assistant answers the user, 2) safety_checker reviews the
+                response, scans for PII, and sanitizes if needed.
+                """)
             .subAgents(assistant, safetyChecker)
             .build();
 

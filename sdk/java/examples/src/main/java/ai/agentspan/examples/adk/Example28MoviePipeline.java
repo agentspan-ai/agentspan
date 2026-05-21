@@ -94,56 +94,72 @@ public class Example28MoviePipeline {
     public static void main(String[] args) {
         LlmAgent conceptDeveloper = LlmAgent.builder()
             .name("concept_developer")
+            .description("Develops a film concept with title, genre, and logline.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a creative director. Develop a concept for a short film "
-                + "based on the given theme. Use create_concept to document the "
-                + "title, genre, and logline. Keep it concise and compelling.")
+            .instruction("""
+                You are a creative director. Develop a concept for a short film
+                based on the given theme. Use create_concept to document the
+                title, genre, and logline. Keep it concise and compelling.
+                """)
             .tools(FunctionTool.create(Example28MoviePipeline.class, "createConcept"))
+            .outputKey("film_concept")
             .build();
 
         LlmAgent scriptwriter = LlmAgent.builder()
             .name("scriptwriter")
+            .description("Writes 3 short scenes from the approved film concept.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a scriptwriter. Based on the concept from the previous "
-                + "stage, write 3 short scenes using write_scene for each. "
-                + "Include location, action, and brief dialogue.")
+            .instruction("""
+                You are a scriptwriter. Based on the concept from the previous
+                stage, write 3 short scenes using write_scene for each.
+                Include location, action, and brief dialogue.
+                """)
             .tools(FunctionTool.create(Example28MoviePipeline.class, "writeScene"))
+            .outputKey("script_scenes")
             .build();
 
         LlmAgent visualDirector = LlmAgent.builder()
             .name("visual_director")
+            .description("Specifies camera shots, lighting, and visual mood for each scene.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a visual director. For each scene written by the "
-                + "scriptwriter, use describe_visual to specify camera shots, "
-                + "lighting, and visual mood. Create one visual spec per scene.")
+            .instruction("""
+                You are a visual director. For each scene written by the
+                scriptwriter, use describe_visual to specify camera shots,
+                lighting, and visual mood. Create one visual spec per scene.
+                """)
             .tools(FunctionTool.create(Example28MoviePipeline.class, "describeVisual"))
+            .outputKey("visual_direction")
             .build();
 
         LlmAgent audioDesigner = LlmAgent.builder()
             .name("audio_designer")
+            .description("Designs music mood and sound effects to match the visual direction.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are an audio designer. For each scene, use specify_audio "
-                + "to define the music mood and key sound effects. Match the "
-                + "audio to the visual mood described by the visual director.")
+            .instruction("""
+                You are an audio designer. For each scene, use specify_audio
+                to define the music mood and key sound effects. Match the
+                audio to the visual mood described by the visual director.
+                """)
             .tools(FunctionTool.create(Example28MoviePipeline.class, "specifyAudio"))
+            .outputKey("audio_direction")
             .build();
 
         LlmAgent producer = LlmAgent.builder()
             .name("producer")
+            .description("Assembles final production notes summarizing all creative elements.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are the producer. Review all previous stages and use "
-                + "assemble_production to create final production notes. "
-                + "Summarize the complete short film with all creative elements.")
+            .instruction("""
+                You are the producer. Review all previous stages and use
+                assemble_production to create final production notes.
+                Summarize the complete short film with all creative elements.
+                """)
             .tools(FunctionTool.create(Example28MoviePipeline.class, "assembleProduction"))
+            .outputKey("production_notes")
             .build();
 
         LlmAgent moviePipeline = LlmAgent.builder()
             .name("short_movie_pipeline")
+            .description("Five-stage short-film pipeline: concept → script → visuals → audio → producer.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You orchestrate a short-movie production pipeline. Run the stages in order: "

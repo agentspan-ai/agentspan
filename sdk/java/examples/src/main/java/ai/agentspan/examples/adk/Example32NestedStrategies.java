@@ -27,6 +27,7 @@ public class Example32NestedStrategies {
         // ── Parallel research agents ────────────────────────────────────
         LlmAgent marketAnalyst = LlmAgent.builder()
             .name("market_analyst")
+            .description("Provides a concise market-size, growth, and competitive analysis.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a market analyst. Analyze the market size, growth rate, "
@@ -35,6 +36,7 @@ public class Example32NestedStrategies {
 
         LlmAgent riskAnalyst = LlmAgent.builder()
             .name("risk_analyst")
+            .description("Identifies the top regulatory, technical, and competitive risks.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a risk analyst. Identify the top 3 risks: regulatory, "
@@ -43,17 +45,20 @@ public class Example32NestedStrategies {
 
         LlmAgent parallelResearch = LlmAgent.builder()
             .name("research_phase")
+            .description("Runs the market and risk analysts concurrently and aggregates their output.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You orchestrate a parallel research phase. Dispatch the topic to "
-                + "market_analyst and risk_analyst concurrently, then aggregate "
-                + "their outputs.")
+            .instruction("""
+                You orchestrate a parallel research phase. Dispatch the topic to
+                market_analyst and risk_analyst concurrently, then aggregate
+                their outputs.
+                """)
             .subAgents(marketAnalyst, riskAnalyst)
             .build();
 
         // ── Summarizer ───────────────────────────────────────────────────
         LlmAgent summarizer = LlmAgent.builder()
             .name("summarizer")
+            .description("Synthesizes the parallel research into a one-paragraph executive briefing.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are an executive briefing writer. Synthesize the market analysis "
@@ -63,6 +68,7 @@ public class Example32NestedStrategies {
         // ── Pipeline: parallel → sequential ──────────────────────────────
         LlmAgent pipeline = LlmAgent.builder()
             .name("analysis_pipeline")
+            .description("Nested strategy: parallel research phase followed by a sequential summarizer.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You orchestrate an analysis pipeline. First run research_phase "

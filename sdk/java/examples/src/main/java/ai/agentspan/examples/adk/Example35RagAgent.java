@@ -155,19 +155,24 @@ public class Example35RagAgent {
     public static void main(String[] args) {
         LlmAgent ragAgent = LlmAgent.builder()
             .name("rag_assistant")
+            .description("RAG product-support assistant that indexes and searches a documentation knowledge base.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a product support assistant with access to the documentation "
-                + "knowledge base.\n\n"
-                + "When the user asks you to index or store documents:\n"
-                + "1. Use index_document for EACH document provided\n"
-                + "2. Use the docId and text exactly as given\n"
-                + "3. Confirm each document was indexed\n\n"
-                + "When the user asks a question:\n"
-                + "1. ALWAYS search the knowledge base first using search_knowledge_base\n"
-                + "2. If relevant documents are found, use them to provide an accurate answer\n"
-                + "3. If no relevant documents are found, say so honestly\n\n"
-                + "Always cite which documents (by docId) you used in your answer.")
+            .instruction("""
+                You are a product support assistant with access to the documentation
+                knowledge base.
+
+                When the user asks you to index or store documents:
+                1. Use index_document for EACH document provided
+                2. Use the docId and text exactly as given
+                3. Confirm each document was indexed
+
+                When the user asks a question:
+                1. ALWAYS search the knowledge base first using search_knowledge_base
+                2. If relevant documents are found, use them to provide an accurate answer
+                3. If no relevant documents are found, say so honestly
+
+                Always cite which documents (by docId) you used in your answer.
+                """)
             .tools(
                 FunctionTool.create(Example35RagAgent.class, "searchKnowledgeBase"),
                 FunctionTool.create(Example35RagAgent.class, "indexDocument"))

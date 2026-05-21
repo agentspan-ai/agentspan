@@ -24,6 +24,7 @@ public class Example05GenerationConfig {
         // Precise agent — low temperature for factual responses
         LlmAgent factualAgent = LlmAgent.builder()
             .name("fact_checker")
+            .description("A low-temperature fact-checker that gives precise, well-sourced answers.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a precise fact-checker. Provide accurate, well-sourced "
@@ -36,6 +37,7 @@ public class Example05GenerationConfig {
         // Creative agent — high temperature for creative writing
         LlmAgent creativeAgent = LlmAgent.builder()
             .name("storyteller")
+            .description("A high-temperature storyteller that produces vivid, imaginative narratives.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are an imaginative storyteller. Create vivid, engaging "

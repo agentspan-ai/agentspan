@@ -109,6 +109,7 @@ public class Example19SupplyChain {
     public static void main(String[] args) {
         LlmAgent inventoryAgent = LlmAgent.builder()
             .name("inventory_manager")
+            .description("Inspects inventory levels and supplier status, flagging items below reorder points.")
             .model(Settings.LLM_MODEL)
             .instruction("Check inventory levels and supplier status. Flag items below reorder points.")
             .tools(
@@ -118,6 +119,7 @@ public class Example19SupplyChain {
 
         LlmAgent logisticsAgent = LlmAgent.builder()
             .name("logistics_coordinator")
+            .description("Finds optimal shipping routes and tracks pending shipments.")
             .model(Settings.LLM_MODEL)
             .instruction("Find optimal shipping routes and track pending shipments.")
             .tools(
@@ -127,6 +129,7 @@ public class Example19SupplyChain {
 
         LlmAgent demandAgent = LlmAgent.builder()
             .name("demand_planner")
+            .description("Analyzes demand forecasts and identifies SKU-level trends.")
             .model(Settings.LLM_MODEL)
             .instruction("Analyze demand forecasts and identify trends.")
             .tools(FunctionTool.create(Example19SupplyChain.class, "getDemandForecast"))
@@ -134,11 +137,13 @@ public class Example19SupplyChain {
 
         LlmAgent coordinator = LlmAgent.builder()
             .name("supply_chain_coordinator")
+            .description("Coordinates inventory, logistics, and demand specialists for supply-chain reports.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a supply chain coordinator. Analyze inventory, logistics, and demand. "
-                + "Identify items that need restocking, recommend optimal shipping, and provide "
-                + "an action plan. Delegate to the appropriate specialist.")
+            .instruction("""
+                You are a supply chain coordinator. Analyze inventory, logistics, and demand.
+                Identify items that need restocking, recommend optimal shipping, and provide
+                an action plan. Delegate to the appropriate specialist.
+                """)
             .subAgents(inventoryAgent, logisticsAgent, demandAgent)
             .build();
 

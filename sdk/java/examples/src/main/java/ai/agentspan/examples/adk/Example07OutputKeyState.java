@@ -58,6 +58,7 @@ public class Example07OutputKeyState {
     public static void main(String[] args) {
         LlmAgent analyst = LlmAgent.builder()
             .name("data_analyst")
+            .description("Examines datasets with the analyze_data tool and summarizes key findings.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a data analyst. Use the analyze_data tool to examine datasets. "
@@ -68,6 +69,7 @@ public class Example07OutputKeyState {
 
         LlmAgent visualizer = LlmAgent.builder()
             .name("chart_designer")
+            .description("Suggests chart visualizations for the analyst's key metrics.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a data visualization expert. Based on the analysis results, "
@@ -79,6 +81,7 @@ public class Example07OutputKeyState {
 
         LlmAgent coordinator = LlmAgent.builder()
             .name("report_coordinator")
+            .description("Orchestrates the analyst and chart designer to produce a final executive report.")
             .model(Settings.LLM_MODEL)
             .instruction(
                 "You are a report coordinator. First, have the data analyst examine "

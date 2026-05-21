@@ -74,43 +74,51 @@ public class Example25CamelSecurity {
     public static void main(String[] args) {
         LlmAgent collector = LlmAgent.builder()
             .name("data_collector")
+            .description("Fetches raw user data and forwards it to the security validator.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a data collection pipeline. When asked about a user, "
-                + "call fetch_user_data with their ID. Pass the raw data along "
-                + "to the next pipeline for security review.")
+            .instruction("""
+                You are a data collection pipeline. When asked about a user,
+                call fetch_user_data with their ID. Pass the raw data along
+                to the next pipeline for security review.
+                """)
             .tools(FunctionTool.create(Example25CamelSecurity.class, "fetchUserData"))
             .build();
 
         LlmAgent validator = LlmAgent.builder()
             .name("security_validator")
+            .description("Redacts sensitive fields (SSN, balances, emails) from collected data.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a security validator. Review data for sensitive information "
-                + "(SSN, account balances, email addresses). Use the redact_sensitive_fields "
-                + "tool to redact any sensitive data before passing it along. "
-                + "Only pass redacted data to the next pipeline.")
+            .instruction("""
+                You are a security validator. Review data for sensitive information
+                (SSN, account balances, email addresses). Use the redact_sensitive_fields
+                tool to redact any sensitive data before passing it along.
+                Only pass redacted data to the next pipeline.
+                """)
             .tools(FunctionTool.create(Example25CamelSecurity.class, "redactSensitiveFields"))
             .build();
 
         LlmAgent responder = LlmAgent.builder()
             .name("responder")
+            .description("Answers the user using only the validated, redacted data.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You are a customer service pipeline. Use the validated, redacted data "
-                + "to answer the user's question. NEVER reveal redacted information. "
-                + "If data shows ***REDACTED***, explain that the information is "
-                + "restricted for security reasons.")
+            .instruction("""
+                You are a customer service pipeline. Use the validated, redacted data
+                to answer the user's question. NEVER reveal redacted information.
+                If data shows ***REDACTED***, explain that the information is
+                restricted for security reasons.
+                """)
             .build();
 
         LlmAgent pipeline = LlmAgent.builder()
             .name("secure_data_pipeline")
+            .description("CaMeL-style sequential pipeline: collect → redact → respond.")
             .model(Settings.LLM_MODEL)
-            .instruction(
-                "You orchestrate a secure data pipeline. Run sub-agents sequentially: "
-                + "1) data_collector fetches raw user data, 2) security_validator redacts "
-                + "sensitive fields, 3) responder formats the final answer using only "
-                + "the redacted data.")
+            .instruction("""
+                You orchestrate a secure data pipeline. Run sub-agents sequentially:
+                1) data_collector fetches raw user data, 2) security_validator redacts
+                sensitive fields, 3) responder formats the final answer using only
+                the redacted data.
+                """)
             .subAgents(collector, validator, responder)
             .build();
 
