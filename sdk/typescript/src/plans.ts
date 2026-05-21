@@ -150,9 +150,9 @@ export class Op {
   readonly generate?: Generate;
 
   constructor(tool: string, opts: OpOptions = {}) {
-    if (opts.args !== undefined && opts.generate !== undefined) {
+    if ((opts.args === undefined) === (opts.generate === undefined)) {
       throw new Error(
-        `Op('${tool}'): set exactly one of args or generate, not both`,
+        `Op('${tool}'): exactly one of args or generate must be set`,
       );
     }
     this.tool = tool;
