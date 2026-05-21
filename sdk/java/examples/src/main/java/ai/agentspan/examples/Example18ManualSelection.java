@@ -73,7 +73,7 @@ public class Example18ManualSelection {
             + "then have it reviewed for accuracy and style.";
 
         AgentHandle handle = Agentspan.start(editorialTeam, prompt);
-        System.out.println("Workflow ID: " + handle.getWorkflowId());
+        System.out.println("Execution ID: " + handle.getExecutionId());
 
         // Drive the 3 manual turns. Each turn the MANUAL strategy creates a
         // HumanTask and sets isWaiting=true. We poll for that state, then send

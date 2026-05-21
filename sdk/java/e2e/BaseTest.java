@@ -78,25 +78,25 @@ public abstract class BaseTest {
     /**
      * Fetch a full workflow execution from the server.
      *
-     * @param workflowId the workflow execution ID
+     * @param executionId the execution ID
      * @return the workflow data map
      */
     @SuppressWarnings("unchecked")
-    protected Map<String, Object> getWorkflow(String workflowId) {
+    protected Map<String, Object> getWorkflow(String executionId) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/api/workflow/" + workflowId))
+                .uri(URI.create(BASE_URL + "/api/workflow/" + executionId))
                 .timeout(Duration.ofSeconds(10))
                 .GET()
                 .build();
             HttpResponse<String> response = HTTP_CLIENT.send(request,
                 HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
-                fail("Failed to fetch workflow " + workflowId + ": HTTP " + response.statusCode());
+                fail("Failed to fetch workflow " + executionId + ": HTTP " + response.statusCode());
             }
             return MAPPER.readValue(response.body(), Map.class);
         } catch (Exception e) {
-            fail("Failed to fetch workflow " + workflowId + ": " + e.getMessage());
+            fail("Failed to fetch workflow " + executionId + ": " + e.getMessage());
             return null; // unreachable
         }
     }

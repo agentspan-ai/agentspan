@@ -3,6 +3,7 @@
 
 import ai.agentspan.Agent;
 import ai.agentspan.AgentRuntime;
+import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.ToolDef;
 import ai.agentspan.tools.PdfTool;
 import org.junit.jupiter.api.*;
@@ -295,5 +296,84 @@ class Suite6PdfTools extends BaseTest {
             + ". COUNTERFACTUAL: if defaults were always emitted, this would fail.");
         assertNull(config2.get("theme"),
             "Plain PDF tool must have NO theme. Got: " + config2.get("theme"));
+    }
+
+    /**
+     * Runtime: agent with PdfTool actually runs the GENERATE_PDF system task to completion.
+     *
+     * Ports Python {@code test_pdf_generation_and_roundtrip} (suite6) at the structural
+     * level — we don't markdown-extract from the binary PDF, but we DO verify that the
+     * Conductor workflow contains a COMPLETED GENERATE_PDF task with non-empty outputData.
+     * Failure modes this catches:
+     *   - server doesn't dispatch the tool to GENERATE_PDF (task missing)
+     *   - server dispatches but the task fails (status != COMPLETED)
+     *   - server claims success but produces no output payload (empty outputData)
+     *
+     * COUNTERFACTUAL: if the SDK didn't carry the toolType through, the workflow would
+     * have no GENERATE_PDF task and this test would fail. Suite-internal contrast with
+     * {@code test_no_pdf_tool_means_no_pdf_in_plan} confirms the SDK does NOT emit
+     * GENERATE_PDF when no PDF tool is attached.
+     */
+    @Test
+    @Order(7)
+    @SuppressWarnings("unchecked")
+    void test_pdf_generation_task_completes_and_has_output() {
+        String sampleMarkdown =
+            "# Agentspan Parity Report\n\n"
+            + "## Overview\n"
+            + "This PDF validates the GENERATE_PDF pipeline end-to-end.\n\n"
+            + "## Numbers\n"
+            + "- Tests run: 12\n"
+            + "- Passed:    11\n";
+
+        ToolDef pdf = PdfTool.create();
+        Agent agent = Agent.builder()
+            .name("e2e_s6_pdf_gen_runtime")
+            .model(MODEL)
+            .instructions(
+                "You generate PDFs. When the user asks, call generate_pdf with the EXACT "
+                + "markdown they provide. Do not paraphrase, do not summarize.")
+            .tools(List.of(pdf))
+            .build();
+
+        AgentResult result = runtime.run(
+            agent,
+            "Convert the following markdown to a PDF. Pass it exactly to generate_pdf:\n\n" + sampleMarkdown);
+
+        assertNotNull(result.getExecutionId(),
+            "Agent run must produce an executionId. status=" + result.getStatus()
+            + " error=" + result.getError());
+        assertTrue(result.isSuccess(),
+            "Agent run did not succeed: status=" + result.getStatus()
+            + ", error=" + result.getError());
+
+        Map<String, Object> wf = getWorkflow(result.getExecutionId());
+        List<Map<String, Object>> tasks = (List<Map<String, Object>>) wf.get("tasks");
+        assertNotNull(tasks, "Workflow has no tasks array. wfId=" + result.getExecutionId());
+
+        Map<String, Object> pdfTask = tasks.stream()
+            .filter(t -> {
+                String tt = String.valueOf(t.getOrDefault("taskType", ""));
+                String tdn = String.valueOf(t.getOrDefault("taskDefName", ""));
+                return tt.contains("GENERATE_PDF") || tdn.contains("generate_pdf");
+            })
+            .findFirst()
+            .orElseGet(() -> {
+                fail("No GENERATE_PDF task found in workflow. Got task types: "
+                    + tasks.stream().map(t -> t.get("taskType")).collect(Collectors.toList())
+                    + ". COUNTERFACTUAL: a PdfTool MUST cause the server to dispatch a "
+                    + "GENERATE_PDF system task.");
+                return null;
+            });
+
+        assertEquals("COMPLETED", pdfTask.get("status"),
+            "GENERATE_PDF task status should be COMPLETED. Got: " + pdfTask.get("status"));
+
+        Object outputData = pdfTask.get("outputData");
+        assertNotNull(outputData, "GENERATE_PDF task outputData is null.");
+        String outputStr = outputData.toString();
+        assertTrue(outputStr.length() > 20,
+            "GENERATE_PDF outputData should not be effectively empty. Got: " + outputStr
+            + ". COUNTERFACTUAL: an empty payload means the renderer ran but produced nothing.");
     }
 }

@@ -283,14 +283,34 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         Agent agent, string prompt, string? sessionId,
         IEnumerable<string>? media, CancellationToken ct)
     {
+        // Generate a fresh per-execution domain UUID for stateful agents. The
+        // server uses this as taskToDomain for every worker task in the run,
+        // and we register local workers under the same domain so they poll the
+        // per-execution queue. Without this, concurrent stateful runs share a
+        // single domain queue and can dequeue each other's tasks.
+        // Mirrors Python runtime._has_stateful_tools + run_id = uuid.uuid4().
+        var runId = HasStatefulTools(agent) ? Guid.NewGuid().ToString("N") : null;
+
         // Fresh worker manager per run
         _workers ??= new WorkerManager(_http, _conductorConfig);
-        _workers.RegisterAgentTools(agent);
+        _workers.RegisterAgentTools(agent, runId);
         _workers.Start();
 
         var payload      = AgentConfigSerializer.Serialize(agent, prompt, sessionId ?? "", media);
+        if (runId is not null) payload["runId"] = runId;
         var executionId  = await _http.StartAsync(payload, ct);
-        return new AgentHandle(executionId, _http);
+        return new AgentHandle(executionId, _http, runId);
+    }
+
+    private static bool HasStatefulTools(Agent agent)
+    {
+        if (agent.Stateful) return true;
+        foreach (var t in agent.Tools)
+            if (t is not null && t.Stateful) return true;
+        foreach (var sub in agent.Agents)
+            if (HasStatefulTools(sub)) return true;
+        if (agent.Router is not null && HasStatefulTools(agent.Router)) return true;
+        return false;
     }
 
     private async Task StopWorkersAsync()

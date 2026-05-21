@@ -42,14 +42,36 @@ public class HttpApi {
      * @param agentConfig serialized agent configuration
      * @param prompt      user prompt
      * @param sessionId   optional session ID
-     * @return server response containing workflowId
+     * @return server response containing executionId
      */
     public Map<String, Object> startAgent(Map<String, Object> agentConfig, String prompt, String sessionId) {
+        return startAgent(agentConfig, prompt, sessionId, null);
+    }
+
+    /**
+     * Start an agent execution with an optional runId for stateful domain routing.
+     *
+     * <p>When {@code runId} is non-null/non-empty, the server uses it as the
+     * {@code taskToDomain} value for every worker task in the run. Workers
+     * registered locally under the same domain poll the per-execution queue,
+     * which isolates concurrent stateful runs from each other.
+     *
+     * @param agentConfig serialized agent configuration
+     * @param prompt      user prompt
+     * @param sessionId   optional session ID
+     * @param runId       optional per-execution UUID — set for stateful agents
+     * @return server response containing executionId
+     */
+    public Map<String, Object> startAgent(
+            Map<String, Object> agentConfig, String prompt, String sessionId, String runId) {
         Map<String, Object> body = new HashMap<>();
         body.put("agentConfig", agentConfig);
         body.put("prompt", prompt);
         if (sessionId != null && !sessionId.isEmpty()) {
             body.put("sessionId", sessionId);
+        }
+        if (runId != null && !runId.isEmpty()) {
+            body.put("runId", runId);
         }
 
         return post("/api/agent/start", body);
@@ -72,12 +94,24 @@ public class HttpApi {
      */
     public Map<String, Object> startFrameworkAgent(
             String framework, Map<String, Object> rawConfig, String prompt, String sessionId) {
+        return startFrameworkAgent(framework, rawConfig, prompt, sessionId, null);
+    }
+
+    /**
+     * Start a framework-backed agent with an optional per-execution {@code runId}
+     * for stateful tool routing. Mirrors {@link #startAgent(Map, String, String, String)}.
+     */
+    public Map<String, Object> startFrameworkAgent(
+            String framework, Map<String, Object> rawConfig, String prompt, String sessionId, String runId) {
         Map<String, Object> body = new HashMap<>();
         body.put("framework", framework);
         body.put("rawConfig", rawConfig);
         body.put("prompt", prompt);
         if (sessionId != null && !sessionId.isEmpty()) {
             body.put("sessionId", sessionId);
+        }
+        if (runId != null && !runId.isEmpty()) {
+            body.put("runId", runId);
         }
         return post("/api/agent/start", body);
     }
@@ -99,29 +133,29 @@ public class HttpApi {
     }
 
     /**
-     * Get the current status of an agent workflow.
+     * Get the current status of an agent execution.
      *
-     * @param workflowId the workflow ID
+     * @param executionId the execution ID
      * @return status response map
      */
-    public Map<String, Object> getAgentStatus(String workflowId) {
-        return get("/api/agent/" + workflowId + "/status");
+    public Map<String, Object> getAgentStatus(String executionId) {
+        return get("/api/agent/" + executionId + "/status");
     }
 
     /**
      * Respond to a waiting agent (approve/reject a tool or send a message).
      *
-     * @param workflowId the workflow ID
-     * @param approved   whether to approve
-     * @param reason     optional rejection reason
+     * @param executionId the execution ID
+     * @param approved    whether to approve
+     * @param reason      optional rejection reason
      */
-    public void respondToAgent(String workflowId, boolean approved, String reason) {
+    public void respondToAgent(String executionId, boolean approved, String reason) {
         Map<String, Object> body = new HashMap<>();
         body.put("approved", approved);
         if (reason != null && !reason.isEmpty()) {
             body.put("reason", reason);
         }
-        post("/api/agent/" + workflowId + "/respond", body);
+        post("/api/agent/" + executionId + "/respond", body);
     }
 
     /**
@@ -130,11 +164,11 @@ public class HttpApi {
      * <p>Used for structured responses such as manual agent selection:
      * {@code {"selected": "writer"}}.
      *
-     * @param workflowId the workflow ID
-     * @param data       the response payload
+     * @param executionId the execution ID
+     * @param data        the response payload
      */
-    public void respondWithData(String workflowId, Map<String, Object> data) {
-        post("/api/agent/" + workflowId + "/respond", data);
+    public void respondWithData(String executionId, Map<String, Object> data) {
+        post("/api/agent/" + executionId + "/respond", data);
     }
 
     /**
@@ -145,8 +179,29 @@ public class HttpApi {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> pollTask(String taskType) {
+        return pollTask(taskType, null);
+    }
+
+    /**
+     * Poll for a pending task of the given type, scoped to a worker domain.
+     *
+     * <p>When {@code domain} is non-null, the poll is sent with a
+     * {@code ?domain=...} query parameter so the server only returns tasks
+     * routed to that worker domain. This is the read-side complement of
+     * {@code startAgent(..., runId)} — stateful tasks routed to a per-execution
+     * domain are only visible to pollers registered under that same domain.
+     *
+     * @param taskType the task type to poll
+     * @param domain   optional worker domain (Conductor taskToDomain value)
+     * @return task data or null if no pending task
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> pollTask(String taskType, String domain) {
         try {
             String url = config.getServerUrl() + "/api/tasks/poll/" + taskType;
+            if (domain != null && !domain.isEmpty()) {
+                url += "?domain=" + java.net.URLEncoder.encode(domain, java.nio.charset.StandardCharsets.UTF_8);
+            }
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(10))
@@ -236,13 +291,13 @@ public class HttpApi {
     }
 
     /**
-     * Get the workflow status for resume (extracts domain/run_id).
+     * Get the workflow data for an execution (extracts domain/run_id).
      *
-     * @param workflowId the workflow ID
+     * @param executionId the execution ID
      * @return workflow data map
      */
-    public Map<String, Object> getWorkflow(String workflowId) {
-        return get("/api/workflow/" + workflowId);
+    public Map<String, Object> getWorkflow(String executionId) {
+        return get("/api/workflow/" + executionId);
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────
@@ -312,9 +367,9 @@ public class HttpApi {
             if (responseBody.startsWith("{")) {
                 return JsonMapper.fromJson(responseBody, Map.class);
             } else if (responseBody.startsWith("\"") || (!responseBody.startsWith("[") && !responseBody.startsWith("{"))) {
-                // Plain string response (e.g., workflow ID)
+                // Plain string response (e.g., execution ID)
                 Map<String, Object> result = new HashMap<>();
-                result.put("workflowId", responseBody.replace("\"", ""));
+                result.put("executionId", responseBody.replace("\"", ""));
                 return result;
             } else {
                 return JsonMapper.fromJson(responseBody, Map.class);

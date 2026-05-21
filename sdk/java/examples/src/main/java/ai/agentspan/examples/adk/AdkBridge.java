@@ -52,7 +52,9 @@ public final class AdkBridge {
             b.instructions(instructionText);
         }
 
-        List<ToolDef> tools = extractTools(adk.tools());
+        // ADK 1.3.0+ returns Single<List<BaseTool>>; resolve synchronously since
+        // the bridge call site already serialises the agent on a worker thread.
+        List<ToolDef> tools = extractTools(adk.tools().blockingGet());
         if (!tools.isEmpty()) {
             b.tools(tools.toArray(new ToolDef[0]));
         }

@@ -49,6 +49,7 @@ class AgentHumanTaskTest {
         assertThat(event.getType()).isEqualTo("waiting");
         assertThat(event.getPendingTool()).containsEntry("tool_name", "publish_article");
         assertThat(event.getPendingTool()).containsEntry("taskRefName", "hitl_approve");
+        assertThat(event.getExecutionId()).isEqualTo("wf-1");
     }
 
     @Test

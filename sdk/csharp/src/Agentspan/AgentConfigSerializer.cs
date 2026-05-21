@@ -121,11 +121,66 @@ internal static class AgentConfigSerializer
             cfg["promptTemplate"] = pt;
         }
 
+        // Inject execute_code worker tool when local code execution is on, so
+        // the LLM sees it as a callable function. Mirrors Python's
+        // Agent._attach_code_execution_tool and Java's serializer block.
+        // The tool name is {agent_name}_execute_code to avoid multi-agent
+        // collisions and to match what AgentRuntime.RegisterLocalCodeExecutionWorker
+        // registers locally.
+        var injectedTools = new JsonArray();
         if (agent.Tools.Count > 0)
         {
-            var tools = new JsonArray();
-            foreach (var t in agent.Tools) tools.Add(SerializeTool(t, agent.Stateful));
-            cfg["tools"] = tools;
+            foreach (var t in agent.Tools) injectedTools.Add(SerializeTool(t, agent.Stateful));
+        }
+        if (agent.LocalCodeExecution || agent.CodeExecution is not null)
+        {
+            var langs = agent.CodeExecution?.AllowedLanguages ?? agent.AllowedLanguages
+                        ?? new List<string> { "python" };
+            if (langs.Count == 0) langs = ["python"];
+            var langArr = new JsonArray();
+            foreach (var l in langs) langArr.Add(l);
+
+            var langDesc = string.Join(", ", langs);
+            var properties = new JsonObject
+            {
+                ["language"] = new JsonObject
+                {
+                    ["type"]        = "string",
+                    ["description"] = "The programming language to use. One of: " + langDesc,
+                    ["enum"]        = new JsonArray(langs.Select(l => (JsonNode?)l).ToArray()),
+                },
+                ["code"] = new JsonObject
+                {
+                    ["type"]        = "string",
+                    ["description"] = "The code to execute.",
+                },
+            };
+
+            var execTool = new JsonObject
+            {
+                ["name"] = $"{agent.Name}_execute_code",
+                ["description"] =
+                    "Execute code in the specified language. Supported languages: " + langDesc +
+                    ". Each execution runs in an isolated environment — no state, variables, " +
+                    "or imports persist between calls.",
+                ["inputSchema"] = new JsonObject
+                {
+                    ["type"]       = "object",
+                    ["properties"] = properties,
+                    ["required"]   = new JsonArray { "language", "code" },
+                },
+                ["outputSchema"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["additionalProperties"] = new JsonObject(),
+                },
+                ["toolType"] = "worker",
+            };
+            injectedTools.Add(execTool);
+        }
+        if (injectedTools.Count > 0)
+        {
+            cfg["tools"] = injectedTools;
         }
 
         if (agent.Guardrails.Count > 0)
@@ -263,8 +318,9 @@ internal static class AgentConfigSerializer
             ["toolType"]    = toolType,
         };
 
-        // Stateful routing: propagate agent.Stateful to worker tools
-        if (agentStateful && toolType is "worker" or "external")
+        // Stateful routing: emit stateful=true if the agent is stateful OR the
+        // tool itself is marked stateful (mirrors Python @tool(stateful=True)).
+        if ((agentStateful || tool.Stateful) && toolType is "worker" or "external")
             t["stateful"] = true;
 
         if (tool.ApprovalRequired)        t["approvalRequired"] = true;

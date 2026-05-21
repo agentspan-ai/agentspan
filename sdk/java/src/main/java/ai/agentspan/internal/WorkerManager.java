@@ -28,6 +28,17 @@ public class WorkerManager {
     private final AgentConfig config;
     private final HttpApi httpApi;
     private final ConcurrentHashMap<String, Function<Map<String, Object>, Object>> handlers;
+    /** Optional worker domain per task name. Tasks without an entry poll the default queue. */
+    private final ConcurrentHashMap<String, String> taskDomains;
+    /**
+     * Domain applied by the no-arg {@link #register(String, Function)} overload.
+     * AgentRuntime sets this for the lifetime of a single
+     * {@code prepareWorkers(agent, domain)} call so all subsequent register
+     * calls (callbacks, guardrails, gates, swarm-transfer, etc.) register
+     * under the same per-execution domain without having to thread the value
+     * through every call site.
+     */
+    private volatile String currentDomain;
     private ScheduledExecutorService scheduledExecutorService;
     private final ConcurrentHashMap<String, ScheduledFuture<?>> workerFutures;
 
@@ -37,6 +48,7 @@ public class WorkerManager {
         this.config = config;
         this.httpApi = new HttpApi(config);
         this.handlers = new ConcurrentHashMap<>();
+        this.taskDomains = new ConcurrentHashMap<>();
         this.workerFutures = new ConcurrentHashMap<>();
     }
 
@@ -47,13 +59,49 @@ public class WorkerManager {
      * @param handler  the function to call when a task is polled
      */
     public void register(String taskName, Function<Map<String, Object>, Object> handler) {
-        if (handlers.containsKey(taskName)) {
-            logger.debug("Re-registering existing handler for task: {}", taskName);
-            handlers.put(taskName, handler);
+        register(taskName, handler, currentDomain);
+    }
+
+    /**
+     * Set the domain that the no-arg {@link #register(String, Function)}
+     * overload will apply to subsequent calls. Pass {@code null} to clear.
+     * Used by {@code AgentRuntime.prepareWorkers(agent, domain)} so the many
+     * internal worker registrations in that method all pick up the run's
+     * domain without per-call wiring.
+     */
+    public void setCurrentDomain(String domain) {
+        this.currentDomain = domain;
+    }
+
+    /**
+     * Register a task handler function scoped to a worker domain.
+     *
+     * <p>When {@code domain} is non-null, the worker polls
+     * {@code /api/tasks/poll/{taskName}?domain={domain}} — only tasks routed
+     * to that domain (i.e. tasks belonging to the matching stateful run) are
+     * returned. This is the worker-side complement of the {@code runId}
+     * passed on {@code /api/agent/start}.
+     *
+     * @param taskName the Conductor task type name
+     * @param handler  the function to call when a task is polled
+     * @param domain   optional worker domain (per-stateful-run UUID), or null
+     */
+    public void register(
+            String taskName,
+            Function<Map<String, Object>, Object> handler,
+            String domain) {
+        boolean reRegister = handlers.containsKey(taskName);
+        handlers.put(taskName, handler);
+        if (domain != null && !domain.isEmpty()) {
+            taskDomains.put(taskName, domain);
+        } else {
+            taskDomains.remove(taskName);
+        }
+        if (reRegister) {
+            logger.debug("Re-registering existing handler for task: {} (domain={})", taskName, domain);
             return;
         }
-        handlers.put(taskName, handler);
-        logger.info("Registered worker for task: {}", taskName);
+        logger.info("Registered worker for task: {} (domain={})", taskName, domain);
 
         // Register task definition on the server
         try {
@@ -119,7 +167,8 @@ public class WorkerManager {
         if (handler == null) return;
 
         try {
-            Map<String, Object> task = httpApi.pollTask(taskName);
+            String domain = taskDomains.get(taskName);
+            Map<String, Object> task = httpApi.pollTask(taskName, domain);
             if (task == null) return;
 
             String taskId = (String) task.get("taskId");

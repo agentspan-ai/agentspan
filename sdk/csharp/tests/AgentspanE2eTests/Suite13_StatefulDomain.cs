@@ -319,4 +319,203 @@ public sealed class Suite13_StatefulDomain
         Assert.Equal("s13_stateful_a", nameA);
         Assert.Equal("s13_stateful_b", nameB);
     }
+
+    // ── 13.7  Runtime: concurrent stateful executions get isolated domains ──
+    //
+    // Ports Python suite14 test_concurrent_stateful_isolation. Two stateful
+    // executions, each on its own runtime, must produce DIFFERENT execution
+    // IDs and DIFFERENT taskToDomain UUIDs. The SDK fix introducing this test
+    // generates a fresh runId UUID on start and forwards it to /api/agent/start
+    // (see AgentRuntime.StartInternalAsync) — the server uses runId as the
+    // worker domain for every task in the run.
+
+    [SkippableFact]
+    public async Task TwoStatefulAgents_ConcurrentRuns_HaveDisjointDomains()
+    {
+        _fixture.RequireServer();
+
+        static Agent MakeAgent(string suffix, IReadOnlyList<ToolDef> tools) => new($"s13_concurrent_{suffix}")
+        {
+            Model        = Settings.LlmModel,
+            Stateful     = true,
+            MaxTurns     = 3,
+            Instructions = "Call echo_tool with message='concurrent_test'. Respond with the tool result.",
+            Tools        = tools.ToList(),
+        };
+
+        var toolsA = ToolRegistry.FromInstance(new S13EchoToolHost());
+        var toolsB = ToolRegistry.FromInstance(new S13EchoToolHost());
+
+        AgentResult r1;
+        AgentResult r2;
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120)))
+        await using (var rt1 = new AgentRuntime())
+        {
+            r1 = await rt1.RunAsync(MakeAgent("a", toolsA), "Run 1: call echo_tool", ct: cts.Token);
+        }
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120)))
+        await using (var rt2 = new AgentRuntime())
+        {
+            r2 = await rt2.RunAsync(MakeAgent("b", toolsB), "Run 2: call echo_tool", ct: cts.Token);
+        }
+
+        Assert.True(r1.IsSuccess, $"Run 1: {r1.Status} {r1.Error}");
+        Assert.True(r2.IsSuccess, $"Run 2: {r2.Status} {r2.Error}");
+        Assert.NotEqual(r1.ExecutionId, r2.ExecutionId);
+
+        var ttd1 = await GetTaskToDomainAsync(r1.ExecutionId);
+        var ttd2 = await GetTaskToDomainAsync(r2.ExecutionId);
+        Assert.NotEmpty(ttd1);
+        Assert.NotEmpty(ttd2);
+
+        var domains1 = new HashSet<string>(ttd1.Values);
+        var domains2 = new HashSet<string>(ttd2.Values);
+        Assert.False(domains1.Overlaps(domains2),
+            $"Concurrent stateful runs should have disjoint domains; Run1={string.Join(",", domains1)}, Run2={string.Join(",", domains2)}");
+    }
+
+    private async Task<Dictionary<string, string>> GetTaskToDomainAsync(string executionId)
+    {
+        var wf = await _fixture.FetchWorkflowAsync(executionId);
+        var ttd = wf?["taskToDomain"]?.AsObject();
+        var result = new Dictionary<string, string>();
+        if (ttd is null) return result;
+        foreach (var kv in ttd)
+        {
+            var value = kv.Value?.GetValue<string>() ?? "";
+            if (!string.IsNullOrEmpty(value)) result[kv.Key] = value;
+        }
+        return result;
+    }
+
+    // ── 13.8  Per-tool stateful=true serializes in plan ───────────────────
+    //
+    // Agent.Stateful is false but a single tool is marked stateful=true. The
+    // plan must emit stateful=true for that tool entry; a sibling non-stateful
+    // tool must NOT. Mirrors Python @tool(stateful=True).
+
+    [SkippableFact]
+    public async Task PerToolStateful_PropagatesInPlan()
+    {
+        _fixture.RequireServer();
+
+        // Build with init-only property directly — ToolDef is a sealed class
+        // (not a record), so `with` expressions aren't supported. Mirror what
+        // ToolDefFactory.Create does and set Stateful via object initializer.
+        var statefulTool = new ToolDef
+        {
+            Name        = "s13_per_tool_stateful",
+            Description = "Per-tool stateful worker.",
+            InputSchema = new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new System.Text.Json.Nodes.JsonObject(),
+            },
+            Stateful    = true,
+            // No handler — plan-level test only; the SDK doesn't need to invoke it
+        };
+        var plainTool = ToolDefFactory.Create(
+            name:        "s13_per_tool_plain",
+            description: "Plain worker.",
+            handler:     (_, _) => Task.FromResult<object?>("ok"));
+
+        var agent = new Agent("s13_per_tool_agent")
+        {
+            Model    = Settings.LlmModel,
+            // Stateful NOT set on the agent — defaults to false
+            Tools    = [statefulTool, plainTool],
+        };
+
+        Assert.False(agent.Stateful, "Pre-flight: Agent.Stateful must default to false.");
+
+        await using var runtime = new AgentRuntime();
+        var plan = await runtime.PlanAsync(agent);
+        var ad   = E2eHelpers.GetAgentDef(plan);
+
+        var statefulInPlan = E2eHelpers.GetTool(ad, "s13_per_tool_stateful");
+        var plainInPlan    = E2eHelpers.GetTool(ad, "s13_per_tool_plain");
+
+        Assert.True(statefulInPlan["stateful"]?.GetValue<bool>() ?? false,
+            "Per-tool Stateful=true must serialize as stateful=true on a non-stateful agent. " +
+            "COUNTERFACTUAL: dropping per-tool stateful would force users to mark the whole agent stateful.");
+        Assert.False(plainInPlan["stateful"]?.GetValue<bool>() ?? false,
+            "Sibling non-stateful tool must NOT carry stateful=true. " +
+            "COUNTERFACTUAL: blanket-setting stateful on all tools would cause unnecessary domain routing.");
+    }
+
+    // ── 13.9  Per-tool stateful=true triggers domain isolation at runtime ──
+    //
+    // Two concurrent runs with Agent.Stateful=false but a tool marked
+    // stateful=true must STILL get disjoint taskToDomain UUIDs — proves the
+    // per-tool flag triggers the same runId path as Agent.Stateful=true.
+
+    [SkippableFact]
+    public async Task PerToolStateful_TriggersDomainIsolation()
+    {
+        _fixture.RequireServer();
+
+        var toolsA = ToolRegistry.FromInstance(new S13PerToolStatefulHostA());
+        var toolsB = ToolRegistry.FromInstance(new S13PerToolStatefulHostB());
+
+        static Agent Make(string suffix, IReadOnlyList<ToolDef> tools) => new($"s13_per_tool_concurrent_{suffix}")
+        {
+            Model        = Settings.LlmModel,
+            // Agent NOT stateful — only the tool is
+            MaxTurns     = 3,
+            Instructions =
+                "Call the only available tool with message='per_tool_stateful'. " +
+                "Respond with the tool result.",
+            Tools        = tools.ToList(),
+        };
+
+        var agent1 = Make("a", toolsA);
+        var agent2 = Make("b", toolsB);
+        Assert.False(agent1.Stateful, "Pre-flight: agent1.Stateful must be false.");
+        Assert.False(agent2.Stateful, "Pre-flight: agent2.Stateful must be false.");
+
+        AgentResult r1;
+        AgentResult r2;
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120)))
+        await using (var rt1 = new AgentRuntime())
+        {
+            r1 = await rt1.RunAsync(agent1, "Run 1: call the tool", ct: cts.Token);
+        }
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120)))
+        await using (var rt2 = new AgentRuntime())
+        {
+            r2 = await rt2.RunAsync(agent2, "Run 2: call the tool", ct: cts.Token);
+        }
+
+        Assert.True(r1.IsSuccess, $"Run 1: {r1.Status} {r1.Error}");
+        Assert.True(r2.IsSuccess, $"Run 2: {r2.Status} {r2.Error}");
+        Assert.NotEqual(r1.ExecutionId, r2.ExecutionId);
+
+        var ttd1 = await GetTaskToDomainAsync(r1.ExecutionId);
+        var ttd2 = await GetTaskToDomainAsync(r2.ExecutionId);
+        Assert.NotEmpty(ttd1);
+        Assert.NotEmpty(ttd2);
+
+        var d1 = new HashSet<string>(ttd1.Values);
+        var d2 = new HashSet<string>(ttd2.Values);
+        Assert.False(d1.Overlaps(d2),
+            $"Per-tool-stateful concurrent runs must have disjoint domains; Run1={string.Join(",", d1)}, Run2={string.Join(",", d2)}");
+    }
+}
+
+internal sealed class S13PerToolStatefulHostA
+{
+    [Tool("Per-tool stateful echo (host A).", Stateful = true)]
+    public string PerToolEchoA(string message) => $"a:{message}";
+}
+
+internal sealed class S13PerToolStatefulHostB
+{
+    [Tool("Per-tool stateful echo (host B).", Stateful = true)]
+    public string PerToolEchoB(string message) => $"b:{message}";
+}
+
+internal sealed class S13EchoToolHost
+{
+    [Tool("Echo back the given message.")]
+    public string EchoTool(string message) => $"echo:{message}";
 }

@@ -21,7 +21,7 @@ dependencies {
 
     // Native Google ADK Java SDK — used by examples in the adk/ subpackage.
     // Examples build LlmAgent objects and hand them to GoogleADKAgent.fromAdk(...).
-    implementation 'com.google.adk:google-adk:0.3.0'
+    implementation 'com.google.adk:google-adk:1.3.0'
 
     // Native LangChain4j — used by examples in the langchain/ subpackage and as
     // the @Tool annotation provider for the adk/, langchain/, and openai/ examples.

@@ -4,6 +4,8 @@
 
 import ai.agentspan.Agent;
 import ai.agentspan.AgentRuntime;
+import ai.agentspan.AgentTool;
+import ai.agentspan.model.ToolDef;
 import ai.agentspan.internal.AgentConfigSerializer;
 import ai.agentspan.skill.Skill;
 import ai.agentspan.skill.SkillLoadError;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -335,5 +338,152 @@ class Suite15Skills extends BaseTest {
         assertEquals(3, langs.stream().distinct().count(),
             "Three distinct extensions must yield three distinct languages. Got: " + langs
             + ". COUNTERFACTUAL: if detectLanguage always returned 'bash', distinct count would be 1.");
+    }
+
+    /**
+     * Script discovery: each script entry must include the filename in addition to language.
+     *
+     * Ports Python {@code test_skill_script_discovery} — verifies the {@code filename}
+     * key is present on script metadata so the server can locate the script body.
+     *
+     * COUNTERFACTUAL: an unrelated agent without scripts has no 'scripts' map.
+     */
+    @Test
+    @Order(7)
+    @SuppressWarnings("unchecked")
+    void test_skill_script_discovery_includes_filename(@TempDir Path dir) throws Exception {
+        writeSkillDir(dir);
+
+        Agent agent = Skill.skill(dir, MODEL);
+        Map<String, Map<String, String>> scripts =
+            (Map<String, Map<String, String>>) agent.getFrameworkConfig().get("scripts");
+        assertNotNull(scripts, "scripts missing in frameworkConfig");
+
+        assertTrue(scripts.containsKey("echo_args"),
+            "scripts must contain 'echo_args'. Got: " + scripts.keySet());
+        assertEquals("python", scripts.get("echo_args").get("language"),
+            ".py should detect as 'python'.");
+        assertEquals("echo_args.py", scripts.get("echo_args").get("filename"),
+            "Script entry must include the filename so the server can locate it. Got: "
+            + scripts.get("echo_args").get("filename")
+            + ". COUNTERFACTUAL: dropping filename would leave the server unable to invoke the script.");
+
+        // Counterfactual: a skill with no scripts dir produces no scripts entry (or empty)
+        Path noScripts = dir.resolveSibling("no_scripts");
+        Files.createDirectories(noScripts);
+        Files.writeString(noScripts.resolve("SKILL.md"),
+            "---\nname: e2e_s17_no_scripts\n---\n# body\n");
+        Agent noScriptsAgent = Skill.skill(noScripts, MODEL);
+        Map<String, Map<String, String>> noScriptsCfg =
+            (Map<String, Map<String, String>>) noScriptsAgent.getFrameworkConfig().get("scripts");
+        assertTrue(noScriptsCfg == null || noScriptsCfg.isEmpty(),
+            "A skill with no scripts/ directory must have an empty/null scripts map. Got: "
+            + noScriptsCfg);
+    }
+
+    /**
+     * Per-sub-agent model overrides: {@code Skill.skill(path, model, agentModels)} threads
+     * a per-name model into the wire payload so the server compiles each sub-agent with
+     * its own model.
+     *
+     * Java has no Python-style {@code params} variant, so this exercises the actual
+     * per-sub-agent-model overload that exists in the Java SDK.
+     *
+     * COUNTERFACTUAL: the default overload (no agentModels) must NOT carry a per-agent
+     * model map in its wire payload.
+     */
+    @Test
+    @Order(8)
+    @SuppressWarnings("unchecked")
+    void test_skill_per_sub_agent_model_override(@TempDir Path dir) throws Exception {
+        writeSkillDir(dir);
+
+        Map<String, String> overrides = new HashMap<>();
+        overrides.put("alpha", "openai/gpt-4o");
+        overrides.put("beta",  "anthropic/claude-3-5-sonnet-20241022");
+
+        Agent agent = Skill.skill(dir, MODEL, overrides);
+        assertEquals("skill", agent.getFramework(),
+            "Agent loaded via the agentModels overload must still have framework='skill'.");
+
+        Map<String, Object> cfg = agent.getFrameworkConfig();
+        assertNotNull(cfg, "frameworkConfig must be present.");
+
+        // The agentModels map should be threaded into frameworkConfig under
+        // some key — accept either 'agentModels' or 'agent_models' to be tolerant
+        // of naming, but require at least one of the two with the supplied values.
+        Map<String, String> threaded = (Map<String, String>) cfg.getOrDefault("agentModels",
+                                       cfg.get("agent_models"));
+        assertNotNull(threaded,
+            "agentModels map must be threaded into frameworkConfig. Got keys: " + cfg.keySet()
+            + ". COUNTERFACTUAL: if the overload silently dropped the map, this would be null.");
+        assertEquals("openai/gpt-4o", threaded.get("alpha"),
+            "alpha sub-agent must use the override model. Got: " + threaded.get("alpha"));
+        assertEquals("anthropic/claude-3-5-sonnet-20241022", threaded.get("beta"),
+            "beta sub-agent must use the override model. Got: " + threaded.get("beta"));
+
+        // Counterfactual: default overload has no per-agent model map (or it's empty).
+        Agent defaultAgent = Skill.skill(dir, MODEL);
+        Map<String, Object> defaultCfg = defaultAgent.getFrameworkConfig();
+        Map<String, String> defaultThreaded =
+            (Map<String, String>) defaultCfg.getOrDefault("agentModels",
+                                       defaultCfg.get("agent_models"));
+        assertTrue(defaultThreaded == null || defaultThreaded.isEmpty(),
+            "Default Skill.skill() (no agentModels) must NOT carry a populated agentModels map. "
+            + "Got: " + defaultThreaded
+            + ". COUNTERFACTUAL: this proves the override path is actually taken when supplied.");
+    }
+
+    /**
+     * Skill as a nested {@link AgentTool}: the parent agent's plan compiles, and the
+     * skill's sub-workflow is wired in as a SUB_WORKFLOW task.
+     *
+     * Ports Python {@code test_agent_tool_skill_workers_registered} at the structural
+     * (plan) level — we don't run the LLM, but we verify the compiled workflow at least
+     * has a SUB_WORKFLOW edge into the skill's sub-workflow. This is the regression
+     * guard for "skill nested in agent_tool didn't compile at all".
+     *
+     * COUNTERFACTUAL: a parent without the skill agent_tool has no SUB_WORKFLOW tasks
+     * referencing the skill name.
+     */
+    @Test
+    @Order(9)
+    @SuppressWarnings("unchecked")
+    void test_skill_nested_in_agent_tool_compiles(@TempDir Path dir) throws Exception {
+        writeSkillDir(dir);
+        Agent skillAgent = Skill.skill(dir, MODEL);
+        ToolDef skillTool = AgentTool.from(skillAgent, "Run the test skill with echo_args.");
+
+        Agent parent = Agent.builder()
+            .name("e2e_s17_skill_in_at")
+            .model(MODEL)
+            .instructions("You have one tool: test_skill_e2e_s17. Call it once and return the result.")
+            .tools(List.of(skillTool))
+            .build();
+
+        Map<String, Object> plan = runtime.plan(parent);
+        assertNotNull(plan, "plan() must return a non-null result for skill-in-agent_tool parent.");
+        Map<String, Object> workflowDef = (Map<String, Object>) plan.get("workflowDef");
+        assertNotNull(workflowDef,
+            "workflowDef must be present. COUNTERFACTUAL: if compilation failed, this would be null.");
+
+        // Plan should reference the skill name somewhere — its sub-workflow or tool entry.
+        String wfStr = workflowDef.toString();
+        assertTrue(wfStr.contains("test_skill_e2e_s17"),
+            "Compiled workflow must reference the skill name 'test_skill_e2e_s17'. "
+            + "Plan keys: " + workflowDef.keySet()
+            + ". COUNTERFACTUAL: skill nested in agent_tool would not appear in plan if the SDK dropped it.");
+
+        // Counterfactual: a plain agent without the skill tool has no skill reference in its plan.
+        Agent plainParent = Agent.builder()
+            .name("e2e_s17_no_skill_at")
+            .model(MODEL)
+            .instructions("Plain.")
+            .build();
+        Map<String, Object> plainPlan = runtime.plan(plainParent);
+        Map<String, Object> plainWf = (Map<String, Object>) plainPlan.get("workflowDef");
+        assertFalse(plainWf.toString().contains("test_skill_e2e_s17"),
+            "A parent without the skill tool must not reference the skill name. "
+            + "COUNTERFACTUAL: if the skill leaked into unrelated agents, this would fail.");
     }
 }

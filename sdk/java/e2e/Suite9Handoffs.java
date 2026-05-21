@@ -96,10 +96,10 @@ class Suite9Handoffs extends BaseTest {
             + "Status: " + result.getStatus()
             + ". Error: " + result.getError());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        Map<String, Object> workflow = getWorkflow(workflowId);
+        Map<String, Object> workflow = getWorkflow(executionId);
         Map<String, Object> workflowDef = (Map<String, Object>) workflow.get("workflowDef");
         if (workflowDef == null) {
             // Fall back to the execution-level tasks
@@ -151,10 +151,10 @@ class Suite9Handoffs extends BaseTest {
             + "Status: " + result.getStatus()
             + ". Error: " + result.getError());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        Map<String, Object> workflow = getWorkflow(workflowId);
+        Map<String, Object> workflow = getWorkflow(executionId);
 
         // Check at the workflowDef level (plan tasks)
         Map<String, Object> workflowDef = (Map<String, Object>) workflow.get("workflowDef");
@@ -214,10 +214,10 @@ class Suite9Handoffs extends BaseTest {
             + "Status: " + result.getStatus()
             + ". Error: " + result.getError());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        Map<String, Object> workflow = getWorkflow(workflowId);
+        Map<String, Object> workflow = getWorkflow(executionId);
 
         // Check for SUB_WORKFLOW tasks (from plan) or executed sub-workflow tasks
         Map<String, Object> workflowDef = (Map<String, Object>) workflow.get("workflowDef");
@@ -294,10 +294,10 @@ class Suite9Handoffs extends BaseTest {
             + "Status: " + result.getStatus()
             + ". Error: " + result.getError());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        Map<String, Object> workflow = getWorkflow(workflowId);
+        Map<String, Object> workflow = getWorkflow(executionId);
         Map<String, Object> workflowDef = (Map<String, Object>) workflow.get("workflowDef");
 
         if (workflowDef != null) {
@@ -357,10 +357,10 @@ class Suite9Handoffs extends BaseTest {
             + "Status: " + result.getStatus()
             + ". Error: " + result.getError());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        Map<String, Object> workflow = getWorkflow(workflowId);
+        Map<String, Object> workflow = getWorkflow(executionId);
 
         // Check execution-level tasks for a SUB_WORKFLOW whose referenceTaskName contains "math"
         List<Map<String, Object>> allExecTasks = (List<Map<String, Object>>) workflow.get("tasks");
@@ -415,10 +415,10 @@ class Suite9Handoffs extends BaseTest {
                 || result.getStatus() == AgentStatus.TERMINATED,
             "Expected a terminal status (COMPLETED/FAILED/TERMINATED). Got: " + result.getStatus());
 
-        String workflowId = result.getWorkflowId();
-        assertNotNull(workflowId, "workflowId is null");
+        String executionId = result.getExecutionId();
+        assertNotNull(executionId, "executionId is null");
 
-        Map<String, Object> workflow = getWorkflow(workflowId);
+        Map<String, Object> workflow = getWorkflow(executionId);
 
         List<Map<String, Object>> allExecTasks = (List<Map<String, Object>>) workflow.get("tasks");
         assertNotNull(allExecTasks, "workflow has no 'tasks' field");

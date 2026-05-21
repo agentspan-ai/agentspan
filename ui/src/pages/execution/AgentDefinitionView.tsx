@@ -72,6 +72,14 @@ function getItemName(t: unknown, fallback = "[item]"): string {
   return fallback;
 }
 
+function getItemDescription(t: unknown): string | undefined {
+  if (!t || typeof t !== "object") return undefined;
+  const o = t as Record<string, unknown>;
+  const d = o.description ?? (o.function as any)?.description;
+  if (typeof d === "string" && d) return d;
+  return undefined;
+}
+
 function toolCat(t: Record<string, unknown>): "agent" | "tool" | "guardrail" | "http" | "mcp" | "rag" {
   const tt = (t.toolType as string | undefined)?.toLowerCase() ?? "";
   if (tt === "agent_tool" || tt === "agent") return "agent";
@@ -157,9 +165,9 @@ function NodeCard({ data, width, height }: { data: DefNodeData; width: number; h
         <div style={{ flexGrow: 1, overflow: "hidden", minWidth: 0 }}>
           {/* Label */}
           <div style={{
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             fontWeight: isRoot ? 700 : 500,
             fontSize: "0.875rem", lineHeight: 1.25,
+            wordBreak: "break-word",
           }}>
             {data.label}
           </div>
@@ -237,7 +245,7 @@ function NodeCard({ data, width, height }: { data: DefNodeData; width: number; h
     <div style={{
       width, height, borderRadius: 10,
       background: "#fff",
-      border: `${isRoot ? "2px" : "1.5px"} solid ${data.borderColor}`,
+      border: `2px solid ${data.borderColor}`,
     }}>
       {cardContent}
     </div>
@@ -402,34 +410,40 @@ function buildDefDiagram(agentDef: Record<string, unknown>) {
     });
   }
 
-  // Helper: add single tool node or group from root
+  // Helper: add tool nodes from root, passing descriptions when available
   const addToolCategory = (
-    items: string[], id: string,
+    tools: Array<Record<string, unknown> | string>, id: string,
     badge: string, badgeColor: string, badgeBg: string, borderColor: string,
   ) => {
-    if (items.length === 0) return;
-    if (items.length === 1) {
-      addFromRoot(id + "-0", {
-        kind: "tool", label: items[0],
-        badge, badgeColor, badgeBg, borderColor,
+    if (tools.length === 0) return;
+    if (tools.length <= MAX_INDIVIDUAL) {
+      tools.forEach((t, i) => {
+        const desc = getItemDescription(t);
+        const descSnippet = desc ? desc.slice(0, 60) + (desc.length > 60 ? "…" : "") : undefined;
+        addFromRoot(`${id}-${i}`, {
+          kind: "tool", label: getItemName(t),
+          sublabel: descSnippet,
+          badge, badgeColor, badgeBg, borderColor,
+        });
       });
     } else {
+      const names = tools.map(t => getItemName(t));
       addFromRoot(id, {
         kind: "group",
-        label: items.slice(0, 2).join(", ") + (items.length > 2 ? ", …" : ""),
-        count: items.length,
+        label: names.slice(0, 2).join(", ") + (names.length > 2 ? ", …" : ""),
+        count: tools.length,
         badge, badgeColor, badgeBg, borderColor,
-        items,
+        items: names,
       });
     }
   };
 
   // ── Tools / HTTP / MCP / RAG ─────────────────────────────────────────────
-  addToolCategory(regularTools.map(t => getItemName(t)), "tools",     "TOOLS",     "#0369a1", "#e0f2fe", "#DDDDDD");
-  addToolCategory(httpTools.map(t => getItemName(t)),    "http",      "HTTP",      "#6b7280", "#f3f4f6", "#DDDDDD");
-  addToolCategory(mcpTools.map(t => getItemName(t)),     "mcp",       "MCP",       "#7c3aed", "#ede9fe", "#c4b5fd");
-  addToolCategory(ragTools.map(t => getItemName(t)),     "rag",       "RAG",       "#0f766e", "#ccfbf1", "#99f6e4");
-  addToolCategory(allGuardrails,                         "guardrails","GUARDRAILS","#b45309", "#fef3c7", "#fde68a");
+  addToolCategory(regularTools,  "tools",     "@TOOL",     "#0369a1", "#e0f2fe", "#7dd3fc");
+  addToolCategory(httpTools,     "http",      "HTTP",      "#6b7280", "#f3f4f6", "#d1d5db");
+  addToolCategory(mcpTools,      "mcp",       "MCP",       "#7c3aed", "#ede9fe", "#c4b5fd");
+  addToolCategory(ragTools,      "rag",       "RAG",       "#0f766e", "#ccfbf1", "#99f6e4");
+  addToolCategory(allGuardrails, "guardrails","GUARDRAILS","#b45309", "#fef3c7", "#fde68a");
 
   return { nodes, edges };
 }

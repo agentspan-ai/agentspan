@@ -154,7 +154,16 @@ public class AgentRuntime implements AutoCloseable {
      * @return a CompletableFuture that resolves to an AgentHandle
      */
     public CompletableFuture<AgentHandle> startAsync(Agent agent, String prompt) {
-        prepareWorkers(agent);
+        // Stateful agents get a per-execution domain UUID. The server uses it
+        // as taskToDomain for every worker task in this run; local workers are
+        // registered under the same domain so they poll the per-execution
+        // queue. Without this, concurrent stateful runs share a single domain
+        // queue and can dequeue each other's tasks.
+        // Mirrors Python runtime._has_stateful_tools + run_id = uuid.uuid4().
+        final String runId = hasStatefulTools(agent)
+            ? java.util.UUID.randomUUID().toString().replace("-", "")
+            : null;
+        prepareWorkers(agent, runId);
         workerManager.startAll();
 
         return CompletableFuture.supplyAsync(() -> {
@@ -170,15 +179,31 @@ public class AgentRuntime implements AutoCloseable {
             Map<String, Object> response;
             String framework = agent.getFramework();
             if (framework != null && !framework.isEmpty() && !"skill".equals(framework)) {
-                response = httpApi.startFrameworkAgent(framework, agentConfig, prompt, sessionId);
+                response = httpApi.startFrameworkAgent(framework, agentConfig, prompt, sessionId, runId);
             } else {
-                response = httpApi.startAgent(agentConfig, prompt, sessionId);
+                response = httpApi.startAgent(agentConfig, prompt, sessionId, runId);
             }
-            String workflowId = extractWorkflowId(response);
+            String executionId = extractExecutionId(response);
 
-            logger.info("Agent '{}' started with workflow ID: {}", agent.getName(), workflowId);
-            return new AgentHandle(workflowId, httpApi);
+            logger.info("Agent '{}' started with execution ID: {}", agent.getName(), executionId);
+            return new AgentHandle(executionId, httpApi);
         });
+    }
+
+    private static boolean hasStatefulTools(Agent agent) {
+        if (agent.isStateful()) return true;
+        if (agent.getTools() != null) {
+            for (ToolDef t : agent.getTools()) {
+                if (t != null && t.isStateful()) return true;
+            }
+        }
+        if (agent.getAgents() != null) {
+            for (Agent sub : agent.getAgents()) {
+                if (hasStatefulTools(sub)) return true;
+            }
+        }
+        if (agent.getRouter() != null && hasStatefulTools(agent.getRouter())) return true;
+        return false;
     }
 
     /**
@@ -193,13 +218,13 @@ public class AgentRuntime implements AutoCloseable {
         workerManager.startAll();
 
         return startAsync(agent, prompt).thenApply(handle -> {
-            String workflowId = handle.getWorkflowId();
-            String sseUrl = config.getServerUrl() + "/api/agent/stream/" + workflowId;
+            String executionId = handle.getExecutionId();
+            String sseUrl = config.getServerUrl() + "/api/agent/stream/" + executionId;
 
             SseClient sseClient = new SseClient(sseUrl, config, httpApi.getHttpClient());
             sseClient.connect();
 
-            return new AgentStream(workflowId, sseClient, httpApi);
+            return new AgentStream(executionId, sseClient, httpApi);
         });
     }
 
@@ -309,6 +334,24 @@ public class AgentRuntime implements AutoCloseable {
      *
      * @param agent the agent (root or sub-agent)
      */
+    /**
+     * Like {@link #prepareWorkers(Agent)} but registers every worker under the
+     * given per-execution domain. Used for stateful agents so concurrent
+     * runs don't share a worker queue.
+     */
+    public void prepareWorkers(Agent agent, String domain) {
+        if (domain == null || domain.isEmpty()) {
+            prepareWorkers(agent);
+            return;
+        }
+        workerManager.setCurrentDomain(domain);
+        try {
+            prepareWorkers(agent);
+        } finally {
+            workerManager.setCurrentDomain(null);
+        }
+    }
+
     public void prepareWorkers(Agent agent) {
         // Register tools for this agent
         for (ToolDef tool : agent.getTools()) {
@@ -711,11 +754,11 @@ public class AgentRuntime implements AutoCloseable {
         return result;
     }
 
-    private String extractWorkflowId(Map<String, Object> response) {
-        // Try several possible keys — server renamed workflowId → executionId
+    private String extractExecutionId(Map<String, Object> response) {
         Object id = response.get("executionId");
         if (id != null) return id.toString();
 
+        // Legacy fallback — older server versions may still return workflowId
         id = response.get("workflowId");
         if (id != null) return id.toString();
 
@@ -725,11 +768,10 @@ public class AgentRuntime implements AutoCloseable {
         id = response.get("correlationId");
         if (id != null) return id.toString();
 
-        // If only one value in the map, use it
         if (response.size() == 1) {
             return response.values().iterator().next().toString();
         }
 
-        throw new RuntimeException("Cannot extract workflow ID from response: " + response);
+        throw new RuntimeException("Cannot extract execution ID from response: " + response);
     }
 }

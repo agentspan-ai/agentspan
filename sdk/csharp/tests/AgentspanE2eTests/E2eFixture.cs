@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Net.Http;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Agentspan.E2eTests;
@@ -41,6 +42,21 @@ public sealed class E2eFixture : IAsyncLifetime
     public void RequireServer()
     {
         Skip.IfNot(ServerAvailable, "Agentspan server is not reachable — skipping e2e test.");
+    }
+
+    /// <summary>
+    /// Fetch a workflow execution from the server API for runtime-state
+    /// assertions. Mirrors Python's <c>_get_workflow(execution_id)</c> helper
+    /// used in suites 6, 10, 12, 14 to inspect compiled task graphs after a
+    /// <c>RunAsync</c> call.
+    /// </summary>
+    public async Task<JsonNode?> FetchWorkflowAsync(string executionId)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        var resp = await http.GetAsync($"{ServerBase}/api/workflow/{executionId}?includeTasks=true");
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadAsStringAsync();
+        return JsonNode.Parse(body);
     }
 }
 

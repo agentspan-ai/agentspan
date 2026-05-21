@@ -116,7 +116,22 @@ public class AgentConfig {
     private boolean external = false;
 
     /** Whether to append a final LLM synthesis step after specialist agents complete.
-     * Set to false to pass specialist output through unchanged. Default true. */
-    @Builder.Default
-    private boolean synthesize = true;
+     * Set to false to pass specialist output through unchanged. Default true.
+     *
+     * <p>Modelled as nullable Boolean (no Builder.Default) so {@code @JsonInclude(NON_NULL)}
+     * keeps the field out of serialized output when callers leave it unset — the SDKs only
+     * emit ``synthesize`` on the wire when explicitly disabled, and the metadata.agentDef
+     * round-trip must preserve that. {@link #isSynthesize()} treats null as ``true``
+     * for compiler use.
+     *
+     * <p>Without this nullable-Boolean shape, ``Suite16Synthesize.test_handoff_default_has_final_task``
+     * fails: a primitive ``boolean synthesize = true`` always serializes to JSON, so
+     * ``agentDef`` contains ``synthesize: true`` even when the caller never set the flag —
+     * violating the test's contract (omit unless explicitly disabled). */
+    private Boolean synthesize;
+
+    /** True iff synthesize hasn't been explicitly disabled (treats null/unset as default true). */
+    public boolean isSynthesize() {
+        return synthesize == null || synthesize;
+    }
 }
