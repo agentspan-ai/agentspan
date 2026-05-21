@@ -75,8 +75,10 @@ public class Example11CustomerSupport {
     }
 
     public static void main(String[] args) {
+        // apiKey is required by LangChain4j's builder but unused — Agentspan
+        // runs the LLM call on the server with server-registered credentials.
         ChatModel model = OpenAiChatModel.builder()
-                .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+                .apiKey("agentspan-server-handles-credentials")
                 .modelName("gpt-4o-mini")
                 .build();
 

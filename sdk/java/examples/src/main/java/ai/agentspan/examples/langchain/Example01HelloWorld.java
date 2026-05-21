@@ -20,15 +20,16 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
  * <p>Requirements:
  * <ul>
  *   <li>{@code AGENTSPAN_SERVER_URL=http://localhost:6767/api}</li>
- *   <li>{@code OPENAI_API_KEY} set (only the model identifier matters; the
- *       server makes the actual LLM call using its own credentials)</li>
+ *   <li>Agentspan server with OpenAI credentials configured server-side.</li>
  * </ul>
  */
 public class Example01HelloWorld {
 
     public static void main(String[] args) {
+        // apiKey is required by LangChain4j's builder but unused — Agentspan
+        // runs the LLM call on the server with server-registered credentials.
         ChatModel model = OpenAiChatModel.builder()
-                .apiKey(System.getenv().getOrDefault("OPENAI_API_KEY", "unused"))
+                .apiKey("agentspan-server-handles-credentials")
                 .modelName("gpt-4o-mini")
                 .build();
 
