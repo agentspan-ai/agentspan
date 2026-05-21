@@ -70,7 +70,9 @@ public class AuthFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return "/api/auth/login".equals(path);
+        // /api/info exposes only a per-JVM instance UUID (used by SDK clients
+        // to detect server restarts) — safe to probe without auth.
+        return "/api/auth/login".equals(path) || "/api/info".equals(path);
     }
 
     @Override
