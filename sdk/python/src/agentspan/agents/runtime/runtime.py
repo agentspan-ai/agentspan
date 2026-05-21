@@ -41,6 +41,16 @@ from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailable
 logger = logging.getLogger("agentspan.agents.runtime")
 
 
+def _is_local_server(server_url: str) -> bool:
+    """Return True if *server_url* points to a loopback address."""
+    from urllib.parse import urlparse
+
+    if not server_url:
+        return False
+    host = (urlparse(server_url).hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "::1", "0.0.0.0")
+
+
 _RETRY_POLICY_MAP = {
     "fixed": "FIXED",
     "linear_backoff": "LINEAR_BACKOFF",
@@ -377,6 +387,12 @@ class AgentRuntime:
         )
 
         logger.info("AgentRuntime initialized (server=%s)", self._config.server_url)
+
+        # Push shell env vars into the local server's credential store so a
+        # corrected key reaches the running JVM without a restart. Skipped
+        # for remote — would clobber UI-managed credentials.
+        if _is_local_server(self._config.server_url):
+            self._sync_provider_env_to_server()
 
     # ── Sync/async bridge ────────────────────────────────────────────
 
@@ -2072,13 +2088,26 @@ class AgentRuntime:
 
             self._integration_api_available = True
         except Exception as e:
-            if self._integration_api_available is None:
-                # First failure — likely OSS Conductor without integration API
-                logger.warning(
-                    "Integration API not available (OSS Conductor?). "
-                    "Auto-registration disabled: %s",
-                    e,
-                )
+            first_failure = self._integration_api_available is None
+            # First failure → assume OSS Conductor (no integration API); push
+            # the key via /api/credentials instead. Later failures are per-model.
+            if first_failure:
+                try:
+                    self._push_credential_to_server(spec.api_key_env, api_key)
+                    logger.info(
+                        "Integration API not available (OSS Conductor?). "
+                        "Pushed %s via /api/credentials instead: %s",
+                        spec.api_key_env,
+                        e,
+                    )
+                except Exception as cred_err:
+                    logger.warning(
+                        "Auto-registration failed for '%s' on both integration "
+                        "API (%s) and credentials API (%s).",
+                        model_string,
+                        e,
+                        cred_err,
+                    )
                 self._integration_api_available = False
             else:
                 logger.warning(
@@ -2088,6 +2117,51 @@ class AgentRuntime:
                 )
 
         self._ensured_models.add(model_string)
+
+    # ── Credential push (Agentspan-native /api/credentials) ────────────
+
+    def _push_credential_to_server(self, name: str, value: str) -> None:
+        """Upsert a credential on the Agentspan server via PUT /api/credentials/{name}.
+
+        Used as a fallback when the Conductor integration API is unavailable
+        (e.g. the local OSS server). Raises on HTTP error so callers can decide
+        whether to swallow the failure.
+        """
+        import httpx
+
+        base = self._config.server_url.rstrip("/")
+        url = f"{base}/credentials/{name}"
+
+        headers: Dict[str, str] = {}
+        if self._config.api_key:
+            headers["Authorization"] = f"Bearer {self._config.api_key}"
+        elif self._config.auth_key:
+            headers["X-Auth-Key"] = self._config.auth_key
+            if self._config.auth_secret:
+                headers["X-Auth-Secret"] = self._config.auth_secret
+
+        resp = httpx.put(url, json={"value": value}, headers=headers, timeout=5.0)
+        resp.raise_for_status()
+
+    def _sync_provider_env_to_server(self) -> None:
+        """Push every known provider env var into the server's credential store.
+
+        Runs once at AgentRuntime construction (localhost target only). Each
+        non-empty env var is upserted via :meth:`_push_credential_to_server`.
+        Failures are logged at debug and swallowed — this is a best-effort
+        convenience and should never block a runtime from starting.
+        """
+        from agentspan.agents._internal.provider_registry import KNOWN_PROVIDER_ENV_VARS
+
+        for name in sorted(KNOWN_PROVIDER_ENV_VARS):
+            value = os.environ.get(name)
+            if not value:
+                continue
+            try:
+                self._push_credential_to_server(name, value)
+                logger.debug("Synced %s into local server credential store", name)
+            except Exception as e:
+                logger.debug("Could not sync %s into local server: %s", name, e)
 
     def _ensure_models_for_agent(self, agent: Agent) -> None:
         """Walk the agent tree and ensure all referenced models are registered."""
