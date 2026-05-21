@@ -58,3 +58,25 @@ def get_provider_spec(provider_name: str) -> Optional[ProviderSpec]:
     Returns ``None`` if the provider is not in the registry.
     """
     return PROVIDER_REGISTRY.get(provider_name)
+
+
+# Mirrors server-side CredentialEnvSeeder.KNOWN_ENV_VARS — the full set of
+# provider API key env vars the runtime will sync into the local server's
+# credential store on boot. Keep in sync with the Java list.
+KNOWN_PROVIDER_ENV_VARS: frozenset[str] = frozenset(
+    {
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "MISTRAL_API_KEY",
+        "COHERE_API_KEY",
+        "XAI_API_KEY",
+        "PERPLEXITY_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "HUGGINGFACE_API_KEY",
+        "GROQ_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "TOGETHER_API_KEY",
+    }
+)

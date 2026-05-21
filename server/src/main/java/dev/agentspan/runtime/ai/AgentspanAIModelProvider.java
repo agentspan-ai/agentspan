@@ -102,12 +102,22 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         log.debug("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
         log.debug("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
+
+        // A blank credential is worse than no credential — it would be passed
+        // to Spring AI and produce a 401 with a misleading "cannot retry due
+        // to server authentication" message. Treat blank as missing.
+        if (userApiKey != null && userApiKey.isBlank()) {
+            log.warn("Per-user credential for '{}' resolved to a blank value — ignoring.", provider);
+            userApiKey = null;
+        }
+
         if (userApiKey != null || baseUrl != null) {
             try {
                 // If we have a base URL but no user key, try the server-wide key
                 if (userApiKey == null) {
                     String envVar = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
-                    userApiKey = envVar != null ? System.getenv(envVar) : null;
+                    String envValue = envVar != null ? lookupEnv(envVar) : null;
+                    userApiKey = (envValue != null && !envValue.isBlank()) ? envValue : null;
                 }
                 if (userApiKey != null) {
                     AIModel model = createModelWithKey(provider, userApiKey, baseUrl);
@@ -122,8 +132,37 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             }
         }
 
+        // Before falling back to the server-wide bean: if the env var is empty/missing,
+        // the bean was configured with "" at startup — fail fast instead of letting Spring AI emit a misleading mid-stream 401.
+        String envVar = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
+        if (envVar != null) {
+            String envValue = lookupEnv(envVar);
+            if (envValue == null || envValue.isBlank()) {
+                throw new IllegalStateException(
+                        "No API key configured for provider '"
+                                + provider
+                                + "'. The server started with an empty "
+                                + envVar
+                                + ", and no credential exists in the store. "
+                                + "Set "
+                                + envVar
+                                + " in the environment before starting the server, "
+                                + "push it via PUT /api/credentials/"
+                                + envVar
+                                + ", or save it via the Credentials UI.");
+            }
+        }
+
         // Fall back to server-wide model
         return super.getModel(input);
+    }
+
+    /**
+     * Indirection over {@link System#getenv(String)} so tests can inject env vars.
+     * Package-private; production code calls {@code System.getenv} directly.
+     */
+    String lookupEnv(String name) {
+        return System.getenv(name);
     }
 
     /**
@@ -259,8 +298,20 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
     /**
      * Create a fresh AIModel instance with a per-user API key and optional base URL.
+     *
+     * <p>The returned model is wrapped in {@link AuthClarifyingAIModel} so a
+     * 401 from the upstream provider (caused by a typo, expired, or revoked
+     * key) surfaces with a clear remediation message instead of Spring AI's
+     * misleading "cannot retry due to server authentication" mid-stream error.</p>
      */
     private AIModel createModelWithKey(String provider, String apiKey, String baseUrl) {
+        AIModel raw = createRawModelWithKey(provider, apiKey, baseUrl);
+        if (raw == null) return null;
+        String envVar = PROVIDER_TO_ENV_VAR.getOrDefault(provider.toLowerCase(), "<api key>");
+        return new AuthClarifyingAIModel(raw, provider, envVar);
+    }
+
+    private AIModel createRawModelWithKey(String provider, String apiKey, String baseUrl) {
         ModelConfiguration<? extends AIModel> config =
                 switch (provider.toLowerCase()) {
                     case "openai" -> new OpenAIConfiguration(apiKey, baseUrl, null);

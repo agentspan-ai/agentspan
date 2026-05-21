@@ -15,6 +15,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,6 +34,7 @@ import org.springframework.stereotype.Component;
  * (Vault, AWS SM, etc.) manage their own secrets.</p>
  */
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 100)
 public class CredentialEnvSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialEnvSeeder.class);
@@ -107,6 +110,15 @@ public class CredentialEnvSeeder implements ApplicationRunner {
     private final CredentialStoreProvider storeProvider;
     private final Function<String, String> envLookup;
 
+    /**
+     * Env vars whose VALUE differs from what's stored under the same name.
+     * Populated by {@link #run(ApplicationArguments)} and surfaced via the
+     * startup banner ({@code AgentRuntime}) so a user who's fat-fingered an
+     * API key and re-exported it can see immediately that the server is
+     * still using the cached value.
+     */
+    private final java.util.List<String> lastMismatchedNames = new java.util.ArrayList<>();
+
     @Value("${agentspan.credentials.store:built-in}")
     private String credentialsStore;
 
@@ -124,6 +136,8 @@ public class CredentialEnvSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        lastMismatchedNames.clear();
+
         if (!"built-in".equals(credentialsStore)) {
             log.debug("Credential env seeding skipped — store={} is not built-in", credentialsStore);
             return;
@@ -161,10 +175,22 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             }
 
             if (existing != null) {
-                log.warn(
-                        "Credential '{}' already exists in store — skipping env import. "
-                                + "To update the value, use the Credentials UI.",
-                        name);
+                if (!existing.equals(value)) {
+                    // The user-facing pain point: env value differs from the
+                    // stored value but the stored value wins. Surface loudly
+                    // so the user doesn't lose an hour debugging.
+                    lastMismatchedNames.add(name);
+                    log.warn(
+                            "Credential '{}' in environment DIFFERS from stored value — "
+                                    + "stored value will be used. To update the stored value, "
+                                    + "run `agentspan credentials set {} \"$" + name + "\"`, "
+                                    + "push via PUT /api/credentials/{}, or use the Credentials UI.",
+                            name,
+                            name,
+                            name);
+                } else {
+                    log.debug("Credential '{}' matches env — leaving stored value in place", name);
+                }
                 skipped++;
                 continue;
             }
@@ -181,5 +207,14 @@ public class CredentialEnvSeeder implements ApplicationRunner {
         if (created > 0 || skipped > 0) {
             log.info("Credential env seeding complete: {} created, {} already existed (skipped)", created, skipped);
         }
+    }
+
+    /**
+     * Names of env vars whose value differed from the stored value on the
+     * most recent {@link #run(ApplicationArguments)}. Empty when env matches
+     * stored or no env vars were set.
+     */
+    public java.util.List<String> getLastMismatchedNames() {
+        return java.util.List.copyOf(lastMismatchedNames);
     }
 }
