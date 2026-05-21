@@ -35,7 +35,7 @@ public class RunResult {
 
     /** The Agentspan execution ID for debugging. */
     public String getExecutionId() {
-        return agentResult.getWorkflowId();
+        return agentResult.getExecutionId();
     }
 
     /** The underlying AgentResult. */

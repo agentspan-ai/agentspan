@@ -33,7 +33,7 @@ public class Example12LongRunning {
             AgentHandle handle = runtime.start(analyst,
                 "What are the key metrics to track for a SaaS product?");
 
-            System.out.println("Agent started: " + handle.getWorkflowId());
+            System.out.println("Agent started: " + handle.getExecutionId());
             System.out.println("Polling for result...");
 
             // Simulate doing other work while the agent runs
