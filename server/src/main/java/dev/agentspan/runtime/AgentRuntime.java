@@ -17,9 +17,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.EnableScheduling;
+
+import dev.agentspan.runtime.credentials.CredentialEnvSeeder;
 
 import lombok.RequiredArgsConstructor;
 
@@ -34,11 +39,15 @@ import lombok.RequiredArgsConstructor;
             "dev.agentspan.runtime"
         })
 @RequiredArgsConstructor
+@Order(Ordered.HIGHEST_PRECEDENCE + 1000)
 public class AgentRuntime implements ApplicationRunner {
 
     private final Logger log = LoggerFactory.getLogger(AgentRuntime.class);
 
     private final Environment environment;
+
+    @Autowired(required = false)
+    private CredentialEnvSeeder credentialEnvSeeder;
 
     public static void main(String[] args) {
         SpringApplication.run(AgentRuntime.class, args);
@@ -75,6 +84,32 @@ public class AgentRuntime implements ApplicationRunner {
         log.info("\n\n\n");
 
         checkAIProviders(environment);
+        warnOnStoredCredentialMismatch();
+    }
+
+    /**
+     * Surface any env-vs-stored credential mismatch detected by the seeder so
+     * a user who's fat-fingered an API key and re-exported it sees on the
+     * very next server start that the cached value is still winning.
+     */
+    private void warnOnStoredCredentialMismatch() {
+        if (credentialEnvSeeder == null) return;
+        var mismatched = credentialEnvSeeder.getLastMismatchedNames();
+        if (mismatched.isEmpty()) return;
+
+        log.warn("┌─────────────────────────────────────────────────────────────────┐");
+        log.warn("│  STORED CREDENTIAL DIFFERS FROM ENVIRONMENT                     │");
+        log.warn("│                                                                 │");
+        log.warn("│  The following env vars are SET but differ from the cached      │");
+        log.warn("│  credential the server is using:                                │");
+        for (String name : mismatched) {
+            log.warn("│    - {}", padRight(name, 58) + "│");
+        }
+        log.warn("│                                                                 │");
+        log.warn("│  The CACHED value is being used. To update the stored value:    │");
+        log.warn("│    agentspan credentials set NAME \"$NAME\"                     │");
+        log.warn("│  or PUT /api/credentials/NAME or use the Credentials UI.        │");
+        log.warn("└─────────────────────────────────────────────────────────────────┘");
     }
 
     private void checkAIProviders(Environment env) {
