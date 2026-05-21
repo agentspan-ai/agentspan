@@ -1079,12 +1079,13 @@ class MultiAgentCompilerTest {
     }
 
     @Test
-    void testPlanExecuteWithGuardrailedToolNoFallback_compilesButWarns() {
-        // RETRY/FIX/HUMAN guardrails collapse to TERMINATE in plan mode; if
-        // there's also no fallback agent, the whole pipeline just fails on a
-        // guardrail trip. compilePlanExecute logs a warning telling the user
-        // to either configure a fallback or switch on_fail to RAISE. It must
-        // NOT block compile — fail-loud-on-trip is also a valid choice.
+    void testPlanExecute_failsCompile_whenGuardrailedToolHasRetryButNoFallback() {
+        // RETRY/FIX/HUMAN guardrails collapse to TERMINATE in plan mode;
+        // without a fallback agent the whole pipeline silently degrades to
+        // fail-loud-on-trip instead of the retry-with-feedback semantics
+        // the user asked for. PAC used to log.warn; now it fails compile
+        // and forces the user to either configure a fallback or
+        // explicitly set on_fail=raise.
         GuardrailConfig retryGuard = GuardrailConfig.builder()
                 .name("size_limit")
                 .guardrailType("regex")
@@ -1109,12 +1110,79 @@ class MultiAgentCompilerTest {
                 // intentionally no fallback
                 .build();
 
-        // Compile must succeed. The warn is observable in logs (manual
-        // verification); covered here by ensuring no exception is thrown
-        // and the workflow shape is well-formed.
+        assertThatThrownBy(() -> new MultiAgentCompiler(compiler).compile(harness))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("on_fail=retry")
+                .hasMessageContaining("fallback")
+                .hasMessageContaining("upload");
+    }
+
+    @Test
+    void testPlanExecute_compilesOk_whenGuardrailHasRetryButHarnessHasFallback() {
+        // Same shape as the previous test, with a fallback added —
+        // compile must succeed because retry/fix/human can be served by
+        // the fallback's LLM-loop recovery.
+        GuardrailConfig retryGuard = GuardrailConfig.builder()
+                .name("size_limit")
+                .guardrailType("regex")
+                .position("input")
+                .onFail("retry")
+                .patterns(List.of("too_big"))
+                .mode("block")
+                .build();
+        ToolConfig guardedTool = ToolConfig.builder()
+                .name("upload")
+                .toolType("worker")
+                .guardrails(List.of(retryGuard))
+                .build();
+
+        AgentConfig planner = simpleSubAgent("planner", "Plan");
+        AgentConfig fallback = simpleSubAgent("fb", "Recover");
+        AgentConfig harness = AgentConfig.builder()
+                .name("ok_with_fallback")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .fallback(fallback)
+                .tools(List.of(guardedTool))
+                .build();
+
         WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
         assertThat(wf).isNotNull();
-        assertThat(wf.getName()).isEqualTo("no_fb_with_retry_guardrail");
+        assertThat(wf.getName()).isEqualTo("ok_with_fallback");
+    }
+
+    @Test
+    void testPlanExecute_compilesOk_whenGuardrailIsOnFailRaiseWithoutFallback() {
+        // on_fail=raise acknowledges fail-closed semantics — compile must
+        // succeed without a fallback. This is the "I know retry collapses
+        // and I'm fine with it" path that the new compile-error guards.
+        GuardrailConfig raiseGuard = GuardrailConfig.builder()
+                .name("size_limit")
+                .guardrailType("regex")
+                .position("input")
+                .onFail("raise")
+                .patterns(List.of("too_big"))
+                .mode("block")
+                .build();
+        ToolConfig guardedTool = ToolConfig.builder()
+                .name("upload")
+                .toolType("worker")
+                .guardrails(List.of(raiseGuard))
+                .build();
+
+        AgentConfig planner = simpleSubAgent("planner", "Plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("ok_raise_no_fallback")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .tools(List.of(guardedTool))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+        assertThat(wf).isNotNull();
+        assertThat(wf.getName()).isEqualTo("ok_raise_no_fallback");
     }
 
     @Test

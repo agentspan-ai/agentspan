@@ -2043,25 +2043,27 @@ public class MultiAgentCompiler {
         // provides). Log-only — don't block compile, since "fail loud on
         // guardrail trip" is also a valid choice.
         if (fallbackConfig == null) {
+            List<String> offenders = new ArrayList<>();
             for (ToolConfig t : parentTools) {
                 if (t.getGuardrails() == null) continue;
                 for (GuardrailConfig g : t.getGuardrails()) {
                     String onFail = g.getOnFail();
                     if (onFail != null && !"raise".equalsIgnoreCase(onFail)) {
-                        log.warn(
-                                "PLAN_EXECUTE harness '{}' has tool '{}' with guardrail '{}' "
-                                        + "on_fail={} but no fallback agent configured. In plan mode, "
-                                        + "RETRY/FIX/HUMAN all collapse to TERMINATE — without a "
-                                        + "fallback the whole pipeline will fail on a guardrail trip. "
-                                        + "Configure ``fallback=<Agent>`` on the harness to enable "
-                                        + "agentic recovery, or set ``on_fail=raise`` to acknowledge "
-                                        + "fail-closed semantics.",
-                                config.getName(),
-                                t.getName(),
-                                g.getName(),
-                                onFail);
+                        offenders.add(
+                                t.getName() + ":" + g.getName() + " (on_fail=" + onFail + ")");
                     }
                 }
+            }
+            if (!offenders.isEmpty()) {
+                throw new IllegalStateException(
+                        "PLAN_EXECUTE harness '"
+                                + config.getName()
+                                + "' has guardrails with on_fail=retry|fix|human but no fallback "
+                                + "agent. In plan mode these collapse to TERMINATE — the user-intended "
+                                + "retry-with-feedback semantics do not apply. Either configure a "
+                                + "``fallback=<Agent>`` on the harness, or set ``on_fail=raise`` on "
+                                + "these guardrails to acknowledge fail-closed semantics. Offenders: "
+                                + String.join(", ", offenders));
             }
         }
         List<String> knownToolNames = new ArrayList<>();

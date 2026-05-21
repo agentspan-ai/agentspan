@@ -252,7 +252,7 @@ Configure `fallback=<Agent>` on the harness for adaptive recovery when:
 
 The fallback runs as a normal LLM-loop agent with the harness's `tools`. It receives the original prompt + the failure context (planner output, error message). `fallback_max_turns` caps its turn count during recovery.
 
-Without a fallback, any failure terminates the workflow. Acceptable for fail-loud pipelines; surprising otherwise — the SDK warns at compile time when guardrails with `on_fail≠raise` are configured but no fallback exists.
+Without a fallback, any failure terminates the workflow. Acceptable for fail-loud pipelines; surprising otherwise — PAC **refuses to compile** when guardrails with `on_fail=retry|fix|human` are configured but no fallback exists, forcing you to either configure a fallback or explicitly set `on_fail=raise` to acknowledge fail-closed semantics.
 
 ## What PAC actually emits
 
@@ -397,5 +397,5 @@ plan = Plan(
 |---|---|---|
 | Workflow FAILED with "uses unknown tool" in PAC error | Planner emitted a tool name not in `harness.tools` | Add the tool, or fix the planner prompt; the auto-injected `## Available tools` block already constrains the planner — check it appears in your prompt |
 | Workflow FAILED, no fallback ran | `plan_exec` SUB_WORKFLOW failure not caught | Confirm `harness.fallback` is set; failures route through `exec_route` SWITCH to fallback |
-| Guardrail tripped, workflow terminated | No fallback configured for `on_fail=retry/fix/human` | Configure a fallback or set `on_fail=raise` to acknowledge fail-closed semantics |
+| Compile fails with "guardrails with on_fail=retry\|fix\|human but no fallback" | PAC blocks compile to prevent the silent degrade-to-terminate footgun | Configure a fallback or set `on_fail=raise` |
 | Plan compiled but did wrong thing | Planner LLM produced a syntactically-valid but semantically-wrong plan | Improve `planner_instructions`; consider switching to `plan=` static plan for deterministic flows |
