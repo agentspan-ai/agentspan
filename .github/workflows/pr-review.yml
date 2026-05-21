@@ -39,6 +39,7 @@ jobs:
         run: pip install agentspan
 
       - name: Run PR Review
+        if: ${{ secrets.AGENTSPAN_SERVER_URL != '' }}
         run: |
           python sdk/python/examples/pr-review-skill/run_review.py \
             ${{ github.event.pull_request.number }} \
