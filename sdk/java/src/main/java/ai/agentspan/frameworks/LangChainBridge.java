@@ -1,10 +1,9 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-package ai.agentspan.examples.langchain;
+package ai.agentspan.frameworks;
 
 import ai.agentspan.Agent;
-import ai.agentspan.frameworks.LangChain4jAgent;
 
 import dev.langchain4j.model.ModelProvider;
 import dev.langchain4j.model.chat.ChatModel;
@@ -30,14 +29,41 @@ public final class LangChainBridge {
      * POJOs into an Agentspan {@link Agent}.
      */
     public static Agent toAgentspan(String name, ChatModel model, String systemPrompt, Object... tools) {
-        String modelString = providerSlashModel(model);
-        return LangChain4jAgent.from(name, modelString, systemPrompt, tools);
+        return agentBuilder(name, model, systemPrompt, tools).build();
     }
 
     /** Same as {@link #toAgentspan(String, ChatModel, String, Object...)} with no tools. */
     public static Agent toAgentspan(String name, ChatModel model, String systemPrompt) {
+        return agentBuilder(name, model, systemPrompt).build();
+    }
+
+    /**
+     * Same as {@link #toAgentspan} but returns the populated
+     * {@link Agent.Builder} so callers can attach Agentspan-only features
+     * (guardrails, gate, termination, callbacks) before {@code .build()}:
+     *
+     * <pre>{@code
+     * Agent agent = LangChainBridge.agentBuilder("name", model, "prompt", new MyTools())
+     *     .guardrails(piiGuard)
+     *     .build();
+     * Agentspan.run(agent, "...");
+     * }</pre>
+     */
+    public static Agent.Builder agentBuilder(String name, ChatModel model, String systemPrompt, Object... tools) {
         String modelString = providerSlashModel(model);
-        return LangChain4jAgent.from(name, modelString, systemPrompt);
+        // Mirrors LangChain4jAgent.from but returns the Builder so callers can
+        // decorate. Imports are kept package-local since LangChain4jAgent is
+        // an ai.agentspan.frameworks class.
+        java.util.List<ai.agentspan.model.ToolDef> toolDefs =
+                LangChain4jAgent.extractTools(tools);
+        Agent.Builder b = Agent.builder()
+                .name(name)
+                .model(modelString)
+                .instructions(systemPrompt);
+        if (!toolDefs.isEmpty()) {
+            b.tools(toolDefs);
+        }
+        return b;
     }
 
     /**

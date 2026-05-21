@@ -6,6 +6,7 @@ package ai.agentspan.examples.langgraph;
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
+import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;

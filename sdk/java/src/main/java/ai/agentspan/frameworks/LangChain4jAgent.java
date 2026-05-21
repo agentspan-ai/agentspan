@@ -128,8 +128,17 @@ public class LangChain4jAgent {
                     try {
                         Object[] args = buildMethodArgs(finalMethod, inputData);
                         return finalMethod.invoke(instance, args);
-                    } catch (Exception e) {
-                        throw new RuntimeException("LangChain4j tool execution failed: " + finalName, e);
+                    } catch (java.lang.reflect.InvocationTargetException ite) {
+                        // Unwrap so the user sees their own exception, not the
+                        // confusing double-wrap.
+                        Throwable cause = ite.getCause() != null ? ite.getCause() : ite;
+                        if (cause instanceof RuntimeException re) throw re;
+                        throw new RuntimeException("LangChain4j tool '" + finalName
+                                + "' threw: " + cause.getMessage(), cause);
+                    } catch (IllegalAccessException | IllegalArgumentException ex) {
+                        throw new RuntimeException("LangChain4j tool '" + finalName
+                                + "' invocation failed (check parameter types and the "
+                                + "-parameters compiler flag): " + ex.getMessage(), ex);
                     }
                 };
 
@@ -252,6 +261,9 @@ public class LangChain4jAgent {
      * 2. Compiler-retained name (not "arg0")
      * 3. Positional fallback "arg{i}"
      */
+    private static final java.util.Set<String> WARNED_ARG_METHODS =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private static String resolveParamName(Parameter param, int index) {
         // Check @P first
         for (java.lang.annotation.Annotation ann : param.getAnnotations()) {
@@ -266,6 +278,18 @@ public class LangChain4jAgent {
         String name = param.getName();
         if (name != null && !name.startsWith("arg")) {
             return name;
+        }
+        // Compiler-retained names require javac -parameters at the user's
+        // build time. Without it the LLM sees arg0/arg1 — guaranteed
+        // garbage tool calls. Warn once per method so the user notices.
+        String key = param.getDeclaringExecutable().getDeclaringClass().getName()
+                + "#" + param.getDeclaringExecutable().getName();
+        if (WARNED_ARG_METHODS.add(key)) {
+            org.slf4j.LoggerFactory.getLogger(LangChain4jAgent.class).warn(
+                    "LangChain4jAgent: method '{}' parameter names are not preserved. "
+                    + "The LLM will see meaningless 'arg0' parameter names. Compile "
+                    + "with javac -parameters or use @P(\"...\") on each parameter.",
+                    key);
         }
         return "arg" + index;
     }
@@ -298,58 +322,13 @@ public class LangChain4jAgent {
             Parameter param = params[i];
             String paramName = resolveParamName(param, i);
             Object raw = inputData != null ? inputData.get(paramName) : null;
-            args[i] = coerce(raw, param.getType());
+            // Share ToolRegistry's coercion table: primitives + String + Boolean
+            // + java.time.* + enums + Optional + List<X>/Map/arrays via Jackson.
+            // Without this, declaring a LocalDate / List<Double> / enum param
+            // on an @Tool method would IllegalArgumentException at invoke time.
+            args[i] = ai.agentspan.internal.ToolRegistry.coerceArgument(
+                    raw, param.getType(), param.getParameterizedType());
         }
         return args;
-    }
-
-    /**
-     * Coerce a raw value (from JSON deserialization) to the target Java type.
-     * Delegates to {@link ToolRegistry}'s logic for numeric conversions.
-     */
-    private static Object coerce(Object value, Class<?> targetType) {
-        if (value == null) return defaultFor(targetType);
-        if (targetType.isInstance(value)) return value;
-
-        // When the LLM emits a JSON object/array for a String-typed parameter,
-        // serialize it as JSON instead of using Java's Map/List toString format
-        // (which uses `{key=value}` rather than `{"key":"value"}`). Tool authors
-        // expect JSON when they declare `String values`.
-        if (targetType == String.class && (value instanceof Map || value instanceof List)) {
-            try {
-                return ai.agentspan.internal.JsonMapper.get().writeValueAsString(value);
-            } catch (Exception e) {
-                return value.toString();
-            }
-        }
-
-        String str = value.toString();
-        if (targetType == String.class) return str;
-        if (targetType == int.class || targetType == Integer.class) {
-            return value instanceof Number ? ((Number) value).intValue() : Integer.parseInt(str);
-        }
-        if (targetType == long.class || targetType == Long.class) {
-            return value instanceof Number ? ((Number) value).longValue() : Long.parseLong(str);
-        }
-        if (targetType == double.class || targetType == Double.class) {
-            return value instanceof Number ? ((Number) value).doubleValue() : Double.parseDouble(str);
-        }
-        if (targetType == float.class || targetType == Float.class) {
-            return value instanceof Number ? ((Number) value).floatValue() : Float.parseFloat(str);
-        }
-        if (targetType == boolean.class || targetType == Boolean.class) {
-            if (value instanceof Boolean) return value;
-            return Boolean.parseBoolean(str);
-        }
-        return value;
-    }
-
-    private static Object defaultFor(Class<?> type) {
-        if (type == int.class) return 0;
-        if (type == long.class) return 0L;
-        if (type == double.class) return 0.0;
-        if (type == float.class) return 0.0f;
-        if (type == boolean.class) return false;
-        return null;
     }
 }

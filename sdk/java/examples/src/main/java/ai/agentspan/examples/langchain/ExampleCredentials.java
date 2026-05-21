@@ -9,6 +9,7 @@ import ai.agentspan.annotations.Tool;
 import ai.agentspan.internal.ToolRegistry;
 import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.ToolDef;
+import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
