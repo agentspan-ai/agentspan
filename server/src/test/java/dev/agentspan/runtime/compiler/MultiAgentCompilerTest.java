@@ -1118,6 +1118,47 @@ class MultiAgentCompilerTest {
     }
 
     @Test
+    void testPlanExecute_failsCompile_whenGuardrailedToolCannotSerialize() {
+        // A guardrail wrapper that Jackson can't serialise must fail the
+        // PAC compile, not silently drop the guardrail and emit a bare
+        // SIMPLE. Drop = fail-open on a safety control; we want fail-closed.
+        // The smallest way to force convertValue() to throw is a circular
+        // reference in the tool's config map: Jackson stack-overflows /
+        // throws JsonMappingException trying to walk it.
+        java.util.Map<String, Object> cyclic = new java.util.LinkedHashMap<>();
+        cyclic.put("self", cyclic);
+
+        GuardrailConfig g = GuardrailConfig.builder()
+                .name("must_wrap")
+                .guardrailType("regex")
+                .position("input")
+                .onFail("raise")
+                .patterns(List.of("never"))
+                .mode("block")
+                .build();
+        ToolConfig badTool = ToolConfig.builder()
+                .name("circular_config_tool")
+                .toolType("worker")
+                .guardrails(List.of(g))
+                .config(cyclic)
+                .build();
+
+        AgentConfig planner = simpleSubAgent("planner", "Plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("fail_closed_harness")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .tools(List.of(badTool))
+                .build();
+
+        assertThatThrownBy(() -> new MultiAgentCompiler(compiler).compile(harness))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("circular_config_tool")
+                .hasMessageContaining("guardrail");
+    }
+
+    @Test
     void testPlanExecuteRequiresPlannerSlot() {
         // No planner slot — must reject with a clear migration message.
         // The legacy ``agents=[planner, fallback]`` positional shape is no

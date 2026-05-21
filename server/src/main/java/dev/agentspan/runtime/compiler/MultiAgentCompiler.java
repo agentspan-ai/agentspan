@@ -2082,29 +2082,37 @@ public class MultiAgentCompiler {
                 Map<String, Object> m = MAPPER.convertValue(t, Map.class);
                 parentToolsAsMaps.add(m);
             } catch (Exception e) {
-                // Promoted from debug to WARN: a tool that fails to
-                // round-trip silently drops out of PAC's guardrail-wrapping
-                // map, and PAC then emits a bare SIMPLE for it with NO
-                // guardrail gate — fail-open on a safety check. The user
-                // needs to see this in logs even on a happy build.
-                if (t.getGuardrails() != null && !t.getGuardrails().isEmpty()) {
-                    log.warn(
-                            "PLAN_EXECUTE '{}': tool '{}' has {} guardrail(s) but failed to "
-                                    + "serialise for PAC ({}); the deterministic plan will emit a "
-                                    + "BARE SIMPLE for this tool with NO guardrail enforcement. "
-                                    + "Investigate the ToolConfig — typically a non-Jackson-friendly "
-                                    + "value in inputSchema or config.",
-                            config.getName(),
-                            t.getName(),
-                            t.getGuardrails().size(),
-                            e.getMessage());
-                } else {
-                    log.warn(
-                            "PLAN_EXECUTE '{}': tool '{}' failed to serialise for PAC: {}",
-                            config.getName(),
-                            t.getName(),
-                            e.getMessage());
+                // Fail-closed on safety controls: if a guardrailed tool's
+                // ToolConfig fails to serialise, PAC can't reach the
+                // guardrail metadata at SUB_WORKFLOW emission time and
+                // would otherwise drop the tool into a bare SIMPLE with
+                // NO guardrail gate. Refuse to compile rather than silently
+                // ship a wrapper-less version of a safety-checked tool.
+                boolean hasGuardrails =
+                        t.getGuardrails() != null && !t.getGuardrails().isEmpty();
+                if (hasGuardrails) {
+                    throw new IllegalStateException(
+                            "PLAN_EXECUTE '"
+                                    + config.getName()
+                                    + "': tool '"
+                                    + t.getName()
+                                    + "' has "
+                                    + t.getGuardrails().size()
+                                    + " guardrail(s) but failed to serialise for PAC ("
+                                    + e.getMessage()
+                                    + "). Cannot guarantee guardrail wrapping in the compiled "
+                                    + "plan — fix the ToolConfig (typically a non-Jackson-friendly "
+                                    + "value in inputSchema or config) and recompile.",
+                            e);
                 }
+                // No guardrails declared — safe to drop the tool from the
+                // wrapping map. Still surface the diagnostic at WARN level.
+                log.warn(
+                        "PLAN_EXECUTE '{}': tool '{}' failed to serialise for PAC (no guardrails "
+                                + "declared, safe to drop): {}",
+                        config.getName(),
+                        t.getName(),
+                        e.getMessage());
             }
         }
 
