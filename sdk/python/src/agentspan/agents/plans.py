@@ -162,9 +162,9 @@ class Op:
     generate: Optional[Generate] = None
 
     def __post_init__(self) -> None:
-        if self.args is not None and self.generate is not None:
+        if (self.args is None) == (self.generate is None):
             raise ValueError(
-                f"Op('{self.tool}'): set exactly one of args or generate, not both"
+                f"Op('{self.tool}'): exactly one of args or generate must be set"
             )
 
     def to_dict(self) -> Dict[str, Any]:

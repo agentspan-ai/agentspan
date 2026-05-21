@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import json
 
-from agentspan.agents.plans import Op, Plan, Step, Validation, coerce_plan
+import pytest
+
+from agentspan.agents.plans import Generate, Op, Plan, Step, Validation, coerce_plan
 
 
 def _build_complex_plan() -> Plan:
@@ -140,3 +142,36 @@ def test_two_plans_with_different_args_differ_predictably() -> None:
     j1 = json.dumps(p1.to_dict(), sort_keys=False)
     j2 = json.dumps(p2.to_dict(), sort_keys=False)
     assert j1 != j2, "differently-built plans must serialize to different JSON"
+
+
+# ── Op XOR invariant ────────────────────────────────────────────
+# An Op must carry exactly one of args (deterministic literal call) or
+# generate (LLM-driven arg construction). Both-set was already rejected;
+# neither-set was silently accepted — that meant a typo like
+# ``Op("write_file")`` would compile and ship, only failing on the server.
+
+
+def test_op_rejects_neither_args_nor_generate() -> None:
+    with pytest.raises(ValueError, match="exactly one of args or generate"):
+        Op("write_file")
+
+
+def test_op_rejects_both_args_and_generate() -> None:
+    with pytest.raises(ValueError, match="exactly one of args or generate"):
+        Op(
+            "write_file",
+            args={"path": "x"},
+            generate=Generate(instructions="i", output_schema="{}"),
+        )
+
+
+def test_op_accepts_args_only() -> None:
+    op = Op("write_file", args={"path": "x"})
+    assert op.to_dict() == {"tool": "write_file", "args": {"path": "x"}}
+
+
+def test_op_accepts_generate_only() -> None:
+    op = Op("write_file", generate=Generate(instructions="i", output_schema='{"x":1}'))
+    d = op.to_dict()
+    assert d["tool"] == "write_file"
+    assert d["generate"]["instructions"] == "i"
