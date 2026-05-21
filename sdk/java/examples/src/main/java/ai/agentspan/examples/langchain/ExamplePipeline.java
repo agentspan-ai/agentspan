@@ -27,8 +27,9 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
  *       report.</li>
  * </ol>
  *
- * <p>This pattern shows that {@link LangChainBridge#toAgentspan} returns a standard
- * {@link Agent} — it composes naturally with any other Agentspan agent or
+ * <p>This pattern shows that
+ * {@link LangChainBridge#agentBuilder} returns a standard {@link Agent} via
+ * {@code .build()} — it composes naturally with any other Agentspan agent or
  * orchestration strategy.
  *
  * <p>Requirements:
@@ -85,14 +86,15 @@ public class ExamplePipeline {
             .build();
 
         // Stage 1: LangChain4j-backed agent — uses @Tool methods to gather product data.
-        // LangChainBridge.toAgentspan() wraps the POJO methods as Agentspan worker tools.
-        Agent dataGatherer = LangChainBridge.toAgentspan(
+        // The advanced LangChainBridge.agentBuilder(...) path returns a standard
+        // Agent, which composes naturally with .then() for the pipeline below.
+        Agent dataGatherer = LangChainBridge.agentBuilder(
             "data_gatherer",
             model,
             "You are a product data specialist. Use your tools to look up product details "
             + "and sales statistics, then output a compact JSON summary of everything you found.",
-            new ProductDataTools()
-        );
+            new ProductDataTools())
+            .build();
 
         // Stage 2: Plain Agentspan agent (no tools) — receives the data summary and writes a report.
         // Use the same provider/model string the bridge derived for stage 1.

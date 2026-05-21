@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -122,17 +120,13 @@ public class Example12DocumentSummarizer {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "document_summarizer_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a document analysis assistant. Use tools to analyze document structure, "
-            + "then synthesize a concise summary with key takeaways.",
+            + "then synthesize a concise summary with key takeaways.\n\n"
+            + "Analyze and summarize this document:\n\n" + SAMPLE_DOCUMENT,
             new DocumentSummarizerTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Analyze and summarize this document:\n\n" + SAMPLE_DOCUMENT
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

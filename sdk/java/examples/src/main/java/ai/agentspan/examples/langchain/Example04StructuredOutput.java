@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -175,16 +173,13 @@ public class Example04StructuredOutput {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "structured_output_agent",
-            model,
-            "You are a book recommendation assistant. Use the recommend_book tool to find books.",
-            new BookTools()
-        );
-
+        // The drop-in overload does not take a system prompt — fold the
+        // instructions into the user message instead.
         AgentResult result = Agentspan.run(
-            agent,
-            "Recommend a great science fiction book and a good mystery novel."
+            model,
+            "You are a book recommendation assistant. Use the recommend_book tool to find books.\n\n"
+                + "Recommend a great science fiction book and a good mystery novel.",
+            new BookTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

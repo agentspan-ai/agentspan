@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -106,17 +104,12 @@ public class Example03CustomTools {
             .build();
 
         // Python's create_agent(llm, tools=[...]) sends no system prompt unless
-        // the caller provides one — match that by passing null instructions.
-        Agent agent = LangChainBridge.toAgentspan(
-            "custom_tools_agent",
-            model,
-            null,
-            new CustomTools()
-        );
-
+        // the caller provides one — the drop-in overload defaults to no system
+        // prompt, which matches.
         AgentResult result = Agentspan.run(
-            agent,
-            "Convert 100°C to Fahrenheit and Kelvin. Also format 1234567.891 with 2 decimal places."
+            model,
+            "Convert 100°C to Fahrenheit and Kelvin. Also format 1234567.891 with 2 decimal places.",
+            new CustomTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

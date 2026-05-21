@@ -3,22 +3,21 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
+
 /**
  * Example LangGraph 01 — Hello World using the native LangGraph4j SDK.
  *
- * <p>Builds a real LangGraph4j {@code AgentExecutor} (a {@code StateGraph}
- * implementing the ReAct pattern) via
- * {@code org.bsc.langgraph4j.agentexecutor.AgentExecutor.builder()} and hands
- * the configuration to {@link LangGraphBridge#toAgentspan} so it runs on
- * the durable Agentspan runtime.
+ * <p>Builds a real LangGraph4j {@code AgentExecutor.Builder} (the same builder
+ * the LangGraph4j docs use for the prebuilt ReAct agent) and hands it directly
+ * to {@link Agentspan#run(AgentExecutor.Builder, String, Object...)} via the
+ * drop-in overload so it runs on the durable Agentspan runtime.
  */
 public class Example01HelloWorld {
 
@@ -28,11 +27,7 @@ public class Example01HelloWorld {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "hello_world_agent",
-                model,
-                null
-        );
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
 
         AgentResult result = Agentspan.run(
                 agent,

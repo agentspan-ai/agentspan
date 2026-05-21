@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -25,7 +23,7 @@ import java.time.LocalDate;
  * <ul>
  *   <li>Defining tools with {@link Tool @Tool} on a POJO</li>
  *   <li>Building a native {@link OpenAiChatModel} and passing it to
- *       {@link LangChainBridge#toAgentspan} alongside the tool POJOs</li>
+ *       {@link Agentspan#run(ChatModel, String, Object...)} alongside the tool POJOs</li>
  *   <li>Calculator, string, and date utilities</li>
  * </ul>
  *
@@ -176,17 +174,12 @@ public class Example02ReactWithTools {
             .build();
 
         // Python's create_agent(llm, tools=[...]) sends no system prompt unless
-        // the caller provides one — match that by passing null instructions.
-        Agent agent = LangChainBridge.toAgentspan(
-            "react_tools_agent",
-            model,
-            null,
-            new UtilityTools()
-        );
-
+        // the caller provides one — the drop-in overload defaults to no system
+        // prompt, which matches.
         AgentResult result = Agentspan.run(
-            agent,
-            "What is sqrt(256)? Also count words in 'the quick brown fox'. What is today's date?"
+            model,
+            "What is sqrt(256)? Also count words in 'the quick brown fox'. What is today's date?",
+            new UtilityTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

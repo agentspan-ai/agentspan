@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -191,18 +189,14 @@ public class Example15DataAnalyst {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "data_analyst_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a data analyst. Analyze the provided data using statistical tools "
-            + "and present your findings clearly with insights and recommendations.",
+            + "and present your findings clearly with insights and recommendations.\n\n"
+            + "Analyze this sales data. What are the revenue statistics, the top 3 products by revenue, "
+            + "and any outliers?\n\n" + SALES_DATA,
             new DataAnalystTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Analyze this sales data. What are the revenue statistics, the top 3 products by revenue, "
-            + "and any outliers?\n\n" + SALES_DATA
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

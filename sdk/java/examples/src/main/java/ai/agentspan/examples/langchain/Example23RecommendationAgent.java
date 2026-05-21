@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -186,18 +184,14 @@ public class Example23RecommendationAgent {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "recommendation_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a personalized book recommendation assistant. Use tools to find, score, "
-                + "and explain book recommendations based on the user's preferences.",
+                + "and explain book recommendations based on the user's preferences.\n\n"
+                + "I love science fiction and I'm interested in themes of technology and survival. "
+                + "Recommend a book and find something similar to 'Dune'.",
             new RecommendationTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "I love science fiction and I'm interested in themes of technology and survival. "
-                + "Recommend a book and find something similar to 'Dune'."
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

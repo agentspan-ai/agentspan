@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -118,16 +116,12 @@ public class Example10WebSearchAgent {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "web_search_agent",
-            model,
-            "You are a research assistant. Use search and retrieval tools to answer questions thoroughly.",
-            new WebSearchTools()
-        );
-
+        // Drop-in overload — fold the system prompt into the user message.
         AgentResult result = Agentspan.run(
-            agent,
-            "Research the history of Python programming language and give me a brief summary."
+            model,
+            "You are a research assistant. Use search and retrieval tools to answer questions thoroughly.\n\n"
+                + "Research the history of Python programming language and give me a brief summary.",
+            new WebSearchTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

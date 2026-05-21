@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -424,17 +422,13 @@ public class Example17SqlAgent {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "sql_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a SQL assistant. Always inspect the schema first, then write and execute a SELECT query. "
-                + "Translate natural language questions into correct SQL.",
+                + "Translate natural language questions into correct SQL.\n\n"
+                + "Which department has the highest average salary? Show me the top 3 earners in Engineering.",
             new SqlTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Which department has the highest average salary? Show me the top 3 earners in Engineering."
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

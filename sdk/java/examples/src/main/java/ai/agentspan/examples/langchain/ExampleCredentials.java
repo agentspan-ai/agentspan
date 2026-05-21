@@ -107,16 +107,18 @@ public class ExampleCredentials {
             .modelName("gpt-4o-mini")
             .build();
 
-        // Build the LangChain4j-backed agent (unit conversion tools)
-        Agent lc4jAgent = LangChainBridge.toAgentspan(
+        // Build the LangChain4j-backed agent (unit conversion tools) via the
+        // advanced LangChainBridge.agentBuilder(...) path so we can merge in
+        // Agentspan @Tool credential-aware tools before .build().
+        Agent lc4jAgent = LangChainBridge.agentBuilder(
             "lc4j_weather_agent",
             model,
             "You are a weather assistant. You can fetch weather data and convert temperatures. "
             + "Always show temperatures in both Celsius and Fahrenheit.",
-            new UnitTools()
-        );
+            new UnitTools())
+            .build();
 
-        // Agentspan @Tool tools (credential-aware) — build separately and merge in
+        // Agentspan @Tool tools (credential-aware) — build separately and merge in.
         List<ToolDef> credentialTools = ToolRegistry.fromInstance(new WeatherTools());
 
         // Merge the credential-aware tool into the agent by rebuilding it.

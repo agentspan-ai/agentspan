@@ -3,28 +3,27 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
 
 /**
  * Example LangGraph 07 — System prompt (persona) demonstration.
  *
  * <p>Mirrors <code>sdk/python/examples/langgraph/07_system_prompt.py</code>
- * which passes a {@code system_prompt=...} to {@code create_agent}. In the
- * LangGraph4j {@code AgentExecutor} world (via {@link LangGraphBridge}), the
- * system prompt is the third argument and is wired to the underlying
- * {@code ChatModel}'s system message channel.
+ * which passes a {@code system_prompt=...} to {@code create_agent}. The
+ * drop-in {@link Agentspan#run} overload takes a single user prompt — fold
+ * the persona into that prompt as a leading section so it steers every reply.
  *
  * <p>Demonstrates:
  * <ul>
  *   <li>Detailed persona/system prompt steering tone and behavior</li>
  *   <li>No tools — the agent answers from the LLM directly</li>
- *   <li>How the system prompt shapes every reply</li>
+ *   <li>How the persona section shapes every reply</li>
  * </ul>
  */
 public class Example07SystemPrompt {
@@ -50,15 +49,13 @@ public class Example07SystemPrompt {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "socratic_tutor",
-                model,
-                TUTOR_SYSTEM_PROMPT
-        );
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
 
+        // Drop-in overload — fold the persona into the user message.
         AgentResult result = Agentspan.run(
                 agent,
-                "I want to understand why 1 + 1 = 2. Can you just tell me?"
+                TUTOR_SYSTEM_PROMPT
+                + "\n\nI want to understand why 1 + 1 = 2. Can you just tell me?"
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

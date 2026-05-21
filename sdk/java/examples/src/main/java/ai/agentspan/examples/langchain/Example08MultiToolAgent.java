@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -102,16 +100,12 @@ public class Example08MultiToolAgent {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "multi_tool_agent",
-            model,
-            "You are a multi-domain assistant with access to weather, stock, and news information.",
-            new MultiDomainTools()
-        );
-
+        // Drop-in overload — fold the system prompt into the user message.
         AgentResult result = Agentspan.run(
-            agent,
-            "What's the weather in Tokyo, the price of AAPL stock, and the latest technology headline?"
+            model,
+            "You are a multi-domain assistant with access to weather, stock, and news information.\n\n"
+                + "What's the weather in Tokyo, the price of AAPL stock, and the latest technology headline?",
+            new MultiDomainTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

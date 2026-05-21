@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -143,19 +141,15 @@ public class Example16ContentWriter {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "content_writer_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a professional content strategist and writer. "
             + "Help users create clear, engaging, SEO-friendly content. "
-            + "Use tools to analyze and improve content quality.",
+            + "Use tools to analyze and improve content quality.\n\n"
+            + "Analyze this content for readability and keyword density for 'python programming'. "
+            + "Also suggest better title options for an article about Python.\n\n" + SAMPLE_CONTENT,
             new ContentWriterTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Analyze this content for readability and keyword density for 'python programming'. "
-            + "Also suggest better title options for an article about Python.\n\n" + SAMPLE_CONTENT
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

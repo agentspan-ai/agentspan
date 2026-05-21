@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -151,18 +149,14 @@ public class Example22ClassificationAgent {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "classification_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a text classification assistant. Analyze text for topic and intent, "
-                + "provide confidence-scored categories, and explain your classifications.",
+                + "provide confidence-scored categories, and explain your classifications.\n\n"
+                + "Classify this text: 'How can I fix the broken API integration? "
+                + "The software keeps returning a 500 error and my team cannot deploy the code.'",
             new ClassificationTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Classify this text: 'How can I fix the broken API integration? "
-                + "The software keeps returning a 500 error and my team cannot deploy the code.'"
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

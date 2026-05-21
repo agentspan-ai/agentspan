@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -241,17 +239,13 @@ public class Example09MathCalculator {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "math_calculator_agent",
-            model,
-            "You are a precise math assistant. Always use tools to compute exact answers.",
-            new MathTools()
-        );
-
+        // Drop-in overload — fold the system prompt into the user message.
         AgentResult result = Agentspan.run(
-            agent,
-            "What is (2 ** 8) + (15 * 7)? Convert 5 miles to kilometers. "
-            + "What is the mean and median of 12, 7, 3, 19, 5, 8?"
+            model,
+            "You are a precise math assistant. Always use tools to compute exact answers.\n\n"
+            + "What is (2 ** 8) + (15 * 7)? Convert 5 miles to kilometers. "
+            + "What is the mean and median of 12, 7, 3, 19, 5, 8?",
+            new MathTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

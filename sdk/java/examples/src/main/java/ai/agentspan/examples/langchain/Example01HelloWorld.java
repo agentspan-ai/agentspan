@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -15,9 +13,9 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
  * Example LangChain 01 — Hello World using the native LangChain4j SDK.
  *
  * <p>Builds a real {@code dev.langchain4j.model.openai.OpenAiChatModel}
- * (the canonical LangChain4j chat-model class) and hands it to
- * {@link LangChainBridge#toAgentspan} so the agent runs on the durable
- * Agentspan runtime.
+ * (the canonical LangChain4j chat-model class) and hands it directly to
+ * {@link Agentspan#run(ChatModel, String)} via the drop-in overload so the
+ * agent runs on the durable Agentspan runtime.
  *
  * <p>Requirements:
  * <ul>
@@ -34,14 +32,8 @@ public class Example01HelloWorld {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-                "hello_world_agent",
-                model,
-                null
-        );
-
         AgentResult result = Agentspan.run(
-                agent,
+                model,
                 "Say hello and tell me a fun fact about Python programming."
         );
         result.printResult();

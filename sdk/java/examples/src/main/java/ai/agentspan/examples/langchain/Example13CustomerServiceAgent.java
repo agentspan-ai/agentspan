@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -96,19 +94,15 @@ public class Example13CustomerServiceAgent {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "customer_service_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are Alex, a friendly and professional customer service agent for ShopEasy. "
             + "Always greet the customer warmly. Use tools to look up orders and answer questions. "
             + "If you cannot resolve the issue, escalate by creating a support ticket. "
-            + "Keep responses concise and empathetic.",
+            + "Keep responses concise and empathetic.\n\n"
+            + "Hi, I ordered something 5 days ago. My order ID is ORD-12345. Where is my package?",
             new CustomerServiceTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Hi, I ordered something 5 days ago. My order ID is ORD-12345. Where is my package?"
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

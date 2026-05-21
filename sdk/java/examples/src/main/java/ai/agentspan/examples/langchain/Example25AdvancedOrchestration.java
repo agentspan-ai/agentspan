@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -230,20 +228,16 @@ public class Example25AdvancedOrchestration {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "advanced_orchestration_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a senior business intelligence analyst. When given a research request, "
                 + "systematically gather company data, market trends, and compute relevant metrics. "
-                + "Then synthesize everything into a structured report with findings and recommendations.",
-            new OrchestrationTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Produce a brief competitive analysis of OpenAI and Anthropic. "
+                + "Then synthesize everything into a structured report with findings and recommendations.\n\n"
+                + "Produce a brief competitive analysis of OpenAI and Anthropic. "
                 + "Include AI market trends and calculate the CAGR if the AI market grows "
-                + "from $200B in 2024 to $1.8T by 2030."
+                + "from $200B in 2024 to $1.8T by 2030.",
+            new OrchestrationTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

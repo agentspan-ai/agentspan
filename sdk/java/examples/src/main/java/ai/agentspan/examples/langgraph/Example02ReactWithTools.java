@@ -3,15 +3,15 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
 
 import java.time.LocalDate;
 
@@ -20,14 +20,16 @@ import java.time.LocalDate;
  *
  * <p>Java port (concepts) of
  * <code>sdk/python/examples/langgraph/02_react_with_tools.py</code>. Builds a
- * real LangGraph4j {@code AgentExecutor} (a ReAct {@code StateGraph}) via
- * {@link LangGraphBridge}, then runs it on Agentspan.
+ * real LangGraph4j {@code AgentExecutor.Builder} (a ReAct {@code StateGraph})
+ * and hands it straight to {@link Agentspan#run} via the drop-in overload.
  *
  * <p>Demonstrates:
  * <ul>
  *   <li>Defining tools with native {@link Tool @Tool} on a POJO</li>
- *   <li>Passing the tool POJO to {@link LangGraphBridge#toAgentspan} —
- *       internally LangGraph4j calls {@code toolsFromObject(...)}</li>
+ *   <li>Passing the tool POJO straight to
+ *       {@link Agentspan#run(AgentExecutor.Builder, String, Object...)} via
+ *       the drop-in overload — internally LangGraph4j calls
+ *       {@code toolsFromObject(...)}</li>
  *   <li>Calculator, word count, and date utilities</li>
  * </ul>
  */
@@ -62,17 +64,15 @@ public class Example02ReactWithTools {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "react_tools_agent",
-                model,
-                null,
-                new UtilityTools()
-        );
+        UtilityTools tools = new UtilityTools();
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
+        agent.toolsFromObject(tools);
 
         AgentResult result = Agentspan.run(
                 agent,
                 "What is 17 + 25? Also count words in 'the quick brown fox jumps'. "
-                + "And what is today's date?"
+                + "And what is today's date?",
+                tools
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

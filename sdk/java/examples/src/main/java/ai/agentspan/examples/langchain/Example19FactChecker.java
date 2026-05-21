@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -154,18 +152,14 @@ public class Example19FactChecker {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "fact_checker_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a rigorous fact-checker. Extract claims from text and verify them. "
-                + "Be precise about what is true, false, or nuanced. Always cite sources when available.",
+                + "Be precise about what is true, false, or nuanced. Always cite sources when available.\n\n"
+                + "Fact-check these claims: 'You can see the Great Wall of China from space' "
+                + "and 'humans only use 10% of their brain'.",
             new FactCheckerTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Fact-check these claims: 'You can see the Great Wall of China from space' "
-                + "and 'humans only use 10% of their brain'."
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

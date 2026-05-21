@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -32,7 +30,8 @@ import java.util.regex.Pattern;
  * {@code PydanticOutputParser}. The Java port uses prompt-based JSON return
  * shapes plus consumer-side Jackson deserialization — LangChain4j's
  * {@code AiServices} typed-return analog isn't applicable in
- * {@link LangChainBridge#toAgentspan} extraction mode (server-side LLM loop).
+ * {@link Agentspan#run(ChatModel, String, Object...)} extraction mode
+ * (server-side LLM loop).
  */
 public class Example24OutputParsers {
 
@@ -159,20 +158,16 @@ public class Example24OutputParsers {
             .modelName("gpt-4o-mini")
             .build();
 
-        // Python uses the shorter prompt below — match it for parity.
-        Agent agent = LangChainBridge.toAgentspan(
-            "output_parsers_agent",
+        // Python uses the shorter prompt below — fold it into the user
+        // message via the drop-in overload for parity.
+        AgentResult result = Agentspan.run(
             model,
             "You are a data extraction and formatting assistant. "
-                + "Use tools to retrieve, parse, and structure information clearly.",
-            new OutputParserTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Get the ingredients for pasta carbonara and format them as a numbered list. "
+                + "Use tools to retrieve, parse, and structure information clearly.\n\n"
+                + "Get the ingredients for pasta carbonara and format them as a numbered list. "
                 + "Also extract any structured data from: "
-                + "'Invoice #1234 dated 2025-03-15, amount $249.99, contact billing@example.com'"
+                + "'Invoice #1234 dated 2025-03-15, amount $249.99, contact billing@example.com'",
+            new OutputParserTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

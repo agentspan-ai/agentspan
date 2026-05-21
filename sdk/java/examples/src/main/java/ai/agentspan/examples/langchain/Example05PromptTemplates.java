@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -25,7 +23,7 @@ import java.util.Map;
  *
  * <p>Demonstrates:
  * <ul>
- *   <li>Passing a rich system prompt to {@link LangChainBridge#toAgentspan}</li>
+ *   <li>Prepending a rich persona prompt onto the user input</li>
  *   <li>Injecting persona, tone, and constraints into the agent</li>
  *   <li>Using tools alongside a custom persona</li>
  * </ul>
@@ -99,16 +97,13 @@ public class Example05PromptTemplates {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "prompt_templates_agent",
-            model,
-            SYSTEM_PROMPT,
-            new LexiconTools()
-        );
-
+        // The drop-in overload does not take a system prompt — fold the
+        // persona into the user message instead.
         AgentResult result = Agentspan.run(
-            agent,
-            "What does 'serendipity' mean? And what are some synonyms for 'happy'?"
+            model,
+            SYSTEM_PROMPT
+                + "\n\nWhat does 'serendipity' mean? And what are some synonyms for 'happy'?",
+            new LexiconTools()
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

@@ -3,15 +3,15 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,9 +21,9 @@ import java.util.Map;
  *
  * <p>Mirrors <code>sdk/python/examples/langgraph/05_tool_node.py</code> which
  * manually wires {@code agent -> tools_condition -> tool_node -> agent}.
- * LangGraph4j's prebuilt {@code AgentExecutor} (used by {@link LangGraphBridge})
- * provides this exact loop out of the box — the example author just supplies
- * the tools and the LLM drives selection.
+ * LangGraph4j's prebuilt {@code AgentExecutor} provides this exact loop out
+ * of the box — the example author just supplies the tools and the LLM drives
+ * selection.
  *
  * <p>Demonstrates:
  * <ul>
@@ -72,16 +72,16 @@ public class Example05ToolNode {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "tool_node_agent",
-                model,
-                "You are a helpful geography assistant. Use the available tools to look up facts.",
-                new GeoTools()
-        );
+        GeoTools tools = new GeoTools();
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
+        agent.toolsFromObject(tools);
 
+        // Drop-in overload — fold the system prompt into the user message.
         AgentResult result = Agentspan.run(
                 agent,
-                "What is the capital and population of Japan and Brazil?"
+                "You are a helpful geography assistant. Use the available tools to look up facts.\n\n"
+                + "What is the capital and population of Japan and Brazil?",
+                tools
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

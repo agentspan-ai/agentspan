@@ -3,15 +3,15 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
 
 /**
  * Example LangGraph 08 — Structured (JSON) output via a tool.
@@ -61,18 +61,18 @@ public class Example08StructuredOutput {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "movie_review_agent",
-                model,
-                "You are a structured movie reviewer. For any movie title the user mentions, "
-                + "call review_movie and return the JSON it produces VERBATIM. "
-                + "Do not add commentary, do not reformat — output the JSON object only.",
-                new ReviewTools()
-        );
+        ReviewTools tools = new ReviewTools();
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
+        agent.toolsFromObject(tools);
 
+        // Drop-in overload — fold the system prompt into the user message.
         AgentResult result = Agentspan.run(
                 agent,
-                "Write a review for the movie Inception (2010)."
+                "You are a structured movie reviewer. For any movie title the user mentions, "
+                + "call review_movie and return the JSON it produces VERBATIM. "
+                + "Do not add commentary, do not reformat — output the JSON object only.\n\n"
+                + "Write a review for the movie Inception (2010).",
+                tools
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

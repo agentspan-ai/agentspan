@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -160,17 +158,13 @@ public class Example21SentimentAnalysis {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "sentiment_analysis_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a sentiment analysis assistant. Analyze text for sentiment and emotions, "
-                + "providing clear scores and insights. Use tools for accurate analysis.",
+                + "providing clear scores and insights. Use tools for accurate analysis.\n\n"
+                + "Analyze the sentiment and emotions in these customer reviews:\n\n" + REVIEWS,
             new SentimentTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Analyze the sentiment and emotions in these customer reviews:\n\n" + REVIEWS
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

@@ -267,6 +267,197 @@ public final class Agentspan {
         return resumeAsync(executionId, coerceAgent(agent));
     }
 
+    // ── LangChain4j / LangGraph4j drop-in overloads ─────────────────────────
+    //
+    // Same shape as the ADK drop-in: the user writes idiomatic
+    // LangChain4j (a ChatModel + @Tool POJOs) or LangGraph4j
+    // (AgentExecutor.Builder) and hands the native object straight to
+    // Agentspan.run / start / deploy / serve. No bridge call in user code.
+    //
+    // Why two flavours:
+    //   - ChatModel + tools:           pure LangChain4j idiom; no LangGraph
+    //                                  dep needed.
+    //   - AgentExecutor.Builder:       LangGraph4j idiom; user passes the
+    //                                  Builder along with the original tool
+    //                                  POJOs (the Builder doesn't preserve
+    //                                  references to them once toolsFromObject
+    //                                  has run).
+    //
+    // Both delegate to LangChainBridge.agentBuilder under the hood. Users who
+    // need a custom agent name, system prompt structure, or Agentspan-side
+    // guardrails should call LangChainBridge.agentBuilder(...) directly.
+
+    // 2-arg overloads exist so Java's overload resolution doesn't pick
+    // the more-general run(Object, String) over the varargs version when
+    // the user passes no tools. Without these, Agentspan.run(model, prompt)
+    // would silently dispatch through coerceAgent and fail with
+    // "Unsupported agent type: ChatModel".
+
+    /** Drop-in: native LangChain4j {@code ChatModel}, no tools. */
+    public static AgentResult run(dev.langchain4j.model.chat.ChatModel model, String prompt) {
+        return run(langchainAgent(model, null), prompt);
+    }
+
+    /** Drop-in: native LangChain4j {@code ChatModel} + {@code @Tool} POJOs. */
+    public static AgentResult run(dev.langchain4j.model.chat.ChatModel model, String prompt, Object... tools) {
+        return run(langchainAgent(model, tools), prompt);
+    }
+
+    /** Drop-in: native LangChain4j {@code ChatModel}, no tools (async). */
+    public static CompletableFuture<AgentResult> runAsync(dev.langchain4j.model.chat.ChatModel model, String prompt) {
+        return runAsync(langchainAgent(model, null), prompt);
+    }
+
+    /** Drop-in: native LangChain4j {@code ChatModel} + {@code @Tool} POJOs (async). */
+    public static CompletableFuture<AgentResult> runAsync(dev.langchain4j.model.chat.ChatModel model, String prompt, Object... tools) {
+        return runAsync(langchainAgent(model, tools), prompt);
+    }
+
+    /** Drop-in: native LangChain4j {@code ChatModel}, no tools (start). */
+    public static AgentHandle start(dev.langchain4j.model.chat.ChatModel model, String prompt) {
+        return start(langchainAgent(model, null), prompt);
+    }
+
+    /** Drop-in: native LangChain4j {@code ChatModel} + {@code @Tool} POJOs (start). */
+    public static AgentHandle start(dev.langchain4j.model.chat.ChatModel model, String prompt, Object... tools) {
+        return start(langchainAgent(model, tools), prompt);
+    }
+
+    /** Drop-in: native LangChain4j {@code ChatModel}, no tools (stream). */
+    public static AgentStream stream(dev.langchain4j.model.chat.ChatModel model, String prompt) {
+        return stream(langchainAgent(model, null), prompt);
+    }
+
+    /** Drop-in: native LangChain4j {@code ChatModel} + {@code @Tool} POJOs (stream). */
+    public static AgentStream stream(dev.langchain4j.model.chat.ChatModel model, String prompt, Object... tools) {
+        return stream(langchainAgent(model, tools), prompt);
+    }
+
+    /** Drop-in deploy for a native LangChain4j configuration. */
+    public static List<DeploymentInfo> deploy(dev.langchain4j.model.chat.ChatModel model, Object... tools) {
+        return deploy(langchainAgent(model, tools));
+    }
+
+    /** Drop-in serve for a native LangChain4j configuration. */
+    public static void serve(dev.langchain4j.model.chat.ChatModel model, Object... tools) {
+        serve(langchainAgent(model, tools));
+    }
+
+    /** Drop-in: native LangGraph4j {@code AgentExecutor.Builder}, no tools. */
+    public static AgentResult run(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, String prompt) {
+        return run(langgraphAgent(builder, null), prompt);
+    }
+
+    /** Drop-in: native LangGraph4j {@code AgentExecutor.Builder} + tool POJOs. */
+    public static AgentResult run(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, String prompt, Object... tools) {
+        return run(langgraphAgent(builder, tools), prompt);
+    }
+
+    /** Drop-in: native LangGraph4j {@code AgentExecutor.Builder}, no tools (async). */
+    public static CompletableFuture<AgentResult> runAsync(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, String prompt) {
+        return runAsync(langgraphAgent(builder, null), prompt);
+    }
+
+    /** Drop-in: native LangGraph4j {@code AgentExecutor.Builder} + tool POJOs (async). */
+    public static CompletableFuture<AgentResult> runAsync(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, String prompt, Object... tools) {
+        return runAsync(langgraphAgent(builder, tools), prompt);
+    }
+
+    /** Drop-in: native LangGraph4j {@code AgentExecutor.Builder}, no tools (start). */
+    public static AgentHandle start(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, String prompt) {
+        return start(langgraphAgent(builder, null), prompt);
+    }
+
+    /** Drop-in: native LangGraph4j {@code AgentExecutor.Builder} + tool POJOs (start). */
+    public static AgentHandle start(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, String prompt, Object... tools) {
+        return start(langgraphAgent(builder, tools), prompt);
+    }
+
+    /** Drop-in: native LangGraph4j {@code AgentExecutor.Builder}, no tools (stream). */
+    public static AgentStream stream(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, String prompt) {
+        return stream(langgraphAgent(builder, null), prompt);
+    }
+
+    /** Drop-in: native LangGraph4j {@code AgentExecutor.Builder} + tool POJOs (stream). */
+    public static AgentStream stream(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, String prompt, Object... tools) {
+        return stream(langgraphAgent(builder, tools), prompt);
+    }
+
+    /** Drop-in deploy for a native LangGraph4j configuration. */
+    public static List<DeploymentInfo> deploy(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, Object... tools) {
+        return deploy(langgraphAgent(builder, tools));
+    }
+
+    /** Drop-in serve for a native LangGraph4j configuration. */
+    public static void serve(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, Object... tools) {
+        serve(langgraphAgent(builder, tools));
+    }
+
+    private static Agent langchainAgent(dev.langchain4j.model.chat.ChatModel model, Object[] tools) {
+        return ai.agentspan.frameworks.LangChainBridge
+                .agentBuilder("langchain_agent", model, null, tools == null ? new Object[0] : tools)
+                .build();
+    }
+
+    private static Agent langgraphAgent(org.bsc.langgraph4j.agentexecutor.AgentExecutor.Builder builder, Object[] tools) {
+        // The LangGraph4j AgentExecutor.Builder carries the ChatModel and the
+        // (optional) SystemMessage in package-private fields. We use reflection
+        // to recover them — failure here means a future ADK build changed the
+        // shape; we throw a clear message rather than silently degrading.
+        dev.langchain4j.model.chat.ChatModel model = readBuilderField(
+                builder, "chatModel", dev.langchain4j.model.chat.ChatModel.class);
+        if (model == null) {
+            throw new IllegalArgumentException(
+                    "Agentspan.run(AgentExecutor.Builder, ...): the Builder has no chatModel set. "
+                    + "Call .chatModel(...) before handing the Builder to Agentspan.");
+        }
+        String systemText = readSystemMessageText(builder);
+
+        // Validate the Builder produces a compilable LangGraph4j StateGraph
+        // before shipping the config — same safety check the old bridge did.
+        try {
+            builder.build();
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "AgentExecutor.Builder is not a valid LangGraph4j configuration: "
+                    + e.getMessage(), e);
+        }
+        return ai.agentspan.frameworks.LangChainBridge
+                .agentBuilder("langgraph_agent", model, systemText, tools == null ? new Object[0] : tools)
+                .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T readBuilderField(Object o, String fieldName, Class<T> expected) {
+        try {
+            java.lang.reflect.Field f = o.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            Object v = f.get(o);
+            return expected.isInstance(v) ? (T) v : null;
+        } catch (NoSuchFieldException nsf) {
+            return null;
+        } catch (Throwable t) {
+            throw new RuntimeException("AgentExecutor.Builder field '" + fieldName
+                    + "' is no longer accessible — likely a LangGraph4j upgrade. "
+                    + "Open an issue.", t);
+        }
+    }
+
+    private static String readSystemMessageText(Object builder) {
+        try {
+            java.lang.reflect.Field f = builder.getClass().getDeclaredField("systemMessage");
+            f.setAccessible(true);
+            Object sys = f.get(builder);
+            if (sys == null) return null;
+            // dev.langchain4j.data.message.SystemMessage has a public text() method
+            java.lang.reflect.Method m = sys.getClass().getMethod("text");
+            Object t = m.invoke(sys);
+            return t instanceof String s && !s.isEmpty() ? s : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /**
      * Internal: coerce a user-provided agent object to an Agentspan {@link Agent}.
      *

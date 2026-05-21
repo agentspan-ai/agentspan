@@ -3,10 +3,8 @@
 
 package ai.agentspan.examples.langchain;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangChainBridge;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -110,18 +108,14 @@ public class Example18EmailDrafter {
             .modelName("gpt-4o-mini")
             .build();
 
-        Agent agent = LangChainBridge.toAgentspan(
-            "email_drafter_agent",
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
             model,
             "You are a professional email writing assistant. Help users draft clear, "
-                + "appropriate, and effective emails. Always check tone and suggest subject lines.",
+                + "appropriate, and effective emails. Always check tone and suggest subject lines.\n\n"
+                + "Draft a professional follow-up email to a client named Sarah after a product demo yesterday. "
+                + "Include subject line options and check the tone.",
             new EmailTools()
-        );
-
-        AgentResult result = Agentspan.run(
-            agent,
-            "Draft a professional follow-up email to a client named Sarah after a product demo yesterday. "
-                + "Include subject line options and check the tone."
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

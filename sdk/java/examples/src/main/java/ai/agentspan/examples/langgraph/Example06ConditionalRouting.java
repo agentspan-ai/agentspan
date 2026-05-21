@@ -3,15 +3,15 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
 
 import java.util.Locale;
 
@@ -28,7 +28,7 @@ import java.util.Locale;
  * <ul>
  *   <li>Classifier tool that returns a routing label</li>
  *   <li>Three branch handlers (positive, negative, neutral)</li>
- *   <li>System prompt instructing the agent to route based on classification</li>
+ *   <li>Routing instructions folded into the user message</li>
  * </ul>
  */
 public class Example06ConditionalRouting {
@@ -69,20 +69,20 @@ public class Example06ConditionalRouting {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "sentiment_router",
-                model,
+        SentimentTools tools = new SentimentTools();
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
+        agent.toolsFromObject(tools);
+
+        // Drop-in overload — fold the routing instructions into the user message.
+        AgentResult result = Agentspan.run(
+                agent,
                 "You are a sentiment-routing agent. For every input: "
                 + "1) call classify_sentiment, "
                 + "2) call exactly ONE of handle_positive / handle_negative / handle_neutral "
                 + "based on the classification result, "
-                + "3) return the handler's output verbatim as the final answer.",
-                new SentimentTools()
-        );
-
-        AgentResult result = Agentspan.run(
-                agent,
-                "I just got promoted at work and I'm thrilled!"
+                + "3) return the handler's output verbatim as the final answer.\n\n"
+                + "I just got promoted at work and I'm thrilled!",
+                tools
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

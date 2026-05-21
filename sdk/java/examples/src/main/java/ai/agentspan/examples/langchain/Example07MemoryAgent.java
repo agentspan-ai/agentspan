@@ -23,14 +23,16 @@ import java.util.Map;
  * The Python version uses LangChain's <code>create_agent</code> with native
  * conversational context — the agent recalls information from earlier turns.
  *
- * <p><b>LangChain4j adaptation:</b> with {@link LangChainBridge#toAgentspan}, the
- * LLM loop runs server-side and there is no client-side
- * {@code MessageWindowChatMemory} that survives across {@link Agentspan#run}
- * calls. The closest semantically-equivalent shape is to mark the agent as
- * {@code stateful(true)} so that the server persists conversation history
- * across runs in a dedicated worker domain. Subsequent runs against the same
- * stateful agent then see prior exchanges. The single-turn driver below
- * mirrors the Python source.
+ * <p><b>LangChain4j adaptation:</b> with the server-side LLM loop, there is
+ * no client-side {@code MessageWindowChatMemory} that survives across
+ * {@link Agentspan#run} calls. The closest semantically-equivalent shape is
+ * to mark the agent as {@code stateful(true)} so that the server persists
+ * conversation history across runs in a dedicated worker domain. Subsequent
+ * runs against the same stateful agent then see prior exchanges. The
+ * single-turn driver below mirrors the Python source. Because
+ * {@code stateful(true)} is an Agentspan-side flag, we use the advanced
+ * {@link LangChainBridge#agentBuilder} path so we can decorate the agent
+ * before {@code .build()}.
  *
  * <p>Demonstrates:
  * <ul>
@@ -76,20 +78,14 @@ public class Example07MemoryAgent {
             .modelName("gpt-4o-mini")
             .build();
 
-        // Extract LangChain4j tools, then rebuild as a stateful agent so the
-        // server persists conversation history across runs.
-        Agent extracted = LangChainBridge.toAgentspan(
+        // Use the advanced LangChainBridge.agentBuilder(...) path so we can
+        // mark the agent stateful(true) — server-side cross-run conversation
+        // persistence is an Agentspan feature on top of LangChain4j.
+        Agent agent = LangChainBridge.agentBuilder(
             "memory_agent",
             model,
             instructions,
-            new HrTools()
-        );
-
-        Agent agent = Agent.builder()
-            .name(extracted.getName())
-            .model(extracted.getModel())
-            .instructions(instructions)
-            .tools(extracted.getTools())
+            new HrTools())
             .stateful(true)
             .build();
 

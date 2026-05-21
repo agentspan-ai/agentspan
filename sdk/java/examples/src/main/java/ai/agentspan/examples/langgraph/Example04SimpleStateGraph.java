@@ -3,15 +3,15 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
 
 /**
  * Example LangGraph 04 — Simple state graph pattern: validate -> refine -> answer.
@@ -26,8 +26,10 @@ import dev.langchain4j.model.openai.OpenAiChatModel;
  * <p>Demonstrates:
  * <ul>
  *   <li>Modeling a multi-stage pipeline as ordered tools</li>
- *   <li>System prompt that enforces tool sequencing (validate -> refine -> answer)</li>
- *   <li>Building the LangGraph4j {@code AgentExecutor} via {@link LangGraphBridge}</li>
+ *   <li>Tool-sequencing instructions folded into the user message
+ *       (validate -> refine -> answer)</li>
+ *   <li>Building the LangGraph4j {@code AgentExecutor.Builder} and handing it
+ *       straight to {@link Agentspan#run}</li>
  * </ul>
  */
 public class Example04SimpleStateGraph {
@@ -63,17 +65,19 @@ public class Example04SimpleStateGraph {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "query_pipeline",
-                model,
+        PipelineTools tools = new PipelineTools();
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
+        agent.toolsFromObject(tools);
+
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
+                agent,
                 "You implement a three-stage query pipeline. "
                 + "ALWAYS call validate_query first, then refine_query, then "
                 + "compose your final answer and finally call record_answer. "
-                + "Return the final user-facing text after record_answer succeeds.",
-                new PipelineTools()
-        );
-
-        AgentResult result = Agentspan.run(agent, "  Tell me about Java   ");
+                + "Return the final user-facing text after record_answer succeeds.\n\n"
+                + "  Tell me about Java   ",
+                tools);
         System.out.println("Status: " + result.getStatus());
         result.printResult();
 

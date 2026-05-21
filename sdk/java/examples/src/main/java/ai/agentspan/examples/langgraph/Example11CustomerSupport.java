@@ -3,15 +3,15 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
 
 import java.util.Locale;
 
@@ -27,7 +27,8 @@ import java.util.Locale;
  * <ul>
  *   <li>Domain-specific multi-step flow (support ticket triage)</li>
  *   <li>Classifier + branch handlers exposed as tools</li>
- *   <li>System prompt sequencing the conversation: greet, classify, respond</li>
+ *   <li>Sequencing instructions folded into the user message: greet,
+ *       classify, respond</li>
  * </ul>
  */
 public class Example11CustomerSupport {
@@ -79,22 +80,22 @@ public class Example11CustomerSupport {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "customer_support",
-                model,
+        SupportTools tools = new SupportTools();
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
+        agent.toolsFromObject(tools);
+
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
+                agent,
                 "You are a customer support router. For EVERY incoming message: "
                 + "1) call greet, "
                 + "2) call classify, "
                 + "3) call exactly ONE of handle_billing / handle_technical / handle_general "
                 + "based on the classification, "
                 + "4) compose a final reply that starts with the greeting and contains the "
-                + "handler's response.",
-                new SupportTools()
-        );
-
-        AgentResult result = Agentspan.run(
-                agent,
-                "I was charged twice for my subscription this month and need a refund."
+                + "handler's response.\n\n"
+                + "I was charged twice for my subscription this month and need a refund.",
+                tools
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

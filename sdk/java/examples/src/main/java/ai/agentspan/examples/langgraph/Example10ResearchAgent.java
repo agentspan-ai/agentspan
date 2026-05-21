@@ -3,15 +3,15 @@
 
 package ai.agentspan.examples.langgraph;
 
-import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
 import ai.agentspan.model.AgentResult;
-import ai.agentspan.frameworks.LangGraphBridge;
 
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+
+import org.bsc.langgraph4j.agentexecutor.AgentExecutor;
 
 import java.util.HashMap;
 import java.util.Locale;
@@ -22,8 +22,8 @@ import java.util.Map;
  *
  * <p>Mirrors <code>sdk/python/examples/langgraph/10_research_agent.py</code>
  * which combines search, summarize, and citation tools. The LangGraph4j
- * {@code AgentExecutor} (via {@link LangGraphBridge}) walks the ReAct loop
- * naturally as the LLM threads results between the tools.
+ * {@code AgentExecutor} walks the ReAct loop naturally as the LLM threads
+ * results between the tools.
  *
  * <p>Demonstrates:
  * <ul>
@@ -110,20 +110,20 @@ public class Example10ResearchAgent {
                 .modelName("gpt-4o-mini")
                 .build();
 
-        Agent agent = LangGraphBridge.toAgentspan(
-                "research_agent",
-                model,
+        ResearchTools tools = new ResearchTools();
+        AgentExecutor.Builder agent = AgentExecutor.builder().chatModel(model);
+        agent.toolsFromObject(tools);
+
+        // Drop-in overload — fold the system prompt into the user message.
+        AgentResult result = Agentspan.run(
+                agent,
                 "You are a research assistant. For any research question: "
                 + "1) call search for relevant information, "
                 + "2) call summarize on the findings, "
                 + "3) call cite_source for at least one key claim. "
-                + "Be thorough and cite your sources.",
-                new ResearchTools()
-        );
-
-        AgentResult result = Agentspan.run(
-                agent,
-                "What are the latest developments in climate change research? Include sources."
+                + "Be thorough and cite your sources.\n\n"
+                + "What are the latest developments in climate change research? Include sources.",
+                tools
         );
         System.out.println("Status: " + result.getStatus());
         result.printResult();

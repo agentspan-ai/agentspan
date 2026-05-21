@@ -24,15 +24,17 @@ import java.util.Map;
  * carries chat history between turns when re-invoked. The example itself only
  * runs one turn, but the underlying agent is conversational.
  *
- * <p><b>LangChain4j adaptation:</b> with {@link LangChainBridge#toAgentspan}, the
- * LLM loop runs server-side and there is no client-side
- * {@code MessageWindowChatMemory} that survives across {@link Agentspan#run}
- * invocations. The closest semantically-equivalent shape is to mark the agent
- * as {@code stateful(true)} so that the server persists conversation history
- * across runs in a dedicated worker domain — multi-turn calls against the same
- * stateful agent will see prior exchanges. The single-turn driver below mirrors
- * the Python source exactly; toggling stateful demonstrates how the Java SDK
- * surfaces persistent context.
+ * <p><b>LangChain4j adaptation:</b> with the server-side LLM loop, there is
+ * no client-side {@code MessageWindowChatMemory} that survives across
+ * {@link Agentspan#run} invocations. The closest semantically-equivalent
+ * shape is to mark the agent as {@code stateful(true)} so that the server
+ * persists conversation history across runs in a dedicated worker domain —
+ * multi-turn calls against the same stateful agent will see prior exchanges.
+ * The single-turn driver below mirrors the Python source exactly; toggling
+ * stateful demonstrates how the Java SDK surfaces persistent context. Because
+ * {@code stateful(true)} is an Agentspan-side flag rather than a LangChain4j
+ * one, we use the advanced {@link LangChainBridge#agentBuilder} path so we
+ * can decorate the agent before {@code .build()}.
  *
  * <p>Demonstrates:
  * <ul>
@@ -76,21 +78,14 @@ public class Example06ChatHistory {
             .modelName("gpt-4o-mini")
             .build();
 
-        // Build via LangChainBridge to extract tools, then rebuild with
-        // stateful(true) to enable cross-run conversation persistence — the
-        // server-side analog of LangChain's chat-history-aware create_agent.
-        Agent extracted = LangChainBridge.toAgentspan(
+        // Use the advanced LangChainBridge.agentBuilder(...) path so we can
+        // mark the agent stateful(true) — server-side cross-run conversation
+        // persistence is an Agentspan feature on top of LangChain4j.
+        Agent agent = LangChainBridge.agentBuilder(
             "chat_history_agent",
             model,
             "You are a helpful science assistant. Use tools to look up facts when needed.",
-            new FactTools()
-        );
-
-        Agent agent = Agent.builder()
-            .name(extracted.getName())
-            .model(extracted.getModel())
-            .instructions("You are a helpful science assistant. Use tools to look up facts when needed.")
-            .tools(extracted.getTools())
+            new FactTools())
             .stateful(true)
             .build();
 
