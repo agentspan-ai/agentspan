@@ -392,10 +392,13 @@ plan = Plan(
 - `examples/100_issue_fixer_agent.py` — production-shape pipeline with PLAN_EXECUTE coder + agentic fallback
 - `examples/108_plan_execute_refs.py` — cross-step output piping via `Ref("step_id")`
 - `examples/109_plan_execute_replan.py` — outer-loop replan pattern: run plan, inspect result, build the next plan with feedback baked into the per-op `generate.instructions`
+- `examples/110_plan_execute_replan_solve.py` — adaptive goal-seeking loop: K parallel proposers + deterministic verifier per iteration; the replanner threads each candidate's exact failure modes back into the next iteration's prompt and loops until any candidate clears all constraints
 
 ## Plan → execute → replan
 
-PAE itself is single-shot: plan-once, execute-once, fallback-once on hard failure. For tasks that need iterative refinement — run, check the output, decide to continue or replan, repeat — wrap the harness in your own loop. `examples/109_plan_execute_replan.py` shows the pattern: each iteration calls `runtime.run(harness, prompt, plan=plan_N)`, the host code reads the artifacts the run produced, a decider returns `done | replan`, and a builder constructs `plan_{N+1}` with the prior iteration's measurements baked into the LLM instructions. The inner per-iteration run stays deterministic; the outer loop carries the adaptive control flow.
+PAE itself is single-shot: plan-once, execute-once, fallback-once on hard failure. For tasks that need iterative refinement — run, check the output, decide to continue or replan, repeat — wrap the harness in your own loop. `examples/109_plan_execute_replan.py` shows the simple shape: each iteration calls `runtime.run(harness, prompt, plan=plan_N)`, the host code reads the artifacts the run produced, a decider returns `done | replan`, and a builder constructs `plan_{N+1}` with the prior iteration's measurements baked into the LLM instructions. The inner per-iteration run stays deterministic; the outer loop carries the adaptive control flow.
+
+`examples/110_plan_execute_replan_solve.py` shows the *adaptive goal-seeking* variant. Each iteration's plan emits **K parallel proposers** (generate ops in a FORK_JOIN step) feeding a deterministic verifier that produces a precise **per-candidate, per-constraint failure breakdown** (e.g. `word_count_off (got 21, expected 25)`). The outer loop reads the verdict JSON, terminates the moment any candidate clears all constraints, and otherwise threads each prior candidate's exact failures into the next iteration's `generate.instructions`. The result is a real plan → execute → replan → execute cycle that converges by *fixing what the previous attempt got wrong*, not by retrying the same prompt with a different seed. The pattern generalises to any LLM-generator + deterministic-verifier loop — swap the verifier for `run_pytest`, `check_proof`, `query_db`, etc., and the outer loop is identical.
 
 ## Failure modes
 
