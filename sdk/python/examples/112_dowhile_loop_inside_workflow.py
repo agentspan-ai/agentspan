@@ -4,43 +4,44 @@
 
 """112 — Plan-Execute-Replan loop INSIDE a single Conductor workflow.
 
-Examples 109/110/111 keep the loop in Python user code: each iteration
-is a separate top-level workflow execution. This example does the
-opposite — it hand-builds a Conductor WorkflowDef whose body is a
-``DO_WHILE`` task that wraps the full plan → execute → review cycle.
-You get ONE workflow ID for the whole run, and the iterations show up
-as task-ref suffixes (``planner_llm__i0``, ``planner_llm__i1``, …)
-inside the same workflow's task list.
+Examples 109/110/111 keep the replan loop in Python user code: each
+iteration is a separate top-level workflow execution. This example
+does the opposite — it hand-builds a Conductor WorkflowDef whose body
+is a ``DO_WHILE`` task that wraps the full plan → COMPILE → EXECUTE →
+review cycle, **using the real ``PLAN_AND_COMPILE`` system task plus a
+dynamic ``SUB_WORKFLOW`` inside the loop**. ONE workflow ID for the
+whole run; iterations show up as ``planner_llm__1``,
+``plan_and_compile__1``, ``plan_exec__1``, ``reviewer_llm__1``, ... in
+the same workflow's task list.
 
 The DO_WHILE body each iteration:
-  1. ``planner_llm``    — LLM proposes the next guess (the plan).
-  2. ``extract_guess``  — INLINE parses the integer out of the LLM text.
-  3. ``verify``         — INLINE compares the guess to the secret and
-                          emits ``{verdict, done, history}``. This is
-                          the deterministic "compile + execute" step
-                          condensed into one INLINE for demo brevity;
-                          a production version would use
-                          ``PLAN_AND_COMPILE`` + ``SUB_WORKFLOW``.
-  4. ``reviewer_llm``   — LLM looks at the verdict + history and emits
-                          a JSON ``{continue, feedback}`` advisory.
-  5. ``update_state``   — SET_VARIABLE pushes the new history/done into
-                          workflow variables so the next iteration sees
-                          them.
+
+  1. ``planner_llm``       — LLM proposes the next guess given history.
+  2. ``extract_guess``     — INLINE parses the integer from LLM text.
+  3. ``build_plan``        — INLINE wraps the integer into a PAC-shaped
+                             plan JSON: a single step calling
+                             ``check_guess(n=<guess>)``.
+  4. ``plan_and_compile``  — the **real PAC task**: compiles the plan
+                             JSON into a Conductor WorkflowDef.
+  5. ``plan_exec``         — SUB_WORKFLOW that executes PAC's
+                             dynamically-compiled WorkflowDef. The
+                             compiled sub-workflow runs a SIMPLE task
+                             against the ``check_guess`` worker we
+                             register from this process.
+  6. ``reviewer_llm``      — LLM looks at the verdict, emits a JSON
+                             ``{continue, feedback}`` advisory.
+  7. ``parse_review``      — INLINE extracts the continue flag.
+  8. ``update_state``      — SET_VARIABLE pushes new bounds into
+                             ``workflow.variables`` so the next
+                             iteration's ``planner_llm`` sees them.
 
 Loop condition: keep going while ``done != true`` AND iteration count
 is under the budget.
 
 This is the shape of a *first-class* ``Strategy.PLAN_EXECUTE_REPLAN``
-that doesn't exist in Agentspan today (dg-review finding F1, plan
-recommendation #2). The example builds it as a raw Conductor workflow
-so you can see the DO_WHILE structure end-to-end before any server
-changes land.
-
-What to watch:
-  * ONE top-level workflow ID.
-  * ``loop`` task contains 8-12 iterations as ``__iN`` suffixes.
-  * Each iteration's ``planner_llm__iN`` is a separate LLM call.
-  * Final ``loop`` output reports the iteration count.
+that doesn't exist in Agentspan today (dg-review finding F1,
+recommendation #2). The example builds it by hand to show the full
+plan→compile→execute→replan structure end-to-end inside one workflow.
 
 Requirements:
   - AGENTSPAN_SERVER_URL=http://localhost:6767/api (default)
@@ -51,10 +52,13 @@ Requirements:
 
 import json
 import os
+import re
 import sys
 import time
 
 import requests
+
+from agentspan.agents import AgentRuntime, plan_execute, tool
 
 SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
 BASE = SERVER_URL.rstrip("/").replace("/api", "")
@@ -62,7 +66,7 @@ MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
 SECRET = int(os.environ.get("AGENTSPAN_BINSEARCH_SECRET", "642"))
 MAX_ITER = int(os.environ.get("AGENTSPAN_DOWHILE_MAX_ITER", "12"))
 WORKFLOW_NAME = "pae_replan_dowhile_demo"
-WORKFLOW_VERSION = 2
+WORKFLOW_VERSION = 5
 
 
 def _model_split(model: str) -> tuple[str, str]:
@@ -75,11 +79,36 @@ def _model_split(model: str) -> tuple[str, str]:
 PROVIDER, MODEL_NAME = _model_split(MODEL)
 
 
+# ── The tool the compiled plan invokes ───────────────────────────
+
+
+@tool
+def check_guess(n: int) -> dict:
+    """Compare a candidate integer to the hidden secret.
+
+    PAC will compile a plan into a sub-workflow that calls this tool
+    via a SIMPLE task. The worker for it is registered by this
+    process's ``AgentRuntime``.
+
+    Returns the verdict wrapped in ``{"result": ...}`` so PAC's
+    compiled-sub-workflow ``outputParameters`` (which references
+    ``${last_op.output.result}``) surfaces it to the outer DO_WHILE.
+    Without the wrapper, the sub-workflow's ``output.result`` is null
+    and the outer loop can't read what just happened.
+    """
+    n_int = int(n)
+    if n_int == SECRET:
+        verdict = "correct"
+    elif n_int < SECRET:
+        verdict = "too_low"
+    else:
+        verdict = "too_high"
+    return {"result": {"verdict": verdict, "guess": n_int, "done": verdict == "correct"}}
+
+
 # ── INLINE script bodies (GraalJS) ────────────────────────────────
 
 
-# Pull the first integer out of whatever the LLM returned ("537",
-# "Guess: 537", "**I'll guess 537**").
 EXTRACT_GUESS_JS = (
     "(function() {"
     "  var s = String($.llm_out || '');"
@@ -89,30 +118,43 @@ EXTRACT_GUESS_JS = (
 )
 
 
-# Compare the guess to the secret. Push the (iteration, guess, verdict)
-# triple onto the history. Emit ``done`` when correct so DO_WHILE exits.
-VERIFY_JS = (
+# Wrap the LLM-proposed guess into the JSON plan shape PAC consumes.
+# A single step with one operation that calls check_guess(n=<guess>).
+BUILD_PLAN_JS = (
     "(function() {"
     "  var g = $.guess;"
-    "  var s = $.secret;"
-    "  var h = $.history ? $.history.slice() : [];"
-    "  var verdict;"
-    "  if (g == null) verdict = 'invalid';"
-    "  else if (g == s) verdict = 'correct';"
-    "  else if (g < s) verdict = 'too_low';"
-    "  else verdict = 'too_high';"
-    "  h.push({iter: $.iter, guess: g, verdict: verdict});"
-    "  var lo = $.lo;"
-    "  var hi = $.hi;"
-    "  if (verdict === 'too_low' && g != null && g + 1 > lo) lo = g + 1;"
-    "  if (verdict === 'too_high' && g != null && g - 1 < hi) hi = g - 1;"
-    "  return {verdict: verdict, guess: g, done: (verdict === 'correct'), "
-    "          history: h, lo: lo, hi: hi};"
+    "  var plan = {"
+    "    steps: ["
+    "      {id: 'check', operations: ["
+    "        {tool: 'check_guess', args: {n: g}}"
+    "      ]}"
+    "    ]"
+    "  };"
+    "  return JSON.stringify(plan);"
     "})();"
 )
 
 
-# Parse the reviewer LLM's JSON output. We only need the ``continue`` flag.
+# Pull the verdict map out of the SUB_WORKFLOW's nested task output.
+# The compiled plan's SIMPLE task for check_guess writes its return value
+# into the sub-workflow output; PAC routes it through step_output_check.
+EXTRACT_VERDICT_JS = (
+    "(function() {"
+    "  var ex = $.exec_output;"
+    "  if (!ex) return {verdict: 'missing', guess: null, done: false,"
+    "                   raw: '(no exec output)'};"
+    "  if (ex.step_outputs && ex.step_outputs.check) {"
+    "    return ex.step_outputs.check;"
+    "  }"
+    "  if (ex.result && typeof ex.result === 'object') return ex.result;"
+    "  if (typeof ex.result === 'string') {"
+    "    try { return JSON.parse(ex.result); } catch(e) {}"
+    "  }"
+    "  return {verdict: 'unknown', guess: null, done: false, raw: JSON.stringify(ex)};"
+    "})();"
+)
+
+
 PARSE_REVIEW_JS = (
     "(function() {"
     "  var s = String($.llm_out || '');"
@@ -124,57 +166,63 @@ PARSE_REVIEW_JS = (
 )
 
 
+# Derive new search bounds AND append to history so the next planner_llm
+# sees the full prior context in ${workflow.variables.lo|hi|history}.
+UPDATE_BOUNDS_JS = (
+    "(function() {"
+    "  var v = $.verdict;"
+    "  var lo = $.lo;"
+    "  var hi = $.hi;"
+    "  var g = $.guess;"
+    "  var h = $.history ? $.history.slice() : [];"
+    "  if (v === 'too_low' && g != null && g + 1 > lo) lo = g + 1;"
+    "  if (v === 'too_high' && g != null && g - 1 < hi) hi = g - 1;"
+    "  h.push({guess: g, verdict: v});"
+    "  return {lo: lo, hi: hi, history: h};"
+    "})();"
+)
+
+
 # ── Workflow definition ───────────────────────────────────────────
 
 
-def build_workflow_def() -> dict:
+def build_workflow_def(check_guess_tool_def: dict | None = None) -> dict:
     """Construct the Conductor WorkflowDef JSON.
 
-    The interesting bit is the ``DO_WHILE`` task at index 1. Its
-    ``loopOver`` body runs once per iteration; each task in the body
-    gets a ``__iN`` suffix in the actual workflow execution so you can
-    see every iteration's tasks side-by-side in the task list.
+    The DO_WHILE body uses the real ``PLAN_AND_COMPILE`` task plus a
+    dynamic ``SUB_WORKFLOW`` so each iteration genuinely compiles a
+    new plan and runs it against the registered ``check_guess`` worker.
     """
     return {
         "name": WORKFLOW_NAME,
         "version": WORKFLOW_VERSION,
-        "description": "PAE plan-execute-replan loop wrapped in a single DO_WHILE",
+        "description": "PAE plan-execute-replan loop wrapped in a single DO_WHILE with real PAC + SUB_WORKFLOW",
         "tasks": [
-            # 1. Initialise workflow variables with the search state.
             {
                 "name": "SET_VARIABLE",
                 "taskReferenceName": "init",
                 "type": "SET_VARIABLE",
                 "inputParameters": {
-                    "history": [],
-                    "done": False,
                     "lo": 1,
                     "hi": 1000,
+                    "history": [],
                     "secret": "${workflow.input.secret}",
                 },
             },
-            # 2. The loop itself.
             {
                 "name": "DO_WHILE",
                 "taskReferenceName": "loop",
                 "type": "DO_WHILE",
-                # ``inputParameters`` are re-evaluated each iteration with the
-                # latest ``__iN``-suffixed task outputs, which is how the
-                # loopCondition gets at the verifier's ``done`` flag. You
-                # can't reach ``${workflow.variables.X}`` from inside the JS
-                # condition — only the names declared here on the loop task.
                 "inputParameters": {
                     "loop": "${loop}",
-                    "verify": "${verify}",
+                    "extract_verdict": "${extract_verdict}",
                 },
-                # Continue while we're under the budget and not yet done.
                 "loopCondition": (
                     f"if ($.loop['iteration'] < {MAX_ITER} "
-                    f"&& $.verify['result']['done'] != true) "
+                    f"&& $.extract_verdict['result']['done'] != true) "
                     f"{{ true; }} else {{ false; }}"
                 ),
                 "loopOver": [
-                    # 2a. Planner LLM — propose the next guess given the running history.
                     {
                         "name": "LLM_CHAT_COMPLETE",
                         "taskReferenceName": "planner_llm",
@@ -182,32 +230,34 @@ def build_workflow_def() -> dict:
                         "inputParameters": {
                             "llmProvider": PROVIDER,
                             "model": MODEL_NAME,
-                            "maxTokens": 128,
+                            "maxTokens": 64,
                             "messages": [
                                 {
                                     "role": "system",
                                     "message": (
-                                        "You are a binary-search assistant. You will be told the "
-                                        "history of guesses and the current bounds. Respond with "
-                                        "ONLY the next integer to try — no prose, no JSON, no "
-                                        "explanation. Use binary search (pick the midpoint of "
-                                        "the remaining range)."
+                                        "You are a binary-search assistant searching for a "
+                                        "hidden integer. You will be given the current valid "
+                                        "range [low, high] and the history of prior guesses + "
+                                        "their verdicts ('too_low', 'too_high'). Your job: "
+                                        "pick the MIDPOINT of the current range — i.e. "
+                                        "floor((low + high) / 2). Respond with ONLY that "
+                                        "integer. No prose, no JSON, no explanation."
                                     ),
                                 },
                                 {
                                     "role": "user",
                                     "message": (
-                                        "Secret is an integer in [1, 1000]. "
-                                        "Current bounds: [${workflow.variables.lo}, "
+                                        "Current valid range: [${workflow.variables.lo}, "
                                         "${workflow.variables.hi}]. "
-                                        "History so far: ${workflow.variables.history}. "
-                                        "Your next guess?"
+                                        "Prior guesses and verdicts: "
+                                        "${workflow.variables.history}. "
+                                        "Compute the midpoint of the current range and emit "
+                                        "ONLY that integer."
                                     ),
                                 },
                             ],
                         },
                     },
-                    # 2b. Extract the integer the planner emitted.
                     {
                         "name": "INLINE",
                         "taskReferenceName": "extract_guess",
@@ -218,23 +268,73 @@ def build_workflow_def() -> dict:
                             "llm_out": "${planner_llm.output.result}",
                         },
                     },
-                    # 2c. Deterministic verifier — the "compile + execute" of this demo.
                     {
                         "name": "INLINE",
-                        "taskReferenceName": "verify",
+                        "taskReferenceName": "build_plan",
                         "type": "INLINE",
                         "inputParameters": {
                             "evaluatorType": "graaljs",
-                            "expression": VERIFY_JS,
+                            "expression": BUILD_PLAN_JS,
                             "guess": "${extract_guess.output.result}",
-                            "secret": "${workflow.variables.secret}",
-                            "history": "${workflow.variables.history}",
-                            "iter": "${loop.output.iteration}",
-                            "lo": "${workflow.variables.lo}",
-                            "hi": "${workflow.variables.hi}",
                         },
                     },
-                    # 2d. Reviewer LLM — looks at the verdict and decides whether to replan.
+                    {
+                        "name": "plan_and_compile",
+                        "taskReferenceName": "plan_and_compile",
+                        "type": "PLAN_AND_COMPILE",
+                        "inputParameters": {
+                            "planJson": "${build_plan.output.result}",
+                            "parentName": WORKFLOW_NAME,
+                            "model": MODEL,
+                            "knownToolNames": ["check_guess"],
+                            # parentTools — pass the real ToolConfig so PAC
+                            # routes check_guess as a SIMPLE worker task
+                            # rather than rejecting it.
+                            **(
+                                {"parentTools": [check_guess_tool_def]}
+                                if check_guess_tool_def
+                                else {}
+                            ),
+                        },
+                    },
+                    {
+                        "name": "SUB_WORKFLOW",
+                        "taskReferenceName": "plan_exec",
+                        "type": "SUB_WORKFLOW",
+                        "subWorkflowParam": {
+                            "name": f"pe_{WORKFLOW_NAME}_plan",
+                            "version": 1,
+                            "workflowDefinition": "${plan_and_compile.output.workflowDef}",
+                        },
+                        "inputParameters": {
+                            "prompt": "${workflow.input.secret}",
+                        },
+                        "optional": True,
+                    },
+                    {
+                        "name": "INLINE",
+                        "taskReferenceName": "extract_verdict",
+                        "type": "INLINE",
+                        "inputParameters": {
+                            "evaluatorType": "graaljs",
+                            "expression": EXTRACT_VERDICT_JS,
+                            "exec_output": "${plan_exec.output}",
+                        },
+                    },
+                    {
+                        "name": "INLINE",
+                        "taskReferenceName": "compute_bounds",
+                        "type": "INLINE",
+                        "inputParameters": {
+                            "evaluatorType": "graaljs",
+                            "expression": UPDATE_BOUNDS_JS,
+                            "verdict": "${extract_verdict.output.result.verdict}",
+                            "guess": "${extract_verdict.output.result.guess}",
+                            "lo": "${workflow.variables.lo}",
+                            "hi": "${workflow.variables.hi}",
+                            "history": "${workflow.variables.history}",
+                        },
+                    },
                     {
                         "name": "LLM_CHAT_COMPLETE",
                         "taskReferenceName": "reviewer_llm",
@@ -247,27 +347,24 @@ def build_workflow_def() -> dict:
                                 {
                                     "role": "system",
                                     "message": (
-                                        "You are a search progress evaluator. The user is "
-                                        "running a binary-search loop and just executed one "
-                                        "iteration. Respond with ONLY a JSON object: "
-                                        '{"continue": true|false, "feedback": "..."}. '
+                                        "You are a search progress evaluator. Respond with ONLY "
+                                        'a JSON object: {"continue": true|false, "feedback": "..."}. '
                                         "Set continue=false only when verdict == 'correct'."
                                     ),
                                 },
                                 {
                                     "role": "user",
                                     "message": (
-                                        "Iteration verdict: ${verify.output.result.verdict}. "
-                                        "Last guess: ${verify.output.result.guess}. "
-                                        "New bounds: [${verify.output.result.lo}, "
-                                        "${verify.output.result.hi}]. "
+                                        "Iteration verdict: ${extract_verdict.output.result.verdict}. "
+                                        "Last guess: ${extract_verdict.output.result.guess}. "
+                                        "New bounds: [${compute_bounds.output.result.lo}, "
+                                        "${compute_bounds.output.result.hi}]. "
                                         "Should we continue?"
                                     ),
                                 },
                             ],
                         },
                     },
-                    # 2e. Parse the reviewer's JSON.
                     {
                         "name": "INLINE",
                         "taskReferenceName": "parse_review",
@@ -278,18 +375,14 @@ def build_workflow_def() -> dict:
                             "llm_out": "${reviewer_llm.output.result}",
                         },
                     },
-                    # 2f. Persist this iteration's state back into workflow.variables
-                    # so the next iteration's planner_llm sees it via the
-                    # ${workflow.variables.X} references in its messages.
                     {
                         "name": "SET_VARIABLE",
                         "taskReferenceName": "update_state",
                         "type": "SET_VARIABLE",
                         "inputParameters": {
-                            "history": "${verify.output.result.history}",
-                            "done": "${verify.output.result.done}",
-                            "lo": "${verify.output.result.lo}",
-                            "hi": "${verify.output.result.hi}",
+                            "lo": "${compute_bounds.output.result.lo}",
+                            "hi": "${compute_bounds.output.result.hi}",
+                            "history": "${compute_bounds.output.result.history}",
                             "secret": "${workflow.variables.secret}",
                         },
                     },
@@ -299,8 +392,7 @@ def build_workflow_def() -> dict:
         "inputParameters": ["secret"],
         "outputParameters": {
             "iterations": "${loop.output.iteration}",
-            "history": "${workflow.variables.history}",
-            "done": "${workflow.variables.done}",
+            "final_verdict": "${extract_verdict.output.result}",
         },
         "schemaVersion": 2,
         "ownerEmail": "demo@example.com",
@@ -315,7 +407,6 @@ def register_workflow(wf: dict) -> None:
         f"{BASE}/api/metadata/workflow", json=[wf], headers={"Content-Type": "application/json"}
     )
     if r.status_code not in (200, 204):
-        # 409 already-registered — try a PUT update instead.
         r2 = requests.put(
             f"{BASE}/api/metadata/workflow",
             json=[wf],
@@ -355,14 +446,6 @@ def poll_until_done(execution_id: str, timeout: int = 300) -> dict:
 
 
 def print_iteration_summary(wf: dict) -> None:
-    """Walk the task list and print one row per DO_WHILE iteration.
-
-    Conductor suffixes loopOver task refs with ``__<iteration>``
-    (e.g. ``planner_llm__1``, ``planner_llm__2``). Group by the
-    suffix to reconstruct the per-iteration view.
-    """
-    import re
-
     tasks = wf.get("tasks", [])
     suffix_re = re.compile(r"^(.+?)__(\d+)$")
     by_iter: dict[int, dict] = {}
@@ -371,25 +454,26 @@ def print_iteration_summary(wf: dict) -> None:
         m = suffix_re.match(ref)
         if not m:
             continue
-        base, iter_n = m.group(1), int(m.group(2))
-        slot = by_iter.setdefault(iter_n, {})
+        base, n = m.group(1), int(m.group(2))
+        slot = by_iter.setdefault(n, {})
         slot[base] = t
 
     print(f"{'iter':>5}  {'guess':>6}  {'verdict':<10}  {'new bounds':<14}  {'continue?':>9}")
     print("─" * 65)
     for n in sorted(by_iter):
         row = by_iter[n]
-        verify = row.get("verify", {})
-        result = verify.get("outputData", {}).get("result", {}) if verify else {}
+        verdict_task = row.get("extract_verdict", {})
+        verdict = (verdict_task.get("outputData", {}) or {}).get("result", {}) or {}
+        bounds_task = row.get("compute_bounds", {})
+        bounds = (bounds_task.get("outputData", {}) or {}).get("result", {}) or {}
         review = row.get("parse_review", {})
-        review_out = review.get("outputData", {}).get("result", {}) if review else {}
+        review_out = (review.get("outputData", {}) or {}).get("result", {}) or {}
         cont = review_out.get("continue") if isinstance(review_out, dict) else None
-        guess = result.get("guess")
-        verdict = result.get("verdict", "?")
-        lo, hi = result.get("lo"), result.get("hi")
         print(
-            f"{n:>5}  {str(guess):>6}  {verdict:<10}  "
-            f"[{lo!s:>4},{hi!s:>4}]  {str(cont):>9}"
+            f"{n:>5}  {str(verdict.get('guess')):>6}  "
+            f"{verdict.get('verdict', '?'):<10}  "
+            f"[{bounds.get('lo')!s:>4},{bounds.get('hi')!s:>4}]  "
+            f"{str(cont):>9}"
         )
 
 
@@ -399,27 +483,52 @@ def main(argv: list[str]) -> None:
     print(f"secret: {SECRET}")
     print(f"max:    {MAX_ITER} iterations\n")
 
-    wf_def = build_workflow_def()
-    print("registering workflow def...")
-    register_workflow(wf_def)
-    print(f"  OK: {WORKFLOW_NAME} v{WORKFLOW_VERSION}\n")
+    # 1. Build a dummy harness whose only purpose is to register the
+    #    ``check_guess`` worker AND give us a serialized ToolConfig the
+    #    workflow def's PAC task can use as ``parentTools``.
+    print("setting up check_guess worker via AgentRuntime...")
+    harness = plan_execute(
+        name="check_harness",
+        tools=[check_guess],
+        planner_instructions="(unused — workers register at deploy time)",
+        model=MODEL,
+    )
 
-    print("starting execution...")
-    execution_id = start_execution()
-    print(f"  execution_id: {execution_id}\n")
+    # Serialize the tool def so PAC's allowlist + SIMPLE-task emission
+    # picks check_guess up correctly.
+    from agentspan.agents.config_serializer import AgentConfigSerializer
 
-    print("polling until done...")
-    wf = poll_until_done(execution_id)
-    print(f"  status: {wf['status']}\n")
+    ac = AgentConfigSerializer().serialize(harness)
+    check_guess_def = next((t for t in ac.get("tools", []) if t.get("name") == "check_guess"), None)
+    if check_guess_def is None:
+        raise RuntimeError("could not serialize check_guess tool config")
+
+    with AgentRuntime() as runtime:
+        # 2. Register the worker (serve, non-blocking).
+        runtime.serve(harness, blocking=False)
+        print("  workers serving: check_guess\n")
+
+        # 3. Register the workflow def.
+        wf_def = build_workflow_def(check_guess_tool_def=check_guess_def)
+        print("registering workflow def...")
+        register_workflow(wf_def)
+        print(f"  OK: {WORKFLOW_NAME} v{WORKFLOW_VERSION}\n")
+
+        # 4. Start the execution.
+        print("starting execution...")
+        execution_id = start_execution()
+        print(f"  execution_id: {execution_id}\n")
+
+        # 5. Poll until done.
+        print("polling until done...")
+        wf = poll_until_done(execution_id)
+        print(f"  status: {wf['status']}\n")
 
     print(f"final output: {json.dumps(wf.get('output', {}), indent=2)}\n")
 
     print("── per-iteration summary (inside the single workflow) ──")
     print_iteration_summary(wf)
     print()
-
-    # Surface a couple of task-ref names so you can curl them yourself.
-    import re
 
     iter_refs = sorted(
         {
@@ -428,11 +537,9 @@ def main(argv: list[str]) -> None:
             if re.search(r"__\d+$", t.get("referenceTaskName", ""))
         }
     )
-    print(f"sample task refs ({len(iter_refs)} total):")
-    for r in iter_refs[:6]:
-        print(f"  {r}")
-    if len(iter_refs) > 6:
-        print(f"  ... (+{len(iter_refs) - 6} more)")
+    distinct_bases = sorted({re.sub(r"__\d+$", "", r) for r in iter_refs})
+    print(f"task suffixes: {len(iter_refs)} total task instances")
+    print(f"distinct task types in loop body: {distinct_bases}")
     print()
     print(f"inspect: curl {BASE}/api/workflow/{execution_id}?includeTasks=true | jq .")
 
