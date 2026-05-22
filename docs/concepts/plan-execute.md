@@ -393,6 +393,7 @@ plan = Plan(
 - `examples/108_plan_execute_refs.py` — cross-step output piping via `Ref("step_id")`
 - `examples/109_plan_execute_replan.py` — outer-loop replan pattern: run plan, inspect result, build the next plan with feedback baked into the per-op `generate.instructions`
 - `examples/110_plan_execute_replan_solve.py` — adaptive goal-seeking loop: K parallel proposers + deterministic verifier per iteration; the replanner threads each candidate's exact failure modes back into the next iteration's prompt and loops until any candidate clears all constraints
+- `examples/111_plan_execute_replan_binsearch.py` — many-iteration binary-search loop. The verifier holds a secret integer and each iteration's verdict reveals only one bit (too_low / too_high), so the loop *must* iterate ~log₂ N times. Use this when you want to see the plan-execute-replan cycle visibly converge over many iterations
 
 ## Plan → execute → replan
 
