@@ -225,16 +225,24 @@ def run_binsearch_loop(runtime: AgentRuntime, harness, *, max_iter: int = MAX_IT
 
     for iteration in range(max_iter):
         plan = build_plan(iteration, history)
-        runtime.run(harness, "guess the number", plan=plan, timeout=120)
+        result = runtime.run(harness, "guess the number", plan=plan, timeout=120)
         v = read_result(iteration)
         guess = v.get("guess")
         verdict = v.get("verdict")
-        history.append({"iteration": iteration, "guess": guess, "verdict": verdict})
+        history.append(
+            {
+                "iteration": iteration,
+                "guess": guess,
+                "verdict": verdict,
+                "execution_id": result.execution_id,
+            }
+        )
 
         lo, hi = _bounds_from_history(history[:-1])  # bounds BEFORE this guess
         print(
             f"── iteration {iteration:>2}  range=[{lo:>4},{hi:>4}]  "
-            f"guess={guess!s:>5}  →  {verdict}"
+            f"guess={guess!s:>5}  →  {verdict:>9}  "
+            f"wf={result.execution_id}"
         )
 
         if verdict == "correct":
