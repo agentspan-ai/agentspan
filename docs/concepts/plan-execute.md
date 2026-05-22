@@ -390,6 +390,12 @@ plan = Plan(
 - `examples/103_plan_and_compile.py` — minimal PAC demo with `args` + `generate` ops + validation
 - `examples/104_plan_execute_guardrails.py` — guardrail propagation in plan mode
 - `examples/100_issue_fixer_agent.py` — production-shape pipeline with PLAN_EXECUTE coder + agentic fallback
+- `examples/108_plan_execute_refs.py` — cross-step output piping via `Ref("step_id")`
+- `examples/109_plan_execute_replan.py` — outer-loop replan pattern: run plan, inspect result, build the next plan with feedback baked into the per-op `generate.instructions`
+
+## Plan → execute → replan
+
+PAE itself is single-shot: plan-once, execute-once, fallback-once on hard failure. For tasks that need iterative refinement — run, check the output, decide to continue or replan, repeat — wrap the harness in your own loop. `examples/109_plan_execute_replan.py` shows the pattern: each iteration calls `runtime.run(harness, prompt, plan=plan_N)`, the host code reads the artifacts the run produced, a decider returns `done | replan`, and a builder constructs `plan_{N+1}` with the prior iteration's measurements baked into the LLM instructions. The inner per-iteration run stays deterministic; the outer loop carries the adaptive control flow.
 
 ## Failure modes
 
