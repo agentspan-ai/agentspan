@@ -2049,21 +2049,19 @@ public class MultiAgentCompiler {
                 for (GuardrailConfig g : t.getGuardrails()) {
                     String onFail = g.getOnFail();
                     if (onFail != null && !"raise".equalsIgnoreCase(onFail)) {
-                        offenders.add(
-                                t.getName() + ":" + g.getName() + " (on_fail=" + onFail + ")");
+                        offenders.add(t.getName() + ":" + g.getName() + " (on_fail=" + onFail + ")");
                     }
                 }
             }
             if (!offenders.isEmpty()) {
-                throw new IllegalStateException(
-                        "PLAN_EXECUTE harness '"
-                                + config.getName()
-                                + "' has guardrails with on_fail=retry|fix|human but no fallback "
-                                + "agent. In plan mode these collapse to TERMINATE — the user-intended "
-                                + "retry-with-feedback semantics do not apply. Either configure a "
-                                + "``fallback=<Agent>`` on the harness, or set ``on_fail=raise`` on "
-                                + "these guardrails to acknowledge fail-closed semantics. Offenders: "
-                                + String.join(", ", offenders));
+                throw new IllegalStateException("PLAN_EXECUTE harness '"
+                        + config.getName()
+                        + "' has guardrails with on_fail=retry|fix|human but no fallback "
+                        + "agent. In plan mode these collapse to TERMINATE — the user-intended "
+                        + "retry-with-feedback semantics do not apply. Either configure a "
+                        + "``fallback=<Agent>`` on the harness, or set ``on_fail=raise`` on "
+                        + "these guardrails to acknowledge fail-closed semantics. Offenders: "
+                        + String.join(", ", offenders));
             }
         }
         List<String> knownToolNames = new ArrayList<>();

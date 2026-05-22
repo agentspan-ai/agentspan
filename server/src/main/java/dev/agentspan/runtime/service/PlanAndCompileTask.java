@@ -330,8 +330,7 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                     // (or be missing/unspecified, in which case we don't
                     // know the shape and skip the check).
                     if (toolName != null && op.get("args") instanceof Map<?, ?> argsMap) {
-                        String mismatch = checkParallelRefShape(
-                                toolName, argsMap, stepIsParallel, parentToolsByName);
+                        String mismatch = checkParallelRefShape(toolName, argsMap, stepIsParallel, parentToolsByName);
                         if (mismatch != null) {
                             errors.add("Step " + id + " op " + oi + " " + mismatch);
                         }
@@ -1403,9 +1402,7 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
         if (inputSchema == null) return null; // no schema — can't type-check
 
         Map<String, Object> properties =
-                inputSchema.get("properties") instanceof Map<?, ?> p
-                        ? (Map<String, Object>) p
-                        : null;
+                inputSchema.get("properties") instanceof Map<?, ?> p ? (Map<String, Object>) p : null;
         if (properties == null) return null;
 
         for (Map.Entry<?, ?> entry : argsMap.entrySet()) {

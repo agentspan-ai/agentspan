@@ -1705,8 +1705,7 @@ class PlanAndCompileTaskTest {
         // Compile must reject the plan with a clear diagnostic.
         Map<String, Object> consumerInputSchema = Map.of(
                 "type", "object",
-                "properties", Map.of(
-                        "document", Map.of("type", "object")),
+                "properties", Map.of("document", Map.of("type", "object")),
                 "required", List.of("document"));
         Map<String, Object> consumerTool = Map.of(
                 "name", "consume_doc",
@@ -1732,16 +1731,11 @@ class PlanAndCompileTaskTest {
                   ]
                 }""";
 
-        Map<String, Object> output = runWithParentTools(
-                planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
+        Map<String, Object> output =
+                runWithParentTools(planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
         Object error = output.get("error");
-        assertThat(error)
-                .as("parallel-Ref into scalar arg must fail compile")
-                .isNotNull();
-        assertThat(String.valueOf(error))
-                .contains("s_fan")
-                .contains("parallel")
-                .contains("consume_doc");
+        assertThat(error).as("parallel-Ref into scalar arg must fail compile").isNotNull();
+        assertThat(String.valueOf(error)).contains("s_fan").contains("parallel").contains("consume_doc");
     }
 
     @Test
@@ -1751,8 +1745,7 @@ class PlanAndCompileTaskTest {
         // shape, so the plan must compile.
         Map<String, Object> consumerInputSchema = Map.of(
                 "type", "object",
-                "properties", Map.of(
-                        "documents", Map.of("type", "array")),
+                "properties", Map.of("documents", Map.of("type", "array")),
                 "required", List.of("documents"));
         Map<String, Object> consumerTool = Map.of(
                 "name", "consume_docs",
@@ -1778,8 +1771,8 @@ class PlanAndCompileTaskTest {
                   ]
                 }""";
 
-        Map<String, Object> output = runWithParentTools(
-                planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
+        Map<String, Object> output =
+                runWithParentTools(planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
         assertThat(output.get("error"))
                 .as("array-typed consumer must accept parallel-Ref")
                 .isNull();
@@ -1793,8 +1786,7 @@ class PlanAndCompileTaskTest {
         // type mismatch.
         Map<String, Object> consumerInputSchema = Map.of(
                 "type", "object",
-                "properties", Map.of(
-                        "document", Map.of("type", "object")),
+                "properties", Map.of("document", Map.of("type", "object")),
                 "required", List.of("document"));
         Map<String, Object> consumerTool = Map.of(
                 "name", "consume_doc",
@@ -1819,8 +1811,8 @@ class PlanAndCompileTaskTest {
                   ]
                 }""";
 
-        Map<String, Object> output = runWithParentTools(
-                planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
+        Map<String, Object> output =
+                runWithParentTools(planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
         assertThat(output.get("error"))
                 .as("sequential-Ref into scalar arg must compile ok")
                 .isNull();
