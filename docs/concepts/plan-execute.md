@@ -394,6 +394,7 @@ plan = Plan(
 - `examples/109_plan_execute_replan.py` — outer-loop replan pattern: run plan, inspect result, build the next plan with feedback baked into the per-op `generate.instructions`
 - `examples/110_plan_execute_replan_solve.py` — adaptive goal-seeking loop: K parallel proposers + deterministic verifier per iteration; the replanner threads each candidate's exact failure modes back into the next iteration's prompt and loops until any candidate clears all constraints
 - `examples/111_plan_execute_replan_binsearch.py` — many-iteration binary-search loop. The verifier holds a secret integer and each iteration's verdict reveals only one bit (too_low / too_high), so the loop *must* iterate ~log₂ N times. Use this when you want to see the plan-execute-replan cycle visibly converge over many iterations
+- `examples/112_dowhile_loop_inside_workflow.py` — the loop *inside* a single Conductor workflow via a hand-built `DO_WHILE` task. Body of the loop: planner LLM → INLINE verify → reviewer LLM → SET_VARIABLE update. One workflow ID for the whole run; iterations show up as `planner_llm__1`, `planner_llm__2`, etc. in the same workflow's task list. This is the shape of the future `Strategy.PLAN_EXECUTE_REPLAN` (recommendation #2 from the design review)
 
 ## Plan → execute → replan
 
