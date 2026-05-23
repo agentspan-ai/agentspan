@@ -180,15 +180,16 @@ public sealed class Plans_ContextTests
     }
 
     /// <summary>
-    /// AgentConfigSerializer.SerializeAgent is `internal static` (the
-    /// public entry point is Serialize which wraps the agent config in
-    /// the POST /agent/start envelope). Use reflection to call the
-    /// internal helper directly — matches the pattern OpenAIAgentTests
-    /// already uses.
+    /// AgentConfigSerializer is `internal static` (the public entry point
+    /// is Serialize which wraps the agent config in the POST /agent/start
+    /// envelope). The test assembly can't reference the type name directly
+    /// — look it up by string via Assembly.GetType, matching the pattern
+    /// OpenAIAgentTests already uses.
     /// </summary>
     private static JsonObject SerializeAgentConfigForTest(Agent agent)
     {
-        var t = typeof(AgentConfigSerializer);
+        var t = typeof(Agent).Assembly
+            .GetType("Agentspan.AgentConfigSerializer", throwOnError: true)!;
         var mi = t.GetMethod(
             "SerializeAgent",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
