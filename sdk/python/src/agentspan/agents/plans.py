@@ -47,6 +47,74 @@ from typing import Any, Dict, List, Optional, Union
 
 
 @dataclass(frozen=True)
+class Context:
+    """A reference document made available to the PLAN_EXECUTE planner.
+
+    Appended to the planner's user prompt as a ``## Reference Context``
+    block on every planner invocation. Use to ground the planner in
+    domain-specific rules / processes / edge cases that a static
+    ``instructions`` string can't capture — onboarding playbooks, KYC
+    rules, compliance thresholds, etc.
+
+    Exactly one of ``text`` or ``url`` must be set:
+
+    * ``text``: inlined verbatim — best for short, stable rules.
+    * ``url``: HTTP GET on every planner run (no compile-time fetch,
+      no cache — doc edits go live without recompile). Optional
+      ``headers`` carry credential placeholders in the
+      ``${CRED_NAME}`` shape; the server escapes them to
+      ``#{CRED_NAME}`` so Conductor's templater doesn't consume them
+      and the runtime credential resolver fills them in at request
+      time — same auth pipeline as :class:`ToolConfig` HTTP tools.
+
+    Attributes:
+        text: Inline reference text.
+        url: HTTP(S) URL to fetch at planner-run time.
+        headers: Optional HTTP headers, may contain ``${CRED_NAME}``
+            placeholders that resolve against the agent's credential
+            store.
+        required: When ``True`` (default) a fetch failure fails the
+            workflow; when ``False`` a ``[doc unavailable]`` marker is
+            substituted in the planner prompt and the workflow
+            proceeds on partial context. Use ``required=False`` for
+            nice-to-have docs (a glossary, an FAQ); leave it ``True``
+            for load-bearing rules.
+        max_bytes: Per-doc truncation cap (default 16384). Larger
+            responses are truncated with a ``[doc truncated]`` marker
+            so a single oversized wiki page can't blow the planner's
+            context window.
+    """
+
+    text: Optional[str] = None
+    url: Optional[str] = None
+    headers: Optional[Dict[str, str]] = None
+    required: bool = True
+    max_bytes: int = 16384
+
+    def __post_init__(self) -> None:
+        if (self.text is None) == (self.url is None):
+            raise ValueError("Context: exactly one of text or url must be set")
+        if self.url is not None and not isinstance(self.url, str):
+            raise ValueError(f"Context.url must be a string; got {type(self.url).__name__}")
+        if self.text is not None and not isinstance(self.text, str):
+            raise ValueError(f"Context.text must be a string; got {type(self.text).__name__}")
+
+    def to_dict(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        if self.text is not None:
+            out["text"] = self.text
+        if self.url is not None:
+            out["url"] = self.url
+            if self.headers:
+                out["headers"] = dict(self.headers)
+            if not self.required:
+                out["required"] = False
+            if self.max_bytes != 16384:
+                out["maxBytes"] = self.max_bytes
+        return out
+
+
+@dataclass(frozen=True)
 class Ref:
     """A reference to a prior step's whole output.
 
@@ -163,9 +231,7 @@ class Op:
 
     def __post_init__(self) -> None:
         if (self.args is None) == (self.generate is None):
-            raise ValueError(
-                f"Op('{self.tool}'): exactly one of args or generate must be set"
-            )
+            raise ValueError(f"Op('{self.tool}'): exactly one of args or generate must be set")
 
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {"tool": self.tool}
@@ -299,9 +365,7 @@ def coerce_plan(plan: PlanLike) -> Dict[str, Any]:
         return plan.to_dict()
     if isinstance(plan, dict):
         return plan
-    raise TypeError(
-        f"plan must be a Plan or a dict; got {type(plan).__name__}"
-    )
+    raise TypeError(f"plan must be a Plan or a dict; got {type(plan).__name__}")
 
 
 def plan_execute(
@@ -312,6 +376,7 @@ def plan_execute(
     fallback_instructions: Optional[str] = None,
     model: Optional[str] = None,
     fallback_max_turns: Optional[int] = None,
+    planner_context: Optional[List[Union[str, "Context"]]] = None,
 ) -> Any:
     """Construct a ``Strategy.PLAN_EXECUTE`` harness in one call.
 
@@ -381,5 +446,7 @@ def plan_execute(
         harness_kwargs["model"] = model
     if fallback_max_turns is not None:
         harness_kwargs["fallback_max_turns"] = fallback_max_turns
+    if planner_context is not None:
+        harness_kwargs["planner_context"] = planner_context
 
     return Agent(**harness_kwargs)

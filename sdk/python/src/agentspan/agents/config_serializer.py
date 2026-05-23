@@ -83,9 +83,11 @@ class AgentConfigSerializer:
         # ``fallback``). Without the slot check, a PLAN_EXECUTE coordinator
         # built with ``planner=…`` would have ``strategy: None`` on the wire
         # and the server's dispatch would fall to compileWithTools.
-        has_sub_agents = bool(agent.agents) \
-            or getattr(agent, "planner", None) is not None \
+        has_sub_agents = (
+            bool(agent.agents)
+            or getattr(agent, "planner", None) is not None
             or getattr(agent, "fallback", None) is not None
+        )
         config: Dict[str, Any] = {
             "name": agent.name,
             "model": agent.model or None,
@@ -112,7 +114,9 @@ class AgentConfigSerializer:
         # Tools
         if agent.tools:
             agent_stateful = getattr(agent, "stateful", False)
-            config["tools"] = [self._serialize_tool(t, agent_stateful=agent_stateful) for t in agent.tools]
+            config["tools"] = [
+                self._serialize_tool(t, agent_stateful=agent_stateful) for t in agent.tools
+            ]
 
         # Sub-agents (recursive)
         if agent.agents:
@@ -230,8 +234,7 @@ class AgentConfigSerializer:
 
         if getattr(agent, "prefill_tools", None):
             config["prefillTools"] = [
-                {"toolName": pt.tool_name, "arguments": pt.arguments}
-                for pt in agent.prefill_tools
+                {"toolName": pt.tool_name, "arguments": pt.arguments} for pt in agent.prefill_tools
             ]
 
         if getattr(agent, "fallback_max_turns", None) is not None:
@@ -239,6 +242,18 @@ class AgentConfigSerializer:
 
         if getattr(agent, "plan_source", None) is not None:
             config["planSource"] = agent.plan_source
+
+        if getattr(agent, "planner_context", None):
+            # Entries are Context dataclasses (normalised by Agent.__init__)
+            # or raw dicts when hand-rolled. Call .to_dict() when present;
+            # otherwise pass through.
+            wire_entries = []
+            for entry in agent.planner_context:
+                if hasattr(entry, "to_dict"):
+                    wire_entries.append(entry.to_dict())
+                else:
+                    wire_entries.append(entry)
+            config["plannerContext"] = wire_entries
 
         # Synthesize flag — whether to append a final LLM synthesis step
         # after specialist agents complete. Default true; pass through only

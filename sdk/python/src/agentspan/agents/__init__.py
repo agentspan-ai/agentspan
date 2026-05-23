@@ -37,6 +37,7 @@ from agentspan.agents.agent import (
 # Typed plan builders + convenience constructor (Strategy.PLAN_EXECUTE)
 from agentspan.agents.plans import (
     Action,
+    Context,
     Generate,
     Op,
     Plan,

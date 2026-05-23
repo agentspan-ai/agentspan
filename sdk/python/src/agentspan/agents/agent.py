@@ -379,6 +379,7 @@ class Agent:
         # PLAN_EXECUTE named slots (replace positional ``agents=[planner, fallback]``)
         planner: Optional["Agent"] = None,
         fallback: Optional["Agent"] = None,
+        planner_context: Optional[List[Any]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -527,6 +528,44 @@ class Agent:
         # PLAN_EXECUTE named slots — see __init__ docstring.
         self.planner: Optional["Agent"] = planner
         self.fallback: Optional["Agent"] = fallback
+
+        # PLAN_EXECUTE planner context (text snippets + URLs whose
+        # bodies are fetched per-planner-invocation and appended to
+        # the planner's prompt). Normalise bare strings to
+        # ``Context(text=...)`` so users can pass either shape.
+        # Reject when set on a non-PLAN_EXECUTE strategy with a
+        # clear migration message — same pattern as planner=/fallback=.
+        if planner_context is not None:
+            if strategy != "plan_execute":
+                raise ValueError(
+                    "``planner_context=`` is only valid with "
+                    f"``strategy=Strategy.PLAN_EXECUTE``. Got strategy={strategy!r}. "
+                    "The context block is appended to the planner's user prompt "
+                    "at runtime, which only exists in PLAN_EXECUTE."
+                )
+            # Local import — Context lives in plans.py which imports Agent
+            # transitively. Doing the import lazily avoids the cycle.
+            from agentspan.agents.plans import Context as _Context
+
+            normalised: List[Any] = []
+            for i, entry in enumerate(planner_context):
+                if isinstance(entry, _Context):
+                    normalised.append(entry)
+                elif isinstance(entry, str):
+                    normalised.append(_Context(text=entry))
+                elif isinstance(entry, dict):
+                    # Already in wire shape — accept as-is so power users
+                    # can hand-roll Maps if they prefer (matches how
+                    # ``plan_source`` is typed as ``Dict[str, Any]``).
+                    normalised.append(entry)
+                else:
+                    raise ValueError(
+                        f"planner_context[{i}]: must be a Context, a string, "
+                        f"or a dict; got {type(entry).__name__}"
+                    )
+            self.planner_context: Optional[List[Any]] = normalised
+        else:
+            self.planner_context = None
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback
         self.after_agent_callback = after_agent_callback
