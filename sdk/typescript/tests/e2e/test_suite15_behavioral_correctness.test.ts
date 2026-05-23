@@ -402,15 +402,36 @@ describe('Suite 15: Behavioral Correctness', { timeout: 1_800_000 }, () => {
       const diag = runDiagnostic(result as unknown as Record<string, unknown>);
       expect(result.status, `[Parallel/Analysts] ${diag}`).toBe('COMPLETED');
 
-      const output = fullOutputText(result as unknown as Record<string, unknown>);
-      // Weather: "72F and sunny"
-      expect(output).toContain('72');
-      // Inventory: quantity 142
-      expect(output).toContain('142');
-      // Shipping: rate 12.50
+      const { results: tasks, allTasks } = await findToolTasksDeep(result.executionId!, [
+        'get_weather',
+        'check_inventory',
+        'get_shipping_rate',
+      ]);
+      const taskDiag = `allTasks=${allTasks.join(' | ')}`;
+
+      const weatherTask = tasks['get_weather'];
+      expect(weatherTask, `[Parallel/Analysts] get_weather task not found. ${taskDiag}`).toBeTruthy();
+      expect(weatherTask.status, '[Parallel/Analysts] get_weather not COMPLETED').toBe('COMPLETED');
       expect(
-        output.includes('12.5') || output.includes('12.50'),
-        `Output missing shipping rate (12.50). Output: ${output.slice(0, 300)}`,
+        JSON.stringify(weatherTask.output),
+        '[Parallel/Analysts] weather output missing 72',
+      ).toContain('72');
+
+      const inventoryTask = tasks['check_inventory'];
+      expect(inventoryTask, `[Parallel/Analysts] check_inventory task not found. ${taskDiag}`).toBeTruthy();
+      expect(inventoryTask.status, '[Parallel/Analysts] check_inventory not COMPLETED').toBe('COMPLETED');
+      expect(
+        JSON.stringify(inventoryTask.output),
+        '[Parallel/Analysts] inventory output missing quantity 142',
+      ).toContain('142');
+
+      const shippingTask = tasks['get_shipping_rate'];
+      expect(shippingTask, `[Parallel/Analysts] get_shipping_rate task not found. ${taskDiag}`).toBeTruthy();
+      expect(shippingTask.status, '[Parallel/Analysts] get_shipping_rate not COMPLETED').toBe('COMPLETED');
+      const shippingOutput = JSON.stringify(shippingTask.output);
+      expect(
+        shippingOutput.includes('12.5') || shippingOutput.includes('12.50'),
+        `[Parallel/Analysts] shipping output missing rate 12.50. Output: ${shippingOutput}`,
       ).toBe(true);
     });
 

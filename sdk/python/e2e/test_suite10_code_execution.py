@@ -455,8 +455,13 @@ class TestSuite10CodeExecution:
         result = ce_runtime.run(
             agent,
             (
-                "Run this exact Python code using execute_code: "
-                'import time; time.sleep(30); print("done")'
+                "Run this exact Python code using execute_code, preserving "
+                "the line breaks exactly:\n"
+                "```python\n"
+                "import time\n"
+                "time.sleep(30)\n"
+                'print("done")\n'
+                "```"
             ),
             timeout=60,  # Generous — we expect the 3s executor timeout to kill it
         )
