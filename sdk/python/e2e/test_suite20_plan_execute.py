@@ -31,7 +31,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import Agent, Op, Plan, Ref, Step, Strategy, plan_execute, tool
+from agentspan.agents import Agent, Context, Op, Plan, Ref, Step, Strategy, plan_execute, tool
 
 pytestmark = pytest.mark.e2e
 
@@ -609,4 +609,190 @@ class TestSuite20PlanExecuteWhitelist:
         ), (
             f"workflow did not reach terminal status — possible hang. "
             f"status={result.status} execution_id={result.execution_id}"
+        )
+
+
+# ── Planner context — text snippets injected into planner prompt ─────────
+
+
+class TestSuite20PlannerContext:
+    """``planner_context`` text snippets reach the planner via the
+    server-emitted ``## Reference Context`` block.
+
+    Compiler-side unit tests in MultiAgentCompilerTest pin the exact task
+    graph (HTTP fetch + ctx_build INLINE in the live branch, no emission
+    in the skip branch). This e2e covers the rest of the chain:
+    SDK → wire → server compile → live workflow execution. All
+    assertions are algorithmic — we inspect the executed workflow's task
+    inputs, never read or judge LLM text.
+    """
+
+    def test_text_planner_context_appears_in_planner_prompt(self, runtime, model):
+        """A PLAN_EXECUTE harness with ``planner_context=["…rule…"]``
+        runs to a terminal status AND the ctx_build INLINE actually
+        executed AND its ``output.result`` carries the supplied text.
+
+        The wire chain we're proving:
+          1. SDK serialises ``planner_context`` to ``plannerContext`` JSON.
+          2. Server's ``MultiAgentCompiler.emitPlannerContextBuilder``
+             emits a {@code _ctx_build} INLINE in the planner-route
+             LIVE branch (gated on static_plan being absent — which we
+             ensure by not passing ``plan=``).
+          3. The INLINE evaluates at runtime with the entries list and
+             produces a markdown block on its ``output.result``.
+          4. The planner sub-workflow's prompt template references
+             ``${…_ctx_build.output.result}`` so the planner sees the
+             rule in its user message.
+
+        We assert (1)-(3) directly from Conductor's task outputs. (4) is
+        covered by the compiler unit tests; verifying it end-to-end would
+        require parsing the planner sub-workflow's LLM_CHAT_COMPLETE
+        inputs, which is fragile across Conductor versions.
+        """
+        planner = Agent(name="s20_ctx_planner", model=model, max_turns=3)
+        fallback = Agent(
+            name="s20_ctx_fallback",
+            model=model,
+            max_turns=3,
+            instructions="Acknowledge and stop.",
+            tools=[append_line],
+        )
+        # The unique sentinel makes the assertion bullet-proof — any other
+        # ctx_build run anywhere in CI couldn't accidentally pass this.
+        sentinel = "ONBOARDING_RULE_X92T: KYC must precede setup."
+        harness = Agent(
+            name="e2e_s20_planner_ctx_text",
+            model=model,
+            tools=[append_line],
+            planner=planner,
+            fallback=fallback,
+            strategy=Strategy.PLAN_EXECUTE,
+            fallback_max_turns=3,
+            # Mix shapes: explicit Context(text=…) AND a bare string that
+            # auto-wraps via Agent.__init__ normalisation. Exercises both
+            # SDK input paths in a single workflow.
+            planner_context=[
+                Context(text=sentinel),
+                "Reject KYC without ID + proof of address.",
+            ],
+        )
+
+        result = runtime.run(
+            harness, "Append 'hi' to /tmp/agentspan_s20_ctx.txt", timeout=PLAN_EXEC_TIMEOUT
+        )
+        assert result.execution_id, f"start failed; result={result!r}"
+        assert str(result.status) in (
+            "COMPLETED",
+            "completed",
+            "Status.COMPLETED",
+            "FAILED",
+            "failed",
+            "Status.FAILED",
+            "TERMINATED",
+            "terminated",
+            "Status.TERMINATED",
+        ), (
+            f"workflow did not reach terminal status; status={result.status} "
+            f"execution_id={result.execution_id}"
+        )
+
+        # Walk the workflow + any nested SUB_WORKFLOW to find the
+        # ctx_build INLINE. It can appear in the parent or in the planner
+        # sub-workflow depending on the dispatcher's wiring — the
+        # recursive search hides that detail from the test.
+        seen: set = set()
+
+        def find_ctx_build(eid: str):
+            if eid in seen:
+                return None
+            seen.add(eid)
+            wf = _get_workflow(eid)
+            for t in wf.get("tasks") or []:
+                ref = t.get("referenceTaskName") or ""
+                if ref.endswith("_ctx_build"):
+                    return t
+                sub_id = (t.get("outputData") or {}).get("subWorkflowId")
+                if sub_id:
+                    inner = find_ctx_build(sub_id)
+                    if inner is not None:
+                        return inner
+            return None
+
+        ctx_build = find_ctx_build(result.execution_id)
+        assert ctx_build is not None, (
+            f"no _ctx_build INLINE task found in execution tree — the "
+            f"planner_context wire path didn't reach the compiler. "
+            f"execution_id={result.execution_id}"
+        )
+        assert ctx_build.get("status") == "COMPLETED", (
+            f"_ctx_build task didn't complete: status={ctx_build.get('status')} "
+            f"reason={(ctx_build.get('reasonForIncompletion') or '')[:200]}"
+        )
+
+        # The INLINE's output.result is the markdown block injected into
+        # the planner prompt. It MUST contain the verbatim sentinel — if
+        # it doesn't, the wire path dropped the entry or the builder
+        # script botched the join.
+        result_text = (ctx_build.get("outputData") or {}).get("result")
+        assert isinstance(result_text, str), (
+            f"_ctx_build output.result must be a string; got {type(result_text).__name__}: "
+            f"{result_text!r}"
+        )
+        assert sentinel in result_text, (
+            f"planner_context sentinel not found in _ctx_build output.result — "
+            f"text entries didn't propagate. expected={sentinel!r} "
+            f"got={result_text!r}"
+        )
+
+    def test_no_planner_context_emits_no_ctx_build_task(self, runtime, model):
+        """Counterfactual: an identical harness WITHOUT planner_context
+        must NOT have a ``_ctx_build`` task anywhere. Pairs with the
+        positive test above — together they pin the gating end-to-end:
+        no ctx_build when none requested, ctx_build present when it is.
+        Without this, the positive test passes vacuously if the compiler
+        always emits ctx_build (e.g. via a forgotten flag flip).
+        """
+        planner = Agent(name="s20_no_ctx_planner", model=model, max_turns=3)
+        fallback = Agent(
+            name="s20_no_ctx_fallback",
+            model=model,
+            max_turns=3,
+            instructions="Acknowledge and stop.",
+            tools=[append_line],
+        )
+        harness = Agent(
+            name="e2e_s20_no_planner_ctx",
+            model=model,
+            tools=[append_line],
+            planner=planner,
+            fallback=fallback,
+            strategy=Strategy.PLAN_EXECUTE,
+            fallback_max_turns=3,
+        )
+
+        result = runtime.run(
+            harness, "Append 'hi' to /tmp/agentspan_s20_noctx.txt", timeout=PLAN_EXEC_TIMEOUT
+        )
+        assert result.execution_id, f"start failed; result={result!r}"
+
+        seen: set = set()
+
+        def has_ctx_build(eid: str) -> bool:
+            if eid in seen:
+                return False
+            seen.add(eid)
+            wf = _get_workflow(eid)
+            for t in wf.get("tasks") or []:
+                ref = t.get("referenceTaskName") or ""
+                if ref.endswith("_ctx_build"):
+                    return True
+                sub_id = (t.get("outputData") or {}).get("subWorkflowId")
+                if sub_id and has_ctx_build(sub_id):
+                    return True
+            return False
+
+        assert not has_ctx_build(result.execution_id), (
+            f"_ctx_build task appeared despite no planner_context — "
+            f"the gating in MultiAgentCompiler.emitPlannerContextBuilder "
+            f"is broken. execution_id={result.execution_id}"
         )
