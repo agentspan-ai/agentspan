@@ -987,6 +987,69 @@ class MultiAgentCompilerTest {
     // ── Plan-Execute tests ──────────────────────────────────────────
 
     @Test
+    void testPlanExecute_emits_planner_route_switch_gating_on_static_plan() {
+        // dg-review F1 / recommendation #13: when workflow.input.static_plan
+        // is supplied, the planner LLM_CHAT_COMPLETE's output is discarded
+        // by extract_json Case 0. Running it costs tokens + latency. The
+        // compiler emits a SWITCH that routes around the planner sub-workflow
+        // when static_plan is present.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("pae_with_gate")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+
+        // Find the planner_route SWITCH at the top level of the harness.
+        WorkflowTask gate = wf.getTasks().stream()
+                .filter(t -> "INLINE".equals(t.getType())
+                        && t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_planner_gate"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing planner_gate INLINE — static_plan gating not emitted"));
+        assertThat((String) gate.getInputParameters().get("staticPlan")).isEqualTo("${workflow.input.static_plan}");
+
+        WorkflowTask route = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_planner_route"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing planner_route SWITCH — static_plan gating not emitted"));
+
+        // The skip case must exist and contain a single no-op INLINE
+        // (NOT a planner SUB_WORKFLOW or any LLM call).
+        assertThat(route.getDecisionCases()).containsKey("skip");
+        List<WorkflowTask> skipBranch = route.getDecisionCases().get("skip");
+        assertThat(skipBranch).hasSize(1);
+        assertThat(skipBranch.get(0).getType()).isEqualTo("INLINE");
+        assertThat(skipBranch.get(0).getTaskReferenceName()).endsWith("_planner_skipped");
+
+        // The default case must contain the planner sub-workflow + its
+        // three follow-on tasks (merge, ctx_set, coerce). Any of those
+        // four being moved out of the SWITCH defeats the gating.
+        List<WorkflowTask> live = route.getDefaultCase();
+        assertThat(live).hasSize(4);
+        // First task is the planner sub-workflow.
+        assertThat(live.get(0).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(live.get(0).getTaskReferenceName()).endsWith("_planner");
+        // Remaining three are the INLINE merge / SET_VARIABLE / coerce.
+        assertThat(live.get(1).getType()).isEqualTo("INLINE");
+        assertThat(live.get(1).getTaskReferenceName()).endsWith("_planner_ctx_merge");
+        assertThat(live.get(2).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(live.get(2).getTaskReferenceName()).endsWith("_planner_ctx_set");
+        assertThat(live.get(3).getType()).isEqualTo("INLINE");
+        assertThat(live.get(3).getTaskReferenceName()).endsWith("_planner_coerce");
+
+        // The gate expression returns 'run' for null staticPlan and 'skip'
+        // for object/non-empty-string. Pin both behaviours via spec.
+        String expr = (String) gate.getInputParameters().get("expression");
+        assertThat(expr).contains("if (sp == null) return 'run'").contains("return 'skip'");
+    }
+
+    @Test
     void testPlanExecuteWithFallback() {
         AgentConfig planner = simpleSubAgent("planner", "Write a plan");
         AgentConfig fallback = simpleSubAgent("fallback", "Fix errors");
