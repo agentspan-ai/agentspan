@@ -956,20 +956,20 @@ async function launchAndPollAll(
 ): Promise<Map<number, TestResult>> {
   const handles: { idx: number; handle: AgentHandle; spec: TestSpec }[] = [];
 
-  // Launch all concurrently. Stagger slightly so 21 concurrent compile-and-
-  // register requests don't pile up on the server in CI (where compile is
-  // an order of magnitude slower than local) — previously two of them came
-  // back as runtime.start() rejections with an executionId='' FAILED result
-  // and no log of *why*. Each launch is delayed by idx * 50ms so the burst
-  // spreads over ~1s instead of going out simultaneously.
-  const launchPromises = specs.map(async (spec, idx) => {
-    if (idx > 0) await new Promise((r) => setTimeout(r, idx * 50));
+  // Serial start, matching the Python suite (which runs the same 21 specs
+  // through the same server without flaking). A previous 50ms stagger on
+  // Promise.all() still left CI with 21-in-flight compile-and-register
+  // bursts that overwhelmed the runner — #10 parallel_tools, #7 swarm_basic,
+  // and #19 swarm_hierarchical surfaced as TIMEOUT / FAILED on shared CI
+  // even though they pass locally. Awaiting each start in turn keeps server
+  // load bounded by HTTP RTT (~100-300ms × 21 ≈ 3-6s of total launch time),
+  // mirroring how Python's test_multi_agent_matrix already runs.
+  for (let idx = 0; idx < specs.length; idx++) {
+    const spec = specs[idx];
     try {
       const handle = await runtime.start(spec.agent, spec.prompt);
       handles.push({ idx, handle, spec });
     } catch (err) {
-      // If start itself fails, record immediately as FAILED — log the cause
-      // so CI failures are diagnosable instead of silent.
       console.error(
         `[suite18] start failed for ${spec.testId}: ${(err as Error)?.message ?? err}`,
       );
@@ -979,11 +979,7 @@ async function launchAndPollAll(
         spec,
       });
     }
-  });
-  await Promise.all(launchPromises);
-
-  // Sort handles by index so results map is deterministic
-  handles.sort((a, b) => a.idx - b.idx);
+  }
 
   const results = new Map<number, TestResult>();
   const pending = new Set<number>();
