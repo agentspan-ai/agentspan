@@ -1090,6 +1090,19 @@ class MultiAgentCompilerTest {
         long httpCount = live.stream().filter(t -> "HTTP".equals(t.getType())).count();
         assertThat(httpCount).isZero();
 
+        // Regression guard: the ctx_build INLINE's expression MUST NOT
+        // contain a literal ``${`` — Conductor's ParametersUtils scans
+        // every input-parameter value for ``${path}`` and interpolates,
+        // and it doesn't parse JS quoting. A literal ``${`` inside our
+        // script string would be eaten at task-dispatch time, breaking
+        // the JS. Real failure caught while running example 115 against
+        // a built server — fix is in plannerContextBuilderScript via
+        // ``TPL_OPEN = '$' + '{'`` runtime concat.
+        String expr = (String) ctxBuild.getInputParameters().get("expression");
+        assertThat(expr)
+                .as("ctx_build expression must not contain literal ${ — Conductor templater would substitute it")
+                .doesNotContain("${");
+
         // Skip branch must still be exactly the no-op INLINE — context-
         // builder is NOT in the skip branch, so static_plan path is free.
         List<WorkflowTask> skip = route.getDecisionCases().get("skip");

@@ -263,7 +263,16 @@ public class JavaScriptBuilder {
                         // task skipped). Detect both shapes.
                         + "    var statusOk = (status == null) || "
                         + "        (typeof status === 'number' && status >= 200 && status < 300);"
-                        + "    var unresolvedTpl = typeof status === 'string' && status.indexOf('${') === 0;"
+                        // ``$ + {`` is split across two literals so the JS
+                        // source string we hand Conductor doesn't itself
+                        // contain ``${``. Conductor's ParametersUtils scans
+                        // ALL input-parameter values for ``${path}`` and
+                        // interpolates them — it doesn't understand JS
+                        // quoting, so a literal ``${`` inside our script
+                        // would be eaten at task-dispatch time, breaking
+                        // the script. Defer the concat to JS runtime.
+                        + "    var TPL_OPEN = '$' + '{';"
+                        + "    var unresolvedTpl = typeof status === 'string' && status.indexOf(TPL_OPEN) === 0;"
                         + "    if (unresolvedTpl) {"
                         + "      parts.push('### ' + url + '\\n[doc unavailable]');"
                         + "      continue;"
@@ -277,7 +286,9 @@ public class JavaScriptBuilder {
                         + "      continue;"
                         + "    }"
                         + "    var body = stringify(rawBody);"
-                        + "    if (!body || body === '${' + 'body' + '}') {"
+                        // Same ``${`` avoidance — match the unresolved-template
+                        // string ``${body}`` by building it at JS runtime.
+                        + "    if (!body || body === TPL_OPEN + 'body}') {"
                         + "      parts.push('### ' + url + '\\n[doc unavailable]');"
                         + "      continue;"
                         + "    }"
