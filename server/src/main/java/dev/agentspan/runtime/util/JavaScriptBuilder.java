@@ -37,6 +37,159 @@ public class JavaScriptBuilder {
     }
 
     /**
+     * Validate a parsed-args instance against a tool's ``inputSchema``.
+     *
+     * <p>Closes the dg-review F3 finding: ``Generate.output_schema`` is a
+     * shape-hint string baked into the LLM prompt, NOT a real schema, so
+     * without this validator a confused or adversarial LLM could emit
+     * args of the wrong shape ({@code {"path": "/etc/passwd"}}) and have
+     * them flow directly into the downstream SIMPLE worker. PAC now
+     * inserts a {@code v_<stepId>_<opIdx>} INLINE that runs this
+     * validator between the parse INLINE and the tool task.
+     *
+     * <p>The script supports a Draft-07 subset:
+     * <ul>
+     *   <li>{@code type} — object/string/number/integer/boolean/array/null
+     *       (including union via array of types)</li>
+     *   <li>{@code required} — list of required property names on objects</li>
+     *   <li>{@code properties} — recursive schema per property</li>
+     *   <li>{@code additionalProperties} — boolean only ({@code false}
+     *       rejects unknown keys; default {@code true})</li>
+     *   <li>{@code enum} — value must equal one of the listed members</li>
+     *   <li>{@code pattern} — regex test on strings</li>
+     *   <li>{@code minLength}/{@code maxLength} on strings</li>
+     *   <li>{@code minimum}/{@code maximum} on numbers</li>
+     *   <li>{@code items} — recursive schema for array elements</li>
+     *   <li>{@code minItems}/{@code maxItems} on arrays</li>
+     * </ul>
+     *
+     * <p>Input contract: ``$.parsed`` is the parse INLINE's output
+     * (either the parsed args object OR ``{__parse_error: true, ...}``
+     * when parsing failed). ``$.schema`` is the tool's input schema.
+     * The script passes ``__parse_error`` through unchanged (so the
+     * downstream parseGate sees a single error sentinel for either
+     * parse or schema failure) and otherwise either returns the
+     * parsed object as-is (validation passed) or sets
+     * ``{__parse_error: true, reason: "schema: <details>"}``.
+     */
+    public static String schemaValidatorScript() {
+        return iife(
+                // Walk a GraalJS-side Java Map / List value to a JS-native
+                // object so JSON-Schema introspection works without the
+                // Map keyset weirdness that bit the AML INLINEs.
+                "function toJS(v) {"
+                        + "  if (v === null || v === undefined) return v;"
+                        + "  if (typeof v !== 'object') return v;"
+                        + "  if (typeof v.keySet === 'function' && typeof v.get === 'function') {"
+                        + "    var out = {}; var it = v.keySet().iterator();"
+                        + "    while (it.hasNext()) { var k = it.next(); out[String(k)] = toJS(v.get(k)); }"
+                        + "    return out;"
+                        + "  }"
+                        + "  if (typeof v.iterator === 'function' && typeof v.size === 'function'"
+                        + "      && typeof v.keySet !== 'function') {"
+                        + "    var arr = []; var lit = v.iterator();"
+                        + "    while (lit.hasNext()) arr.push(toJS(lit.next()));"
+                        + "    return arr;"
+                        + "  }"
+                        + "  if (Array.isArray(v)) return v.map(toJS);"
+                        + "  var keys = Object.keys(v); var o2 = {};"
+                        + "  for (var i = 0; i < keys.length; i++) o2[keys[i]] = toJS(v[keys[i]]);"
+                        + "  return o2;"
+                        + "}"
+                        + "function jsType(v) {"
+                        + "  if (v === null) return 'null';"
+                        + "  if (Array.isArray(v)) return 'array';"
+                        + "  var t = typeof v;"
+                        + "  if (t === 'number') return Number.isInteger(v) ? 'integer' : 'number';"
+                        + "  return t;"
+                        + "}"
+                        + "function typeMatches(declared, actual) {"
+                        + "  if (declared === undefined || declared === null) return true;"
+                        + "  if (Array.isArray(declared)) {"
+                        + "    for (var i = 0; i < declared.length; i++) {"
+                        + "      if (typeMatches(declared[i], actual)) return true;"
+                        + "    }"
+                        + "    return false;"
+                        + "  }"
+                        + "  if (declared === 'number') return actual === 'number' || actual === 'integer';"
+                        + "  return declared === actual;"
+                        + "}"
+                        + "function validate(instance, schema, path, errs) {"
+                        + "  if (schema === null || schema === undefined) return;"
+                        + "  if (typeof schema !== 'object') return;"
+                        + "  var actual = jsType(instance);"
+                        + "  if (schema.type !== undefined && !typeMatches(schema.type, actual)) {"
+                        + "    errs.push(path + ': type ' + JSON.stringify(schema.type) + ' expected, got ' + actual);"
+                        + "    return;"
+                        + "  }"
+                        + "  if (Array.isArray(schema.enum)) {"
+                        + "    var found = false;"
+                        + "    for (var i = 0; i < schema.enum.length; i++) {"
+                        + "      if (JSON.stringify(schema.enum[i]) === JSON.stringify(instance)) { found = true; break; }"
+                        + "    }"
+                        + "    if (!found) errs.push(path + ': not in enum ' + JSON.stringify(schema.enum));"
+                        + "  }"
+                        + "  if (actual === 'string') {"
+                        + "    if (typeof schema.minLength === 'number' && instance.length < schema.minLength)"
+                        + "      errs.push(path + ': length ' + instance.length + ' < minLength ' + schema.minLength);"
+                        + "    if (typeof schema.maxLength === 'number' && instance.length > schema.maxLength)"
+                        + "      errs.push(path + ': length ' + instance.length + ' > maxLength ' + schema.maxLength);"
+                        + "    if (typeof schema.pattern === 'string') {"
+                        + "      try { if (!(new RegExp(schema.pattern)).test(instance))"
+                        + "        errs.push(path + ': string does not match pattern ' + JSON.stringify(schema.pattern));"
+                        + "      } catch(e) {}"
+                        + "    }"
+                        + "  }"
+                        + "  if (actual === 'number' || actual === 'integer') {"
+                        + "    if (typeof schema.minimum === 'number' && instance < schema.minimum)"
+                        + "      errs.push(path + ': ' + instance + ' < minimum ' + schema.minimum);"
+                        + "    if (typeof schema.maximum === 'number' && instance > schema.maximum)"
+                        + "      errs.push(path + ': ' + instance + ' > maximum ' + schema.maximum);"
+                        + "  }"
+                        + "  if (actual === 'object' && schema.properties && typeof schema.properties === 'object') {"
+                        + "    if (Array.isArray(schema.required)) {"
+                        + "      for (var ri = 0; ri < schema.required.length; ri++) {"
+                        + "        var req = schema.required[ri];"
+                        + "        if (instance[req] === undefined) errs.push(path + ': missing required property \\'' + req + '\\'');"
+                        + "      }"
+                        + "    }"
+                        + "    var keys = Object.keys(instance);"
+                        + "    for (var ki = 0; ki < keys.length; ki++) {"
+                        + "      var k = keys[ki];"
+                        + "      if (schema.properties[k] !== undefined) {"
+                        + "        validate(instance[k], schema.properties[k], path + '/' + k, errs);"
+                        + "      } else if (schema.additionalProperties === false) {"
+                        + "        errs.push(path + ': unexpected property \\'' + k + '\\' (additionalProperties: false)');"
+                        + "      }"
+                        + "    }"
+                        + "  }"
+                        + "  if (actual === 'array') {"
+                        + "    if (typeof schema.minItems === 'number' && instance.length < schema.minItems)"
+                        + "      errs.push(path + ': ' + instance.length + ' items < minItems ' + schema.minItems);"
+                        + "    if (typeof schema.maxItems === 'number' && instance.length > schema.maxItems)"
+                        + "      errs.push(path + ': ' + instance.length + ' items > maxItems ' + schema.maxItems);"
+                        + "    if (schema.items && typeof schema.items === 'object') {"
+                        + "      for (var ai = 0; ai < instance.length; ai++) {"
+                        + "        validate(instance[ai], schema.items, path + '[' + ai + ']', errs);"
+                        + "      }"
+                        + "    }"
+                        + "  }"
+                        + "}"
+                        // Entry point — pass parse errors through; otherwise
+                        // validate ``parsed`` against ``schema`` and emit a
+                        // schema-error sentinel on failure.
+                        + "var parsed = toJS($.parsed);"
+                        + "if (parsed && parsed.__parse_error === true) return parsed;"
+                        + "var schema = toJS($.schema);"
+                        + "if (!schema || typeof schema !== 'object') return parsed;"
+                        + "var errs = []; validate(parsed, schema, '', errs);"
+                        + "if (errs.length > 0) {"
+                        + "  return {__parse_error: true, reason: 'schema: ' + errs.join('; ')};"
+                        + "}"
+                        + "return parsed;");
+    }
+
+    /**
      * Build the regex guardrail JavaScript.
      */
     public static String regexGuardrailScript(

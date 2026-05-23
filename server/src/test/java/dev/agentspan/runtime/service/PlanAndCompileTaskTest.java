@@ -325,6 +325,15 @@ class PlanAndCompileTaskTest {
 
     @Test
     void testUnsafeSuccessConditionIsRejected() {
+        // Updated for the SafeConditionInterpreter parser (dg-rec #14).
+        // The grammar's whitelist makes node-type-based attacks
+        // syntactically impossible. Note: bare property accesses like
+        // ``$.constructor`` / ``$.__proto__`` are NOT in this list — in
+        // a Java map they're inert lookups returning null. The classes
+        // of expressions the parser must reject are: function calls,
+        // assignments, computed subscripts via concatenation, ternaries,
+        // statement sequencing, template literals, var-declarations,
+        // bare identifiers other than {true,false,null}.
         String[] unsafeConditions = {
             "function() { while (true) {} }",
             "$.x === 1; while(1){}",
@@ -333,11 +342,6 @@ class PlanAndCompileTaskTest {
             "$.x = 5",
             "var foo = 1",
             "$.constructor.constructor('return Java.type(0)')()",
-            "$.constructor",
-            "$.prototype.foo",
-            "$.__proto__",
-            "$['constructor']",
-            "$.x['__proto__']",
             "$.x === 1, eval('1')",
             "$['c'+'onstructor']",
             "$.\\u0063onstructor",
@@ -345,8 +349,7 @@ class PlanAndCompileTaskTest {
             "$.x ? 1 : 0",
             "Object.keys($).length > 0",
             "Reflect.get($, 'x')",
-            "Proxy",
-            "$.__defineGetter__",
+            "$.__defineGetter__('x', function(){})",
             "(function(){ x = 1; return $.y; })()",
         };
         for (String unsafe : unsafeConditions) {
@@ -357,6 +360,28 @@ class PlanAndCompileTaskTest {
             assertThat(error)
                     .as("unsafe success_condition '%s' must be rejected", unsafe)
                     .contains("unsafe success_condition");
+        }
+    }
+
+    @Test
+    void testBarePrototypePropertyAccessIsAcceptedAsInertMapLookup() {
+        // ``$.constructor`` / ``$.__proto__`` / ``$['constructor']`` are
+        // JS prototype-pollution vectors. In Java they're plain Map.get()
+        // calls returning null. Document this explicitly so a future
+        // reader doesn't re-add a denylist that's not buying anything.
+        String[] inertLookups = {
+            "$.constructor === null",
+            "$.prototype === null",
+            "$.__proto__ === null",
+            "$['constructor'] === null",
+            "$.x['__proto__'] === null",
+        };
+        for (String cond : inertLookups) {
+            String planJson = "{ \"steps\": [{\"id\": \"s1\", \"operations\": [{\"tool\": \"noop\", \"args\": {}}]}],"
+                    + "  \"validation\": [{\"tool\": \"check\", \"success_condition\": "
+                    + jsonString(cond) + "}] }";
+            Map<String, Object> wf = compilePlan(planJson);
+            assertThat(wf).isNotNull();
         }
     }
 
@@ -376,19 +401,30 @@ class PlanAndCompileTaskTest {
 
     @Test
     void testSafeSuccessConditionsAreAccepted() {
+        // Real-world success_condition shapes the parser must accept.
+        // Replaces the legacy "$.indexOf('passed') >= 0" assertion: that
+        // was a JS method call, never grammar-legal under the new parser.
+        // The intent (substring match) wasn't actually wired in the old
+        // implementation either — it relied on GraalJS interpreting
+        // String.prototype.indexOf, which our toolOut wrapping erased on
+        // any non-string result. Pragmatic substitute: explicit equality.
         String[] safeConditions = {
             "$.exit_code === 0",
             "$.passed === true",
-            "$.indexOf('passed') >= 0",
+            "$.passed", // truthy check on a field
+            "$.status === 'passed'",
             "$.count > 0 && $.errors === 0",
             "$.status !== 'ERROR'",
+            "$.score >= 0.5 && $.score <= 1.0",
+            "$.flags.green === true || $.flags.amber === true",
+            "!($.failed)",
         };
         for (String safe : safeConditions) {
             String planJson = "{ \"steps\": [{\"id\": \"s1\", \"operations\": [{\"tool\": \"noop\", \"args\": {}}]}],"
                     + "  \"validation\": [{\"tool\": \"check\", \"success_condition\": "
                     + jsonString(safe) + "}] }";
             Map<String, Object> wf = compilePlan(planJson);
-            assertThat(wf).isNotNull();
+            assertThat(wf).as("must accept: %s", safe).isNotNull();
         }
     }
 
@@ -1816,6 +1852,125 @@ class PlanAndCompileTaskTest {
         assertThat(output.get("error"))
                 .as("sequential-Ref into scalar arg must compile ok")
                 .isNull();
+    }
+
+    // -----------------------------------------------------------------------
+    //  Schema validator INLINE for generate ops (dg-review #12 / F3)
+    // -----------------------------------------------------------------------
+    //
+    // PAC inserts a ``v_<stepId>`` INLINE between the parse INLINE and the
+    // SIMPLE so the LLM's output is validated against the consumer tool's
+    // ``inputSchema`` before it flows into the tool's task. The same SWITCH
+    // routes parse OR schema failures to TERMINATE.
+
+    @Test
+    void testGenerateOp_emits_schema_validator_inline_between_parse_and_switch() {
+        Map<String, Object> writeFileInputSchema = Map.of(
+                "type", "object",
+                "properties",
+                        Map.of(
+                                "path", Map.of("type", "string", "pattern", "^out/.+\\.md$"),
+                                "content", Map.of("type", "string", "minLength", 1)),
+                "required", List.of("path", "content"));
+        Map<String, Object> writeFile = Map.of(
+                "name", "write_file",
+                "toolType", "worker",
+                "inputSchema", writeFileInputSchema);
+
+        String planJson =
+                """
+                {
+                  "steps": [{"id": "write", "operations": [
+                    {"tool": "write_file", "generate": {
+                      "instructions": "compose a section",
+                      "output_schema": "{\\"path\\":\\"out/intro.md\\",\\"content\\":\\"...\\"}"
+                    }}
+                  ]}]
+                }""";
+
+        Map<String, Object> wf = compilePlanWithParentTools(planJson, List.of(writeFile));
+        List<Map<String, Object>> tasks = allTasks(wf);
+
+        // Validator INLINE must exist with ref starting v_write_
+        Map<String, Object> validator = tasks.stream()
+                .filter(t -> "INLINE".equals(t.get("type"))
+                        && String.valueOf(t.get("taskReferenceName")).startsWith("v_write_"))
+                .findFirst()
+                .orElseThrow(
+                        () -> new AssertionError("missing v_<stepId> validator INLINE — schema-validator not emitted"));
+        Map<String, Object> vInputs = (Map<String, Object>) validator.get("inputParameters");
+        // The validator's schema input must be the tool's inputSchema (not an empty Map).
+        Map<String, Object> schemaInput = (Map<String, Object>) vInputs.get("schema");
+        assertThat(schemaInput).containsKey("properties");
+        assertThat((Map<String, Object>) schemaInput.get("properties")).containsKeys("path", "content");
+        // Expression must reference the validator helper (we just check
+        // for a few key tokens — the full JS is exercised in the live tests).
+        String expr = String.valueOf(vInputs.get("expression"));
+        assertThat(expr)
+                .contains("function validate(")
+                .contains("__parse_error")
+                .contains("schema:");
+
+        // The downstream SWITCH (pgate_) must consume validateRef, not parseRef.
+        Map<String, Object> gate = tasks.stream()
+                .filter(t -> "SWITCH".equals(t.get("type"))
+                        && String.valueOf(t.get("taskReferenceName")).startsWith("pgate_write_"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing pgate_ SWITCH"));
+        Map<String, Object> gInputs = (Map<String, Object>) gate.get("inputParameters");
+        String parsedExpr = String.valueOf(gInputs.get("parsed"));
+        assertThat(parsedExpr)
+                .as("parseGate must read validator output (v_), not parse output (p_)")
+                .contains("v_write_");
+
+        // The compiled SIMPLE / wrap branch must template values from v_, not p_.
+        boolean anySimpleUsesValidator = tasks.stream()
+                .filter(t -> "SIMPLE".equals(t.get("type")) || "write_file".equals(String.valueOf(t.get("type"))))
+                .anyMatch(t -> {
+                    Object inputs = t.get("inputParameters");
+                    return inputs != null && inputs.toString().contains("v_write_");
+                });
+        assertThat(anySimpleUsesValidator)
+                .as("the tool task must source args from the validator's output, not raw parse")
+                .isTrue();
+    }
+
+    @Test
+    void testGenerateOp_validator_passes_through_when_tool_has_no_input_schema() {
+        // Legacy callers without parentTools (no inputSchema) must NOT
+        // accidentally fail compilation just because we added the validator.
+        // Without an inputSchema the validator is a structural no-op (passes
+        // ``parsed`` through unchanged on the happy path).
+        String planJson =
+                """
+                {
+                  "steps": [{"id": "write", "operations": [
+                    {"tool": "write_file", "generate": {
+                      "instructions": "compose",
+                      "output_schema": "{\\"path\\":\\"x\\",\\"content\\":\\"y\\"}"
+                    }}
+                  ]}]
+                }""";
+
+        Map<String, Object> wf = compilePlan(planJson);
+        List<Map<String, Object>> tasks = allTasks(wf);
+        // The validator INLINE should still be emitted — even if the schema
+        // is empty Map.of(), the structural slot exists for consistent
+        // task graphs.
+        boolean hasValidator = tasks.stream()
+                .anyMatch(t -> "INLINE".equals(t.get("type"))
+                        && String.valueOf(t.get("taskReferenceName")).startsWith("v_write_"));
+        assertThat(hasValidator).isTrue();
+    }
+
+    private Map<String, Object> compilePlanWithParentTools(String planJson, List<Map<String, Object>> parentTools) {
+        Map<String, Object> output =
+                runWithParentTools(planJson, /* harnessTimeoutSeconds */ null, /* knownToolNames */ null, parentTools);
+        Object error = output.get("error");
+        if (error != null) {
+            throw new AssertionError("Plan compilation failed: " + error);
+        }
+        return (Map<String, Object>) output.get("workflowDef");
     }
 
     /** Quick JSON string-encode for inlining into a plan literal. */

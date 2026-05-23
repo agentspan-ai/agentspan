@@ -14,7 +14,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +28,9 @@ import com.netflix.conductor.model.WorkflowModel;
 import dev.agentspan.runtime.compiler.GuardrailCompiler;
 import dev.agentspan.runtime.model.GuardrailConfig;
 import dev.agentspan.runtime.model.ToolConfig;
+import dev.agentspan.runtime.util.JavaScriptBuilder;
+import dev.agentspan.runtime.util.SafeConditionInterpreter;
+import dev.agentspan.runtime.util.SafeConditionParseException;
 import dev.agentspan.runtime.util.WorkflowTaskUtils;
 
 /**
@@ -69,21 +71,6 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
 
     private static final Logger logger = LoggerFactory.getLogger(PlanAndCompileTask.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    /** Allowed character set for {@code success_condition} expressions. */
-    private static final Pattern COND_CHARS = Pattern.compile("^[$\\w\\s.()'\"!=<>&|\\-]*$");
-
-    private static final Pattern COND_BANNED = Pattern.compile(
-            "\\b(constructor|prototype|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__"
-                    + "|Function|eval|globalThis|Object|Reflect|Proxy|Java|require|import|process"
-                    + "|setTimeout|setInterval|setImmediate|queueMicrotask|Promise|fetch|XMLHttpRequest"
-                    + "|new|throw|try|catch|finally|while|for|do|if|else|case|switch|return|var|let|const|function|class"
-                    + "|yield|await|async|delete|typeof|instanceof|void|in|of)\\b");
-
-    private static final Pattern COND_BARE_ASSIGN = Pattern.compile("(^|[^=!<>])=(?!=)");
-
-    private static final Pattern COND_STRING_LITERAL_S = Pattern.compile("'[^']*'");
-    private static final Pattern COND_STRING_LITERAL_D = Pattern.compile("\"[^\"]*\"");
 
     /** Keys that imply an LLM emitted a real JSON Schema instead of an instance shape. */
     private static final List<String> SCHEMA_LIKE_KEYS = Arrays.asList(
@@ -381,16 +368,25 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
             return result;
         }
 
-        // Validation block: success_condition strings must pass safeCondition.
+        // Validation block: success_condition strings must parse cleanly
+        // under SafeConditionInterpreter's whitelist grammar (dg-review F14
+        // / recommendation #14). The Java AST parser replaces the old
+        // regex denylist + GraalJS pipeline — same string, two layers
+        // wasn't real defence in depth. A grammar parser cannot emit a
+        // node type outside its whitelist.
         Object validationObj = plan.get("validation");
         List<Map<String, Object>> validations =
                 validationObj instanceof List ? (List<Map<String, Object>>) validationObj : List.of();
         for (int vi = 0; vi < validations.size(); vi++) {
             Map<String, Object> v = validations.get(vi);
             Object cond = v.get("success_condition");
-            if (cond instanceof String && safeCondition((String) cond) == null) {
-                result.error = "Validation " + vi + " has unsafe success_condition: " + cond;
-                return result;
+            if (cond instanceof String && !((String) cond).isEmpty()) {
+                try {
+                    SafeConditionInterpreter.parse((String) cond);
+                } catch (SafeConditionParseException ex) {
+                    result.error = "Validation " + vi + " has unsafe success_condition: " + ex.getMessage();
+                    return result;
+                }
             }
         }
 
@@ -615,6 +611,38 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 parseTask.put("inputParameters", parseInputs);
                 chain.add(parseTask);
 
+                // dg-review F3 / recommendation #12: validate the parsed
+                // LLM output against the consumer tool's inputSchema BEFORE
+                // it flows into the SIMPLE's inputParameters. Without this
+                // gate, an LLM emitting {"path":"/etc/passwd"} for a
+                // write_file op flowed straight to the worker — the
+                // ``output_schema`` field was documentation, not a
+                // contract. Now: any divergence from the tool's declared
+                // inputSchema produces a __parse_error with the field
+                // path + the violated rule, and the same parseGate SWITCH
+                // routes the whole op to the err branch.
+                //
+                // ``schemaJson`` is the tool's input schema; when the tool
+                // is unknown to PAC (legacy callers without parentTools)
+                // or has no schema, the validator is a no-op pass-through.
+                ToolConfig vToolConfig = ctx.parentToolsByName.get(tool);
+                Map<String, Object> validateInputs = new LinkedHashMap<>();
+                validateInputs.put("evaluatorType", "graaljs");
+                validateInputs.put("parsed", "${" + parseRef + ".output.result}");
+                validateInputs.put(
+                        "schema",
+                        vToolConfig != null && vToolConfig.getInputSchema() != null
+                                ? vToolConfig.getInputSchema()
+                                : Map.of());
+                validateInputs.put("expression", JavaScriptBuilder.schemaValidatorScript());
+                String validateRef = ctx.uid("v_" + stepId);
+                Map<String, Object> validateTask = new LinkedHashMap<>();
+                validateTask.put("name", "INLINE_TASK");
+                validateTask.put("taskReferenceName", validateRef);
+                validateTask.put("type", "INLINE");
+                validateTask.put("inputParameters", validateInputs);
+                chain.add(validateTask);
+
                 // Build LLM-driven tool inputs from output_schema (instance shape),
                 // then injectAmbient as forced overrides.
                 Map<String, Object> toolInputs = new LinkedHashMap<>();
@@ -636,14 +664,18 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                                     + " e.g. {\"path\":\"...\",\"content\":\"...\"}";
                         } else {
                             for (String k : schemaMap.keySet()) {
-                                toolInputs.put(k, "${" + parseRef + ".output.result." + k + "}");
+                                // Source from validateRef so the SIMPLE only
+                                // ever receives schema-validated values. On
+                                // schema failure the SWITCH below routes to
+                                // TERMINATE before this expression is read.
+                                toolInputs.put(k, "${" + validateRef + ".output.result." + k + "}");
                             }
                         }
                     } else {
                         schemaErr = "output_schema must be a JSON object";
                     }
                 } catch (Exception e) {
-                    toolInputs.put("_args", "${" + parseRef + ".output.result}");
+                    toolInputs.put("_args", "${" + validateRef + ".output.result}");
                 }
                 injectAmbient(toolInputs);
                 if (schemaErr != null) {
@@ -663,7 +695,13 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 termTask.put("type", "TERMINATE");
                 Map<String, Object> termInputs = new LinkedHashMap<>();
                 termInputs.put("terminationStatus", "FAILED");
-                termInputs.put("terminationReason", "LLM JSON parse failed for " + tool);
+                // The reason interpolates the validator/parse INLINE's
+                // __parse_error.reason so the failure mode (parse error vs
+                // schema violation, with field path) surfaces in the
+                // workflow's reasonForIncompletion.
+                termInputs.put(
+                        "terminationReason",
+                        "LLM output rejected for " + tool + ": " + "${" + validateRef + ".output.result.reason}");
                 termTask.put("inputParameters", termInputs);
 
                 Map<String, Object> parseGate = new LinkedHashMap<>();
@@ -676,7 +714,14 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                         "expression",
                         "(function(){ return $.parsed && $.parsed.__parse_error ? \"err\" : \"ok\"; })()");
                 Map<String, Object> gateInputs = new LinkedHashMap<>();
-                gateInputs.put("parsed", "${" + parseRef + ".output.result}");
+                // SWITCH reads validateRef so a schema-failure produces the
+                // same ``err`` route as a parse-failure (both set
+                // __parse_error). The downstream TERMINATE's reason string
+                // is now slightly misleading on a schema fail (says "JSON
+                // parse failed"); the validator stamps a more specific
+                // reason into __parse_error.reason, which is the
+                // user-debuggable artefact.
+                gateInputs.put("parsed", "${" + validateRef + ".output.result}");
                 parseGate.put("inputParameters", gateInputs);
 
                 // Generate-op guardrail wrap. Static-arg ops are wrapped at
@@ -1697,25 +1742,6 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
             }
         }
         return out;
-    }
-
-    /**
-     * Three-layer filter for plan-supplied {@code success_condition}
-     * expressions. Returns the condition as-is if safe, or {@code null} to
-     * reject. See JS path comments for the threat model.
-     */
-    static String safeCondition(String cond) {
-        if (cond == null) return null;
-        if (cond.length() > 256) return null;
-        if (!COND_CHARS.matcher(cond).matches()) return null;
-        // Strip string literals before identifier check so legitimate uses
-        // like ``$.x === 'constructor'`` survive the denylist.
-        String stripped = COND_STRING_LITERAL_S
-                .matcher(COND_STRING_LITERAL_D.matcher(cond).replaceAll("\"\""))
-                .replaceAll("''");
-        if (COND_BANNED.matcher(stripped).find()) return null;
-        if (COND_BARE_ASSIGN.matcher(stripped).find()) return null;
-        return cond;
     }
 
     @SuppressWarnings("unchecked")
