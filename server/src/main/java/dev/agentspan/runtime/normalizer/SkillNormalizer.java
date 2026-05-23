@@ -59,6 +59,9 @@ public class SkillNormalizer implements AgentConfigNormalizer {
         List<String> resourceFiles = (List<String>) rawConfig.getOrDefault("resourceFiles", Collections.emptyList());
         Map<String, Object> crossSkillRefs =
                 (Map<String, Object>) rawConfig.getOrDefault("crossSkillRefs", Collections.emptyMap());
+        Map<String, Object> workspace =
+                (Map<String, Object>) rawConfig.getOrDefault("workspace", Collections.emptyMap());
+        List<String> workspaceRoots = workspaceRootNames(workspace);
 
         // Step 1: Parse SKILL.md frontmatter
         Map<String, Object> frontmatter = parseFrontmatter(skillMd);
@@ -81,6 +84,9 @@ public class SkillNormalizer implements AgentConfigNormalizer {
                         SECTION_SPLIT_THRESHOLD,
                         skillSections.size());
             }
+        }
+        if (!workspaceRoots.isEmpty()) {
+            body = appendWorkspaceInstructions(body, workspaceRoots);
         }
 
         // Step 3: Build orchestrator AgentConfig
@@ -107,6 +113,12 @@ public class SkillNormalizer implements AgentConfigNormalizer {
             subAgent.setName(agentName);
             subAgent.setInstructions(instructions);
             subAgent.setModel(agentModel);
+            if (!workspaceRoots.isEmpty()) {
+                subAgent.setInstructions(appendWorkspaceInstructions(instructions, workspaceRoots));
+                List<ToolConfig> subTools = new ArrayList<>();
+                addWorkspaceTools(subTools, name, workspaceRoots);
+                subAgent.setTools(subTools);
+            }
 
             String namespacedName = name + "__" + agentName;
             Map<String, Object> toolConfig = new LinkedHashMap<>();
@@ -209,7 +221,12 @@ public class SkillNormalizer implements AgentConfigNormalizer {
                     skillSections.size());
         }
 
-        // Step 7: Wire cross-skill references
+        // Step 7: Build per-run workspace tools
+        if (!workspaceRoots.isEmpty()) {
+            addWorkspaceTools(tools, name, workspaceRoots);
+        }
+
+        // Step 8: Wire cross-skill references
         Set<String> stack = normalizingStack.get();
         for (Map.Entry<String, Object> entry : crossSkillRefs.entrySet()) {
             String refName = entry.getKey();
@@ -220,6 +237,10 @@ public class SkillNormalizer implements AgentConfigNormalizer {
             stack.add(refName);
             try {
                 Map<String, Object> refConfig = (Map<String, Object>) entry.getValue();
+                if (!workspaceRoots.isEmpty() && !refConfig.containsKey("workspace")) {
+                    refConfig = new LinkedHashMap<>(refConfig);
+                    refConfig.put("workspace", workspace);
+                }
                 AgentConfig refAgent = this.normalize(refConfig);
 
                 Map<String, Object> refToolConfig = new LinkedHashMap<>();
@@ -254,7 +275,7 @@ public class SkillNormalizer implements AgentConfigNormalizer {
             }
         }
 
-        // Step 8: Assemble
+        // Step 9: Assemble
         if (!tools.isEmpty()) {
             orchestrator.setTools(tools);
         }
@@ -267,6 +288,141 @@ public class SkillNormalizer implements AgentConfigNormalizer {
                 resourceFiles.size());
 
         return orchestrator;
+    }
+
+    private List<String> workspaceRootNames(Map<String, Object> workspace) {
+        Object enabled = workspace.get("enabled");
+        if (Boolean.FALSE.equals(enabled)) {
+            return List.of();
+        }
+        List<String> roots = new ArrayList<>();
+        Object rawRoots = workspace.get("roots");
+        if (rawRoots instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> map) {
+                    Object name = map.get("name");
+                    if (name instanceof String s && !s.isBlank() && !roots.contains(s)) {
+                        roots.add(s);
+                    }
+                }
+            }
+        }
+        if (roots.isEmpty() && Boolean.TRUE.equals(enabled)) {
+            roots.add("workspace");
+        }
+        return roots;
+    }
+
+    private String appendWorkspaceInstructions(String body, List<String> roots) {
+        StringBuilder sb = new StringBuilder(body == null ? "" : body.trim());
+        if (sb.length() > 0) {
+            sb.append("\n\n");
+        }
+        sb.append("## Workspace Context\n");
+        sb.append("This run exposes local files through workspace tools. ");
+        sb.append(
+                "Use list_workspace_files, read_workspace_file, search_workspace, git_status, and git_diff when task context requires repository or filesystem contents.\n");
+        sb.append("Available root names: ").append(String.join(", ", roots)).append(".");
+        return sb.toString();
+    }
+
+    private ToolConfig workspaceTool(
+            String skillName, String toolName, String description, Map<String, Object> schema) {
+        return ToolConfig.builder()
+                .name(skillName + "__" + toolName)
+                .description(description)
+                .toolType("worker")
+                .inputSchema(schema)
+                .build();
+    }
+
+    private void addWorkspaceTools(List<ToolConfig> tools, String skillName, List<String> workspaceRoots) {
+        tools.add(workspaceTool(
+                skillName,
+                "list_workspace_files",
+                "List files available in the local workspace or configured filesystem roots",
+                workspaceListSchema(workspaceRoots)));
+        tools.add(workspaceTool(
+                skillName,
+                "read_workspace_file",
+                "Read a file from the local workspace or configured filesystem roots",
+                workspaceReadSchema(workspaceRoots)));
+        tools.add(workspaceTool(
+                skillName,
+                "search_workspace",
+                "Search text in files from the local workspace or configured filesystem roots",
+                workspaceSearchSchema(workspaceRoots)));
+        tools.add(workspaceTool(
+                skillName,
+                "git_status",
+                "Show git status for a local workspace root",
+                workspaceGitStatusSchema(workspaceRoots)));
+        tools.add(workspaceTool(
+                skillName,
+                "git_diff",
+                "Show git diff for a local workspace root",
+                workspaceGitDiffSchema(workspaceRoots)));
+    }
+
+    private Map<String, Object> workspaceListSchema(List<String> roots) {
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("root", rootProperty(roots));
+        props.put("path", Map.of("type", "string", "description", "Directory path relative to the selected root"));
+        props.put("glob", Map.of("type", "string", "description", "Optional file glob such as src/**/*.py"));
+        props.put("limit", Map.of("type", "integer", "description", "Maximum number of file paths to return"));
+        return objectSchema(props, List.of());
+    }
+
+    private Map<String, Object> workspaceReadSchema(List<String> roots) {
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("root", rootProperty(roots));
+        props.put("path", Map.of("type", "string", "description", "File path relative to the selected root"));
+        props.put("limit", Map.of("type", "integer", "description", "Maximum bytes to return"));
+        return objectSchema(props, List.of("path"));
+    }
+
+    private Map<String, Object> workspaceSearchSchema(List<String> roots) {
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("root", rootProperty(roots));
+        props.put("query", Map.of("type", "string", "description", "Text to search for"));
+        props.put("path", Map.of("type", "string", "description", "Directory path relative to the selected root"));
+        props.put("glob", Map.of("type", "string", "description", "Optional file glob such as **/*.java"));
+        props.put("ignoreCase", Map.of("type", "boolean", "description", "Whether to ignore case"));
+        props.put("limit", Map.of("type", "integer", "description", "Maximum number of matches to return"));
+        return objectSchema(props, List.of("query"));
+    }
+
+    private Map<String, Object> workspaceGitStatusSchema(List<String> roots) {
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("root", rootProperty(roots));
+        return objectSchema(props, List.of());
+    }
+
+    private Map<String, Object> workspaceGitDiffSchema(List<String> roots) {
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("root", rootProperty(roots));
+        props.put("path", Map.of("type", "string", "description", "Optional file path relative to the selected root"));
+        props.put("staged", Map.of("type", "boolean", "description", "When true, show staged changes"));
+        props.put("base", Map.of("type", "string", "description", "Optional base revision or range"));
+        return objectSchema(props, List.of());
+    }
+
+    private Map<String, Object> rootProperty(List<String> roots) {
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("type", "string");
+        root.put("description", "Filesystem root name. Defaults to the first configured root when omitted.");
+        root.put("enum", roots);
+        return root;
+    }
+
+    private Map<String, Object> objectSchema(Map<String, Object> properties, List<String> required) {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        schema.put("properties", properties);
+        if (!required.isEmpty()) {
+            schema.put("required", required);
+        }
+        return schema;
     }
 
     private Map<String, Object> parseFrontmatter(String skillMd) {

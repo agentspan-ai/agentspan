@@ -48,9 +48,10 @@ func TestStart_ReturnsExecutionIDAndAgentName(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"executionId": "exec-123",
-			"agentName":   "my-agent",
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"executionId":     "exec-123",
+			"agentName":       "my-agent",
+			"requiredWorkers": []string{"my-agent__tool"},
 		})
 	}))
 
@@ -63,6 +64,27 @@ func TestStart_ReturnsExecutionIDAndAgentName(t *testing.T) {
 	}
 	if resp.AgentName != "my-agent" {
 		t.Errorf("AgentName = %q, want my-agent", resp.AgentName)
+	}
+	if len(resp.RequiredWorkers) != 1 || resp.RequiredWorkers[0] != "my-agent__tool" {
+		t.Errorf("RequiredWorkers = %v, want [my-agent__tool]", resp.RequiredWorkers)
+	}
+}
+
+func TestPollTask_ReturnsNilForNoTaskStatuses(t *testing.T) {
+	for _, status := range []int{http.StatusNoContent, http.StatusNotFound} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+
+			task, err := c.PollTask("skill__read_skill_file")
+			if err != nil {
+				t.Fatalf("PollTask: %v", err)
+			}
+			if task != nil {
+				t.Fatalf("PollTask task = %v, want nil", task)
+			}
+		})
 	}
 }
 

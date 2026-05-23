@@ -178,6 +178,10 @@ vi.mock("utils/constants/route", () => ({
     NAME_VERSION: "/agentDef/:name/:version",
     NEW: "/agentDef/new",
   },
+  SKILLS_URL: {
+    BASE: "/skills",
+    NAME_VERSION: "/skills/:name/:version",
+  },
   AGENT_EXPLORER_URL: "/agentExplorer",
   WORKERS_URL: {
     BASE: "/workers",
@@ -218,6 +222,11 @@ vi.mock("pages/definitions", () => ({
   Schedules: () => ({ type: "Schedules" }),
   Agent: () => ({ type: "Agent" }),
   Workflow: () => ({ type: "Agent" }),
+}));
+
+vi.mock("pages/skills", () => ({
+  SkillsPage: () => ({ type: "SkillsPage" }),
+  SkillDetailPage: () => ({ type: "SkillDetailPage" }),
 }));
 vi.mock("enterprise/pages/envVariables/EnvVariables", () => ({
   EnvVariables: () => ({ type: "EnvVariables" }),

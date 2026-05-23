@@ -24,6 +24,7 @@ import {
   TASK_QUEUE_URL,
   AGENT_DEFINITION_URL,
   AGENT_EXECUTION_URL,
+  SKILLS_URL,
 } from "utils/constants/route";
 
 /**
@@ -49,7 +50,8 @@ const CORE_SIDEBAR_POSITIONS = {
   // Definitions submenu children
   DEFINITIONS: {
     workflowDefItem: 100,
-    credentialsItem: 200,
+    skillsItem: 200,
+    credentialsItem: 300,
   },
 } as const;
 
@@ -132,6 +134,17 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           hotkeys: "",
           hidden: false,
           position: D.workflowDefItem,
+        },
+        {
+          id: "skillsItem",
+          title: "Skills",
+          icon: null,
+          linkTo: SKILLS_URL.BASE,
+          activeRoutes: [SKILLS_URL.NAME_VERSION],
+          shortcuts: [],
+          hotkeys: "",
+          hidden: false,
+          position: D.skillsItem,
         },
         {
           id: "credentialsItem",

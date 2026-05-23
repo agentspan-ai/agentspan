@@ -6,14 +6,22 @@ package ai.agentspan.skill;
 import ai.agentspan.Agent;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -36,6 +44,12 @@ public class Skill {
 
     private static final Pattern FRONTMATTER = Pattern.compile("^---\\s*\\n(.*?)\\n---\\s*\\n", Pattern.DOTALL);
     private static final Pattern NAME_FIELD = Pattern.compile("(?m)^name:\\s*(.+)$");
+    private static final Map<String, String> INTERPRETERS = Map.of(
+        "python", "python3",
+        "bash", "bash",
+        "node", "node",
+        "ruby", "ruby"
+    );
 
     private Skill() {}
 
@@ -92,6 +106,7 @@ public class Skill {
         rawConfig.put("agentFiles", agentFiles);
         rawConfig.put("scripts", scripts);
         rawConfig.put("resourceFiles", resourceFiles);
+        rawConfig.put("skillPath", path.toString());
 
         return Agent.builder()
                 .name(name)
@@ -198,12 +213,30 @@ public class Skill {
             try (Stream<Path> files = Files.walk(d)) {
                 files.filter(Files::isRegularFile)
                      .sorted()
-                     .forEach(f -> resources.add(skillDir.relativize(f).toString()));
+                     .forEach(f -> resources.add(relativeSkillPath(skillDir, f)));
             } catch (IOException e) {
                 throw new SkillLoadError("Failed to list resource files in " + d + ": " + e.getMessage(), e);
             }
         }
+        try (Stream<Path> files = Files.list(skillDir)) {
+            files.filter(Files::isRegularFile)
+                 .filter(f -> {
+                     String name = f.getFileName().toString();
+                     return !"SKILL.md".equals(name)
+                         && !"skill.yaml".equals(name)
+                         && !"skill.toml".equals(name)
+                         && !name.endsWith("-agent.md");
+                 })
+                 .sorted()
+                 .forEach(f -> resources.add(relativeSkillPath(skillDir, f)));
+        } catch (IOException e) {
+            throw new SkillLoadError("Failed to list root resource files: " + e.getMessage(), e);
+        }
         return resources;
+    }
+
+    private static String relativeSkillPath(Path skillDir, Path file) {
+        return skillDir.relativize(file).toString().replace('\\', '/');
     }
 
     private static String detectLanguage(Path file) {
@@ -213,5 +246,149 @@ public class Skill {
         if (name.endsWith(".js") || name.endsWith(".mjs") || name.endsWith(".ts")) return "node";
         if (name.endsWith(".rb")) return "ruby";
         return "bash";
+    }
+
+    /** A local worker generated from a skill script or resource reader. */
+    public static class SkillWorker {
+        private final String name;
+        private final String description;
+        private final Function<Map<String, Object>, Object> func;
+
+        SkillWorker(String name, String description, Function<Map<String, Object>, Object> func) {
+            this.name = name;
+            this.description = description;
+            this.func = func;
+        }
+
+        public String getName() { return name; }
+        public String getDescription() { return description; }
+        public Function<Map<String, Object>, Object> getFunc() { return func; }
+    }
+
+    /** Create local workers for a skill agent's scripts and readable resource files. */
+    @SuppressWarnings("unchecked")
+    public static List<SkillWorker> createSkillWorkers(Agent agent) {
+        if (agent == null || !"skill".equals(agent.getFramework()) || agent.getFrameworkConfig() == null) {
+            return Collections.emptyList();
+        }
+
+        String skillName = agent.getName();
+        Map<String, Object> config = agent.getFrameworkConfig();
+        Path skillPath = Paths.get((String) config.getOrDefault("skillPath", "."))
+            .toAbsolutePath()
+            .normalize();
+        Map<String, Map<String, String>> scripts =
+            (Map<String, Map<String, String>>) config.getOrDefault("scripts", Collections.emptyMap());
+
+        List<SkillWorker> workers = new ArrayList<>();
+        for (Map.Entry<String, Map<String, String>> entry : scripts.entrySet()) {
+            String toolName = entry.getKey();
+            Map<String, String> info = entry.getValue();
+            String filename = info.get("filename");
+            if (filename == null || filename.isEmpty()) continue;
+
+            String workerName = skillName + "__" + toolName;
+            String interpreter = INTERPRETERS.getOrDefault(info.getOrDefault("language", "bash"), "bash");
+            Path scriptPath = skillPath.resolve("scripts").resolve(filename).normalize();
+            workers.add(new SkillWorker(
+                workerName,
+                "Run " + toolName + " script from " + skillName + " skill",
+                input -> runScript(interpreter, scriptPath, stringValue(input.get("command")))
+            ));
+        }
+
+        Set<String> allowedFiles = new HashSet<>((List<String>) config.getOrDefault("resourceFiles", List.of()));
+        if (!allowedFiles.isEmpty()) {
+            workers.add(new SkillWorker(
+                skillName + "__read_skill_file",
+                "Read resource files from " + skillName + " skill",
+                input -> readSkillFile(skillPath, allowedFiles, stringValue(input.get("path")))
+            ));
+        }
+        return workers;
+    }
+
+    private static String runScript(String interpreter, Path scriptPath, String command) {
+        try {
+            List<String> args = new ArrayList<>();
+            args.add(interpreter);
+            args.add(scriptPath.toString());
+            args.addAll(splitArgs(command));
+
+            ProcessBuilder pb = new ProcessBuilder(args);
+            pb.directory(scriptPath.getParent().toFile());
+            Process p = pb.start();
+            CompletableFuture<String> stdoutFuture =
+                CompletableFuture.supplyAsync(() -> readStream(p.getInputStream()));
+            CompletableFuture<String> stderrFuture =
+                CompletableFuture.supplyAsync(() -> readStream(p.getErrorStream()));
+            boolean done = p.waitFor(300, TimeUnit.SECONDS);
+            if (!done) {
+                p.destroyForcibly();
+                return "ERROR: Script execution timed out (300s)";
+            }
+            String stdout = stdoutFuture.join();
+            String stderr = stderrFuture.join();
+            if (p.exitValue() != 0) {
+                return "ERROR (exit " + p.exitValue() + "):\n" + stderr;
+            }
+            return stdout;
+        } catch (Exception e) {
+            return "ERROR: " + e.getMessage();
+        }
+    }
+
+    private static String readStream(InputStream stream) {
+        try {
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private static String readSkillFile(Path skillPath, Set<String> allowedFiles, String requestedPath) {
+        if (!allowedFiles.contains(requestedPath)) {
+            List<String> sorted = new ArrayList<>(allowedFiles);
+            Collections.sort(sorted);
+            return "ERROR: '" + requestedPath + "' not found. Available: " + sorted;
+        }
+        Path target = skillPath.resolve(requestedPath).normalize();
+        if (!target.startsWith(skillPath)) {
+            return "ERROR: '" + requestedPath + "' is outside the skill directory";
+        }
+        try {
+            return Files.readString(target);
+        } catch (IOException e) {
+            return "ERROR reading '" + requestedPath + "': " + e.getMessage();
+        }
+    }
+
+    private static List<String> splitArgs(String command) {
+        if (command == null || command.isBlank()) return List.of();
+        List<String> args = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inSingle = false;
+        boolean inDouble = false;
+        for (int i = 0; i < command.length(); i++) {
+            char ch = command.charAt(i);
+            if (ch == '\'' && !inDouble) {
+                inSingle = !inSingle;
+            } else if (ch == '"' && !inSingle) {
+                inDouble = !inDouble;
+            } else if (Character.isWhitespace(ch) && !inSingle && !inDouble) {
+                if (current.length() > 0) {
+                    args.add(current.toString());
+                    current.setLength(0);
+                }
+            } else {
+                current.append(ch);
+            }
+        }
+        if (current.length() > 0) args.add(current.toString());
+        return args;
+    }
+
+    private static String stringValue(Object value) {
+        return value != null ? value.toString() : "";
     }
 }

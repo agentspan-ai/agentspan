@@ -39,6 +39,13 @@ public class StartRequest {
     /** Raw framework-specific agent config. Used when {@code framework} is non-null. */
     private Map<String, Object> rawConfig;
 
+    /**
+     * Reference to a server-registered skill package. Used with {@code framework="skill"}
+     * when the caller wants the server to resolve the raw skill config from the
+     * skill registry instead of sending it inline.
+     */
+    private Map<String, Object> skillRef;
+
     /** Per-call timeout override (seconds). Applied server-side to the workflow definition. */
     private Integer timeoutSeconds;
 

@@ -21,7 +21,7 @@ internal static class AgentConfigSerializer
         // {framework, rawConfig, prompt, sessionId}. The server routes these to
         // OpenAINormalizer / GoogleADKNormalizer based on `framework`. Mirrors
         // Java's HttpApi.startFrameworkAgent (POST /api/agent/start with framework).
-        if (agent.Framework is "openai" or "google_adk")
+        if (agent.Framework is "openai" or "google_adk" or "skill")
         {
             var env = new JsonObject
             {
@@ -48,6 +48,22 @@ internal static class AgentConfigSerializer
         // GoogleADKNormalizer) consume a different wire shape than the default.
         // Tools are emitted as {_worker_ref, description, parameters}; raw
         // framework config (handoffs, sub_agents, output_type) is folded in.
+        if (agent.Framework == "skill")
+        {
+            var skill = new JsonObject
+            {
+                ["name"] = agent.Name,
+                ["model"] = agent.Model,
+                ["_framework"] = "skill",
+            };
+            if (agent.FrameworkConfig is not null)
+            {
+                foreach (var (k, v) in agent.FrameworkConfig)
+                    skill[k] = JsonNode.Parse(JsonSerializer.Serialize(v, AgentspanJson.Options));
+            }
+            return skill;
+        }
+
         if (agent.Framework is "openai" or "google_adk")
         {
             return SerializeFrameworkAgent(agent);
@@ -357,6 +373,13 @@ internal static class AgentConfigSerializer
             {
                 ["agentConfig"] = SerializeAgent(tool.WrappedAgent),
             };
+            if (tool.WrappedAgent.Framework == "skill")
+            {
+                config["workerNames"] = new JsonArray(
+                    Skill.CreateSkillWorkers(tool.WrappedAgent)
+                        .Select(w => (JsonNode?)w.Name)
+                        .ToArray());
+            }
             if (tool.AgentToolRetryCount.HasValue)
                 config["retryCount"] = tool.AgentToolRetryCount.Value;
             if (tool.AgentToolRetryDelaySeconds.HasValue)

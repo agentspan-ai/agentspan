@@ -71,6 +71,9 @@ public class AgentService {
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
 
+    @Autowired(required = false)
+    private SkillRegistryService skillRegistryService;
+
     /** Package-private constructor for testing with ExecutionTokenService */
     AgentService(
             AgentCompiler agentCompiler,
@@ -640,6 +643,10 @@ public class AgentService {
                 ? request.getRawConfig()
                 : (request.getAgentConfig() != null ? MAPPER.convertValue(request.getAgentConfig(), Map.class) : null);
         if (agentDef != null) {
+            if (request.getSkillRef() != null) {
+                agentDef = new LinkedHashMap<>(agentDef);
+                agentDef.put("skillRef", request.getSkillRef());
+            }
             metadata.put("agentDef", agentDef);
         }
     }
@@ -1008,7 +1015,16 @@ public class AgentService {
                 if (agentConfigObj instanceof AgentConfig) {
                     childConfig = (AgentConfig) agentConfigObj;
                 } else if (agentConfigObj instanceof Map) {
-                    childConfig = MAPPER.convertValue(agentConfigObj, AgentConfig.class);
+                    Map<String, Object> childMap = (Map<String, Object>) agentConfigObj;
+                    Object framework = childMap.get("_framework");
+                    if (!(framework instanceof String) || ((String) framework).isEmpty()) {
+                        framework = childMap.get("framework");
+                    }
+                    if (framework instanceof String frameworkId && !frameworkId.isEmpty()) {
+                        childConfig = normalizerRegistry.normalize(frameworkId, childMap);
+                    } else {
+                        childConfig = MAPPER.convertValue(childMap, AgentConfig.class);
+                    }
                 } else {
                     log.warn(
                             "Unexpected agentConfig type for tool '{}': {}", tool.getName(), agentConfigObj.getClass());
@@ -1074,6 +1090,14 @@ public class AgentService {
     private AgentConfig resolveConfig(StartRequest request) {
         if (request.getFramework() != null && !request.getFramework().isEmpty()) {
             log.info("Normalizing framework '{}' agent config", request.getFramework());
+            if ("skill".equals(request.getFramework())
+                    && request.getRawConfig() == null
+                    && request.getSkillRef() != null) {
+                if (skillRegistryService == null) {
+                    throw new IllegalStateException("Skill registry is not available");
+                }
+                request.setRawConfig(skillRegistryService.resolveRawConfig(request.getSkillRef()));
+            }
             return normalizerRegistry.normalize(request.getFramework(), request.getRawConfig());
         }
         return request.getAgentConfig();
@@ -1314,6 +1338,17 @@ public class AgentService {
             for (ToolConfig tool : config.getTools()) {
                 if (tool.isStateful()) {
                     taskToDomain.put(tool.getName(), domain);
+                }
+                Map<String, Object> toolConfig = tool.getConfig();
+                if ("agent_tool".equals(tool.getToolType()) && toolConfig != null) {
+                    Object workerNames = toolConfig.get("workerNames");
+                    if (workerNames instanceof List<?> names) {
+                        for (Object workerName : names) {
+                            if (workerName instanceof String name && !name.isBlank()) {
+                                taskToDomain.put(name, domain);
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1436,7 +1436,7 @@ Key implementation points:
 - List `references/`, `examples/`, `assets/` for resource files
 - Package as JSON matching the raw config format from the design spec
 - `skill run`: POST to `/api/agent/start`, start workers, wait for result
-- `skill load`: POST to `/api/agent/compile`
+- `skill load`: POST to `/api/agent/deploy`
 - `skill serve`: start workers (blocking, like existing `serve` command)
 
 This task is implementation-heavy and Go-specific. Refer to existing commands in `cli/cmd/` (e.g., `run.go`, `deploy.go`) for patterns.

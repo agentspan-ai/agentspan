@@ -37,6 +37,7 @@ import {
 } from "pages/definitions";
 import ErrorPage from "pages/error/ErrorPage";
 import { SchedulerExecutions, AgentSearch } from "pages/executions";
+import { SkillDetailPage, SkillsPage } from "pages/skills";
 import { pluginRegistry } from "plugins/registry";
 import { featureFlags, FEATURES } from "utils";
 import {
@@ -46,6 +47,7 @@ import {
   SCHEDULER_DEFINITION_URL,
   TASK_QUEUE_URL,
   AGENT_DEFINITION_URL,
+  SKILLS_URL,
 } from "utils/constants/route";
 import Execution from "../pages/execution/Execution";
 import TaskQueue from "../pages/queueMonitor/TaskQueue";
@@ -78,6 +80,14 @@ const getCoreAuthenticatedRoutes = () => [
   {
     path: AGENT_DEFINITION_URL.NAME_VERSION,
     element: <WorkflowDefinition />,
+  },
+  {
+    path: SKILLS_URL.BASE,
+    element: <SkillsPage />,
+  },
+  {
+    path: SKILLS_URL.NAME_VERSION,
+    element: <SkillDetailPage />,
   },
 
   // Credentials

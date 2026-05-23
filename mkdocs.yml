@@ -63,6 +63,7 @@ nav:
   - Concepts:
       - Agents: concepts/agents.md
       - Tools: concepts/tools.md
+      - Skills: concepts/skills.md
       - Multi-Agent Strategies: concepts/multi-agent.md
       - Guardrails: concepts/guardrails.md
       - Memory: concepts/memory.md

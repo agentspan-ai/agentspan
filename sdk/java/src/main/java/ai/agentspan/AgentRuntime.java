@@ -11,6 +11,7 @@ import ai.agentspan.model.AgentHandle;
 import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.AgentStream;
 import ai.agentspan.model.ToolDef;
+import ai.agentspan.skill.Skill;
 import ai.agentspan.termination.AndTermination;
 import ai.agentspan.termination.MaxMessageTermination;
 import ai.agentspan.termination.OrTermination;
@@ -94,7 +95,7 @@ public class AgentRuntime implements AutoCloseable {
         // agents (openai / google_adk / langgraph) need to round-trip through
         // the server normalizer or compile fails on a missing top-level model.
         String framework = agent.getFramework();
-        boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
+        boolean isFramework = framework != null && !framework.isEmpty();
         Map<String, Object> payload = new java.util.HashMap<>();
         if (isFramework) {
             payload.put("framework", framework);
@@ -184,12 +185,11 @@ public class AgentRuntime implements AutoCloseable {
 
             logger.debug("Starting agent '{}' with prompt: {}", agent.getName(), prompt);
 
-            // Framework-backed agents (openai, google_adk, langgraph, vercel_ai)
+            // Framework-backed agents (openai, google_adk, langgraph, vercel_ai, skill)
             // must be sent via the server's framework+rawConfig fields so the
-            // matching normalizer runs server-side. The "skill" framework keeps
-            // the legacy path because its serialized config still includes model.
+            // matching normalizer runs server-side.
             String framework = agent.getFramework();
-            boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
+            boolean isFramework = framework != null && !framework.isEmpty();
             Map<String, Object> payload = new java.util.HashMap<>();
             if (isFramework) {
                 payload.put("framework", framework);
@@ -266,13 +266,13 @@ public class AgentRuntime implements AutoCloseable {
         for (Agent agent : agents) {
             Map<String, Object> agentConfig = serializer.serialize(agent);
             Map<String, Object> payload = new java.util.LinkedHashMap<>();
-            // Framework-backed agents (openai, google_adk, langgraph) ship via
+            // Framework-backed agents (openai, google_adk, langgraph, skill) ship via
             // {framework, rawConfig} so the matching server-side normalizer
             // runs — same dispatch as startAsync. Without this, the server
             // tries to compile the agent as a native Agentspan agent and
             // fails on a missing model / null taskDef name.
             String framework = agent.getFramework();
-            if (framework != null && !framework.isEmpty() && !"skill".equals(framework)) {
+            if (framework != null && !framework.isEmpty()) {
                 payload.put("framework", framework);
                 payload.put("rawConfig", agentConfig);
             } else {
@@ -390,6 +390,12 @@ public class AgentRuntime implements AutoCloseable {
     }
 
     public void prepareWorkers(Agent agent) {
+        if ("skill".equals(agent.getFramework())) {
+            for (Skill.SkillWorker worker : Skill.createSkillWorkers(agent)) {
+                workerManager.register(worker.getName(), worker.getFunc());
+            }
+        }
+
         // Register tools for this agent
         for (ToolDef tool : agent.getTools()) {
             if (tool.getFunc() != null && "worker".equals(tool.getToolType())) {

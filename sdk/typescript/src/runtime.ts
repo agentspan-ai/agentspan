@@ -39,6 +39,9 @@ const CALLBACK_POSITION_MAP: Record<string, string> = {
   onToolEnd: "after_tool",
 };
 
+type CallbackCallable = (agentName: string, data: unknown) => unknown | Promise<unknown>;
+type WorkerCallable = (inputData: Record<string, unknown>) => unknown | Promise<unknown>;
+
 // ── AgentHandle ─────────────────────────────────────────
 
 /**
@@ -697,6 +700,7 @@ export class AgentRuntime {
             });
             const workflowName = (deployResult as Record<string, unknown>).agentName as string;
             td.config.workflowName = workflowName;
+            td.config.workerNames = createSkillWorkers(skillAgent).map((sw) => sw.name);
             skillAgents.push(skillAgent);
             delete td.config.agent;
           }
@@ -1000,7 +1004,7 @@ export class AgentRuntime {
         try {
           let result: unknown = {};
           for (const handler of handlers) {
-            const fn = (handler as Record<string, unknown>)[methodName] as Function;
+            const fn = (handler as Record<string, unknown>)[methodName] as CallbackCallable;
             // Pass server data matching CallbackHandler method signatures:
             // before/after_agent: (agentName, data)
             // before/after_model: (agentName, messages|response)
@@ -1327,12 +1331,12 @@ export class AgentRuntime {
    * Register extracted worker functions for framework-based agents.
    */
   private _registerExtractedWorkers(
-    workers: { name: string; func?: Function | null }[],
+    workers: { name: string; func?: unknown | null }[],
     credentials?: string[],
   ): void {
     for (const worker of workers) {
-      if (worker.func) {
-        const fn = worker.func;
+      if (typeof worker.func === "function") {
+        const fn = worker.func as WorkerCallable;
         this.workerManager.addWorker(
           worker.name,
           async (inputData) => {
@@ -1356,7 +1360,7 @@ export class AgentRuntime {
    */
   private _serializeSkill(
     agent: Agent,
-  ): [Record<string, unknown>, { name: string; func?: Function }[]] {
+  ): [Record<string, unknown>, { name: string; func?: WorkerCallable }[]] {
     const a = agent as unknown as Record<string, unknown>;
     const rawConfig = a._framework_config as Record<string, unknown>;
     const skillWorkers = createSkillWorkers(agent);

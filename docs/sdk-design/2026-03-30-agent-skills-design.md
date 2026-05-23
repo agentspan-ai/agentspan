@@ -77,7 +77,7 @@ All parsing and normalization logic lives server-side in `SkillNormalizer`. This
 - Read skill directory contents from local filesystem
 - Package file contents into raw config dict
 - Register script and `read_skill_file` workers (must run user-side)
-- Send `{"framework": "skill", "config": {...}}` to server
+- Send `{"framework": "skill", "rawConfig": {...}}` to server
 
 **Server responsibilities (shared, single implementation):**
 - Parse SKILL.md frontmatter
@@ -130,7 +130,7 @@ dg = skill("./dg",
 ```json
 {
   "framework": "skill",
-  "config": {
+  "rawConfig": {
     "model": "anthropic/claude-sonnet-4-6",
     "agentModels": {"gilfoyle": "openai/gpt-4o"},
     "skillMd": "---\nname: dg\ndescription: ...\n---\n# Dinesh vs Gilfoyle...",
@@ -437,7 +437,7 @@ def detect_framework(agent_obj):
     # ... existing detection logic
 ```
 
-When framework is `"skill"`, the serializer sends `{"framework": "skill", "config": agent._framework_config}` to the server.
+When framework is `"skill"`, the serializer sends `{"framework": "skill", "rawConfig": agent._framework_config}` to the server.
 
 ### SDK Code per Language
 
@@ -458,15 +458,35 @@ When framework is `"skill"`, the serializer sends `{"framework": "skill", "confi
 ### Ephemeral — `agentspan skill run`
 
 ```bash
-agentspan skill run <path> "<prompt>" [flags]
+agentspan skill run <path-or-name> "<prompt>" [flags]
     --model <model>                    # Orchestrator + default model
     --agent-model <name>=<model>       # Sub-agent override (repeatable)
     --search-path <dir>                # Cross-skill search dir (repeatable)
+    --version <version>                # Registered skill version/checksum prefix
     --timeout <seconds>                # Execution timeout
+    --script-timeout <seconds>         # Per-script timeout
+    --script-output-limit <bytes>      # Per-script captured output limit
     --stream                           # Stream SSE events
 ```
 
-Internally: reads dir → packages config → sends to server → starts workers in background → waits for result → stops workers → exits.
+Internally for a local path: reads dir → packages config → sends to server → starts workers in background → waits for result → stops workers → exits.
+
+Internally for a registered skill name: resolves `skillRef` from the server registry → downloads the package to a temp directory for local script/resource workers → sends `{"framework":"skill","skillRef":...}` to the server → waits for result → removes the temp package.
+
+### Registry — `agentspan skill register`
+
+```bash
+# Upload full skill folder as an immutable server-side package
+agentspan skill register <path> [--model <model>] [--version <label>]
+
+# Browse registered packages
+agentspan skill list [--all-versions]
+agentspan skill get <name> [version]
+agentspan skill pull <name> [destination] [--version <version>]
+agentspan skill delete <name> [version] --yes
+```
+
+The registry stores a zip package plus non-executable manifest metadata: skill name, description, file tree, package checksum, server-derived raw skill config, script/sub-agent/resource counts, owner id, and a stable package handle. Package bytes go through a `SkillPackageStore` abstraction. `filesystem` stores immutable zip blobs under `agentspan.skills.package-store.filesystem.directory`; `conductor-payload` stores blobs through Conductor external payload storage for deployments that already use a shared Conductor-backed blob store.
 
 ### Production — `agentspan skill load` + `agentspan skill serve`
 
@@ -475,10 +495,10 @@ Internally: reads dir → packages config → sends to server → starts workers
 agentspan skill load <path> --model <model> [--agent-model <name>=<model>]
 
 # Start workers (blocks, like rt.serve())
-agentspan skill serve <path>
+agentspan skill serve <path-or-name> [--search-path <dir>] [--version <version>]
 
 # Trigger by name (existing command, unchanged)
-agentspan run <skill-name> "<prompt>"
+agentspan agent run --name <skill-name> "<prompt>"
 ```
 
 ### CLI Implementation
@@ -720,27 +740,44 @@ skills = load_skills(
 
 ```bash
 # Ephemeral
-agentspan skill run <path> "<prompt>" \
+agentspan skill run <path-or-name> "<prompt>" \
     --model <model> \
     --agent-model <name>=<model> \
     --search-path <dir> \
+    --version <version> \
     --timeout <seconds> \
     --stream
 
+# Registry
+agentspan skill register <path> [--model <model>] [--version <label>]
+agentspan skill list [--all-versions]
+agentspan skill get <name> [version]
+agentspan skill pull <name> [destination]
+agentspan skill delete <name> [version] --yes
+
 # Production
 agentspan skill load <path> --model <model> --agent-model <name>=<model>
-agentspan skill serve <path>
-agentspan run <skill-name> "<prompt>"
+agentspan skill serve <path-or-name> [--search-path <dir>] [--version <version>] [--script-timeout <seconds>]
+agentspan agent run --name <skill-name> "<prompt>"
 ```
 
 ### Server API
 
-No new endpoints. Skills use existing endpoints with `framework: "skill"`:
+Registered skills add a package registry API. Path-based skill execution still uses existing agent endpoints with `framework: "skill"`:
 
 | Endpoint | Usage |
 |----------|-------|
-| `POST /api/agent/start` | Ephemeral: `{"framework": "skill", "config": {...}, "prompt": "..."}` |
-| `POST /api/agent/compile` | Production load: `{"framework": "skill", "config": {...}}` |
+| `POST /api/agent/start` | Ephemeral: `{"framework": "skill", "rawConfig": {...}, "prompt": "..."}` |
+| `POST /api/agent/start` | Registered: `{"framework": "skill", "skillRef": {"name": "...", "version": "..."}, "prompt": "..."}` |
+| `POST /api/agent/deploy` | Production load: `{"framework": "skill", "rawConfig": {...}}` |
+| `POST /api/skills/register` | Upload full skill package plus non-executable manifest metadata. Server derives runtime config from the package contents. |
+| `GET /api/skills` | List registered skills |
+| `GET /api/skills/{name}` | Get latest skill package metadata |
+| `GET /api/skills/{name}/versions/{version}` | Get specific skill package metadata |
+| `GET /api/skills/{name}/versions/{version}/files?path=...` | Browse a file inside the package |
+| `GET /api/skills/{name}/versions/{version}/package` | Download the package zip |
+| `POST /api/skills/{name}/versions/{version}/deploy` | Deploy registered skill as an agent definition |
+| `DELETE /api/skills/{name}/versions/{version}` | Delete registry metadata and package blob when the backing store supports delete |
 | `GET /api/agent/stream/{executionId}` | SSE streaming — unchanged |
 | `GET /api/agent/{executionId}/status` | Status polling — unchanged |
 | `GET /api/agent/list` | Lists skill-based agents alongside regular agents |
@@ -858,7 +895,7 @@ Matched names are searched in the search path (sibling dirs → `.agents/skills/
 
 ### Script Security
 
-Script arguments come from LLM tool calls. While `shlex.split` prevents shell injection (no `shell=True`), the LLM can pass arbitrary arguments to scripts. Skill authors should validate arguments within their scripts. The `subprocess.run` call uses `timeout=300` to prevent runaway scripts.
+Script arguments come from LLM tool calls. Argument parsing avoids `shell=True`, but the LLM can still pass arbitrary arguments to scripts. Skill authors should validate arguments within their scripts. CLI script workers run with the skill root as `cwd`, expose `AGENTSPAN_SKILL_DIR`, and enforce `--script-timeout` plus `--script-output-limit` to prevent runaway execution and unbounded logs.
 
 ---
 

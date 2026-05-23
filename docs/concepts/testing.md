@@ -298,6 +298,30 @@ Run integration tests:
 pytest tests/ -m integration
 ```
 
+## Real Server SDK E2E Tests
+
+Runtime features that cross the SDK/server boundary should have deterministic
+e2e tests against a real Agentspan server. Skills are covered this way in every
+SDK:
+
+```bash
+cd sdk/python && AGENTSPAN_SERVER_URL=http://localhost:6767/api \
+  python3 -m pytest e2e/test_suite15_skills.py -q
+
+cd sdk/typescript && AGENTSPAN_SERVER_URL=http://localhost:6767/api \
+  npm test -- tests/e2e/test_suite15_skills.test.ts
+
+cd sdk/java && AGENTSPAN_SERVER_URL=http://localhost:6767/api \
+  ./gradlew :test --tests Suite15Skills -Pe2e
+
+cd sdk/csharp && AGENTSPAN_SERVER_URL=http://localhost:6767/api \
+  dotnet test tests/AgentspanE2eTests/AgentspanE2eTests.csproj --filter Suite16_Skills
+```
+
+Skill e2e tests assert deterministic script output, resource reads,
+multi-agent skill files, `agent_tool` nesting, `workerNames` propagation, and
+real worker execution.
+
 ## Evaluating output correctness
 
 For evaluating LLM output quality (not just structure), use `CorrectnessEval`:
