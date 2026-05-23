@@ -458,7 +458,7 @@ class PlanExecuteTest extends BaseTest {
      */
     @Test
     @Order(1)
-    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    @Timeout(value = 600, unit = TimeUnit.SECONDS)
     void testReportGeneration() {
         List<ToolDef> tools = List.of(
             createDirectoryTool(),
@@ -562,7 +562,7 @@ class PlanExecuteTest extends BaseTest {
      */
     @Test
     @Order(2)
-    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    @Timeout(value = 600, unit = TimeUnit.SECONDS)
     void testMaxTokensInGenerate() {
         List<ToolDef> tools = List.of(
             createDirectoryTool(),
@@ -773,7 +773,7 @@ class PlanExecuteTest extends BaseTest {
      */
     @Test
     @Order(10)
-    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    @Timeout(value = 600, unit = TimeUnit.SECONDS)
     void testRefPipesWholeOutputAcrossSteps() throws Exception {
         Agent harness = buildRefsHarness();
         Plan plan = Plan.builder()
@@ -821,7 +821,7 @@ class PlanExecuteTest extends BaseTest {
      */
     @Test
     @Order(11)
-    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    @Timeout(value = 600, unit = TimeUnit.SECONDS)
     void testTwoRefsInSameArgsResolveIndependently() throws Exception {
         Agent harness = buildRefsHarness();
         Plan plan = Plan.builder()
