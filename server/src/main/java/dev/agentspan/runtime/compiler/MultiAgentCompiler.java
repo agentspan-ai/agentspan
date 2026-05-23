@@ -2162,86 +2162,8 @@ public class MultiAgentCompiler {
         pp.append("\n\n").append(planSchemaBlock);
         String plannerPrompt = pp.toString();
         String plannerRef = prefix + "_planner";
-        String plannerMergeRef = prefix + "_planner_ctx_merge";
         String plannerCoerceRef = prefix + "_planner_coerce";
-
-        // ── 2a. static_plan gate (dg-review F1 / recommendation #13) ─
-        // When ``workflow.input.static_plan`` is supplied, ``extract_json``
-        // Case 0 wins and the planner LLM's output is discarded. Running
-        // the LLM in that case is wasted billed tokens + latency. Gate
-        // the planner sub-workflow + its three follow-on INLINEs behind
-        // a SWITCH that routes to a no-op when static_plan is present.
-        //
-        // Downstream tasks reference ``${plannerCoerceRef}.output.result``;
-        // when the SWITCH takes the skip branch those refs resolve to null,
-        // which extract_json's Case 0 path doesn't read anyway.
-        String plannerGateRef = prefix + "_planner_gate";
-        WorkflowTask plannerGate = new WorkflowTask();
-        plannerGate.setType("INLINE");
-        plannerGate.setTaskReferenceName(plannerGateRef);
-        plannerGate.setInputParameters(Map.of(
-                "evaluatorType",
-                "graaljs",
-                "staticPlan",
-                "${workflow.input.static_plan}",
-                "expression",
-                "(function(){ var sp = $.staticPlan; "
-                        + "if (sp == null) return 'run'; "
-                        + "if (typeof sp === 'object') return 'skip'; "
-                        + "if (typeof sp === 'string' && sp.length > 2) return 'skip'; "
-                        + "return 'run'; })();"));
-        tasks.add(plannerGate);
-
-        // Live branch: the original four planner-prep tasks.
-        WorkflowTask plannerTask = agentCompiler.compileSubAgent(
-                plannerConfig, plannerRef, plannerPrompt, "${workflow.input.media}", "${workflow.variables.context}");
-
-        WorkflowTask plannerMerge = new WorkflowTask();
-        plannerMerge.setType("INLINE");
-        plannerMerge.setTaskReferenceName(plannerMergeRef);
-        plannerMerge.setInputParameters(Map.of(
-                "evaluatorType",
-                "graaljs",
-                "parent",
-                "${workflow.variables.context}",
-                "child",
-                "${" + plannerRef + ".output.context}",
-                "expression",
-                JavaScriptBuilder.flatMergeContextScript()));
-
-        WorkflowTask plannerCtxSet = new WorkflowTask();
-        plannerCtxSet.setType("SET_VARIABLE");
-        plannerCtxSet.setTaskReferenceName(prefix + "_planner_ctx_set");
-        plannerCtxSet.setInputParameters(Map.of("context", "${" + plannerMergeRef + ".output.result}"));
-
-        String plannerResultRaw = AgentCompiler.subAgentResultRef(plannerConfig, plannerRef);
-        WorkflowTask plannerCoerce = AgentCompiler.createCoerceTask(plannerResultRaw, plannerCoerceRef);
-
-        List<WorkflowTask> plannerLiveBranch = List.of(plannerTask, plannerMerge, plannerCtxSet, plannerCoerce);
-
-        // Skip branch: a single no-op INLINE so the SWITCH has both arms
-        // defined. Conductor returns empty data for tasks in un-taken
-        // branches; downstream refs to plannerCoerceRef just resolve to
-        // null, which is fine since extract_json Case 0 ignores them.
-        WorkflowTask plannerSkipped = new WorkflowTask();
-        plannerSkipped.setType("INLINE");
-        plannerSkipped.setTaskReferenceName(prefix + "_planner_skipped");
-        plannerSkipped.setInputParameters(Map.of(
-                "evaluatorType",
-                "graaljs",
-                "expression",
-                "(function(){ return {result: '[planner skipped — static_plan supplied]'}; })();"));
-
-        WorkflowTask plannerRoute = new WorkflowTask();
-        plannerRoute.setType("SWITCH");
-        plannerRoute.setTaskReferenceName(prefix + "_planner_route");
-        plannerRoute.setEvaluatorType("value-param");
-        plannerRoute.setExpression("route");
-        plannerRoute.setInputParameters(Map.of("route", "${" + plannerGateRef + ".output.result}"));
-        plannerRoute.setDecisionCases(Map.of("skip", List.of(plannerSkipped)));
-        plannerRoute.setDefaultCase(plannerLiveBranch);
-        tasks.add(plannerRoute);
-
+        emitPlannerStage(plannerConfig, prefix, plannerRef, plannerCoerceRef, plannerPrompt, tasks);
         String plannerResult = AgentCompiler.coercedRef(plannerCoerceRef);
 
         // ── 2b. Optional plan_source: deterministic tool call to read plan ──
@@ -2599,6 +2521,95 @@ public class MultiAgentCompiler {
         tasks.add(compileGate);
 
         return tasks;
+    }
+
+    /**
+     * Emit the planner-stage tasks: a static-plan gate INLINE, then a SWITCH
+     * whose default branch runs the planner sub-workflow + the three
+     * follow-on context-handling tasks, and whose ``skip`` branch is a
+     * single no-op INLINE that fires when ``workflow.input.static_plan``
+     * is supplied (dg-review F1 / recommendation #13).
+     *
+     * <p>Appends two top-level tasks ({@code plannerGate} + {@code plannerRoute})
+     * to the supplied {@code tasks} list. Downstream consumers reference
+     * the planner's coerced output via {@link AgentCompiler#coercedRef}
+     * with {@code plannerCoerceRef} — when the SWITCH takes the skip
+     * branch those references resolve to null, which {@code extract_json}
+     * Case 0 doesn't read anyway (it reads {@code workflow.input.static_plan}
+     * directly).
+     */
+    private void emitPlannerStage(
+            AgentConfig plannerConfig,
+            String prefix,
+            String plannerRef,
+            String plannerCoerceRef,
+            String plannerPrompt,
+            List<WorkflowTask> tasks) {
+
+        String plannerGateRef = prefix + "_planner_gate";
+        WorkflowTask plannerGate = new WorkflowTask();
+        plannerGate.setType("INLINE");
+        plannerGate.setTaskReferenceName(plannerGateRef);
+        plannerGate.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "staticPlan",
+                "${workflow.input.static_plan}",
+                "expression",
+                "(function(){ var sp = $.staticPlan; "
+                        + "if (sp == null) return 'run'; "
+                        + "if (typeof sp === 'object') return 'skip'; "
+                        + "if (typeof sp === 'string' && sp.length > 2) return 'skip'; "
+                        + "return 'run'; })();"));
+        tasks.add(plannerGate);
+
+        // Live branch: planner sub-workflow + ctx_merge + ctx_set + coerce.
+        WorkflowTask plannerTask = agentCompiler.compileSubAgent(
+                plannerConfig, plannerRef, plannerPrompt, "${workflow.input.media}", "${workflow.variables.context}");
+
+        String plannerMergeRef = prefix + "_planner_ctx_merge";
+        WorkflowTask plannerMerge = new WorkflowTask();
+        plannerMerge.setType("INLINE");
+        plannerMerge.setTaskReferenceName(plannerMergeRef);
+        plannerMerge.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "parent",
+                "${workflow.variables.context}",
+                "child",
+                "${" + plannerRef + ".output.context}",
+                "expression",
+                JavaScriptBuilder.flatMergeContextScript()));
+
+        WorkflowTask plannerCtxSet = new WorkflowTask();
+        plannerCtxSet.setType("SET_VARIABLE");
+        plannerCtxSet.setTaskReferenceName(prefix + "_planner_ctx_set");
+        plannerCtxSet.setInputParameters(Map.of("context", "${" + plannerMergeRef + ".output.result}"));
+
+        String plannerResultRaw = AgentCompiler.subAgentResultRef(plannerConfig, plannerRef);
+        WorkflowTask plannerCoerce = AgentCompiler.createCoerceTask(plannerResultRaw, plannerCoerceRef);
+
+        List<WorkflowTask> plannerLiveBranch = List.of(plannerTask, plannerMerge, plannerCtxSet, plannerCoerce);
+
+        // Skip branch: a single no-op INLINE so the SWITCH has both arms.
+        WorkflowTask plannerSkipped = new WorkflowTask();
+        plannerSkipped.setType("INLINE");
+        plannerSkipped.setTaskReferenceName(prefix + "_planner_skipped");
+        plannerSkipped.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "expression",
+                "(function(){ return {result: '[planner skipped — static_plan supplied]'}; })();"));
+
+        WorkflowTask plannerRoute = new WorkflowTask();
+        plannerRoute.setType("SWITCH");
+        plannerRoute.setTaskReferenceName(prefix + "_planner_route");
+        plannerRoute.setEvaluatorType("value-param");
+        plannerRoute.setExpression("route");
+        plannerRoute.setInputParameters(Map.of("route", "${" + plannerGateRef + ".output.result}"));
+        plannerRoute.setDecisionCases(Map.of("skip", List.of(plannerSkipped)));
+        plannerRoute.setDefaultCase(plannerLiveBranch);
+        tasks.add(plannerRoute);
     }
 
     /**
