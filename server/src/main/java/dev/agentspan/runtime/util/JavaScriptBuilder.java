@@ -301,7 +301,12 @@ public class JavaScriptBuilder {
                         + "    parts.push('### ' + url + '\\n' + body + (truncated ? '\\n[doc truncated]' : ''));"
                         + "  }"
                         + "}"
-                        + "return { result: parts.join('\\n\\n') };");
+                        // Return the joined string directly — Conductor's
+                        // INLINE wraps the script's return value as
+                        // ``outputData = {result: <return>}`` automatically.
+                        // Returning ``{result: …}`` from the script would
+                        // produce a double-nested ``output.result.result``.
+                        + "return parts.join('\\n\\n');");
     }
 
     /**
