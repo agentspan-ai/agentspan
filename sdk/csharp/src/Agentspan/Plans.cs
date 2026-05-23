@@ -63,6 +63,106 @@ public sealed class Ref
     public override string ToString() => $"Ref({StepId})";
 }
 
+/// <summary>
+/// A reference document made available to the PLAN_EXECUTE planner.
+///
+/// <para>Appended to the planner's user prompt as a <c>## Reference Context</c>
+/// block on every planner invocation. Use to ground the planner in
+/// domain-specific rules / processes / edge cases that a static
+/// <c>Instructions</c> string can't capture — onboarding playbooks,
+/// KYC rules, compliance thresholds, etc.</para>
+///
+/// <para>Exactly one of <see cref="Text"/> or <see cref="Url"/> must be set.</para>
+///
+/// <para>For URL entries, optional <see cref="Headers"/> carry credential
+/// placeholders in the <c>${CRED_NAME}</c> shape; the server escapes them
+/// to <c>#{CRED_NAME}</c> so Conductor's templater doesn't consume them
+/// and the runtime credential resolver fills them in at request time —
+/// same auth pipeline as HTTP tool headers.</para>
+///
+/// <para>Mirrors Python's <c>Context</c> dataclass, TypeScript's
+/// <c>Context</c> class, and Java's <c>Context</c> — same wire shape
+/// produced by <see cref="ToJson"/>.</para>
+/// </summary>
+public sealed class Context
+{
+    public string? Text { get; }
+    public string? Url { get; }
+    public IDictionary<string, string>? Headers { get; }
+    public bool Required { get; }
+    public int MaxBytes { get; }
+
+    private Context(string? text, string? url, IDictionary<string, string>? headers, bool required, int maxBytes)
+    {
+        Text = text;
+        Url = url;
+        Headers = headers;
+        Required = required;
+        MaxBytes = maxBytes;
+    }
+
+    /// <summary>Inline-text Context entry.</summary>
+    public static Context FromText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            throw new ArgumentException("Context.Text must be a non-empty string", nameof(text));
+        return new Context(text, null, null, true, 16384);
+    }
+
+    /// <summary>URL Context entry. Optional headers may contain
+    /// <c>${CRED_NAME}</c> placeholders that resolve against the agent's
+    /// credential store at request time. <paramref name="required"/>=false
+    /// substitutes a <c>[doc unavailable]</c> marker on fetch failure
+    /// instead of failing the workflow. <paramref name="maxBytes"/>
+    /// truncates large responses with a <c>[doc truncated]</c> marker.</summary>
+    public static Context FromUrl(
+        string url,
+        IDictionary<string, string>? headers = null,
+        bool required = true,
+        int maxBytes = 16384)
+    {
+        if (string.IsNullOrEmpty(url))
+            throw new ArgumentException("Context.Url must be a non-empty string", nameof(url));
+        return new Context(null, url, headers, required, maxBytes);
+    }
+
+    /// <summary>
+    /// Wire format the server's MultiAgentCompiler consumes. Defaults are
+    /// omitted so the payload stays tight for the common text-only /
+    /// minimal-URL case.
+    /// </summary>
+    public JsonObject ToJson()
+    {
+        var obj = new JsonObject();
+        if (Text != null)
+        {
+            obj["text"] = Text;
+        }
+        if (Url != null)
+        {
+            obj["url"] = Url;
+            if (Headers != null && Headers.Count > 0)
+            {
+                var h = new JsonObject();
+                foreach (var (k, v) in Headers) h[k] = v;
+                obj["headers"] = h;
+            }
+            if (!Required)
+            {
+                obj["required"] = false;
+            }
+            if (MaxBytes != 16384)
+            {
+                obj["maxBytes"] = MaxBytes;
+            }
+        }
+        return obj;
+    }
+
+    public override string ToString() =>
+        Text != null ? $"Context(text={Text.Substring(0, Math.Min(Text.Length, 40))}…)" : $"Context(url={Url})";
+}
+
 internal static class PlanValues
 {
     /// <summary>

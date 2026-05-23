@@ -54,3 +54,69 @@ describe("Plan wire format", () => {
     expect(refOp.args.document).toEqual({ $ref: "fetch" });
   });
 });
+
+import { Context } from "../../src/plans";
+
+describe("Context dataclass", () => {
+  it("text-only construction", () => {
+    const c = new Context({ text: "rule one" });
+    expect(c.text).toBe("rule one");
+    expect(c.url).toBeUndefined();
+  });
+
+  it("url-only construction sets defaults", () => {
+    const c = new Context({ url: "https://x.example/y" });
+    expect(c.url).toBe("https://x.example/y");
+    expect(c.text).toBeUndefined();
+    expect(c.required).toBe(true);
+    expect(c.maxBytes).toBe(16384);
+  });
+
+  it("rejects neither text nor url", () => {
+    expect(() => new Context({})).toThrow(/exactly one of text or url/);
+  });
+
+  it("rejects both text and url", () => {
+    expect(() => new Context({ text: "x", url: "https://y/" })).toThrow(
+      /exactly one of text or url/,
+    );
+  });
+
+  it("rejects non-string url", () => {
+    expect(() => new Context({ url: 123 as unknown as string })).toThrow(
+      /Context.url must be a string/,
+    );
+  });
+
+  it("rejects non-string text", () => {
+    expect(() => new Context({ text: 42 as unknown as string })).toThrow(
+      /Context.text must be a string/,
+    );
+  });
+
+  it("toJSON text-only is minimal", () => {
+    expect(new Context({ text: "rule" }).toJSON()).toEqual({ text: "rule" });
+  });
+
+  it("toJSON url-only with defaults is minimal", () => {
+    expect(new Context({ url: "https://x/" }).toJSON()).toEqual({
+      url: "https://x/",
+    });
+  });
+
+  it("toJSON url with full options preserves credential placeholder verbatim", () => {
+    // Server is responsible for the ${} -> #{} escape; SDK passes through.
+    const c = new Context({
+      url: "https://confluence.example.com/page",
+      headers: { Authorization: "Bearer ${CONFLUENCE_TOKEN}" },
+      required: false,
+      maxBytes: 8192,
+    });
+    expect(c.toJSON()).toEqual({
+      url: "https://confluence.example.com/page",
+      headers: { Authorization: "Bearer ${CONFLUENCE_TOKEN}" },
+      required: false,
+      maxBytes: 8192,
+    });
+  });
+});

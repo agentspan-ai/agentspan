@@ -4,6 +4,7 @@ import { ConfigurationError } from "./errors.js";
 import { ClaudeCode } from "./claude-code.js";
 import type { CliConfigOptions } from "./cli-config.js";
 import { makeCliTool } from "./cli-config.js";
+import { Context } from "./plans.js";
 
 // ── Validation constants ──────────────────────────────────
 
@@ -154,6 +155,21 @@ export interface AgentOptions {
    * Format: { tool: "tool_name", args: { key: "value" } }.
    */
   planSource?: { tool: string; args?: Record<string, unknown> };
+  /**
+   * PLAN_EXECUTE planner context: a list of text snippets and/or URLs whose
+   * contents are appended to the planner's user prompt as a
+   * `## Reference Context` block on every planner invocation. URLs are
+   * fetched dynamically — no compile-time fetch, no cache — so doc edits
+   * go live without recompile.
+   *
+   * Bare strings auto-wrap to `Context(text=...)`. Use a {@link Context}
+   * instance directly for URL entries (with optional credentialed
+   * `headers`, `required`, `maxBytes`). Hand-rolled dicts in the wire
+   * shape are also accepted for power users.
+   *
+   * Only valid with `strategy='plan_execute'`.
+   */
+  plannerContext?: (string | Context | Record<string, unknown>)[];
 }
 
 // ── Agent class ───────────────────────────────────────────
@@ -203,6 +219,12 @@ export class Agent {
   readonly credentials?: (string | CredentialFile)[];
   readonly fallbackMaxTurns?: number;
   readonly planSource?: { tool: string; args?: Record<string, unknown> };
+  /**
+   * Normalised planner-context entries — bare strings auto-wrapped to
+   * `Context(text=...)`, raw dicts passed through. `undefined` when
+   * the option wasn't supplied.
+   */
+  readonly plannerContext?: (Context | Record<string, unknown>)[];
 
   /** @internal Stored ClaudeCode config when model is ClaudeCode instance. */
   private readonly _claudeCodeConfig?: ClaudeCode;
@@ -285,6 +307,38 @@ export class Agent {
     this.credentials = options.credentials;
     this.fallbackMaxTurns = options.fallbackMaxTurns;
     this.planSource = options.planSource;
+
+    // ── plannerContext normalisation + validation ─────────
+    // Bare strings auto-wrap to Context(text=...); Context instances and
+    // raw dicts pass through. Rejected for non-PLAN_EXECUTE strategies
+    // with a clear message (matches the planner=/fallback= guard).
+    if (options.plannerContext !== undefined) {
+      if (this.strategy !== "plan_execute") {
+        throw new ConfigurationError(
+          `'plannerContext' is only valid with strategy='plan_execute'. ` +
+            `Got strategy=${this.strategy ?? "<undefined>"}. ` +
+            `The context block is appended to the planner's user prompt at ` +
+            `runtime, which only exists in PLAN_EXECUTE.`,
+        );
+      }
+      const normalised: (Context | Record<string, unknown>)[] = [];
+      options.plannerContext.forEach((entry, i) => {
+        if (entry instanceof Context) {
+          normalised.push(entry);
+        } else if (typeof entry === "string") {
+          normalised.push(new Context({ text: entry }));
+        } else if (entry !== null && typeof entry === "object") {
+          // Hand-rolled wire-shape dicts (matches how planSource is typed).
+          normalised.push(entry as Record<string, unknown>);
+        } else {
+          throw new ConfigurationError(
+            `plannerContext[${i}]: must be a Context, a string, or a dict; ` +
+              `got ${typeof entry}`,
+          );
+        }
+      });
+      this.plannerContext = normalised;
+    }
 
     // ── Duplicate sub-agent name detection ────────────────
     if (this.agents.length > 0) {

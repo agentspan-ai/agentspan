@@ -836,4 +836,82 @@ class SerializerTest {
         assertFalse(toolMap.containsKey("retryDelaySeconds"));
         assertFalse(toolMap.containsKey("retryPolicy"));
     }
+
+    // ── plannerContext (PLAN_EXECUTE) ─────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void planner_context_emitted_with_text_and_url_entries() {
+        // Mirrors the Python + TS serializer tests. The wire shape MUST be
+        // byte-equal across SDKs so the server compiler sees the same
+        // payload regardless of language.
+        Agent planner = Agent.builder().name("planner_sub").model("openai/gpt-4o-mini").build();
+        ToolDef stub = ToolDef.builder()
+                .name("stub")
+                .description("stub")
+                .inputSchema(Map.of("type", "object", "properties", Map.of()))
+                .build();
+        Agent harness = Agent.builder()
+                .name("h").model("openai/gpt-4o-mini")
+                .strategy(Strategy.PLAN_EXECUTE)
+                .planner(planner)
+                .tools(List.of(stub))
+                .plannerContext(List.of(
+                        ai.agentspan.plans.Context.text("inline rule"),
+                        ai.agentspan.plans.Context.builder()
+                                .url("https://confluence.example.com/onboarding")
+                                .header("Authorization", "Bearer ${CONFLUENCE_TOKEN}")
+                                .required(false)
+                                .maxBytes(8192)
+                                .build()))
+                .build();
+        Map<String, Object> out = ser.serialize(harness);
+        List<Map<String, Object>> ctx = (List<Map<String, Object>>) out.get("plannerContext");
+        assertEquals(2, ctx.size());
+        assertEquals(Map.of("text", "inline rule"), ctx.get(0));
+        Map<String, Object> urlEntry = ctx.get(1);
+        assertEquals("https://confluence.example.com/onboarding", urlEntry.get("url"));
+        // Credential placeholder MUST pass through verbatim — server escapes.
+        assertEquals(
+                Map.of("Authorization", "Bearer ${CONFLUENCE_TOKEN}"),
+                urlEntry.get("headers"));
+        assertEquals(false, urlEntry.get("required"));
+        assertEquals(8192, urlEntry.get("maxBytes"));
+    }
+
+    @Test
+    void planner_context_omitted_when_unset() {
+        // Counterfactual: without plannerContext the field MUST NOT appear
+        // on the wire. Pairs with the positive test — pins the gating.
+        Agent planner = Agent.builder().name("planner_sub").model("openai/gpt-4o-mini").build();
+        ToolDef stub = ToolDef.builder()
+                .name("stub")
+                .description("stub")
+                .inputSchema(Map.of("type", "object", "properties", Map.of()))
+                .build();
+        Agent harness = Agent.builder()
+                .name("h").model("openai/gpt-4o-mini")
+                .strategy(Strategy.PLAN_EXECUTE)
+                .planner(planner)
+                .tools(List.of(stub))
+                .build();
+        Map<String, Object> out = ser.serialize(harness);
+        assertFalse(out.containsKey("plannerContext"));
+    }
+
+    @Test
+    void planner_context_rejected_on_non_plan_execute_strategy() {
+        // Same guard shape as planner=/fallback= — setting plannerContext
+        // on anything other than PLAN_EXECUTE is a silent bug.
+        Agent sub = Agent.builder().name("sub").model("openai/gpt-4o-mini").build();
+        IllegalArgumentException e = assertThrows(
+                IllegalArgumentException.class,
+                () -> Agent.builder()
+                        .name("h").model("openai/gpt-4o-mini")
+                        .strategy(Strategy.HANDOFF)
+                        .agents(List.of(sub))
+                        .plannerContext("rule")
+                        .build());
+        assertTrue(e.getMessage().contains("PLAN_EXECUTE"));
+    }
 }

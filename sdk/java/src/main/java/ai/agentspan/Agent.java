@@ -83,6 +83,11 @@ public class Agent {
      *  shape with HTTP 400 once strategy is PLAN_EXECUTE — set these instead. */
     private final Agent planner;
     private final Agent fallback;
+    /** PLAN_EXECUTE planner context — text snippets / URLs whose bodies are
+     *  fetched at planner-run time and appended to the planner prompt as a
+     *  ``## Reference Context`` block. Only meaningful with PLAN_EXECUTE;
+     *  the server compiler skips emission for any other strategy. */
+    private final List<ai.agentspan.plans.Context> plannerContext;
     private final List<PrefillToolCall> prefillTools;
     private final boolean synthesize;
     private final boolean stateful;
@@ -131,6 +136,21 @@ public class Agent {
         this.fallbackMaxTurns = builder.fallbackMaxTurns;
         this.planner = builder.planner;
         this.fallback = builder.fallback;
+        // plannerContext is only meaningful for PLAN_EXECUTE. Reject loudly
+        // here so misconfig doesn't propagate to the server — same shape
+        // as the planner/fallback validation in Python/TS SDKs.
+        if (builder.plannerContext != null && !builder.plannerContext.isEmpty()) {
+            if (builder.strategy != ai.agentspan.enums.Strategy.PLAN_EXECUTE) {
+                throw new IllegalArgumentException(
+                        "plannerContext is only valid with strategy=PLAN_EXECUTE. "
+                                + "Got strategy=" + builder.strategy + ". The context block "
+                                + "is appended to the planner's user prompt at runtime, "
+                                + "which only exists in PLAN_EXECUTE.");
+            }
+            this.plannerContext = new ArrayList<>(builder.plannerContext);
+        } else {
+            this.plannerContext = null;
+        }
         this.prefillTools = builder.prefillTools != null ? new ArrayList<>(builder.prefillTools) : new ArrayList<>();
         this.synthesize = builder.synthesize;
         this.stateful = builder.stateful;
@@ -217,6 +237,7 @@ public class Agent {
     public Integer getFallbackMaxTurns() { return fallbackMaxTurns; }
     public Agent getPlanner() { return planner; }
     public Agent getFallback() { return fallback; }
+    public List<ai.agentspan.plans.Context> getPlannerContext() { return plannerContext; }
     public List<PrefillToolCall> getPrefillTools() { return prefillTools; }
     public boolean isSynthesize() { return synthesize; }
     public boolean isStateful() { return stateful; }
@@ -285,6 +306,7 @@ public class Agent {
         private Integer fallbackMaxTurns;
         private Agent planner;
         private Agent fallback;
+        private List<ai.agentspan.plans.Context> plannerContext;
         private List<PrefillToolCall> prefillTools;
         private boolean synthesize = true;
         private boolean stateful = false;
@@ -621,6 +643,35 @@ public class Agent {
          */
         public Builder fallback(Agent fallback) {
             this.fallback = fallback;
+            return this;
+        }
+
+        /**
+         * PLAN_EXECUTE planner context — a list of text snippets and/or URLs
+         * appended to the planner's user prompt as a {@code ## Reference Context}
+         * block at runtime. URLs are fetched per planner invocation (no
+         * compile-time fetch, no cache) so doc edits go live without recompile.
+         *
+         * <p>Pass {@link ai.agentspan.plans.Context} entries built via
+         * {@code Context.text(...)} or {@code Context.url(...)} /
+         * {@code Context.builder().url(...).header(...).build()} for credentialed
+         * fetches — credential placeholders in the {@code ${CRED_NAME}} shape
+         * are escaped server-side and resolved by the same credential pipeline
+         * as HTTP tool headers.
+         */
+        public Builder plannerContext(List<ai.agentspan.plans.Context> plannerContext) {
+            this.plannerContext = plannerContext;
+            return this;
+        }
+
+        /** Shorthand: single-entry text-only planner context. Equivalent to
+         *  {@code plannerContext(List.of(Context.text(text)))}. */
+        public Builder plannerContext(String... texts) {
+            List<ai.agentspan.plans.Context> ctx = new ArrayList<>();
+            for (String t : texts) {
+                ctx.add(ai.agentspan.plans.Context.text(t));
+            }
+            this.plannerContext = ctx;
             return this;
         }
 

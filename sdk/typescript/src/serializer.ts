@@ -288,6 +288,19 @@ export class AgentConfigSerializer {
       config.planSource = agent.planSource;
     }
 
+    // Planner context (PLAN_EXECUTE strategy) — text snippets + URLs
+    // injected into the planner's prompt. Each entry is either a Context
+    // instance (has toJSON) or a raw wire-shape dict; the constructor
+    // already validated and normalised so we just dispatch via toJSON.
+    if (agent.plannerContext !== undefined && agent.plannerContext.length > 0) {
+      config.plannerContext = agent.plannerContext.map((entry) => {
+        if (entry !== null && typeof entry === "object" && "toJSON" in entry) {
+          return (entry as { toJSON: () => unknown }).toJSON();
+        }
+        return entry;
+      });
+    }
+
     return config;
   }
 

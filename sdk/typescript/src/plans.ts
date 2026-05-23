@@ -59,6 +59,96 @@ export class Ref {
 }
 
 /**
+ * Options for constructing a {@link Context} entry.
+ *
+ * Exactly one of `text` or `url` must be set. `headers`/`required`/
+ * `maxBytes` only apply when `url` is set.
+ */
+export interface ContextOptions {
+  text?: string;
+  url?: string;
+  headers?: Record<string, string>;
+  required?: boolean;
+  maxBytes?: number;
+}
+
+/**
+ * A reference document made available to the PLAN_EXECUTE planner.
+ *
+ * Appended to the planner's user prompt as a `## Reference Context`
+ * block on every planner invocation. Use to ground the planner in
+ * domain-specific rules / processes / edge cases that a static
+ * `instructions` string can't capture — onboarding playbooks, KYC
+ * rules, compliance thresholds, etc.
+ *
+ * Exactly one of `text` or `url` must be set:
+ *
+ * * `text`: inlined verbatim — best for short, stable rules.
+ * * `url`: HTTP GET on every planner run (no compile-time fetch,
+ *   no cache — doc edits go live without recompile). Optional
+ *   `headers` carry credential placeholders in the
+ *   `${CRED_NAME}` shape; the server escapes them to
+ *   `#{CRED_NAME}` so Conductor's templater doesn't consume them
+ *   and the runtime credential resolver fills them in at request
+ *   time — same auth pipeline as `ToolConfig` HTTP tools.
+ *
+ * `required=false` substitutes a `[doc unavailable]` marker on
+ * fetch failure instead of failing the workflow; `maxBytes`
+ * (default 16384) truncates large responses with a
+ * `[doc truncated]` marker.
+ */
+export class Context {
+  readonly text?: string;
+  readonly url?: string;
+  readonly headers?: Record<string, string>;
+  readonly required: boolean;
+  readonly maxBytes: number;
+
+  constructor(options: ContextOptions) {
+    const hasText = options.text !== undefined && options.text !== null;
+    const hasUrl = options.url !== undefined && options.url !== null;
+    if (hasText === hasUrl) {
+      throw new Error("Context: exactly one of text or url must be set");
+    }
+    if (hasText && typeof options.text !== "string") {
+      throw new Error(`Context.text must be a string; got ${typeof options.text}`);
+    }
+    if (hasUrl && typeof options.url !== "string") {
+      throw new Error(`Context.url must be a string; got ${typeof options.url}`);
+    }
+    this.text = options.text;
+    this.url = options.url;
+    this.headers = options.headers;
+    this.required = options.required ?? true;
+    this.maxBytes = options.maxBytes ?? 16384;
+  }
+
+  /**
+   * Wire format the server's MultiAgentCompiler consumes. Defaults are
+   * omitted so the payload stays tight for the common text-only case.
+   */
+  toJSON(): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (this.text !== undefined) {
+      out.text = this.text;
+    }
+    if (this.url !== undefined) {
+      out.url = this.url;
+      if (this.headers !== undefined && Object.keys(this.headers).length > 0) {
+        out.headers = { ...this.headers };
+      }
+      if (this.required === false) {
+        out.required = false;
+      }
+      if (this.maxBytes !== 16384) {
+        out.maxBytes = this.maxBytes;
+      }
+    }
+    return out;
+  }
+}
+
+/**
  * Walk an arg value tree and replace nested `Ref` objects with their wire
  * form. Lists and dicts are traversed; scalars and `Ref`s themselves are
  * returned as-is via their `toJSON`.

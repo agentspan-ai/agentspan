@@ -382,6 +382,17 @@ public class AgentConfigSerializer {
             agentMap.put("fallbackMaxTurns", agent.getFallbackMaxTurns());
         }
 
+        // Planner context (PLAN_EXECUTE strategy) — text snippets + URLs
+        // injected into the planner's prompt. Each Context entry serialises
+        // via toJson() — defaults are omitted so the payload stays tight.
+        if (agent.getPlannerContext() != null && !agent.getPlannerContext().isEmpty()) {
+            java.util.List<Map<String, Object>> ctx = new java.util.ArrayList<>();
+            for (ai.agentspan.plans.Context entry : agent.getPlannerContext()) {
+                ctx.add(entry.toJson());
+            }
+            agentMap.put("plannerContext", ctx);
+        }
+
         // Stateful mode
         if (agent.isStateful()) {
             agentMap.put("stateful", true);

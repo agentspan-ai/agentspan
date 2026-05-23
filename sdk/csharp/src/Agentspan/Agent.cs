@@ -68,6 +68,23 @@ public sealed class Agent
     /// Max LLM turns for the fallback agent in PlanExecute strategy.
     /// </summary>
     public int? FallbackMaxTurns { get; set; }
+
+    /// <summary>
+    /// PLAN_EXECUTE planner context: text snippets and/or URLs whose contents
+    /// are appended to the planner's user prompt as a <c>## Reference Context</c>
+    /// block on every planner invocation. URLs are fetched dynamically — no
+    /// compile-time fetch, no cache — so doc edits go live without recompile.
+    ///
+    /// <para>Build entries via <see cref="Context.FromText"/> /
+    /// <see cref="Context.FromUrl"/>. URL entries may carry credentialed
+    /// headers in the <c>${CRED_NAME}</c> shape; the server escapes them
+    /// and the runtime credential resolver fills them in at request time —
+    /// same auth pipeline as HTTP tool headers.</para>
+    ///
+    /// <para>Only meaningful with <c>Strategy.PlanExecute</c>. The server
+    /// compiler skips emission for any other strategy.</para>
+    /// </summary>
+    public List<Context>? PlannerContext { get; set; }
     public bool LocalCodeExecution { get; set; }
     public List<string>? AllowedLanguages { get; set; }
     public List<string>? AllowedCommands { get; set; }
@@ -216,6 +233,24 @@ public sealed class AgentBuilder
     public AgentBuilder WithPlanner(Agent planner)                   { _agent.Planner = planner; return this; }
     public AgentBuilder WithFallback(Agent fallback)                 { _agent.Fallback = fallback; return this; }
     public AgentBuilder WithFallbackMaxTurns(int turns)              { _agent.FallbackMaxTurns = turns; return this; }
+    /// <summary>
+    /// PLAN_EXECUTE planner context — text snippets and URLs appended to the
+    /// planner's user prompt at runtime. See <see cref="Agent.PlannerContext"/>.
+    /// Only valid with <c>Strategy.PlanExecute</c>; throws at serialization
+    /// time on other strategies.
+    /// </summary>
+    public AgentBuilder WithPlannerContext(params Context[] entries)
+    {
+        _agent.PlannerContext = [.. entries];
+        return this;
+    }
+    /// <summary>Shorthand: text-only planner context. Wraps each string in
+    /// <see cref="Context.FromText"/>.</summary>
+    public AgentBuilder WithPlannerContext(params string[] texts)
+    {
+        _agent.PlannerContext = [.. texts.Select(Context.FromText)];
+        return this;
+    }
     public AgentBuilder WithIncludeContents(string mode)            { _agent.IncludeContents = mode; return this; }
     public AgentBuilder WithThinkingBudget(int tokens)              { _agent.ThinkingBudgetTokens = tokens; return this; }
     public AgentBuilder WithRequiredTools(params string[] tools)    { _agent.RequiredTools = [.. tools]; return this; }

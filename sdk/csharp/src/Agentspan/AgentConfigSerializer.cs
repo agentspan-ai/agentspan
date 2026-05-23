@@ -76,6 +76,25 @@ internal static class AgentConfigSerializer
         if (agent.Fallback is not null)         cfg["fallback"] = SerializeAgent(agent.Fallback);
         if (agent.FallbackMaxTurns.HasValue)    cfg["fallbackMaxTurns"] = agent.FallbackMaxTurns.Value;
 
+        // Planner context (PLAN_EXECUTE strategy) — text snippets + URLs
+        // injected into the planner's prompt. Reject if set on a non-
+        // PLAN_EXECUTE strategy to match the Python/TS/Java SDK guard
+        // shape (caught at build time elsewhere; serialization is the
+        // last line of defence).
+        if (agent.PlannerContext is { Count: > 0 })
+        {
+            if (agent.Strategy != Strategy.PlanExecute)
+            {
+                throw new InvalidOperationException(
+                    "PlannerContext is only valid with Strategy.PlanExecute. " +
+                    $"Got Strategy={agent.Strategy}. The context block is appended " +
+                    "to the planner's user prompt at runtime, which only exists in PLAN_EXECUTE.");
+            }
+            var arr = new JsonArray();
+            foreach (var entry in agent.PlannerContext) arr.Add(entry.ToJson());
+            cfg["plannerContext"] = arr;
+        }
+
         if (agent.LocalCodeExecution || agent.CodeExecution is not null
             || agent.AllowedLanguages is not null || agent.AllowedCommands is not null)
         {

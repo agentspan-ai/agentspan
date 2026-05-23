@@ -177,7 +177,7 @@ export type {
   PlanOptions,
   PlanLike,
 } from "./plans.js";
-export { Plan, Step, Op, Generate, Validation, Action, Ref, coercePlan, serializePlanValue } from "./plans.js";
+export { Plan, Step, Op, Generate, Validation, Action, Ref, Context, coercePlan, serializePlanValue } from "./plans.js";
 
 // ── Termination ─────────────────────────────────────────
 export {
