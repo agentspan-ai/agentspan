@@ -239,7 +239,8 @@ jobs:
 
       - name: Start mcp-testkit
         run: |
-          mcp-testkit --transport http --port 3001 &
+          cd sdk/python
+          uv run mcp-testkit --transport http --port 3001 &
           sleep 2
 
       - name: Start server

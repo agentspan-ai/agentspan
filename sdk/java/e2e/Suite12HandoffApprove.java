@@ -46,32 +46,32 @@ class Suite12HandoffApprove extends BaseTest {
     }
 
     /** Approval-required tool that lives on the sub-agent. */
-    public static class DatabaseTools {
+    public static class ApprovalTools {
         @Tool(
-            name = "execute_sql",
-            description = "Execute a SQL statement that modifies the database",
+            name = "submit_change",
+            description = "Submit a configuration change after human approval",
             approvalRequired = true
         )
-        public String executeSql(String statement) {
-            return "Statement executed.";
+        public String submitChange(String change) {
+            return "Change submitted: " + change;
         }
     }
 
     private Agent buildHandoffAgent(String name) {
-        List<ToolDef> dbTools = ToolRegistry.fromInstance(new DatabaseTools());
+        List<ToolDef> approvalTools = ToolRegistry.fromInstance(new ApprovalTools());
 
-        Agent dba = Agent.builder()
-            .name(name + "_dba")
+        Agent reviewer = Agent.builder()
+            .name(name + "_reviewer")
             .model(MODEL)
-            .instructions("You run database statements. Use execute_sql when asked.")
-            .tools(dbTools)
+            .instructions("You submit configuration changes. Always call submit_change with the requested change.")
+            .tools(approvalTools)
             .build();
 
         return Agent.builder()
             .name(name)
             .model(MODEL)
-            .instructions("Route any database task to the dba sub-agent.")
-            .agents(dba)
+            .instructions("Route every configuration change request to the reviewer sub-agent. Do not answer directly.")
+            .agents(reviewer)
             .strategy(Strategy.HANDOFF)
             .build();
     }
@@ -87,18 +87,20 @@ class Suite12HandoffApprove extends BaseTest {
         Agent support = buildHandoffAgent("e2e_java_handoff_waiting_id");
 
         try (AgentStream stream = runtime.stream(support,
-                "Please run: UPDATE users SET active = true WHERE id = 1")) {
+                "Please submit this configuration change: enable feature flag java_e2e_hitl.")) {
 
             String topExecutionId = stream.getExecutionId();
             assertNotNull(topExecutionId);
             assertFalse(topExecutionId.isEmpty());
 
             AgentEvent waiting = null;
+            int approvals = 0;
             for (AgentEvent event : stream) {
                 if (event.getType() == EventType.WAITING) {
-                    waiting = event;
+                    if (waiting == null) waiting = event;
                     stream.approve(event); // let the run terminate so we don't leak server state
-                    break;
+                    approvals++;
+                    assertTrue(approvals <= 5, "too many approval prompts; handoff did not settle");
                 }
             }
 
@@ -124,17 +126,17 @@ class Suite12HandoffApprove extends BaseTest {
         Agent support = buildHandoffAgent("e2e_java_handoff_approve_event");
 
         try (AgentStream stream = runtime.stream(support,
-                "Please run: UPDATE users SET active = true WHERE id = 1")) {
+                "Please submit this configuration change: enable feature flag java_e2e_hitl.")) {
 
-            boolean approved = false;
+            int approvals = 0;
             for (AgentEvent event : stream) {
                 if (event.getType() == EventType.WAITING) {
                     stream.approve(event);
-                    approved = true;
-                    break;
+                    approvals++;
+                    assertTrue(approvals <= 5, "too many approval prompts; handoff did not settle");
                 }
             }
-            assertTrue(approved, "expected a WAITING event from the sub-agent's approval-required tool");
+            assertTrue(approvals > 0, "expected a WAITING event from the sub-agent's approval-required tool");
 
             AgentResult result = stream.getResult();
             assertEquals(AgentStatus.COMPLETED, result.getStatus(),
@@ -166,7 +168,7 @@ class Suite12HandoffApprove extends BaseTest {
             AgentEvent eventWithNoId = new AgentEvent(
                 EventType.WAITING,
                 /*content*/ null,
-                /*toolName*/ "execute_sql",
+                /*toolName*/ "submit_change",
                 /*args*/ null,
                 /*result*/ null,
                 /*output*/ null,

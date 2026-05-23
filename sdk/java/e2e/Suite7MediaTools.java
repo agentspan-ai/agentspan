@@ -322,7 +322,7 @@ class Suite7MediaTools extends BaseTest {
             "generate_image",
             "Generate an image from a text prompt.",
             "openai",
-            "gpt-image-1");
+            "dall-e-3");
 
         Agent agent = Agent.builder()
             .name("e2e_s16_image_openai_runtime")

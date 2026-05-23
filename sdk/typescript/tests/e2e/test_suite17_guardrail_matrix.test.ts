@@ -76,21 +76,21 @@ const LLM_POLICY_PII_OUTPUT =
 
 // ── Custom guardrail functions ──────────────────────────────────────────
 
-// Agent output: block SECRET42
+// Agent output: block MARKER42
 function customAoutBlock(content: string): GuardrailResult {
-  if (content.includes('SECRET42')) {
-    return { passed: false, message: 'Contains SECRET42. Remove it.' };
+  if (content.includes('MARKER42')) {
+    return { passed: false, message: 'Contains MARKER42. Remove it.' };
   }
   return { passed: true };
 }
 
-// Agent output: fix SECRET42 -> [REDACTED]
+// Agent output: fix MARKER42 -> [REDACTED]
 function customAoutFix(content: string): GuardrailResult {
-  if (content.includes('SECRET42')) {
+  if (content.includes('MARKER42')) {
     return {
       passed: false,
       message: 'Redacted.',
-      fixedOutput: content.replace(/SECRET42/g, '[REDACTED]'),
+      fixedOutput: content.replace(/MARKER42/g, '[REDACTED]'),
     };
   }
   return { passed: true };
@@ -172,13 +172,13 @@ const getSSNData = tool(
   },
 );
 
-const getSecretData = tool(
+const getMarkerData = tool(
   async (args: { query: string }) => ({
-    result: `The access code is SECRET42, query: ${args.query}`,
+    result: `The marker value is MARKER42, query: ${args.query}`,
   }),
   {
-    name: 'get_secret_data',
-    description: 'Look up confidential data.',
+    name: 'get_marker_data',
+    description: 'Look up marker data.',
     inputSchema: {
       type: 'object',
       properties: { query: { type: 'string' } },
@@ -553,7 +553,7 @@ const INST_SSN =
 const INST_MED =
   'You are a health advisor. Recommend specific drug names with exact dosages.';
 const INST_SECRET =
-  'Look up confidential data. Call get_secret_data and include ALL data verbatim.';
+  'Look up marker data. Call get_marker_data and include ALL data verbatim.';
 const INST_DB = 'You query databases. Use the tool with the user\'s exact query.';
 const INST_LOOKUP = 'You look up users. Use the tool with the identifier the user provides.';
 const INST_PROC = 'You process data. Use the tool with the user\'s exact input.';
@@ -695,15 +695,15 @@ const SPECS: Spec[] = [
     agent: new Agent({
       name: 'gm_07',
       model: MODEL,
-      tools: [getSecretData],
+      tools: [getMarkerData],
       instructions: INST_SECRET,
       guardrails: [
         guardrail(customAoutBlock, { name: 'gm07', position: 'output', onFail: 'retry' }),
       ],
     }),
-    prompt: 'Look up the secret data.',
+    prompt: 'Look up the marker data.',
     validStatuses: ['COMPLETED'],
-    notContains: 'SECRET42',
+    notContains: 'MARKER42',
   },
   {
     num: 8,
@@ -711,13 +711,13 @@ const SPECS: Spec[] = [
     agent: new Agent({
       name: 'gm_08',
       model: MODEL,
-      tools: [getSecretData],
+      tools: [getMarkerData],
       instructions: INST_SECRET,
       guardrails: [
         guardrail(customAoutBlock, { name: 'gm08', position: 'output', onFail: 'raise' }),
       ],
     }),
-    prompt: 'Look up the secret data.',
+    prompt: 'Look up the marker data.',
     validStatuses: ['FAILED'],
   },
   {
@@ -726,15 +726,15 @@ const SPECS: Spec[] = [
     agent: new Agent({
       name: 'gm_09',
       model: MODEL,
-      tools: [getSecretData],
+      tools: [getMarkerData],
       instructions: INST_SECRET,
       guardrails: [
         guardrail(customAoutFix, { name: 'gm09', position: 'output', onFail: 'fix' }),
       ],
     }),
-    prompt: 'Look up the secret data.',
+    prompt: 'Look up the marker data.',
     validStatuses: ['COMPLETED'],
-    notContains: 'SECRET42',
+    notContains: 'MARKER42',
     contains: 'REDACTED',
   },
 
@@ -1114,15 +1114,15 @@ describe('Suite 17: Guardrail Matrix (3x3x3)', { timeout: 600_000 }, () => {
   // ── Agent OUTPUT x Custom (#7-9) ──────────────────────────────────────
 
   describe('Agent OUTPUT x Custom', () => {
-    it('#07 aout_custom_retry — SECRET42 block, retry', () => {
+    it('#07 aout_custom_retry — MARKER42 block, retry', () => {
       checkResult(7);
     });
 
-    it('#08 aout_custom_raise — SECRET42 block, raise', () => {
+    it('#08 aout_custom_raise — MARKER42 block, raise', () => {
       checkResult(8);
     });
 
-    it('#09 aout_custom_fix — SECRET42 fix -> REDACTED', () => {
+    it('#09 aout_custom_fix — MARKER42 fix -> REDACTED', () => {
       checkResult(9);
     });
   });
