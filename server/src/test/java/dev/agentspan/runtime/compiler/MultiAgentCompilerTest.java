@@ -1050,6 +1050,183 @@ class MultiAgentCompilerTest {
     }
 
     @Test
+    void testPlanExecute_with_text_only_plannerContext_emits_ctx_build_inside_live_branch() {
+        // plannerContext = [{text: "..."}, {text: "..."}] must produce an
+        // INLINE that joins them into the planner's ## Reference Context
+        // block. No HTTP fetch tasks; the INLINE lives in the SWITCH's
+        // default branch (so the static-plan path skips it for free).
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("pae_with_text_ctx")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .plannerContext(List.of(
+                        Map.of("text", "Onboarding takes 3 phases: KYC, setup, training."),
+                        Map.of("text", "Reject KYC unless ID + proof-of-address are both present.")))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+
+        WorkflowTask route = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_planner_route"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing planner_route SWITCH"));
+
+        List<WorkflowTask> live = route.getDefaultCase();
+        // First task in the live branch must be the context-builder INLINE
+        // — emitted BEFORE the planner so its output can be templated into
+        // the planner's prompt.
+        WorkflowTask ctxBuild = live.get(0);
+        assertThat(ctxBuild.getType()).isEqualTo("INLINE");
+        assertThat(ctxBuild.getTaskReferenceName()).endsWith("_ctx_build");
+
+        // No HTTP fetches in the live branch for text-only context — only
+        // the planner-stage core (planner SUB_WORKFLOW + merge + ctx_set +
+        // coerce) PLUS the ctx_build INLINE = 5 tasks total.
+        assertThat(live).hasSize(5);
+        long httpCount = live.stream().filter(t -> "HTTP".equals(t.getType())).count();
+        assertThat(httpCount).isZero();
+
+        // Skip branch must still be exactly the no-op INLINE — context-
+        // builder is NOT in the skip branch, so static_plan path is free.
+        List<WorkflowTask> skip = route.getDecisionCases().get("skip");
+        assertThat(skip).hasSize(1);
+        assertThat(skip.get(0).getTaskReferenceName()).endsWith("_planner_skipped");
+    }
+
+    @Test
+    void testPlanExecute_with_url_plannerContext_emits_http_fetch_with_escaped_credentials() {
+        // plannerContext entry with a URL + credentialed headers must:
+        //   1) emit an HTTP fetch task in the live branch BEFORE ctx_build
+        //   2) escape ${CRED} → #{CRED} in headers (matches ToolCompiler's
+        //      pipeline so credential resolution is single-source)
+        //   3) forward __agentspan_ctx__ for CredentialAwareHttpTask
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("pae_with_url_ctx")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .plannerContext(List.of(Map.of(
+                        "url",
+                        "https://confluence.example.com/onboarding-rules.md",
+                        "headers",
+                        Map.of("Authorization", "Bearer ${CONFLUENCE_TOKEN}"))))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+
+        WorkflowTask route = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_planner_route"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing planner_route SWITCH"));
+
+        List<WorkflowTask> live = route.getDefaultCase();
+        WorkflowTask fetch = live.get(0);
+        assertThat(fetch.getType()).isEqualTo("HTTP");
+        assertThat(fetch.getTaskReferenceName()).endsWith("_ctx_fetch_0");
+
+        // Headers must have credential placeholder escaped.
+        @SuppressWarnings("unchecked")
+        Map<String, Object> req =
+                (Map<String, Object>) fetch.getInputParameters().get("http_request");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> headers = (Map<String, Object>) req.get("headers");
+        assertThat(headers).containsEntry("Authorization", "Bearer #{CONFLUENCE_TOKEN}");
+
+        // URI / method propagated from config.
+        assertThat(req).containsEntry("uri", "https://confluence.example.com/onboarding-rules.md");
+        assertThat(req).containsEntry("method", "GET");
+
+        // Execution token forwarded for CredentialAwareHttpTask.
+        assertThat(fetch.getInputParameters())
+                .containsEntry("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+
+        // ctx_build INLINE comes after the fetch, referencing its
+        // output.response.body via template.
+        WorkflowTask ctxBuild = live.get(1);
+        assertThat(ctxBuild.getType()).isEqualTo("INLINE");
+        assertThat(ctxBuild.getTaskReferenceName()).endsWith("_ctx_build");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> descriptors =
+                (List<Map<String, Object>>) ctxBuild.getInputParameters().get("entries");
+        assertThat(descriptors).hasSize(1);
+        assertThat(descriptors.get(0)).containsEntry("type", "url");
+        assertThat((String) descriptors.get(0).get("body"))
+                .isEqualTo("${" + fetch.getTaskReferenceName() + ".output.response.body}");
+    }
+
+    @Test
+    void testPlanExecute_url_plannerContext_with_required_false_sets_optional_on_fetch() {
+        // required=false → HTTP task gets .optional=true so a fetch failure
+        // doesn't fail the workflow; the INLINE then substitutes the
+        // [doc unavailable] marker.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("pae_with_optional_url_ctx")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .plannerContext(List.of(
+                        Map.of("url", "https://docs.example.com/required.md"),
+                        Map.of("url", "https://docs.example.com/optional.md", "required", false)))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+
+        WorkflowTask route = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_planner_route"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing planner_route SWITCH"));
+
+        List<WorkflowTask> live = route.getDefaultCase();
+        WorkflowTask requiredFetch = live.get(0);
+        WorkflowTask optionalFetch = live.get(1);
+        assertThat(requiredFetch.getTaskReferenceName()).endsWith("_ctx_fetch_0");
+        assertThat(optionalFetch.getTaskReferenceName()).endsWith("_ctx_fetch_1");
+        assertThat(requiredFetch.isOptional()).isFalse();
+        assertThat(optionalFetch.isOptional()).isTrue();
+    }
+
+    @Test
+    void testPlanExecute_without_plannerContext_emits_no_ctx_build_task() {
+        // Counterfactual: without plannerContext, the live branch goes back
+        // to its 4-task core (planner + merge + ctx_set + coerce). Proves
+        // the ctx_build emission is gated on the field's presence.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("pae_no_ctx")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+
+        WorkflowTask route = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_planner_route"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing planner_route SWITCH"));
+
+        List<WorkflowTask> live = route.getDefaultCase();
+        assertThat(live).hasSize(4);
+        assertThat(live.stream()
+                        .noneMatch(t -> t.getTaskReferenceName() != null
+                                && (t.getTaskReferenceName().endsWith("_ctx_build")
+                                        || t.getTaskReferenceName().contains("_ctx_fetch_"))))
+                .isTrue();
+    }
+
+    @Test
     void testPlanExecuteWithFallback() {
         AgentConfig planner = simpleSubAgent("planner", "Write a plan");
         AgentConfig fallback = simpleSubAgent("fallback", "Fix errors");

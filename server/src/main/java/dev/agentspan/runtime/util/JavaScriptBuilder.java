@@ -190,6 +190,110 @@ public class JavaScriptBuilder {
     }
 
     /**
+     * Build the planner-context aggregator script.
+     *
+     * <p>Input contract: {@code $.entries} is a list of per-entry descriptors
+     * produced by {@code MultiAgentCompiler.emitPlannerContextBuilder}. Each
+     * entry is either:
+     * <ul>
+     *   <li>{@code {type: 'text', text: <literal>}} — inlined verbatim.</li>
+     *   <li>{@code {type: 'url', url, body, statusCode, required, maxBytes}}
+     *       — the {@code body} and {@code statusCode} fields are Conductor
+     *       templates that have already been resolved to the HTTP fetch
+     *       output by the time the INLINE script runs.</li>
+     * </ul>
+     *
+     * <p>The script:
+     * <ul>
+     *   <li>Coerces non-string bodies (JSON-parsed Maps) to strings via
+     *       {@code JSON.stringify} — the planner gets text, not a Java
+     *       Map.</li>
+     *   <li>Truncates each body at {@code maxBytes} with a
+     *       {@code [doc truncated]} marker.</li>
+     *   <li>For non-{@code required=false} URLs whose fetch failed
+     *       (non-2xx status or missing body), substitutes
+     *       {@code [doc unavailable]} so the planner sees an explicit
+     *       gap instead of silent omission.</li>
+     *   <li>Returns {@code {result: <concatenated markdown>}}.</li>
+     * </ul>
+     */
+    public static String plannerContextBuilderScript() {
+        return iife(
+                // Reuse the toJS walker pattern from schemaValidatorScript —
+                // Conductor hands us Java Map/List values whose .keySet /
+                // .iterator behave differently than native JS objects.
+                "function toJS(v) {"
+                        + "  if (v === null || v === undefined) return v;"
+                        + "  if (typeof v !== 'object') return v;"
+                        + "  if (typeof v.keySet === 'function' && typeof v.get === 'function') {"
+                        + "    var out = {}; var it = v.keySet().iterator();"
+                        + "    while (it.hasNext()) { var k = it.next(); out[String(k)] = toJS(v.get(k)); }"
+                        + "    return out;"
+                        + "  }"
+                        + "  if (typeof v.iterator === 'function' && typeof v.size === 'function'"
+                        + "      && typeof v.keySet !== 'function') {"
+                        + "    var arr = []; var lit = v.iterator();"
+                        + "    while (lit.hasNext()) arr.push(toJS(lit.next()));"
+                        + "    return arr;"
+                        + "  }"
+                        + "  return v;"
+                        + "}"
+                        + "function stringify(b) {"
+                        + "  if (b === null || b === undefined) return '';"
+                        + "  if (typeof b === 'string') return b;"
+                        + "  try { return JSON.stringify(b); } catch (e) { return String(b); }"
+                        + "}"
+                        + "var entries = toJS($.entries) || [];"
+                        + "var parts = [];"
+                        + "for (var i = 0; i < entries.length; i++) {"
+                        + "  var e = entries[i];"
+                        + "  if (!e) continue;"
+                        + "  if (e.type === 'text') {"
+                        + "    if (e.text == null) continue;"
+                        + "    parts.push('### Inline note ' + (i+1) + '\\n' + e.text);"
+                        + "    continue;"
+                        + "  }"
+                        + "  if (e.type === 'url') {"
+                        + "    var url = e.url || ('doc ' + (i+1));"
+                        + "    var status = e.statusCode;"
+                        + "    var rawBody = e.body;"
+                        // statusCode is a JS Number when set, but Conductor
+                        // can leave it as the literal template string when
+                        // the underlying HTTP task didn't run (optional
+                        // task skipped). Detect both shapes.
+                        + "    var statusOk = (status == null) || "
+                        + "        (typeof status === 'number' && status >= 200 && status < 300);"
+                        + "    var unresolvedTpl = typeof status === 'string' && status.indexOf('${') === 0;"
+                        + "    if (unresolvedTpl) {"
+                        + "      parts.push('### ' + url + '\\n[doc unavailable]');"
+                        + "      continue;"
+                        + "    }"
+                        + "    if (!statusOk) {"
+                        + "      if (e.required === false) {"
+                        + "        parts.push('### ' + url + '\\n[doc unavailable]');"
+                        + "      } else {"
+                        + "        parts.push('### ' + url + '\\n[doc fetch failed status=' + status + ']');"
+                        + "      }"
+                        + "      continue;"
+                        + "    }"
+                        + "    var body = stringify(rawBody);"
+                        + "    if (!body || body === '${' + 'body' + '}') {"
+                        + "      parts.push('### ' + url + '\\n[doc unavailable]');"
+                        + "      continue;"
+                        + "    }"
+                        + "    var max = (typeof e.maxBytes === 'number') ? e.maxBytes : 16384;"
+                        + "    var truncated = false;"
+                        + "    if (body.length > max) {"
+                        + "      body = body.substring(0, max);"
+                        + "      truncated = true;"
+                        + "    }"
+                        + "    parts.push('### ' + url + '\\n' + body + (truncated ? '\\n[doc truncated]' : ''));"
+                        + "  }"
+                        + "}"
+                        + "return { result: parts.join('\\n\\n') };");
+    }
+
+    /**
      * Build the regex guardrail JavaScript.
      */
     public static String regexGuardrailScript(

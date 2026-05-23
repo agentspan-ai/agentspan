@@ -153,6 +153,36 @@ public class AgentConfig {
     private Map<String, Object> planSource;
 
     /**
+     * PLAN_EXECUTE planner context: a list of text snippets and/or URLs whose
+     * contents are appended to the planner's user prompt as a {@code ## Reference
+     * Context} block at runtime. URLs are fetched <em>per planner invocation</em>
+     * (no compile-time fetch, no cache) so doc edits go live without recompile.
+     *
+     * <p>Each entry has either {@code text} (inlined verbatim) or {@code url}
+     * (HTTP GET, body included). URL entries may declare:
+     * <ul>
+     *   <li>{@code headers}: arbitrary HTTP headers. Values may contain
+     *       {@code ${CRED_NAME}} placeholders that resolve against the agent's
+     *       credential store at request time — same shape as
+     *       {@code ToolConfig.config.headers}, so e.g. Confluence/Notion
+     *       bearer tokens work without a separate auth pipeline.</li>
+     *   <li>{@code required}: when {@code true} (default) a fetch failure
+     *       fails the workflow; when {@code false} a {@code [doc unavailable]}
+     *       marker is substituted and the planner runs on partial context.</li>
+     *   <li>{@code maxBytes}: per-doc truncation cap (default 16384).
+     *       Larger responses are truncated with a {@code [doc truncated]}
+     *       marker so a single oversized wiki page can't blow the planner's
+     *       context window.</li>
+     * </ul>
+     *
+     * <p>Only meaningful when {@link #strategy} is {@code "plan_execute"};
+     * the compiler emits HTTP fetch tasks for URL entries inside the
+     * planner-route live branch (skipped when {@code static_plan} is set,
+     * so the static-plan path stays free of fetch latency).
+     */
+    private List<Map<String, Object>> plannerContext;
+
+    /**
      * Input/output field names whose values should be redacted in the execution
      * history and UI.  Maps directly to Conductor's {@code WorkflowDef.maskedFields}.
      */

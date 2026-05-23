@@ -2155,7 +2155,20 @@ public class MultiAgentCompiler {
         // that's now redundant — the server appends a canonical version.)
         String availableToolsBlock = buildAvailableToolsBlock(parentTools);
         String planSchemaBlock = buildPlanSchemaBlock();
+
+        // ── 2a. Optional planner context (text + URL fetches) ────────────
+        // When the harness declares ``plannerContext``, emit a per-URL HTTP
+        // fetch + a concatenating INLINE inside the planner-route LIVE
+        // branch so the static-plan path skips the work. The INLINE's
+        // ``output.result`` is referenced as a ``## Reference Context``
+        // block in the planner's user prompt.
+        List<WorkflowTask> contextPreTasks = new ArrayList<>();
+        String contextBuildRef = emitPlannerContextBuilder(config.getPlannerContext(), prefix, contextPreTasks);
+
         StringBuilder pp = new StringBuilder("${workflow.input.prompt}");
+        if (contextBuildRef != null) {
+            pp.append("\n\n## Reference Context\n${").append(contextBuildRef).append(".output.result}");
+        }
         if (!availableToolsBlock.isEmpty()) {
             pp.append("\n\n").append(availableToolsBlock);
         }
@@ -2163,7 +2176,7 @@ public class MultiAgentCompiler {
         String plannerPrompt = pp.toString();
         String plannerRef = prefix + "_planner";
         String plannerCoerceRef = prefix + "_planner_coerce";
-        emitPlannerStage(plannerConfig, prefix, plannerRef, plannerCoerceRef, plannerPrompt, tasks);
+        emitPlannerStage(plannerConfig, prefix, plannerRef, plannerCoerceRef, plannerPrompt, contextPreTasks, tasks);
         String plannerResult = AgentCompiler.coercedRef(plannerCoerceRef);
 
         // ── 2b. Optional plan_source: deterministic tool call to read plan ──
@@ -2524,6 +2537,130 @@ public class MultiAgentCompiler {
     }
 
     /**
+     * Emit per-URL HTTP fetch tasks plus a concatenating INLINE that builds
+     * the {@code ## Reference Context} block injected into the planner's
+     * prompt. Returns the ref of the INLINE so the caller can template
+     * {@code ${ref.output.result}} into the prompt — or {@code null} when
+     * {@code entries} is null/empty (no context configured).
+     *
+     * <p>Per-entry semantics:
+     * <ul>
+     *   <li>{@code text}: inlined verbatim — no fetch.</li>
+     *   <li>{@code url}: emits a Conductor HTTP task with the supplied
+     *       headers (credential placeholders escaped from {@code ${CRED}}
+     *       to {@code #{CRED}} so Conductor's templater doesn't consume
+     *       them; resolved at execution by the credential-aware HTTP
+     *       handler). {@code required=false} sets {@code optional=true}
+     *       on the task so a fetch failure substitutes a
+     *       {@code [doc unavailable]} marker instead of failing the
+     *       workflow. {@code maxBytes} (default 16384) truncates large
+     *       responses with a {@code [doc truncated]} marker so a single
+     *       oversized wiki page can't blow the planner's context window.</li>
+     * </ul>
+     *
+     * <p>HTTP fetches run sequentially in the live branch — for the typical
+     * 1–3-doc shape that's fine. A FORK_JOIN parallel variant can be added
+     * if doc counts grow.
+     */
+    private String emitPlannerContextBuilder(List<Map<String, Object>> entries, String prefix, List<WorkflowTask> out) {
+        if (entries == null || entries.isEmpty()) {
+            return null;
+        }
+
+        // Per-entry descriptors handed to the builder INLINE. URL entries
+        // reference the fetch task's response.body via Conductor template;
+        // text entries inline their literal.
+        List<Map<String, Object>> descriptors = new ArrayList<>();
+
+        for (int i = 0; i < entries.size(); i++) {
+            Map<String, Object> e = entries.get(i);
+            if (e == null) continue;
+            Object text = e.get("text");
+            Object url = e.get("url");
+            if (text instanceof String ts && !ts.isEmpty()) {
+                descriptors.add(Map.of("type", "text", "text", ts));
+            } else if (url instanceof String us && !us.isEmpty()) {
+                String fetchRef = prefix + "_ctx_fetch_" + i;
+                WorkflowTask fetch = new WorkflowTask();
+                fetch.setName("planner_context_fetch");
+                fetch.setType("HTTP");
+                fetch.setTaskReferenceName(fetchRef);
+
+                Map<String, Object> headers = new LinkedHashMap<>();
+                Object hdrObj = e.get("headers");
+                if (hdrObj instanceof Map<?, ?> hdrMap) {
+                    for (Map.Entry<?, ?> h : hdrMap.entrySet()) {
+                        // ToolCompiler does the same ${CRED} → #{CRED}
+                        // escape on tool headers; keep the credential
+                        // pipeline single-source.
+                        headers.put(
+                                String.valueOf(h.getKey()),
+                                String.valueOf(h.getValue()).replace("${", "#{"));
+                    }
+                }
+                Map<String, Object> req = new LinkedHashMap<>();
+                req.put("uri", us);
+                req.put("method", "GET");
+                req.put("headers", headers);
+                req.put("accept", "*/*");
+                req.put("contentType", "application/json");
+                req.put("connectionTimeOut", 10000);
+                req.put("readTimeOut", 30000);
+                Map<String, Object> fetchInputs = new LinkedHashMap<>();
+                fetchInputs.put("http_request", req);
+                // Forward the execution token so CredentialAwareHttpTask can
+                // resolve any #{CRED} headers (same shape as ToolCompiler's
+                // OpenAPI-spec fetch path).
+                fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+                fetch.setInputParameters(fetchInputs);
+
+                boolean required = !Boolean.FALSE.equals(e.get("required"));
+                if (!required) {
+                    // Conductor's WorkflowTask.optional surfaces as a flag on
+                    // the task — a non-2xx / timeout doesn't fail the
+                    // workflow; the INLINE then substitutes [doc unavailable].
+                    fetch.setOptional(true);
+                }
+                out.add(fetch);
+
+                Map<String, Object> desc = new LinkedHashMap<>();
+                desc.put("type", "url");
+                desc.put("url", us);
+                desc.put("required", required);
+                int maxBytes = 16384;
+                if (e.get("maxBytes") instanceof Number n) {
+                    maxBytes = n.intValue();
+                }
+                desc.put("maxBytes", maxBytes);
+                // Conductor resolves these templates BEFORE invoking the
+                // INLINE script — so $.entries[i].body is the actual body.
+                desc.put("body", "${" + fetchRef + ".output.response.body}");
+                desc.put("statusCode", "${" + fetchRef + ".output.response.statusCode}");
+                descriptors.add(desc);
+            }
+            // Entries with neither text nor url are silently skipped — the
+            // SDK already validates exactly-one-of at construction time,
+            // so this only fires on hand-rolled wire payloads.
+        }
+
+        if (descriptors.isEmpty()) {
+            return null;
+        }
+
+        String buildRef = prefix + "_ctx_build";
+        WorkflowTask buildTask = new WorkflowTask();
+        buildTask.setType("INLINE");
+        buildTask.setTaskReferenceName(buildRef);
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        inputs.put("evaluatorType", "graaljs");
+        inputs.put("entries", descriptors);
+        inputs.put("expression", JavaScriptBuilder.plannerContextBuilderScript());
+        buildTask.setInputParameters(inputs);
+        out.add(buildTask);
+        return buildRef;
+    }
+
+    /**
      * Emit the planner-stage tasks: a static-plan gate INLINE, then a SWITCH
      * whose default branch runs the planner sub-workflow + the three
      * follow-on context-handling tasks, and whose ``skip`` branch is a
@@ -2537,6 +2674,11 @@ public class MultiAgentCompiler {
      * branch those references resolve to null, which {@code extract_json}
      * Case 0 doesn't read anyway (it reads {@code workflow.input.static_plan}
      * directly).
+     *
+     * <p>{@code preLiveBranchTasks} are prepended to the SWITCH's default
+     * (live) branch — used by the planner-context fetch+build pipeline to
+     * resolve URLs on every planner invocation while staying cost-free on
+     * the static-plan path (the skip branch never runs them).
      */
     private void emitPlannerStage(
             AgentConfig plannerConfig,
@@ -2544,6 +2686,7 @@ public class MultiAgentCompiler {
             String plannerRef,
             String plannerCoerceRef,
             String plannerPrompt,
+            List<WorkflowTask> preLiveBranchTasks,
             List<WorkflowTask> tasks) {
 
         String plannerGateRef = prefix + "_planner_gate";
@@ -2589,7 +2732,14 @@ public class MultiAgentCompiler {
         String plannerResultRaw = AgentCompiler.subAgentResultRef(plannerConfig, plannerRef);
         WorkflowTask plannerCoerce = AgentCompiler.createCoerceTask(plannerResultRaw, plannerCoerceRef);
 
-        List<WorkflowTask> plannerLiveBranch = List.of(plannerTask, plannerMerge, plannerCtxSet, plannerCoerce);
+        List<WorkflowTask> plannerLiveBranch = new ArrayList<>();
+        if (preLiveBranchTasks != null) {
+            plannerLiveBranch.addAll(preLiveBranchTasks);
+        }
+        plannerLiveBranch.add(plannerTask);
+        plannerLiveBranch.add(plannerMerge);
+        plannerLiveBranch.add(plannerCtxSet);
+        plannerLiveBranch.add(plannerCoerce);
 
         // Skip branch: a single no-op INLINE so the SWITCH has both arms.
         WorkflowTask plannerSkipped = new WorkflowTask();
