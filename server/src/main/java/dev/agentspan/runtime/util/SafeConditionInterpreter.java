@@ -4,6 +4,7 @@
  */
 package dev.agentspan.runtime.util;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -276,7 +277,7 @@ public final class SafeConditionInterpreter {
             List<Node> parts = null;
             while (peek("||")) {
                 if (parts == null) {
-                    parts = new java.util.ArrayList<>();
+                    parts = new ArrayList<>();
                     parts.add(first);
                 }
                 consume("||");
@@ -290,7 +291,7 @@ public final class SafeConditionInterpreter {
             List<Node> parts = null;
             while (peek("&&")) {
                 if (parts == null) {
-                    parts = new java.util.ArrayList<>();
+                    parts = new ArrayList<>();
                     parts.add(first);
                 }
                 consume("&&");
@@ -351,7 +352,7 @@ public final class SafeConditionInterpreter {
 
         private Node parseField() {
             consume("$");
-            List<String> path = new java.util.ArrayList<>();
+            List<String> path = new ArrayList<>();
             while (true) {
                 skipWs();
                 if (peek(".")) {
