@@ -50,7 +50,7 @@ BASE = SERVER_URL.rstrip("/").replace("/api", "")
 MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
 MAX_ITER = int(os.environ.get("AGENTSPAN_REBAL_MAX_ITER", "8"))
 WORKFLOW_NAME = "portfolio_rebalance_loop"
-WORKFLOW_VERSION = 5
+WORKFLOW_VERSION = 6
 
 
 def _model_split(model: str) -> tuple[str, str]:
@@ -381,6 +381,39 @@ EXTRACT_RESULT_JS = TO_JS_OBJ_JS + (
 )
 
 
+# Build a human-readable summary string for the workflow's top-level
+# ``output.result`` field. Conductor's UI prefers a leading ``result``
+# string over deeply nested output objects; without this the rebalancing
+# outcome is invisible in the workflow-detail panel.
+SUMMARIZE_JS = TO_JS_OBJ_JS + (
+    "(function() {"
+    "  var fs = $.final_state ? toJSObj($.final_state) : {};"
+    "  var n = $.iter_count;"
+    "  var lines = [];"
+    "  lines.push('Portfolio rebalance — ' + (fs.account_id || ''));"
+    "  lines.push('Iterations: ' + n);"
+    "  if (fs.submitted === true) {"
+    "    lines.push('Status: SUBMITTED');"
+    "    var trades = fs.trades || [];"
+    "    lines.push('Trades (' + trades.length + '):');"
+    "    for (var i = 0; i < trades.length; i++) {"
+    "      var t = trades[i] || {};"
+    "      lines.push('  - ' + String(t.action || '?').toUpperCase() + ' ' +"
+    "                 t.shares + ' ' + t.symbol);"
+    "    }"
+    "    if (fs.rationale) { lines.push(''); lines.push('Rationale: ' + fs.rationale); }"
+    "  } else {"
+    "    lines.push('Status: NOT SUBMITTED (budget exhausted)');"
+    "    lines.push('Remaining violations: ' + (fs.violation_count || '?'));"
+    "    if (fs.max_drift_bps !== undefined) {"
+    "      lines.push('Max drift: ' + fs.max_drift_bps + ' bps');"
+    "    }"
+    "  }"
+    "  return lines.join('\\n');"
+    "})();"
+)
+
+
 APPEND_HISTORY_JS = TO_JS_OBJ_JS + (
     "(function() {"
     "  function unwrap(v) {"
@@ -594,6 +627,20 @@ def build_workflow_def(tool_defs: list[dict]) -> dict:
                     },
                 ],
             },
+            # Post-loop: build a human-readable summary so Conductor UIs
+            # render the rebalance outcome prominently in their workflow-detail
+            # panel (most UIs key off ``output.result``).
+            {
+                "name": "INLINE",
+                "taskReferenceName": "summarize",
+                "type": "INLINE",
+                "inputParameters": {
+                    "evaluatorType": "graaljs",
+                    "expression": SUMMARIZE_JS,
+                    "final_state": "${extract_result.output.result}",
+                    "iter_count": "${loop.output.iteration}",
+                },
+            },
         ],
         "inputParameters": [
             "account_id",
@@ -602,6 +649,7 @@ def build_workflow_def(tool_defs: list[dict]) -> dict:
             "current_weights_json",
         ],
         "outputParameters": {
+            "result": "${summarize.output.result}",
             "iterations": "${loop.output.iteration}",
             "final_state": "${extract_result.output.result}",
             "history": "${workflow.variables.history}",

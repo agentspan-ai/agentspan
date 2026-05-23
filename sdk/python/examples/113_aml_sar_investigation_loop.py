@@ -48,7 +48,7 @@ BASE = SERVER_URL.rstrip("/").replace("/api", "")
 MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
 MAX_ITER = int(os.environ.get("AGENTSPAN_AML_MAX_ITER", "10"))
 WORKFLOW_NAME = "aml_sar_investigation_loop"
-WORKFLOW_VERSION = 4
+WORKFLOW_VERSION = 5
 
 
 def _model_split(model: str) -> tuple[str, str]:
@@ -373,6 +373,37 @@ EXTRACT_RESULT_JS = TO_JS_OBJ_JS + (
 )
 
 
+# Human-readable summary for the workflow's top-level ``output.result``
+# so Conductor UIs render the disposition + narrative prominently.
+SUMMARIZE_JS = TO_JS_OBJ_JS + (
+    "(function() {"
+    "  var fs = $.final_state ? toJSObj($.final_state) : {};"
+    "  var n = $.iter_count;"
+    "  var lines = [];"
+    "  lines.push('AML/SAR investigation — ' + ($.alert_id || ''));"
+    "  lines.push('Iterations: ' + n);"
+    "  var disp = (fs.disposition || 'unknown').toUpperCase();"
+    "  lines.push('Disposition: ' + disp);"
+    "  var rf = fs.red_flags || [];"
+    "  if (rf.length > 0) {"
+    "    lines.push('Red flags (' + rf.length + '):');"
+    "    for (var i = 0; i < rf.length; i++) lines.push('  - ' + rf[i]);"
+    "  }"
+    "  var se = fs.supporting_evidence || [];"
+    "  if (se.length > 0) {"
+    "    lines.push('Supporting evidence (' + se.length + '):');"
+    "    for (var j = 0; j < se.length; j++) lines.push('  - ' + se[j]);"
+    "  }"
+    "  if (fs.narrative) {"
+    "    lines.push('');"
+    "    lines.push('Narrative:');"
+    "    lines.push(fs.narrative);"
+    "  }"
+    "  return lines.join('\\n');"
+    "})();"
+)
+
+
 # Push the iteration's (tool, args, result) onto the running case file.
 # All inputs may be Java Maps/Lists; walk via toJSObj before serialization.
 APPEND_CASE_FILE_JS = TO_JS_OBJ_JS + (
@@ -568,9 +599,23 @@ def build_workflow_def(tool_defs: list[dict]) -> dict:
                     },
                 ],
             },
+            # Post-loop: build the human-readable summary the UI surfaces.
+            {
+                "name": "INLINE",
+                "taskReferenceName": "summarize",
+                "type": "INLINE",
+                "inputParameters": {
+                    "evaluatorType": "graaljs",
+                    "expression": SUMMARIZE_JS,
+                    "final_state": "${extract_result.output.result}",
+                    "iter_count": "${loop.output.iteration}",
+                    "alert_id": "${workflow.input.alert_id}",
+                },
+            },
         ],
-        "inputParameters": ["alert_json"],
+        "inputParameters": ["alert_json", "alert_id"],
         "outputParameters": {
+            "result": "${summarize.output.result}",
             "iterations": "${loop.output.iteration}",
             "final_disposition": "${extract_result.output.result}",
             "case_file": "${workflow.variables.case_file}",
@@ -605,7 +650,10 @@ def register_workflow(wf: dict) -> None:
 def start_execution(alert: dict) -> str:
     r = requests.post(
         f"{BASE}/api/workflow/{WORKFLOW_NAME}?version={WORKFLOW_VERSION}",
-        json={"alert_json": json.dumps(alert)},
+        json={
+            "alert_json": json.dumps(alert),
+            "alert_id": alert.get("alert_id", ""),
+        },
         headers={"Content-Type": "application/json"},
     )
     r.raise_for_status()
