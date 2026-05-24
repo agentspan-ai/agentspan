@@ -107,6 +107,12 @@ jobs:
         run: npm run build
       - name: Run unit tests
         run: npx vitest run tests/unit/
+      # /dg #12: high-severity dep CVEs that ship to users (not dev or
+      # examples workspace) fail the build. Scoped to non-dev deps +
+      # the root workspace only — examples are a separate workspace
+      # and don't reach end users via the published package.
+      - name: npm audit (high-severity, runtime deps only)
+        run: npm audit --workspaces=false --omit=dev --audit-level=high
 
   # ── Java SDK Unit Tests ────────────────────────────────────────────
   # Runs the Java SDK core + Spring auto-configuration unit tests in one
