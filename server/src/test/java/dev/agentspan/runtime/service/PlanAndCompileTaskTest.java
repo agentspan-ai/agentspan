@@ -1973,6 +1973,68 @@ class PlanAndCompileTaskTest {
         return (Map<String, Object>) output.get("workflowDef");
     }
 
+    // ── /dg #6: inspectPlan public API ──────────────────────────
+
+    /**
+     * Build a mutable plan map — PAC's compile mutates steps in-place
+     * (auto-IDs missing entries, threads ordinal numbers through),
+     * so {@code Map.of()} immutable literals trip
+     * {@code UnsupportedOperationException}. Tests use this helper
+     * for any plan handed to {@link PlanAndCompileTask#inspectPlan}.
+     */
+    private static Map<String, Object> mutablePlan(Map<String, Object> arg, String tool) {
+        HashMap<String, Object> op = new HashMap<>();
+        op.put("tool", tool);
+        op.put("args", arg);
+        HashMap<String, Object> step = new HashMap<>();
+        step.put("id", "step_1");
+        step.put("operations", new ArrayList<>(List.of(op)));
+        HashMap<String, Object> plan = new HashMap<>();
+        plan.put("steps", new ArrayList<>(List.of(step)));
+        return plan;
+    }
+
+    @Test
+    void inspectPlan_returnsCompiledWorkflowDefForValidPlan() {
+        // Same compile logic that PAC runs at workflow-execution time,
+        // exposed for callers (the inspect-plan REST endpoint) that
+        // want to see what would be produced without running it.
+        HashMap<String, Object> args = new HashMap<>();
+        args.put("text", "hello");
+        Map<String, Object> plan = mutablePlan(args, "echo");
+        PlanAndCompileTask.InspectResult r =
+                task.inspectPlan(plan, "inspect_test_wf", "openai/gpt-4o-mini", 60, java.util.Set.of("echo"), Map.of());
+        assertThat(r.error).isNull();
+        assertThat(r.workflowDef).isNotNull();
+        assertThat(r.workflowDef).containsKey("tasks");
+        assertThat(r.stats).containsKey("stepCount");
+    }
+
+    @Test
+    void inspectPlan_surfacesErrorForBadPlan() {
+        // Missing ``steps`` → compile rejects with a clear error
+        // message. inspectPlan must surface that error rather than
+        // throwing, so the REST endpoint can return it as a structured
+        // 200 response (the request was valid, the plan wasn't).
+        HashMap<String, Object> badPlan = new HashMap<>();
+        badPlan.put("not_steps", new ArrayList<>());
+        PlanAndCompileTask.InspectResult r = task.inspectPlan(
+                badPlan, "inspect_test_wf", "openai/gpt-4o-mini", 60, java.util.Set.of("echo"), Map.of());
+        assertThat(r.error).isNotNull().contains("steps");
+        assertThat(r.workflowDef).isNull();
+    }
+
+    @Test
+    void inspectPlan_surfacesUnknownToolError() {
+        // The PAC tool whitelist is the same in the inspect path as in
+        // the runtime path — an op.tool not in knownToolNames must
+        // produce a compile error even from inspect.
+        Map<String, Object> plan = mutablePlan(new HashMap<>(), "send_email");
+        PlanAndCompileTask.InspectResult r =
+                task.inspectPlan(plan, "inspect_test_wf", "openai/gpt-4o-mini", 60, java.util.Set.of("echo"), Map.of());
+        assertThat(r.error).isNotNull().contains("send_email").contains("unknown tool");
+    }
+
     /** Quick JSON string-encode for inlining into a plan literal. */
     private String jsonString(String s) {
         StringBuilder sb = new StringBuilder("\"");

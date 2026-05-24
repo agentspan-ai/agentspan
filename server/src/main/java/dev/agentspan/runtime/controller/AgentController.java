@@ -60,6 +60,23 @@ public class AgentController {
     }
 
     /**
+     * /dg #6: compile a plan against a PLAN_EXECUTE harness config and
+     * return the resulting Conductor WorkflowDef, error string, warnings
+     * list, and stats — without dispatching the SUB_WORKFLOW.
+     *
+     * <p>Useful for IDE tooling, plan-debug REPLs, and CI checks that
+     * validate a plan compiles cleanly against a fixed agent config
+     * before deploy. Uses the same compile path the runtime would,
+     * so the inspected output is byte-equal to what the real run
+     * would produce for the same plan.
+     */
+    @PostMapping("/inspect-plan")
+    public dev.agentspan.runtime.service.PlanAndCompileTask.InspectResult inspectPlan(
+            @RequestBody dev.agentspan.runtime.model.InspectPlanRequest request) {
+        return agentService.inspectPlan(request);
+    }
+
+    /**
      * Compile and register an agent definition without starting execution.
      * This is a CI/CD operation — the agent is registered on the server and can be
      * triggered later via {@code /start} or by name.

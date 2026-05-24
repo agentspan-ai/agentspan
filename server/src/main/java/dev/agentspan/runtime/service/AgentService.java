@@ -129,6 +129,61 @@ public class AgentService {
     }
 
     /**
+     * /dg #6: compile a plan against a PLAN_EXECUTE harness config and
+     * return the resulting Conductor WorkflowDef — without dispatching
+     * it. Lets callers inspect what PAC would produce before running.
+     *
+     * <p>Uses the same {@link PlanAndCompileTask#inspectPlan(Map, String,
+     * String, int, Set, Map)} path the runtime SUB_WORKFLOW dispatch
+     * uses, so there's exactly one compiler — no inspect-only divergence.
+     *
+     * <p>Caller must supply both the agent config (so the compile knows
+     * about the tool list, model, harness timeout) and the plan
+     * (typically what the planner LLM emitted, but can be a hand-rolled
+     * static plan for offline validation).
+     */
+    public dev.agentspan.runtime.service.PlanAndCompileTask.InspectResult inspectPlan(
+            dev.agentspan.runtime.model.InspectPlanRequest request) {
+        if (request == null || request.getAgentConfig() == null) {
+            throw new IllegalArgumentException("inspectPlan: agentConfig is required");
+        }
+        if (request.getPlan() == null) {
+            throw new IllegalArgumentException("inspectPlan: plan is required");
+        }
+        AgentConfig config = request.getAgentConfig();
+        if (config.getName() == null || config.getName().isEmpty()) {
+            config.setName("agent_inspect");
+        }
+        if (!"plan_execute".equals(config.getStrategy())) {
+            throw new IllegalArgumentException(
+                    "inspectPlan: agentConfig.strategy must be 'plan_execute', got '" + config.getStrategy() + "'");
+        }
+
+        // Replicate what MultiAgentCompiler.compilePlanExecute computes
+        // before calling PAC at runtime — so the inspect compile sees the
+        // same inputs the real one would.
+        String workflowName = dev.agentspan.runtime.compiler.MultiAgentCompiler.planWorkflowName(config.getName());
+        String model = config.getModel() != null ? config.getModel() : "";
+        int harnessTimeout = config.getTimeoutSeconds();
+        java.util.List<ToolConfig> parentTools = config.getTools() != null ? config.getTools() : java.util.List.of();
+        Set<String> knownToolNames = new java.util.HashSet<>();
+        for (ToolConfig t : parentTools) {
+            if (t.getName() != null && !t.getName().isEmpty()) {
+                knownToolNames.add(t.getName());
+            }
+        }
+        Map<String, ToolConfig> parentToolsByName = new java.util.LinkedHashMap<>();
+        for (ToolConfig t : parentTools) {
+            if (t.getName() != null && !t.getName().isEmpty()) {
+                parentToolsByName.put(t.getName(), t);
+            }
+        }
+
+        return new dev.agentspan.runtime.service.PlanAndCompileTask()
+                .inspectPlan(request.getPlan(), workflowName, model, harnessTimeout, knownToolNames, parentToolsByName);
+    }
+
+    /**
      * Compile and register workflow + task definitions without starting execution.
      * This is a CI/CD operation — pushes the workflow to the server for later execution.
      */

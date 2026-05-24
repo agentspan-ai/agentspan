@@ -173,6 +173,66 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
     }
 
     /**
+     * Public DTO returned by {@link #inspectPlan(java.util.Map, String, String,
+     * int, java.util.Set, java.util.Map)} — gives external callers (the
+     * inspect-plan REST endpoint, /dg #6) visibility into PAC's compile
+     * output without dispatching the SUB_WORKFLOW.
+     *
+     * <p>Mirrors the fields ``start()`` puts on the task's outputData. The
+     * inner {@code workflowDef} is the same Conductor {@code WorkflowDef}
+     * shape that would be templated into ``subWorkflowParam.workflowDefinition``
+     * at SUB_WORKFLOW dispatch.
+     */
+    public static final class InspectResult {
+        public final Map<String, Object> workflowDef;
+        public final String error;
+        public final List<String> warnings;
+        public final Map<String, Object> stats;
+
+        InspectResult(CompileResult r) {
+            this.workflowDef = r.workflowDef;
+            this.error = r.error;
+            this.warnings = r.warnings == null ? List.of() : List.copyOf(r.warnings);
+            this.stats = r.stats == null ? Map.of() : Map.copyOf(r.stats);
+        }
+    }
+
+    /**
+     * /dg #6: inspect what PAC would compile from a given plan without
+     * actually dispatching the SUB_WORKFLOW. The REST endpoint at
+     * {@code POST /api/agent/inspect-plan} surfaces this through the
+     * server's HTTP layer.
+     *
+     * <p>Same parameter set as the internal {@link #compile(Map, String,
+     * String, int, Set, Map)} so the inspect path uses the production
+     * compile logic — there's exactly one compiler, not a divergent
+     * inspect-only fork.
+     */
+    public InspectResult inspectPlan(
+            Map<String, Object> plan,
+            String workflowName,
+            String model,
+            int harnessTimeout,
+            Set<String> knownToolNames,
+            Map<String, ToolConfig> parentToolsByName) {
+        try {
+            CompileResult r = compile(plan, workflowName, model, harnessTimeout, knownToolNames, parentToolsByName);
+            return new InspectResult(r);
+        } catch (Exception e) {
+            CompileResult r = new CompileResult();
+            // Use exception class name as fallback when getMessage() is
+            // null — NPE etc. have null messages, and "Compiler internal
+            // error: null" is useless feedback.
+            String msg = e.getMessage();
+            if (msg == null || msg.isEmpty()) {
+                msg = e.getClass().getSimpleName();
+            }
+            r.error = "Compiler internal error: " + msg;
+            return new InspectResult(r);
+        }
+    }
+
+    /**
      * State carried through compilation. Mirrors the JS path's globals. Kept
      * as a per-invocation instance so the task itself remains stateless.
      */
