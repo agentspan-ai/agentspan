@@ -145,13 +145,30 @@ public final class SafeConditionInterpreter {
                 case "!==":
                     return !looseEquals(l, r, "!==".equals(op));
                 case "<":
-                    return cmpNumeric(l, r) < 0;
                 case "<=":
-                    return cmpNumeric(l, r) <= 0;
                 case ">":
-                    return cmpNumeric(l, r) > 0;
                 case ">=":
-                    return cmpNumeric(l, r) >= 0;
+                    // /dg #8: cmpNumeric throws ArithmeticException on non-
+                    // numeric operands; the comment at its throw site says the
+                    // intent is to let ``evaluate()`` default to false. But
+                    // ``evaluate()`` didn't catch, so a single non-numeric
+                    // comparison aborted the whole INLINE. Match JS semantics:
+                    // NaN-comparison is always false.
+                    try {
+                        int c = cmpNumeric(l, r);
+                        switch (op) {
+                            case "<":
+                                return c < 0;
+                            case "<=":
+                                return c <= 0;
+                            case ">":
+                                return c > 0;
+                            default:
+                                return c >= 0;
+                        }
+                    } catch (ArithmeticException ignored) {
+                        return Boolean.FALSE;
+                    }
                 default:
                     throw new SafeConditionParseException("unknown comparator: " + op);
             }

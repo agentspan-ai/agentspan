@@ -1047,6 +1047,18 @@ class MultiAgentCompilerTest {
         // for object/non-empty-string. Pin both behaviours via spec.
         String expr = (String) gate.getInputParameters().get("expression");
         assertThat(expr).contains("if (sp == null) return 'run'").contains("return 'skip'");
+
+        // /dg #3: the gate must mirror extract_json Case 0's accept-criteria
+        // — objects need a ``steps`` key, strings need substring ``"steps"``
+        // — otherwise an empty dict ``{}`` from ``runtime.run(plan={})``
+        // takes the skip branch and then no-plan-found fallback fires.
+        assertThat(expr)
+                .as("object skip must require a steps key to mirror extract_json Case 0")
+                .contains("hasSteps = sp.steps != null")
+                .contains("hasSteps ? 'skip' : 'run'");
+        assertThat(expr)
+                .as("string skip must require a steps-shaped JSON substring")
+                .contains("sp.indexOf('\"steps\"') >= 0");
     }
 
     @Test

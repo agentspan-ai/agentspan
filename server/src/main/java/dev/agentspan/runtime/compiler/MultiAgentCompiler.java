@@ -2699,10 +2699,20 @@ public class MultiAgentCompiler {
                 "staticPlan",
                 "${workflow.input.static_plan}",
                 "expression",
+                // /dg #3: an object without ``steps`` (e.g. ``{}`` from
+                // ``runtime.run(harness, plan={})``) used to take the skip
+                // branch, then extract_json Case 0 rejected it for the
+                // missing key, and the user saw both "planner skipped" and
+                // "no plan found". Mirror Case 0's accept-criteria here so
+                // skip only fires when the static_plan is genuinely usable.
                 "(function(){ var sp = $.staticPlan; "
                         + "if (sp == null) return 'run'; "
-                        + "if (typeof sp === 'object') return 'skip'; "
-                        + "if (typeof sp === 'string' && sp.length > 2) return 'skip'; "
+                        + "if (typeof sp === 'object') {"
+                        + "  var hasSteps = false;"
+                        + "  try { hasSteps = sp.steps != null || (sp.get && sp.get('steps') != null); } catch(e) {}"
+                        + "  return hasSteps ? 'skip' : 'run';"
+                        + "} "
+                        + "if (typeof sp === 'string' && sp.length > 2 && sp.indexOf('\"steps\"') >= 0) return 'skip'; "
                         + "return 'run'; })();"));
         tasks.add(plannerGate);
 

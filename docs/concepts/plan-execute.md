@@ -377,7 +377,7 @@ plan = Plan(
 | `fallback=` | Optional. Agentic recovery when a plan can't compile/exec. |
 | `tools=` | Required. Plan-executable tool set. PAC validates `op.tool` names against this list and propagates each tool's guardrails. |
 | `fallback_max_turns=` | Caps the fallback agent's turn count during recovery. |
-| `plan_source=` | **Deprecated.** Earlier mechanism for injecting a fixed plan via a tool call — use the run-time `plan=` argument instead. Slated for removal. |
+| `plan_source=` | Optional. Reads a fixed plan from a deterministic tool call after the planner sub-workflow runs. When the planner's text output fails extraction, this source is tried as a fallback. The newer run-time `plan=` argument (see "Static plans" below) is the simpler path for most cases. |
 
 | Run-time kwarg | Purpose |
 |---|---|

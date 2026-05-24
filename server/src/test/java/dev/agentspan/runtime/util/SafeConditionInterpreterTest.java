@@ -214,4 +214,24 @@ class SafeConditionInterpreterTest {
         assertThat(ev("$.x !== 5", r)).isTrue(); // strict: string != number
         assertThat(ev("$.x != 5", r)).isFalse(); // loose: numeric coercion
     }
+
+    @Test
+    void numericComparisonReturnsFalseOnNonNumericOperands() {
+        // /dg #8: cmpNumeric throws ArithmeticException on non-numeric ops
+        // — used to abort the whole INLINE because evaluate() didn't catch.
+        // Now matches JS semantics: NaN-comparison is always false. Pins
+        // every relational operator individually so the regression catches
+        // a one-arm slip.
+        Map<String, Object> r = Map.of("a", "foo", "b", "bar", "n", 5L);
+        assertThat(ev("$.a < $.b", r)).isFalse();
+        assertThat(ev("$.a <= $.b", r)).isFalse();
+        assertThat(ev("$.a > $.b", r)).isFalse();
+        assertThat(ev("$.a >= $.b", r)).isFalse();
+        // Mixed: one numeric, one not — also NaN, also false on both sides.
+        assertThat(ev("$.a < $.n", r)).isFalse();
+        assertThat(ev("$.n < $.a", r)).isFalse();
+        // Sanity: real numeric comparisons still work after the fix.
+        assertThat(ev("$.n > 3", r)).isTrue();
+        assertThat(ev("$.n < 3", r)).isFalse();
+    }
 }
