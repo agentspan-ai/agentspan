@@ -2089,6 +2089,21 @@ public class MultiAgentCompiler {
         // drives guardrail wrapping.
         List<Map<String, Object>> parentToolsAsMaps = new ArrayList<>();
         for (ToolConfig t : parentTools) {
+            // /dg #1: reject schemas using JSON-Schema features the runtime
+            // INLINE validator silently ignores ($ref, allOf, anyOf, oneOf,
+            // format, if/then/else, etc.). Without this check users got
+            // permissive runtime validation — the schema appears to declare
+            // constraints but the validator never fires them. Fail at
+            // agent-compile time with the exact offending keyword + path.
+            if (t.getInputSchema() != null) {
+                try {
+                    dev.agentspan.runtime.util.SchemaSubsetValidator.validate(
+                            t.getInputSchema(),
+                            "PLAN_EXECUTE '" + config.getName() + "': tool '" + t.getName() + "' inputSchema");
+                } catch (dev.agentspan.runtime.util.SchemaSubsetValidator.UnsupportedSchemaException usx) {
+                    throw new IllegalStateException(usx.getMessage(), usx);
+                }
+            }
             try {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> m = MAPPER.convertValue(t, Map.class);
