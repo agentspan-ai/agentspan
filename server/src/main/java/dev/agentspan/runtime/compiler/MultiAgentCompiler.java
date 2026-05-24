@@ -35,6 +35,18 @@ public class MultiAgentCompiler {
     private static final Logger log = LoggerFactory.getLogger(MultiAgentCompiler.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /**
+     * /dg #2: anchored credential-placeholder pattern for plannerContext
+     * HTTP headers. Matches ``${IDENTIFIER}`` only — leaves any other
+     * ``${...}`` substring (e.g. random characters that happen to start
+     * with ``${``) untouched. Replacement rewrites to ``#{IDENTIFIER}``
+     * so Conductor's ParametersUtils doesn't consume the placeholder;
+     * the runtime credential resolver substitutes the real value at
+     * request time.
+     */
+    private static final java.util.regex.Pattern CREDENTIAL_PLACEHOLDER =
+            java.util.regex.Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
+
     private final AgentCompiler agentCompiler;
 
     public MultiAgentCompiler(AgentCompiler agentCompiler) {
@@ -2082,37 +2094,38 @@ public class MultiAgentCompiler {
                 Map<String, Object> m = MAPPER.convertValue(t, Map.class);
                 parentToolsAsMaps.add(m);
             } catch (Exception e) {
-                // Fail-closed on safety controls: if a guardrailed tool's
-                // ToolConfig fails to serialise, PAC can't reach the
-                // guardrail metadata at SUB_WORKFLOW emission time and
-                // would otherwise drop the tool into a bare SIMPLE with
-                // NO guardrail gate. Refuse to compile rather than silently
-                // ship a wrapper-less version of a safety-checked tool.
-                boolean hasGuardrails =
-                        t.getGuardrails() != null && !t.getGuardrails().isEmpty();
-                if (hasGuardrails) {
-                    throw new IllegalStateException(
-                            "PLAN_EXECUTE '"
-                                    + config.getName()
-                                    + "': tool '"
-                                    + t.getName()
-                                    + "' has "
-                                    + t.getGuardrails().size()
-                                    + " guardrail(s) but failed to serialise for PAC ("
-                                    + e.getMessage()
-                                    + "). Cannot guarantee guardrail wrapping in the compiled "
-                                    + "plan — fix the ToolConfig (typically a non-Jackson-friendly "
-                                    + "value in inputSchema or config) and recompile.",
-                            e);
-                }
-                // No guardrails declared — safe to drop the tool from the
-                // wrapping map. Still surface the diagnostic at WARN level.
-                log.warn(
-                        "PLAN_EXECUTE '{}': tool '{}' failed to serialise for PAC (no guardrails "
-                                + "declared, safe to drop): {}",
-                        config.getName(),
-                        t.getName(),
-                        e.getMessage());
+                // /dg #7: fail-closed on ALL serialization failures, not just
+                // guardrailed ones. Previously a non-guardrailed tool was
+                // silently dropped from parentToolsByName with only a WARN,
+                // which meant ``knownToolNames`` still allowed the tool but
+                // PAC had no schema / inputSchema / guardrail context — a
+                // generate-op output landed in a bare SIMPLE with no
+                // validation. Treat the divergence as a compile error so the
+                // user fixes the ToolConfig (typically a non-Jackson-friendly
+                // value in inputSchema or config) instead of shipping a
+                // half-configured tool. Guardrailed tools get the longer
+                // diagnostic since the failure mode there is more dangerous.
+                int guardrailCount =
+                        t.getGuardrails() != null ? t.getGuardrails().size() : 0;
+                throw new IllegalStateException(
+                        "PLAN_EXECUTE '"
+                                + config.getName()
+                                + "': tool '"
+                                + t.getName()
+                                + "' failed to serialise for PAC ("
+                                + e.getMessage()
+                                + ")."
+                                + (guardrailCount > 0
+                                        ? " The tool has "
+                                                + guardrailCount
+                                                + " guardrail(s) — silently dropping it would compile a"
+                                                + " wrapper-less version of a safety-checked tool."
+                                        : " Silently dropping the tool would leave"
+                                                + " ``knownToolNames`` allowing it while PAC has no schema or"
+                                                + " inputSchema for validation.")
+                                + " Fix the ToolConfig (typically a non-Jackson-friendly value"
+                                + " in inputSchema or config) and recompile.",
+                        e);
             }
         }
 
@@ -2590,12 +2603,20 @@ public class MultiAgentCompiler {
                 Object hdrObj = e.get("headers");
                 if (hdrObj instanceof Map<?, ?> hdrMap) {
                     for (Map.Entry<?, ?> h : hdrMap.entrySet()) {
-                        // ToolCompiler does the same ${CRED} → #{CRED}
-                        // escape on tool headers; keep the credential
-                        // pipeline single-source.
-                        headers.put(
-                                String.valueOf(h.getKey()),
-                                String.valueOf(h.getValue()).replace("${", "#{"));
+                        // /dg #2: escape ONLY ``${CRED_NAME}`` patterns where
+                        // ``CRED_NAME`` is an identifier — preserves literal
+                        // ``${...}`` substrings that don't look like
+                        // credentials (the old ``replace("${","#{")`` was a
+                        // greedy substring match that ate any opening brace
+                        // pair). Also reject CR/LF in header values up-front
+                        // to close the response-splitting injection vector.
+                        String name = String.valueOf(h.getKey());
+                        String value = String.valueOf(h.getValue());
+                        if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+                            throw new IllegalArgumentException("plannerContext header '" + name
+                                    + "' contains CR/LF — rejected to prevent HTTP response splitting");
+                        }
+                        headers.put(name, CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("#{$1}"));
                     }
                 }
                 Map<String, Object> req = new LinkedHashMap<>();

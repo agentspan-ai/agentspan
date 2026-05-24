@@ -1187,6 +1187,86 @@ class MultiAgentCompilerTest {
     }
 
     @Test
+    void testPlanExecute_plannerContext_credential_escape_only_anchored_identifiers() {
+        // /dg #2: the credential escape used to be a greedy substring match
+        // ``replace("${","#{")``. That ate any opening brace pair, including
+        // literal ``${...}`` substrings that happened to start with ``${`` but
+        // weren't credentials. Anchored regex now only rewrites
+        // ``${IDENTIFIER}`` patterns to ``#{IDENTIFIER}`` — anything that
+        // doesn't look like a placeholder passes through verbatim.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("pae_credential_escape")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .plannerContext(List.of(Map.of(
+                        "url",
+                        "https://docs.example.com/page",
+                        "headers",
+                        Map.of(
+                                "Authorization", "Bearer ${CONFLUENCE_TOKEN}",
+                                // Mixed: a placeholder + literal ${...} substring that
+                                // looks like one but isn't (no closing brace).
+                                "X-Custom", "value-with-${UNCLOSED and ${REAL_CRED}",
+                                // Pure literal — no rewrites at all.
+                                "X-Literal", "plain-text-value"))))
+                .build();
+
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+        WorkflowTask route = wf.getTasks().stream()
+                .filter(t -> "SWITCH".equals(t.getType())
+                        && t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_planner_route"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing planner_route SWITCH"));
+        WorkflowTask fetch = route.getDefaultCase().stream()
+                .filter(t -> t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_ctx_fetch_0"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing _ctx_fetch_0 task in live branch"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> req =
+                (Map<String, Object>) fetch.getInputParameters().get("http_request");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> headers = (Map<String, Object>) req.get("headers");
+
+        assertThat(headers)
+                .as("anchored placeholder must be escaped to #{IDENTIFIER}")
+                .containsEntry("Authorization", "Bearer #{CONFLUENCE_TOKEN}");
+        assertThat(headers)
+                .as("real placeholder escaped; un-anchored ${...} preserved")
+                .containsEntry("X-Custom", "value-with-${UNCLOSED and #{REAL_CRED}");
+        assertThat(headers)
+                .as("literal value with no placeholder passes through unchanged")
+                .containsEntry("X-Literal", "plain-text-value");
+    }
+
+    @Test
+    void testPlanExecute_plannerContext_rejects_CRLF_in_header_value() {
+        // /dg #2: header values must reject CR/LF to close the
+        // HTTP-response-splitting / header-injection vector.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig harness = AgentConfig.builder()
+                .name("pae_crlf_reject")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .plannerContext(List.of(Map.of(
+                        "url",
+                        "https://docs.example.com/page",
+                        "headers",
+                        Map.of("X-Bad", "value\r\nInjected: header"))))
+                .build();
+
+        assertThatThrownBy(() -> new MultiAgentCompiler(compiler).compile(harness))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("CR/LF")
+                .hasMessageContaining("X-Bad");
+    }
+
+    @Test
     void testPlanExecute_url_plannerContext_with_required_false_sets_optional_on_fetch() {
         // required=false → HTTP task gets .optional=true so a fetch failure
         // doesn't fail the workflow; the INLINE then substitutes the

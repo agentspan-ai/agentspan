@@ -190,6 +190,31 @@ public class JavaScriptBuilder {
     }
 
     /**
+     * Parse an LLM's text output into a JSON object, with a structured
+     * ``__parse_error`` sentinel on failure that the downstream parseGate
+     * SWITCH consumes.
+     *
+     * <p>Input contract: {@code $.llmOut} is the planner LLM's raw output
+     * (either an already-parsed Map from JSON-mode or a string).
+     *
+     * <p>Returns either the parsed object or:
+     * {@code {__parse_error: true, reason: '...'}}.
+     *
+     * <p>Used by every PAC ``generate`` op (PAC compiles to LLM_CHAT_COMPLETE
+     * → parse INLINE → SWITCH). /dg #10 extracted it from a string-literal
+     * inside ``PlanAndCompileTask.java`` into this method so quoting bugs
+     * don't break every plan one typo away.
+     */
+    public static String parseLlmOutputScript() {
+        return "(function(){ var r = $.llmOut; if (r == null || r === '')"
+                + " return {__parse_error: true, reason: 'empty LLM output'};"
+                + " try { var p = typeof r === 'string' ? JSON.parse(r) : r;"
+                + " if (!p || typeof p !== 'object' || Object.keys(p).length === 0)"
+                + " return {__parse_error: true, reason: 'empty JSON object'};"
+                + " return p; } catch(e) { return {__parse_error: true, reason: 'JSON parse: ' + e.message}; } })()";
+    }
+
+    /**
      * Build the planner-context aggregator script.
      *
      * <p>Input contract: {@code $.entries} is a list of per-entry descriptors

@@ -596,14 +596,10 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 Map<String, Object> parseInputs = new LinkedHashMap<>();
                 parseInputs.put("evaluatorType", "graaljs");
                 parseInputs.put("llmOut", "${" + llmRef + ".output.result}");
-                parseInputs.put(
-                        "expression",
-                        "(function(){ var r = $.llmOut; if (r == null || r === '')"
-                                + " return {__parse_error: true, reason: 'empty LLM output'};"
-                                + " try { var p = typeof r === 'string' ? JSON.parse(r) : r;"
-                                + " if (!p || typeof p !== 'object' || Object.keys(p).length === 0)"
-                                + " return {__parse_error: true, reason: 'empty JSON object'};"
-                                + " return p; } catch(e) { return {__parse_error: true, reason: 'JSON parse: ' + e.message}; } })()");
+                // /dg #10: extracted from a Java-source string literal into
+                // ``JavaScriptBuilder.parseLlmOutputScript()`` so quoting
+                // bugs are pinned to one method and tested in isolation.
+                parseInputs.put("expression", JavaScriptBuilder.parseLlmOutputScript());
                 Map<String, Object> parseTask = new LinkedHashMap<>();
                 parseTask.put("name", "INLINE_TASK");
                 parseTask.put("taskReferenceName", parseRef);
