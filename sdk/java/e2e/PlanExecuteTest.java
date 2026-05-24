@@ -645,13 +645,183 @@ class PlanExecuteTest extends BaseTest {
             + " text file(s), total word count: " + wordCount
             + ", files=" + textFiles);
 
+        // If the file-count assertion is about to fail, dump diagnostics
+        // FIRST so the failure message tells us what actually happened —
+        // not just "0 files produced." See dumpWorkflowDiagnostics for
+        // the shape: status, reasonForIncompletion, planner output,
+        // PAC's compile output (error/warnings/stats), which branch
+        // fired, and tool task outcomes. This was added because CI was
+        // failing intermittently with no actionable signal.
+        if (textFiles.size() == 0 || wordCount < MIN_WORD_COUNT) {
+            dumpWorkflowDiagnostics(result.getExecutionId(), "testMaxTokensInGenerate");
+        }
+
         assertTrue(textFiles.size() > 0,
             "no .md/.txt files produced in " + WORK_DIR
             + ". COUNTERFACTUAL: if the GraalJS compiler dropped max_tokens, "
-            + "the workflow may have terminated before writing any output.");
+            + "the workflow may have terminated before writing any output."
+            + " See stderr for workflow diagnostics.");
         assertTrue(wordCount >= MIN_WORD_COUNT,
             "Total word count " + wordCount + " < " + MIN_WORD_COUNT
-            + ". COUNTERFACTUAL: if max_tokens was ignored, LLM output is truncated short.");
+            + ". COUNTERFACTUAL: if max_tokens was ignored, LLM output is truncated short."
+            + " See stderr for workflow diagnostics.");
+    }
+
+    /**
+     * Fetch the workflow with tasks and dump a debugging summary to stderr.
+     * Used by tests whose assertions are several layers downstream from the
+     * server-side behaviour they actually validate (e.g. file existence as
+     * proxy for "planner emitted a plan that compiled and ran") — when those
+     * fail the bare message is useless. This dumps the workflow's status,
+     * each task's type/status/output, and recurses one level into
+     * SUB_WORKFLOWs (the plan_exec sub-workflow is where the action is).
+     *
+     * <p>Best-effort: any network or JSON failure is caught and logged
+     * rather than failing the test on top of the original failure.
+     */
+    @SuppressWarnings("unchecked")
+    private void dumpWorkflowDiagnostics(String executionId, String label) {
+        System.err.println();
+        System.err.println("════════════════════════════════════════════════════");
+        System.err.println("  [" + label + "] DIAGNOSTICS for execution " + executionId);
+        System.err.println("════════════════════════════════════════════════════");
+        try {
+            Map<String, Object> wf = fetchWorkflowWithTasks(executionId);
+            if (wf == null) {
+                System.err.println("  (workflow fetch failed)");
+                return;
+            }
+            System.err.println("  workflowName: " + wf.get("workflowName"));
+            System.err.println("  status:       " + wf.get("status"));
+            Object reason = wf.get("reasonForIncompletion");
+            if (reason != null) {
+                System.err.println("  reasonForIncompletion: " + truncate(reason.toString(), 500));
+            }
+            Object output = wf.get("output");
+            if (output != null) {
+                System.err.println("  parent output keys: "
+                    + (output instanceof Map<?, ?> m ? m.keySet() : output.getClass().getSimpleName()));
+            }
+            List<Map<String, Object>> tasks = (List<Map<String, Object>>) wf.getOrDefault("tasks", List.of());
+            System.err.println("  task count: " + tasks.size());
+            System.err.println();
+            System.err.println("  PARENT TASKS:");
+            String planExecSubId = null;
+            String plannerSubId = null;
+            for (Map<String, Object> t : tasks) {
+                String ref = String.valueOf(t.getOrDefault("referenceTaskName", ""));
+                String type = String.valueOf(t.getOrDefault("taskType", ""));
+                String status = String.valueOf(t.getOrDefault("status", ""));
+                System.err.printf("    %-12s %-18s %s%n", status, type, ref);
+
+                // Capture sub-workflow IDs for nested dump.
+                Object od = t.get("outputData");
+                if (od instanceof Map<?, ?> odm) {
+                    Object subId = odm.get("subWorkflowId");
+                    if (subId instanceof String sid && !sid.isEmpty()) {
+                        if (ref.endsWith("_plan_exec")) planExecSubId = sid;
+                        else if (ref.endsWith("_planner")) plannerSubId = sid;
+                    }
+                }
+
+                // For PLAN_AND_COMPILE: dump error + warnings + stats.
+                if ("PLAN_AND_COMPILE".equals(type)) {
+                    if (od instanceof Map<?, ?> odm) {
+                        System.err.println("      error:    " + odm.get("error"));
+                        System.err.println("      warnings: " + odm.get("warnings"));
+                        System.err.println("      stats:    " + odm.get("stats"));
+                    }
+                }
+                // For TERMINATE: dump reason.
+                if ("TERMINATE".equals(type) && t.get("inputData") instanceof Map<?, ?> idm) {
+                    System.err.println("      terminationReason: " + idm.get("terminationReason"));
+                }
+            }
+
+            // Recurse into planner + plan_exec sub-workflows — that's where
+            // the actual writes live.
+            if (plannerSubId != null) {
+                System.err.println();
+                System.err.println("  PLANNER SUB-WORKFLOW (" + plannerSubId + "):");
+                dumpChildWorkflow(plannerSubId, "    ");
+            }
+            if (planExecSubId != null) {
+                System.err.println();
+                System.err.println("  PLAN_EXEC SUB-WORKFLOW (" + planExecSubId + "):");
+                dumpChildWorkflow(planExecSubId, "    ");
+            }
+            System.err.println("════════════════════════════════════════════════════");
+            System.err.println();
+        } catch (Exception e) {
+            System.err.println("  (diagnostics dump failed: " + e.getMessage() + ")");
+        }
+    }
+
+    /** Print one child workflow's tasks + status, indented by {@code indent}. */
+    @SuppressWarnings("unchecked")
+    private void dumpChildWorkflow(String executionId, String indent) {
+        try {
+            Map<String, Object> wf = fetchWorkflowWithTasks(executionId);
+            if (wf == null) {
+                System.err.println(indent + "(fetch failed)");
+                return;
+            }
+            System.err.println(indent + "status: " + wf.get("status"));
+            Object reason = wf.get("reasonForIncompletion");
+            if (reason != null) {
+                System.err.println(indent + "reasonForIncompletion: " + truncate(reason.toString(), 500));
+            }
+            List<Map<String, Object>> tasks = (List<Map<String, Object>>) wf.getOrDefault("tasks", List.of());
+            for (Map<String, Object> t : tasks) {
+                String ref = String.valueOf(t.getOrDefault("referenceTaskName", ""));
+                String type = String.valueOf(t.getOrDefault("taskType", ""));
+                String status = String.valueOf(t.getOrDefault("status", ""));
+                String defName = String.valueOf(t.getOrDefault("taskDefName", ""));
+                System.err.printf(indent + "%-12s %-18s %-40s def=%s%n", status, type, ref, defName);
+                // For user-tool SIMPLE tasks, surface input + output briefly.
+                if ("SIMPLE".equals(type)) {
+                    Object id = t.get("inputData");
+                    Object od = t.get("outputData");
+                    System.err.println(indent + "  input:  " + truncate(String.valueOf(id), 200));
+                    System.err.println(indent + "  output: " + truncate(String.valueOf(od), 200));
+                }
+                if ("LLM_CHAT_COMPLETE".equals(type)) {
+                    Object od = t.get("outputData");
+                    if (od instanceof Map<?, ?> odm) {
+                        Object r = odm.get("result");
+                        System.err.println(indent + "  llm output: " + truncate(String.valueOf(r), 300));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println(indent + "(child dump failed: " + e.getMessage() + ")");
+        }
+    }
+
+    /** Fetch a workflow with includeTasks=true (the base class helper omits the flag). */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> fetchWorkflowWithTasks(String executionId) {
+        try {
+            java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(10))
+                .build();
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(BASE_URL + "/api/workflow/" + executionId + "?includeTasks=true"))
+                .timeout(java.time.Duration.ofSeconds(10))
+                .GET()
+                .build();
+            java.net.http.HttpResponse<String> resp = http.send(req,
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 400) return null;
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(resp.body(), Map.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "null";
+        return s.length() <= max ? s : s.substring(0, max) + "…(" + (s.length() - max) + " more chars)";
     }
 
     // ── Deterministic PAC/PAE tests — no LLM in assertion path ──────────
