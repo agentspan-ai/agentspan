@@ -245,6 +245,7 @@ The `server/` directory contains the Agent Runtime — a Spring Boot server that
 |---|---|---|
 | `/api/agent/start` | POST | Compile, register, and start an agent execution |
 | `/api/agent/compile` | POST | Compile agent config (inspect only) |
+| `/api/agent/inspect-plan` | POST | Compile a plan against a PLAN_EXECUTE harness config and return the resulting `WorkflowDef` + error + warnings + stats without dispatching the SUB_WORKFLOW. Body: `{agentConfig, plan}`. Same compile path PAC uses at runtime. See [docs/concepts/plan-execute.md](docs/concepts/plan-execute.md) |
 | `/api/agent/list` | GET | List all registered agents (filtered by `agent_sdk` metadata) |
 | `/api/agent/executions` | GET | Search agent executions (with `start`, `size`, `sort`, `freeText`, `status`, `agentName` params) |
 | `/api/agent/executions/{id}` | GET | Get detailed execution status (agent name, version, status, input, output, current task) |

@@ -369,6 +369,67 @@ plan = Plan(
 )
 ```
 
+## Planner context — ground the planner in your domain rules
+
+The planner's `instructions` are fine for "how to emit a plan." They're a poor fit for the *domain-specific rules* a real plan depends on: KYC tier thresholds, onboarding phase ordering, compliance escalation paths, region-specific exceptions. Those live in docs that change weekly — not in code that ships quarterly.
+
+`planner_context` injects those rules into the planner's user prompt at runtime, as a `## Reference Context` block. Two entry shapes:
+
+```python
+from agentspan.agents import Agent, Context, Strategy
+
+harness = Agent(
+    name="onboarding_harness",
+    strategy=Strategy.PLAN_EXECUTE,
+    tools=[validate_kyc, create_account, send_welcome_email],
+    planner=planner,
+    fallback=fallback,
+    planner_context=[
+        # 1) Inline text — short, stable, hand-edited in code.
+        "Onboarding has 3 mandatory phases in order: validate_kyc → create_account → send_welcome_email.",
+        "Tier 'enterprise' customers ADDITIONALLY require schedule_kickoff_call.",
+
+        # 2) Live doc — fetched per planner invocation, no compile-time fetch, no cache.
+        #    Authorization placeholders use the same `${CRED}` shape as ToolConfig.headers.
+        Context(
+            url="https://confluence.example.com/onboarding-rules",
+            headers={"Authorization": "Bearer ${CONFLUENCE_TOKEN}"},
+            required=True,    # fetch failure → workflow fails (default)
+            max_bytes=8192,   # truncate at 8KB + add a [doc truncated] marker
+        ),
+    ],
+)
+```
+
+**How it compiles.** Each URL entry emits a `PLANNER_CONTEXT_FETCH` system task inside the planner-route's *live* branch (the static-plan path skips it for free). With ≥2 URLs the fetches are wrapped in a `FORK_JOIN` so they run in parallel. A small in-process TTL cache (default 60 s) plus `If-None-Match`/ETag means repeat fetches for the same doc within the TTL return the cached body without touching the wire — and 304 responses refresh the TTL without re-downloading.
+
+**Cache scope.** Cache key is `(url, sorted-headers)`, so different `Authorization` headers (different principals) never share a cache entry. Bounded LRU at ~1024 entries.
+
+**Credential placeholders.** `${CRED_NAME}` in headers gets escaped server-side to `#{CRED_NAME}` so Conductor's templater leaves it alone; the runtime credential resolver fills the value at request time — same pipeline as HTTP tool headers. Headers containing `CR`/`LF` are rejected at compile time to close the HTTP-response-splitting injection vector.
+
+**Failure handling.** `required=True` (default) hard-fails the workflow on fetch error. `required=False` substitutes a `[doc unavailable]` marker in the planner prompt so the planner runs on partial context — for "nice-to-have" docs (glossaries, FAQs).
+
+End-to-end demo: `examples/115_plan_execute_planner_context.py` (Python; mirrored to TS / Java / C#).
+
+## Inspecting compiled plans
+
+`POST /api/agent/inspect-plan` compiles a plan against a PLAN_EXECUTE harness config and returns the resulting Conductor `WorkflowDef` + error string + warnings + stats — **without dispatching the SUB_WORKFLOW**. Useful for:
+
+* IDE tooling validating that a plan compiles cleanly against a fixed agent config before deploy
+* Plan-debug REPLs visualizing the compiled DAG
+* CI checks that verify a static plan still compiles after agent-config or tool-schema changes
+
+Request shape:
+
+```json
+{
+  "agentConfig": { /* same shape as POST /agent/start */ },
+  "plan": { "steps": [ { "id": "...", "operations": [ ... ] } ] }
+}
+```
+
+Response includes the same fields PAC sets on `output` at execution time (`workflowDef`, `error`, `warnings`, `stats`) — uses the production compile path, so the inspected output is byte-equal to what a real run would produce for that plan.
+
 ## Knobs reference
 
 | Field | Purpose |
@@ -376,6 +437,7 @@ plan = Plan(
 | `planner=` | Required. The agent that emits the JSON plan. |
 | `fallback=` | Optional. Agentic recovery when a plan can't compile/exec. |
 | `tools=` | Required. Plan-executable tool set. PAC validates `op.tool` names against this list and propagates each tool's guardrails. |
+| `planner_context=` | Optional. List of `Context(text=…)` / `Context(url=…)` entries appended to the planner's user prompt as `## Reference Context`. URLs fetched per-planner-invocation with TTL cache + ETag revalidation. See "Planner context" above. |
 | `fallback_max_turns=` | Caps the fallback agent's turn count during recovery. |
 | `plan_source=` | Optional. Reads a fixed plan from a deterministic tool call after the planner sub-workflow runs. When the planner's text output fails extraction, this source is tried as a fallback. The newer run-time `plan=` argument (see "Static plans" below) is the simpler path for most cases. |
 
@@ -395,6 +457,9 @@ plan = Plan(
 - `examples/110_plan_execute_replan_solve.py` — adaptive goal-seeking loop: K parallel proposers + deterministic verifier per iteration; the replanner threads each candidate's exact failure modes back into the next iteration's prompt and loops until any candidate clears all constraints
 - `examples/111_plan_execute_replan_binsearch.py` — many-iteration binary-search loop. The verifier holds a secret integer and each iteration's verdict reveals only one bit (too_low / too_high), so the loop *must* iterate ~log₂ N times. Use this when you want to see the plan-execute-replan cycle visibly converge over many iterations
 - `examples/112_dowhile_loop_inside_workflow.py` — the loop *inside* a single Conductor workflow via a hand-built `DO_WHILE` task. Body of the loop: planner LLM → INLINE verify → reviewer LLM → SET_VARIABLE update. One workflow ID for the whole run; iterations show up as `planner_llm__1`, `planner_llm__2`, etc. in the same workflow's task list. This is the shape of the future `Strategy.PLAN_EXECUTE_REPLAN` (recommendation #2 from the design review)
+- `examples/113_aml_sar_investigation_loop.py` — AML/SAR investigation as a DO_WHILE-inside-workflow with real PAC sub-workflows per iteration. The planner emits red-flag tool calls, the loop checks for "needs more evidence", and the cycle continues until the case is dispositioned. Mirrors finance compliance workflows
+- `examples/114_portfolio_rebalance_loop.py` — multi-constraint portfolio rebalancing with wash-sale / concentration / drift checks. Each iteration refines the trade list to satisfy more constraints; the loop terminates when all checks pass
+- `examples/115_plan_execute_planner_context.py` — customer onboarding with `planner_context` grounding the planner in tier rules. Mixed inline-text + commented Confluence-URL with `${CONFLUENCE_TOKEN}` reference for the credentialed-URL pattern. Mirrored to TS/Java/C#
 
 ## Plan → execute → replan
 
@@ -409,4 +474,8 @@ PAE itself is single-shot: plan-once, execute-once, fallback-once on hard failur
 | Workflow FAILED with "uses unknown tool" in PAC error | Planner emitted a tool name not in `harness.tools` | Add the tool, or fix the planner prompt; the auto-injected `## Available tools` block already constrains the planner — check it appears in your prompt |
 | Workflow FAILED, no fallback ran | `plan_exec` SUB_WORKFLOW failure not caught | Confirm `harness.fallback` is set; failures route through `exec_route` SWITCH to fallback |
 | Compile fails with "guardrails with on_fail=retry\|fix\|human but no fallback" | PAC blocks compile to prevent the silent degrade-to-terminate footgun | Configure a fallback or set `on_fail=raise` |
-| Plan compiled but did wrong thing | Planner LLM produced a syntactically-valid but semantically-wrong plan | Improve `planner_instructions`; consider switching to `plan=` static plan for deterministic flows |
+| Compile fails with "uses unsupported JSON Schema keyword '$ref' (or `oneOf`/`allOf`/`format`/etc.)" | The runtime input-schema validator implements a Draft-07 subset — keywords like `$ref`/`allOf`/`oneOf`/`format` would silently pass at runtime, producing *permissive validation*. PAC rejects at compile time instead | Restrict the tool's `inputSchema` to the supported subset (`type`, `properties`, `required`, `additionalProperties`, `enum`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum`, `items`, `minItems`, `maxItems`) or remove the misleading constraint |
+| Compile fails with "plannerContext header '...' contains CR/LF" | A `Context(url=…, headers=…)` value contained a newline — would smuggle a fake HTTP header (response-splitting vector) | Sanitize the credential value; CR/LF in HTTP header values is never legitimate |
+| `[doc unavailable]` markers in the planner's `## Reference Context` block | `Context(url=…, required=False)` doc fetch returned non-2xx | If the doc IS required, set `required=True` (default) so the workflow fails loudly instead. If it's truly optional, the marker is the intended behaviour |
+| Plan compiled but did wrong thing | Planner LLM produced a syntactically-valid but semantically-wrong plan | Improve `planner_instructions`; consider switching to `plan=` static plan for deterministic flows. For domain rules, lift them into `planner_context` so the planner re-reads them on every run instead of relying on the static `instructions` |
+| Need to see what PAC will compile a plan to without running it | Use the `POST /api/agent/inspect-plan` endpoint — same compile path PAC uses at runtime, no SUB_WORKFLOW dispatch | See "Inspecting compiled plans" above |
