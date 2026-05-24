@@ -9,6 +9,7 @@ import static dev.agentspan.runtime.compiler.AgentCompiler.ref;
 import static dev.agentspan.runtime.compiler.AgentCompiler.toRef;
 
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -44,8 +45,7 @@ public class MultiAgentCompiler {
      * the runtime credential resolver substitutes the real value at
      * request time.
      */
-    private static final java.util.regex.Pattern CREDENTIAL_PLACEHOLDER =
-            java.util.regex.Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
+    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
 
     private final AgentCompiler agentCompiler;
 

@@ -43,6 +43,7 @@ import com.netflix.conductor.service.WorkflowService;
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
 import dev.agentspan.runtime.compiler.AgentCompiler;
+import dev.agentspan.runtime.compiler.MultiAgentCompiler;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
@@ -142,8 +143,7 @@ public class AgentService {
      * (typically what the planner LLM emitted, but can be a hand-rolled
      * static plan for offline validation).
      */
-    public dev.agentspan.runtime.service.PlanAndCompileTask.InspectResult inspectPlan(
-            dev.agentspan.runtime.model.InspectPlanRequest request) {
+    public PlanAndCompileTask.InspectResult inspectPlan(InspectPlanRequest request) {
         if (request == null || request.getAgentConfig() == null) {
             throw new IllegalArgumentException("inspectPlan: agentConfig is required");
         }
@@ -162,24 +162,24 @@ public class AgentService {
         // Replicate what MultiAgentCompiler.compilePlanExecute computes
         // before calling PAC at runtime — so the inspect compile sees the
         // same inputs the real one would.
-        String workflowName = dev.agentspan.runtime.compiler.MultiAgentCompiler.planWorkflowName(config.getName());
+        String workflowName = MultiAgentCompiler.planWorkflowName(config.getName());
         String model = config.getModel() != null ? config.getModel() : "";
         int harnessTimeout = config.getTimeoutSeconds();
-        java.util.List<ToolConfig> parentTools = config.getTools() != null ? config.getTools() : java.util.List.of();
-        Set<String> knownToolNames = new java.util.HashSet<>();
+        List<ToolConfig> parentTools = config.getTools() != null ? config.getTools() : List.of();
+        Set<String> knownToolNames = new HashSet<>();
         for (ToolConfig t : parentTools) {
             if (t.getName() != null && !t.getName().isEmpty()) {
                 knownToolNames.add(t.getName());
             }
         }
-        Map<String, ToolConfig> parentToolsByName = new java.util.LinkedHashMap<>();
+        Map<String, ToolConfig> parentToolsByName = new LinkedHashMap<>();
         for (ToolConfig t : parentTools) {
             if (t.getName() != null && !t.getName().isEmpty()) {
                 parentToolsByName.put(t.getName(), t);
             }
         }
 
-        return new dev.agentspan.runtime.service.PlanAndCompileTask()
+        return new PlanAndCompileTask()
                 .inspectPlan(request.getPlan(), workflowName, model, harnessTimeout, knownToolNames, parentToolsByName);
     }
 

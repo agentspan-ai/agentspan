@@ -30,11 +30,13 @@ import dev.agentspan.runtime.model.CreateTrackingWorkflowRequest;
 import dev.agentspan.runtime.model.CreateTrackingWorkflowResponse;
 import dev.agentspan.runtime.model.InjectTaskRequest;
 import dev.agentspan.runtime.model.InjectTaskResponse;
+import dev.agentspan.runtime.model.InspectPlanRequest;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
 import dev.agentspan.runtime.model.TaskListResponse;
 import dev.agentspan.runtime.service.AgentDagService;
 import dev.agentspan.runtime.service.AgentService;
+import dev.agentspan.runtime.service.PlanAndCompileTask;
 
 import lombok.RequiredArgsConstructor;
 
@@ -71,8 +73,7 @@ public class AgentController {
      * would produce for the same plan.
      */
     @PostMapping("/inspect-plan")
-    public dev.agentspan.runtime.service.PlanAndCompileTask.InspectResult inspectPlan(
-            @RequestBody dev.agentspan.runtime.model.InspectPlanRequest request) {
+    public PlanAndCompileTask.InspectResult inspectPlan(@RequestBody InspectPlanRequest request) {
         return agentService.inspectPlan(request);
     }
 
