@@ -1187,6 +1187,93 @@ class MultiAgentCompilerTest {
     }
 
     @Test
+    void testPlanExecute_output_select_reads_final_result_variable_not_branch_refs() {
+        // /dg #5: the output selector used to pattern-match four mutually-
+        // exclusive ``${prefix_X.output.result}`` template strings to find
+        // the live one — Conductor leaves unresolved refs as literal
+        // ``${...}`` strings, and the script filtered them with a
+        // ``String.fromCharCode(36) + '{'`` marker. Refactored: each of
+        // the four terminal arms now writes ``workflow.variables.final_result``
+        // via SET_VARIABLE, and the selector reads from that single
+        // resolved variable. No more dead-branch leftovers to filter.
+        AgentConfig planner = simpleSubAgent("planner", "Write a plan");
+        AgentConfig fallback = simpleSubAgent("fallback", "Fix");
+        AgentConfig harness = AgentConfig.builder()
+                .name("out_sel_refactor")
+                .model("openai/gpt-4o-mini")
+                .strategy("plan_execute")
+                .planner(planner)
+                .fallback(fallback)
+                .build();
+        WorkflowDef wf = new MultiAgentCompiler(compiler).compile(harness);
+
+        WorkflowTask outputSelect = wf.getTasks().stream()
+                .filter(t -> "INLINE".equals(t.getType())
+                        && t.getTaskReferenceName() != null
+                        && t.getTaskReferenceName().endsWith("_output_select"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing _output_select INLINE"));
+
+        // Reads from the workflow variable, not from four branch refs.
+        assertThat(outputSelect.getInputParameters().get("r"))
+                .as("output selector must read workflow.variables.final_result")
+                .isEqualTo("${workflow.variables.final_result}");
+        assertThat(outputSelect.getInputParameters())
+                .as("output selector must not reference branch refs anymore — "
+                        + "previously had planResult / fallbackResult / "
+                        + "compileFallbackResult / noPlanResult inputs")
+                .doesNotContainKeys("planResult", "fallbackResult", "compileFallbackResult", "noPlanResult");
+
+        // The expression must not need a fromCharCode dollar-sign trick
+        // anymore — the variable resolves cleanly, no template-string
+        // pattern-matching required.
+        String expr = (String) outputSelect.getInputParameters().get("expression");
+        assertThat(expr)
+                .as("expression must not pattern-match unresolved templates")
+                .doesNotContain("fromCharCode")
+                .doesNotContain("indexOf");
+
+        // Verify the four terminal SET_VARIABLEs exist.
+        java.util.Set<String> setVarRefs = collectTaskRefsRecursive(wf.getTasks()).stream()
+                .filter(r -> r.endsWith("_set"))
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(setVarRefs)
+                .as("each terminal arm writes final_result via SET_VARIABLE")
+                .contains(
+                        "out_sel_refactor_exec_success_set",
+                        "out_sel_refactor_fallback_set",
+                        "out_sel_refactor_compile_fallback_set",
+                        "out_sel_refactor_noplan_fallback_set");
+    }
+
+    /**
+     * Walk the workflow's task tree (top-level + every SWITCH branch) and
+     * collect taskReferenceNames. Used by the output-selector test to find
+     * SET_VARIABLEs that live inside SWITCH branches.
+     */
+    private static List<String> collectTaskRefsRecursive(List<WorkflowTask> tasks) {
+        List<String> refs = new java.util.ArrayList<>();
+        if (tasks == null) return refs;
+        for (WorkflowTask t : tasks) {
+            if (t.getTaskReferenceName() != null) refs.add(t.getTaskReferenceName());
+            if (t.getDecisionCases() != null) {
+                for (List<WorkflowTask> branch : t.getDecisionCases().values()) {
+                    refs.addAll(collectTaskRefsRecursive(branch));
+                }
+            }
+            if (t.getDefaultCase() != null) {
+                refs.addAll(collectTaskRefsRecursive(t.getDefaultCase()));
+            }
+            if (t.getForkTasks() != null) {
+                for (List<WorkflowTask> branch : t.getForkTasks()) {
+                    refs.addAll(collectTaskRefsRecursive(branch));
+                }
+            }
+        }
+        return refs;
+    }
+
+    @Test
     void testPlanExecute_plannerContext_credential_escape_only_anchored_identifiers() {
         // /dg #2: the credential escape used to be a greedy substring match
         // ``replace("${","#{")``. That ate any opening brace pair, including
@@ -1759,11 +1846,16 @@ class MultiAgentCompilerTest {
         List<WorkflowTask> errBranch = compileGate.getDecisionCases().get("compile_failed");
         assertThat(errBranch).isNotEmpty();
         // With a fallback agent configured, compile failure routes to the fallback
-        // (last task is the fallback SUB_WORKFLOW), not TERMINATE. The whole point
-        // of fallback is to recover from this kind of failure.
+        // SUB_WORKFLOW. The last task is now a SET_VARIABLE that writes the
+        // fallback's result into ``workflow.variables.final_result`` for the
+        // output selector (/dg #5). The fallback SUB_WORKFLOW lives just before it.
         WorkflowTask lastErrTask = errBranch.get(errBranch.size() - 1);
         assertThat(lastErrTask.getType())
-                .as("compile_failed branch should route to fallback SUB_WORKFLOW when fallback is configured")
+                .as("compile_failed branch ends with the final_result SET_VARIABLE (/dg #5)")
+                .isEqualTo("SET_VARIABLE");
+        WorkflowTask penultimate = errBranch.get(errBranch.size() - 2);
+        assertThat(penultimate.getType())
+                .as("compile_failed branch's terminal action must still be the fallback SUB_WORKFLOW")
                 .isEqualTo("SUB_WORKFLOW");
     }
 

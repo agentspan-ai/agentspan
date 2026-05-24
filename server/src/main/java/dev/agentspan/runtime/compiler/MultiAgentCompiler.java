@@ -2343,36 +2343,31 @@ public class MultiAgentCompiler {
         routeSwitch.setDefaultCase(noPlanTasks);
         tasks.add(routeSwitch);
 
-        // ── Output selector: pick result from whichever branch ran ────
+        // ── Output selector: read final_result variable ─────────────────
+        // /dg #5: each of the four mutually-exclusive terminal branches
+        // (plan_exec success, exec-failure fallback, compile-failure
+        // fallback, no-plan fallback) writes ``workflow.variables.final_result``
+        // via SET_VARIABLE as its last task. The selector reads from that
+        // single resolved variable instead of pattern-matching unresolved
+        // ``${...}`` template strings across all four branch refs.
+        //
+        // The previous shape needed a ``safe()`` helper to filter out
+        // Conductor-left-behind ``${...}`` literals from dead branches, and
+        // built the ``${`` marker from ``String.fromCharCode(36)`` to keep
+        // the script's source out of Conductor's own templater. All of
+        // that goes away: the variable resolves to exactly one value
+        // (the branch that ran), or null if no branch did.
         String outputRef = prefix + "_output_select";
         WorkflowTask outputSelect = new WorkflowTask();
         outputSelect.setType("INLINE");
         outputSelect.setTaskReferenceName(outputRef);
-        // Output selector: pick the result from whichever branch ran. Up to four
-        // refs may appear in the workflow definition (plan_exec, exec-failure
-        // fallback, compile-failure fallback, no-plan fallback) but only one
-        // executes per run. Conductor leaves unresolved expressions as literal
-        // strings starting with ``${`` — the ``safe`` helper below filters
-        // those out so the JS coalesce only picks live results. ``optional:true``
-        // was previously needed to mask the unresolved-ref errors but it also
-        // swallowed real expression bugs; the safe-helper approach keeps this
-        // task non-optional so genuine errors surface.
         Map<String, Object> outputInputs = new LinkedHashMap<>();
         outputInputs.put("evaluatorType", "graaljs");
-        outputInputs.put("planResult", "${" + prefix + "_plan_exec.output.result}");
-        outputInputs.put("fallbackResult", "${" + prefix + "_fallback.output.result}");
-        outputInputs.put("noPlanResult", "${" + prefix + "_noplan_fallback.output.result}");
-        outputInputs.put("compileFallbackResult", "${" + prefix + "_compile_fallback.output.result}");
+        outputInputs.put("r", "${workflow.variables.final_result}");
         outputInputs.put(
                 "expression",
-                "(function(){ "
-                        // Detect literal ``${...}`` left over when a branch didn't run. Build
-                        // the marker char from charCode 36 ($) so this script's source itself
-                        // doesn't get pre-resolved by Conductor.
-                        + "var marker = String.fromCharCode(36) + '{';"
-                        + "function safe(v){ if (v == null) return null; if (typeof v === 'string' && v.indexOf(marker) === 0) return null; return v; }"
-                        + "var r = safe($.planResult) || safe($.fallbackResult) || safe($.compileFallbackResult) || safe($.noPlanResult) || '';"
-                        + "return (typeof r === 'object') ? JSON.stringify(r) : String(r); })()");
+                "(function(){ var r = $.r; if (r == null) return '';"
+                        + " return (typeof r === 'object') ? JSON.stringify(r) : String(r); })()");
         outputSelect.setInputParameters(outputInputs);
         tasks.add(outputSelect);
 
@@ -2467,8 +2462,19 @@ public class MultiAgentCompiler {
             // as the error source — the PLAN_AND_COMPILE task's output map
             // contains the error string and any warnings. A distinct prefix
             // prevents task-name collision with the exec-failure fallback.
-            compileFailureBranch =
-                    buildFallbackBranch(config, fallbackConfig, prefix + "_compile", plannerResult, compileRef);
+            List<WorkflowTask> base = new ArrayList<>(
+                    buildFallbackBranch(config, fallbackConfig, prefix + "_compile", plannerResult, compileRef));
+            // /dg #5: terminal SET_VARIABLE so the output selector reads
+            // ``workflow.variables.final_result`` instead of pattern-matching
+            // unresolved ``${_compile_fallback.output.result}`` from the
+            // outer scope.
+            WorkflowTask compileFallbackSet = new WorkflowTask();
+            compileFallbackSet.setType("SET_VARIABLE");
+            compileFallbackSet.setTaskReferenceName(prefix + "_compile_fallback_set");
+            compileFallbackSet.setInputParameters(
+                    Map.of("final_result", "${" + prefix + "_compile_fallback.output.result}"));
+            base.add(compileFallbackSet);
+            compileFailureBranch = base;
         } else {
             WorkflowTask compileFail = new WorkflowTask();
             compileFail.setType("TERMINATE");
@@ -2537,14 +2543,38 @@ public class MultiAgentCompiler {
 
         List<WorkflowTask> fallbackTasks = buildFallbackBranch(config, fallbackConfig, prefix, plannerResult, execRef);
 
+        // /dg #5: each terminal arm writes ``workflow.variables.final_result``
+        // via SET_VARIABLE so the output selector reads from one resolved
+        // variable instead of pattern-matching unresolved ``${...}`` template
+        // strings across four mutually-exclusive branches. Append the
+        // ``final_result`` SET_VARIABLE to every branch's last task.
+        WorkflowTask execSuccessSet = new WorkflowTask();
+        execSuccessSet.setType("SET_VARIABLE");
+        execSuccessSet.setTaskReferenceName(prefix + "_exec_success_set");
+        execSuccessSet.setInputParameters(Map.of("final_result", "${" + execRef + ".output.result}"));
+
         WorkflowTask statusSwitch = new WorkflowTask();
         statusSwitch.setType("SWITCH");
         statusSwitch.setTaskReferenceName(prefix + "_exec_route");
         statusSwitch.setEvaluatorType("value-param");
         statusSwitch.setExpression("switchCaseValue");
         statusSwitch.setInputParameters(Map.of("switchCaseValue", "${" + statusRef + ".output.result}"));
-        statusSwitch.setDecisionCases(Map.of("failed", fallbackTasks));
-        statusSwitch.setDefaultCase(List.of()); // success = done, result already set
+        // Append the exec_fallback's SET_VARIABLE ONLY when the fallback
+        // branch actually produces a result. With no fallback configured,
+        // buildFallbackBranch returns ``[TERMINATE]`` — Conductor halts
+        // there, the SET_VARIABLE would be dead code, and existing tests
+        // assert TERMINATE is the branch's last task. Same gate pattern
+        // as the compile-failure branch below.
+        List<WorkflowTask> failedBranch = new ArrayList<>(fallbackTasks);
+        if (fallbackConfig != null) {
+            WorkflowTask fallbackSet = new WorkflowTask();
+            fallbackSet.setType("SET_VARIABLE");
+            fallbackSet.setTaskReferenceName(prefix + "_fallback_set");
+            fallbackSet.setInputParameters(Map.of("final_result", "${" + prefix + "_fallback.output.result}"));
+            failedBranch.add(fallbackSet);
+        }
+        statusSwitch.setDecisionCases(Map.of("failed", failedBranch));
+        statusSwitch.setDefaultCase(List.of(execSuccessSet));
 
         List<WorkflowTask> compileSuccessBranch = new ArrayList<>();
         compileSuccessBranch.add(execTask);
@@ -2929,6 +2959,15 @@ public class MultiAgentCompiler {
                 "${workflow.input.media}",
                 "${workflow.variables.context}");
         tasks.add(fallbackTask);
+
+        // /dg #5: terminal SET_VARIABLE so the output selector reads
+        // ``workflow.variables.final_result`` instead of pattern-matching
+        // unresolved ``${_noplan_fallback.output.result}``.
+        WorkflowTask noPlanSet = new WorkflowTask();
+        noPlanSet.setType("SET_VARIABLE");
+        noPlanSet.setTaskReferenceName(prefix + "_noplan_fallback_set");
+        noPlanSet.setInputParameters(Map.of("final_result", "${" + noPlanFallbackRef + ".output.result}"));
+        tasks.add(noPlanSet);
 
         return tasks;
     }
