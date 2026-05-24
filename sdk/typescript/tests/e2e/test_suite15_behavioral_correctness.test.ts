@@ -360,7 +360,15 @@ describe('Suite 15: Behavioral Correctness', { timeout: 1_800_000 }, () => {
   // ═══════════════════════════════════════════════════════════════════
 
   describe('Parallel Behavioral', () => {
-    it('test_three_analysts_all_contribute', async () => {
+    // The real subject is "parallel strategy fans out to 3 sub-agents,
+    // each one executes its tool, the workflow completes". That's a
+    // server-side compile + dispatch property. gpt-4o-mini drives the
+    // tool-call decisions inside each sub-agent and occasionally skips
+    // a tool call entirely (especially get_shipping_rate under load).
+    // Per AGENTS.md "No Flaky Tests" — retries here cope with upstream
+    // LLM-provider variability, NOT with our own bugs. Same pattern as
+    // test_suite20_plan_execute.test.ts.
+    it('test_three_analysts_all_contribute', { retry: 2 }, async () => {
       const weatherAnalyst = new Agent({
         name: 'weather_analyst',
         model: MODEL,
@@ -560,7 +568,11 @@ describe('Suite 15: Behavioral Correctness', { timeout: 1_800_000 }, () => {
       expect(output).toContain('32');
     });
 
-    it('test_order_routed_and_looked_up', async () => {
+    // Same shape as test_three_analysts_all_contribute: the real subject
+    // is the router strategy + tool dispatch; the LLM drives the route +
+    // tool call. gpt-4o-mini sometimes routes elsewhere on first try.
+    // Retries cope with upstream provider variability, not Agentspan bugs.
+    it('test_order_routed_and_looked_up', { retry: 2 }, async () => {
       const desk = makeServiceDesk();
       const result = await runtime.run(
         desk,

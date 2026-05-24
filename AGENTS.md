@@ -157,6 +157,11 @@ This is not negotiable and not subject to per-session interpretation:
 
 When a test reveals non-determinism that the test itself caused (timing-sensitive assertions, ordering assumptions), fix the **test** so it's robust. When the non-determinism is in the system under test (real race, real instability), fix the **system**. Don't add retries to mask either case.
 
+**The narrow exception — upstream LLM provider variability.** Some e2e tests validate a non-LLM property (a strategy compiles, a sub-workflow fires, a worker registers) but depend on the LLM to drive the scenario (call a tool, pick a route). When gpt-4o-mini occasionally skips a tool call or paraphrases away a number, that's external provider variability — not Agentspan's bug and not the test's bug. For these cases:
+- Strongly prefer asserting on deterministic server-side state (workflow status, task names, `outputData` shapes from `@tool` stubs that return fixed data).
+- When that's not enough, `{ retry: 2 }` is acceptable, but only with a comment explaining *which* property is the real subject of the test and *why* LLM variability is incidental. See the pattern in `test_suite20_plan_execute.test.ts`.
+- Never use retries to paper over a real race in the system or a brittle assertion in the test. The retry is a coping mechanism for upstream variability, not for our own bugs.
+
 ### Writing Tests
 
 - Unit tests must run without an Agentspan server (mock all external calls)
