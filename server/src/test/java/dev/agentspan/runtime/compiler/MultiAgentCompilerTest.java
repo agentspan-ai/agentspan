@@ -1153,24 +1153,23 @@ class MultiAgentCompilerTest {
 
         List<WorkflowTask> live = route.getDefaultCase();
         WorkflowTask fetch = live.get(0);
-        assertThat(fetch.getType()).isEqualTo("HTTP");
+        // /dg #4: task type is now PLANNER_CONTEXT_FETCH (custom system
+        // task with cache + ETag) instead of Conductor's built-in HTTP.
+        assertThat(fetch.getType()).isEqualTo("PLANNER_CONTEXT_FETCH");
         assertThat(fetch.getTaskReferenceName()).endsWith("_ctx_fetch_0");
+
+        // Inputs are flattened (no nested http_request wrapper) so the
+        // PLANNER_CONTEXT_FETCH system task can read them directly.
+        Map<String, Object> inputs = fetch.getInputParameters();
+        assertThat(inputs).containsEntry("url", "https://confluence.example.com/onboarding-rules.md");
 
         // Headers must have credential placeholder escaped.
         @SuppressWarnings("unchecked")
-        Map<String, Object> req =
-                (Map<String, Object>) fetch.getInputParameters().get("http_request");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> headers = (Map<String, Object>) req.get("headers");
+        Map<String, Object> headers = (Map<String, Object>) inputs.get("headers");
         assertThat(headers).containsEntry("Authorization", "Bearer #{CONFLUENCE_TOKEN}");
 
-        // URI / method propagated from config.
-        assertThat(req).containsEntry("uri", "https://confluence.example.com/onboarding-rules.md");
-        assertThat(req).containsEntry("method", "GET");
-
-        // Execution token forwarded for CredentialAwareHttpTask.
-        assertThat(fetch.getInputParameters())
-                .containsEntry("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+        // Execution token forwarded for credential resolution.
+        assertThat(inputs).containsEntry("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
 
         // ctx_build INLINE comes after the fetch, referencing its
         // output.response.body via template.
@@ -1313,11 +1312,12 @@ class MultiAgentCompilerTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("missing _ctx_fetch_0 task in live branch"));
 
+        // /dg #4: headers live at the top level of inputParameters now,
+        // not nested under ``http_request`` — the PLANNER_CONTEXT_FETCH
+        // system task reads them directly.
         @SuppressWarnings("unchecked")
-        Map<String, Object> req =
-                (Map<String, Object>) fetch.getInputParameters().get("http_request");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> headers = (Map<String, Object>) req.get("headers");
+        Map<String, Object> headers =
+                (Map<String, Object>) fetch.getInputParameters().get("headers");
 
         assertThat(headers)
                 .as("anchored placeholder must be escaped to #{IDENTIFIER}")
@@ -1355,9 +1355,13 @@ class MultiAgentCompilerTest {
 
     @Test
     void testPlanExecute_url_plannerContext_with_required_false_sets_optional_on_fetch() {
-        // required=false → HTTP task gets .optional=true so a fetch failure
+        // required=false → fetch task gets .optional=true so a fetch failure
         // doesn't fail the workflow; the INLINE then substitutes the
         // [doc unavailable] marker.
+        //
+        // /dg #4: with ≥2 URLs the fetches are now wrapped in a FORK_JOIN
+        // for parallel execution. The fetch tasks live inside the fork's
+        // branches, not at the top of the live branch.
         AgentConfig planner = simpleSubAgent("planner", "Write a plan");
         AgentConfig harness = AgentConfig.builder()
                 .name("pae_with_optional_url_ctx")
@@ -1379,8 +1383,22 @@ class MultiAgentCompilerTest {
                 .orElseThrow(() -> new AssertionError("missing planner_route SWITCH"));
 
         List<WorkflowTask> live = route.getDefaultCase();
-        WorkflowTask requiredFetch = live.get(0);
-        WorkflowTask optionalFetch = live.get(1);
+
+        // First task in the live branch is the FORK_JOIN (≥2 URLs).
+        WorkflowTask fork = live.get(0);
+        assertThat(fork.getType())
+                .as("≥2 URLs must be wrapped in FORK_JOIN for parallel fetching")
+                .isEqualTo("FORK_JOIN");
+        assertThat(fork.getForkTasks()).hasSize(2);
+
+        // JOIN immediately after FORK_JOIN.
+        WorkflowTask join = live.get(1);
+        assertThat(join.getType()).isEqualTo("JOIN");
+        assertThat(join.getJoinOn()).hasSize(2);
+
+        // Each fork branch contains one fetch task.
+        WorkflowTask requiredFetch = fork.getForkTasks().get(0).get(0);
+        WorkflowTask optionalFetch = fork.getForkTasks().get(1).get(0);
         assertThat(requiredFetch.getTaskReferenceName()).endsWith("_ctx_fetch_0");
         assertThat(optionalFetch.getTaskReferenceName()).endsWith("_ctx_fetch_1");
         assertThat(requiredFetch.isOptional()).isFalse();

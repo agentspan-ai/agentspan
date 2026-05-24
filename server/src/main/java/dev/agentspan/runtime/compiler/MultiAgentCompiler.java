@@ -2595,7 +2595,7 @@ public class MultiAgentCompiler {
     }
 
     /**
-     * Emit per-URL HTTP fetch tasks plus a concatenating INLINE that builds
+     * Emit per-URL fetch tasks plus a concatenating INLINE that builds
      * the {@code ## Reference Context} block injected into the planner's
      * prompt. Returns the ref of the INLINE so the caller can template
      * {@code ${ref.output.result}} into the prompt — or {@code null} when
@@ -2604,21 +2604,23 @@ public class MultiAgentCompiler {
      * <p>Per-entry semantics:
      * <ul>
      *   <li>{@code text}: inlined verbatim — no fetch.</li>
-     *   <li>{@code url}: emits a Conductor HTTP task with the supplied
-     *       headers (credential placeholders escaped from {@code ${CRED}}
-     *       to {@code #{CRED}} so Conductor's templater doesn't consume
-     *       them; resolved at execution by the credential-aware HTTP
-     *       handler). {@code required=false} sets {@code optional=true}
-     *       on the task so a fetch failure substitutes a
-     *       {@code [doc unavailable]} marker instead of failing the
-     *       workflow. {@code maxBytes} (default 16384) truncates large
-     *       responses with a {@code [doc truncated]} marker so a single
-     *       oversized wiki page can't blow the planner's context window.</li>
+     *   <li>{@code url}: emits a {@code PLANNER_CONTEXT_FETCH} system task
+     *       with the supplied headers (credential placeholders escaped
+     *       from {@code ${CRED}} to {@code #{CRED}} server-side; the
+     *       runtime resolver fills the value at request time). The
+     *       custom task adds an in-process TTL cache + {@code If-None-Match}
+     *       conditional-GET on top of Conductor's HTTP task — see
+     *       {@link dev.agentspan.runtime.service.PlannerContextFetchTask}.
+     *       {@code required=false} doesn't fail the workflow on a fetch
+     *       error; instead the INLINE substitutes a {@code [doc unavailable]}
+     *       marker. {@code maxBytes} (default 16384) truncates large
+     *       responses with a {@code [doc truncated]} marker.</li>
      * </ul>
      *
-     * <p>HTTP fetches run sequentially in the live branch — for the typical
-     * 1–3-doc shape that's fine. A FORK_JOIN parallel variant can be added
-     * if doc counts grow.
+     * <p>/dg #4: when there are ≥2 URL fetches the compiler wraps them in
+     * a {@code FORK_JOIN} so they run in parallel. Single-fetch case
+     * stays flat to keep the workflow graph readable. The
+     * {@code _ctx_build} INLINE always runs after all fetches complete.
      */
     private String emitPlannerContextBuilder(List<Map<String, Object>> entries, String prefix, List<WorkflowTask> out) {
         if (entries == null || entries.isEmpty()) {
@@ -2629,6 +2631,8 @@ public class MultiAgentCompiler {
         // reference the fetch task's response.body via Conductor template;
         // text entries inline their literal.
         List<Map<String, Object>> descriptors = new ArrayList<>();
+        // Fetch tasks collected here so >1 can be wrapped in FORK_JOIN.
+        List<WorkflowTask> fetchTasks = new ArrayList<>();
 
         for (int i = 0; i < entries.size(); i++) {
             Map<String, Object> e = entries.get(i);
@@ -2640,8 +2644,8 @@ public class MultiAgentCompiler {
             } else if (url instanceof String us && !us.isEmpty()) {
                 String fetchRef = prefix + "_ctx_fetch_" + i;
                 WorkflowTask fetch = new WorkflowTask();
-                fetch.setName("planner_context_fetch");
-                fetch.setType("HTTP");
+                fetch.setName(dev.agentspan.runtime.service.PlannerContextFetchTask.TASK_TYPE);
+                fetch.setType(dev.agentspan.runtime.service.PlannerContextFetchTask.TASK_TYPE);
                 fetch.setTaskReferenceName(fetchRef);
 
                 Map<String, Object> headers = new LinkedHashMap<>();
@@ -2651,10 +2655,8 @@ public class MultiAgentCompiler {
                         // /dg #2: escape ONLY ``${CRED_NAME}`` patterns where
                         // ``CRED_NAME`` is an identifier — preserves literal
                         // ``${...}`` substrings that don't look like
-                        // credentials (the old ``replace("${","#{")`` was a
-                        // greedy substring match that ate any opening brace
-                        // pair). Also reject CR/LF in header values up-front
-                        // to close the response-splitting injection vector.
+                        // credentials. Also reject CR/LF up-front to close
+                        // the response-splitting injection vector.
                         String name = String.valueOf(h.getKey());
                         String value = String.valueOf(h.getValue());
                         if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
@@ -2664,39 +2666,40 @@ public class MultiAgentCompiler {
                         headers.put(name, CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("#{$1}"));
                     }
                 }
-                Map<String, Object> req = new LinkedHashMap<>();
-                req.put("uri", us);
-                req.put("method", "GET");
-                req.put("headers", headers);
-                req.put("accept", "*/*");
-                req.put("contentType", "application/json");
-                req.put("connectionTimeOut", 10000);
-                req.put("readTimeOut", 30000);
+
+                boolean required = !Boolean.FALSE.equals(e.get("required"));
+                int maxBytes = 16384;
+                if (e.get("maxBytes") instanceof Number n) {
+                    maxBytes = n.intValue();
+                }
+                int ttlSeconds = 60;
+                if (e.get("ttlSeconds") instanceof Number n) {
+                    ttlSeconds = n.intValue();
+                }
+
                 Map<String, Object> fetchInputs = new LinkedHashMap<>();
-                fetchInputs.put("http_request", req);
-                // Forward the execution token so CredentialAwareHttpTask can
-                // resolve any #{CRED} headers (same shape as ToolCompiler's
-                // OpenAPI-spec fetch path).
+                fetchInputs.put("url", us);
+                fetchInputs.put("headers", headers);
+                fetchInputs.put("required", required);
+                fetchInputs.put("maxBytes", maxBytes);
+                fetchInputs.put("ttl_seconds", ttlSeconds);
+                // Forward the execution token so credential-aware
+                // resolution at the network layer can substitute #{CRED}.
                 fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
                 fetch.setInputParameters(fetchInputs);
 
-                boolean required = !Boolean.FALSE.equals(e.get("required"));
                 if (!required) {
-                    // Conductor's WorkflowTask.optional surfaces as a flag on
-                    // the task — a non-2xx / timeout doesn't fail the
-                    // workflow; the INLINE then substitutes [doc unavailable].
+                    // /dg #4: optional=true means a doc-host outage on a
+                    // non-required doc doesn't fail the workflow — the
+                    // INLINE substitutes [doc unavailable] marker.
                     fetch.setOptional(true);
                 }
-                out.add(fetch);
+                fetchTasks.add(fetch);
 
                 Map<String, Object> desc = new LinkedHashMap<>();
                 desc.put("type", "url");
                 desc.put("url", us);
                 desc.put("required", required);
-                int maxBytes = 16384;
-                if (e.get("maxBytes") instanceof Number n) {
-                    maxBytes = n.intValue();
-                }
                 desc.put("maxBytes", maxBytes);
                 // Conductor resolves these templates BEFORE invoking the
                 // INLINE script — so $.entries[i].body is the actual body.
@@ -2711,6 +2714,33 @@ public class MultiAgentCompiler {
 
         if (descriptors.isEmpty()) {
             return null;
+        }
+
+        // /dg #4: emit fetches in parallel when there are ≥2. Single-fetch
+        // stays flat to keep the graph readable. The build INLINE always
+        // runs after every fetch completes (FORK_JOIN's JOIN gives us
+        // that for free).
+        if (fetchTasks.size() >= 2) {
+            String forkRef = prefix + "_ctx_fork";
+            String joinRef = prefix + "_ctx_join";
+            WorkflowTask fork = new WorkflowTask();
+            fork.setType("FORK_JOIN");
+            fork.setTaskReferenceName(forkRef);
+            List<List<WorkflowTask>> branches = new ArrayList<>();
+            List<String> joinOn = new ArrayList<>();
+            for (WorkflowTask f : fetchTasks) {
+                branches.add(List.of(f));
+                joinOn.add(f.getTaskReferenceName());
+            }
+            fork.setForkTasks(branches);
+            out.add(fork);
+            WorkflowTask join = new WorkflowTask();
+            join.setType("JOIN");
+            join.setTaskReferenceName(joinRef);
+            join.setJoinOn(joinOn);
+            out.add(join);
+        } else if (!fetchTasks.isEmpty()) {
+            out.addAll(fetchTasks);
         }
 
         String buildRef = prefix + "_ctx_build";
