@@ -122,7 +122,16 @@ agentspan skill serve my-skill --version 2026.05.21 --script-timeout 300
 When `skill run` or `skill serve` is given a registered skill name instead of
 a local directory, the CLI downloads the package into
 `~/.agentspan/skills/<name>/<version>/files` and reuses that cached copy until
-the server checksum changes.
+the server checksum changes. Downloaded packages are checksum-verified before
+the cache is installed or any script worker is started. If a registered skill
+references another registered skill, the server resolves that reference at
+compile time and the CLI downloads the referenced package too, so script tools
+and `read_skill_file` work for both the parent and referenced skills. Referenced
+skill versions are pinned when the parent is registered; running `parent@v1`
+continues to use the child version that was latest at registration time.
+
+`skill register` excludes generated directories, common secret files such as
+`.env` and private keys, and paths matched by `.agentspanignore`.
 
 `skill run` exposes the current directory as the `workspace` filesystem root by
 default. Skills can list, read, search, and inspect git status/diff through

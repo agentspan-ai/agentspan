@@ -7,6 +7,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -687,6 +689,33 @@ func TestBuildSkillPackage_IncludesSkillFiles(t *testing.T) {
 	}
 }
 
+func TestBuildSkillPackage_ExcludesSecretsAndAgentspanIgnore(t *testing.T) {
+	dir := t.TempDir()
+	createSimpleSkill(t, dir)
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret"), 0o600)
+	os.WriteFile(filepath.Join(dir, "private.pem"), []byte("secret-key"), 0o600)
+	os.WriteFile(filepath.Join(dir, "notes.tmp"), []byte("generated"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".agentspanignore"), []byte("notes.tmp\nignored/\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "ignored"), 0o755)
+	os.WriteFile(filepath.Join(dir, "ignored", "artifact.txt"), []byte("artifact"), 0o644)
+
+	_, files, err := buildSkillPackage(dir)
+	if err != nil {
+		t.Fatalf("buildSkillPackage: %v", err)
+	}
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.Path)
+	}
+	for _, excluded := range []string{".env", "private.pem", "notes.tmp", ".agentspanignore", "ignored/artifact.txt"} {
+		for _, got := range paths {
+			if got == excluded {
+				t.Fatalf("package included excluded file %q; paths=%v", excluded, paths)
+			}
+		}
+	}
+}
+
 func TestSkillRegister_Integration(t *testing.T) {
 	dir := t.TempDir()
 	createResourceSkill(t, dir)
@@ -874,11 +903,36 @@ func TestSkillRun_Integration(t *testing.T) {
 func TestSkillRun_RegisteredSkillUsesSkillRef(t *testing.T) {
 	newTempHome(t)
 	dir := t.TempDir()
-	createSimpleSkill(t, dir)
+	skillMd := `---
+name: registered-skill
+description: Parent skill.
+---
+
+# Parent
+
+Use the child-skill skill.
+`
+	os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(skillMd), 0o644)
 	zipBytes, _, err := buildSkillPackage(dir)
 	if err != nil {
 		t.Fatalf("buildSkillPackage: %v", err)
 	}
+	checksum := testSHA256(zipBytes)
+	childDir := t.TempDir()
+	childMd := `---
+name: child-skill
+description: Child skill.
+---
+
+# Child
+`
+	os.WriteFile(filepath.Join(childDir, "SKILL.md"), []byte(childMd), 0o644)
+	childZipBytes, _, err := buildSkillPackage(childDir)
+	if err != nil {
+		t.Fatalf("build child package: %v", err)
+	}
+	childChecksum := testSHA256(childZipBytes)
+	var childFetched bool
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -887,11 +941,22 @@ func TestSkillRun_RegisteredSkillUsesSkillRef(t *testing.T) {
 				"name":     "registered-skill",
 				"version":  "v1",
 				"status":   "READY",
-				"checksum": "checksum-v1",
+				"checksum": checksum,
 			})
 		case r.Method == "GET" && r.URL.Path == "/api/skills/registered-skill/versions/v1/package":
 			w.Header().Set("Content-Type", "application/octet-stream")
 			w.Write(zipBytes)
+		case r.Method == "GET" && r.URL.Path == "/api/skills/child-skill":
+			childFetched = true
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"name":     "child-skill",
+				"version":  "v1",
+				"status":   "READY",
+				"checksum": childChecksum,
+			})
+		case r.Method == "GET" && r.URL.Path == "/api/skills/child-skill/versions/v1/package":
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(childZipBytes)
 		case r.Method == "POST" && r.URL.Path == "/api/agent/start":
 			var req map[string]interface{}
 			json.NewDecoder(r.Body).Decode(&req)
@@ -904,9 +969,14 @@ func TestSkillRun_RegisteredSkillUsesSkillRef(t *testing.T) {
 				http.Error(w, fmt.Sprintf("bad skillRef: %#v", ref), http.StatusBadRequest)
 				return
 			}
+			params, _ := ref["params"].(map[string]interface{})
+			if params["mode"] != "review" {
+				http.Error(w, fmt.Sprintf("missing params in skillRef: %#v", ref), http.StatusBadRequest)
+				return
+			}
 			json.NewEncoder(w).Encode(map[string]string{
 				"executionId": "exec-registered",
-				"agentName":   "simple-skill",
+				"agentName":   "registered-skill",
 			})
 		case r.Method == "GET" && r.URL.Path == "/api/agent/exec-registered/status":
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -924,12 +994,14 @@ func TestSkillRun_RegisteredSkillUsesSkillRef(t *testing.T) {
 	oldTimeout := skillTimeout
 	oldServerURL := serverURL
 	oldVersion := skillVersion
+	oldParams := skillParams
 	defer func() {
 		skillModel = oldModel
 		skillStream = oldStream
 		skillTimeout = oldTimeout
 		serverURL = oldServerURL
 		skillVersion = oldVersion
+		skillParams = oldParams
 	}()
 
 	skillModel = "openai/gpt-4o"
@@ -937,9 +1009,13 @@ func TestSkillRun_RegisteredSkillUsesSkillRef(t *testing.T) {
 	skillTimeout = 10
 	serverURL = srv.URL
 	skillVersion = ""
+	skillParams = []string{"mode=review"}
 
 	if err := runSkillRun(nil, []string{"registered-skill", "test prompt"}); err != nil {
 		t.Fatalf("runSkillRun error: %v", err)
+	}
+	if !childFetched {
+		t.Fatal("registered cross-skill reference was not fetched")
 	}
 }
 
@@ -1033,6 +1109,7 @@ func TestMaterializeSkillArg_RegisteredSkillCachesUnderAgentspan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildSkillPackage: %v", err)
 	}
+	checksum := testSHA256(zipBytes)
 
 	packageDownloads := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1042,7 +1119,7 @@ func TestMaterializeSkillArg_RegisteredSkillCachesUnderAgentspan(t *testing.T) {
 				"name":        "registered-skill",
 				"version":     "v1",
 				"status":      "READY",
-				"checksum":    "checksum-v1",
+				"checksum":    checksum,
 				"packageSize": len(zipBytes),
 			})
 		case r.Method == "GET" && r.URL.Path == "/api/skills/registered-skill/versions/v1/package":
@@ -1087,6 +1164,45 @@ func TestMaterializeSkillArg_RegisteredSkillCachesUnderAgentspan(t *testing.T) {
 	if packageDownloads != 1 {
 		t.Fatalf("package downloads after second materialize = %d, want 1", packageDownloads)
 	}
+}
+
+func TestMaterializeSkillArg_RejectsChecksumMismatch(t *testing.T) {
+	newTempHome(t)
+	dir := t.TempDir()
+	createSimpleSkill(t, dir)
+	zipBytes, _, err := buildSkillPackage(dir)
+	if err != nil {
+		t.Fatalf("buildSkillPackage: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/api/skills/registered-skill":
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"name":     "registered-skill",
+				"version":  "v1",
+				"status":   "READY",
+				"checksum": strings.Repeat("0", 64),
+			})
+		case r.Method == "GET" && r.URL.Path == "/api/skills/registered-skill/versions/v1/package":
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(zipBytes)
+		default:
+			http.Error(w, "unexpected request: "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := client.New(newTestConfig(t, srv.URL))
+	_, _, _, err = materializeSkillArg(c, "registered-skill")
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("expected checksum mismatch error, got %v", err)
+	}
+}
+
+func testSHA256(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func TestWorkspaceFileTools_RespectConfiguredRoot(t *testing.T) {

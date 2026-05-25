@@ -390,7 +390,7 @@ agentspan skill run code-review "Review code and docs" \
 
 ### Server registry
 
-Registering a skill uploads the full folder as an immutable server-side package. The server validates the zip, derives the runtime skill config from the package contents, stores it with a content checksum, exposes it in the UI under **Definitions → Skills**, and can later resolve it by name.
+Registering a skill uploads the skill folder as an immutable server-side package. The CLI excludes generated directories, common secret files such as `.env` and private keys, and paths matched by `.agentspanignore`. The server validates the zip, derives the runtime skill config from the package contents, stores owner-scoped metadata with a content checksum, exposes it in the UI under **Definitions → Skills**, and can later resolve it by name for that owner.
 
 ```bash
 # Register a skill package on the server
@@ -415,7 +415,7 @@ agentspan skill run dg "Review auth.py" --model openai/gpt-4o
 agentspan skill serve dg
 ```
 
-Registered skill execution uses a compact `skillRef` on the server. When a registered skill has script tools or resource-file reads, the CLI downloads the package to `~/.agentspan/skills/<name>/<version>/files` and starts the same local workers used for path-based execution. The cached package is reused until the server checksum changes.
+Registered skill execution uses a compact `skillRef` on the server. The server resolves defaults and registered cross-skill references from the registry at compile time. Referenced skill versions are pinned when the parent is registered, so a parent version keeps using the same child version even if the child is updated later. When a registered skill or referenced skill has script tools or resource-file reads, the CLI downloads each package to `~/.agentspan/skills/<name>/<version>/files`, verifies the package checksum, and starts the same local workers used for path-based execution. The cached package is reused until the server checksum changes.
 
 For local context, `skill run` exposes the current directory as a read-only `workspace` root by default. The server compiles workspace tools for listing files, reading files, searching text, and reading git status/diff; the CLI serves those tools locally and enforces root boundaries. Additional read-only roots can be exposed with `--filesystem <name>=<path>`. Script workers run with the skill root as their working directory, expose `AGENTSPAN_SKILL_DIR`, expose `AGENTSPAN_WORKSPACE_DIR` when a workspace root is available, and expose each configured root as `AGENTSPAN_FILESYSTEM_ROOT_<NAME>`.
 
@@ -426,7 +426,7 @@ The server separates registry metadata from package blob storage. Configure the 
 | Property | Default | Description |
 |----------|---------|-------------|
 | `agentspan.skills.package-store.type` | `filesystem` | `filesystem` for local or mounted-volume deployments; `conductor-payload` for Conductor external payload storage. |
-| `agentspan.skills.storage.directory` | `${java.io.tmpdir}/agentspan/skills` | Metadata root and default filesystem package root parent. |
+| `agentspan.skills.storage.directory` | `${java.io.tmpdir}/agentspan/skills` | Owner-scoped metadata root and default filesystem package root parent. |
 | `agentspan.skills.package-store.filesystem.directory` | `${agentspan.skills.storage.directory}/packages` | Filesystem package blob directory. |
 | `agentspan.skills.max-package-bytes` | `52428800` | Maximum compressed package upload size. |
 | `agentspan.skills.max-uncompressed-bytes` | `209715200` | Maximum expanded zip payload size. |

@@ -17,6 +17,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+import requests
 from conftest import BASE_URL, CLI_PATH, MODEL, get_workflow
 
 pytestmark = [pytest.mark.e2e, pytest.mark.xdist_group("cli-skills")]
@@ -178,6 +179,69 @@ def _assert_loaded_skill_raw_config(output: str, skill_name: str) -> None:
     assert "_skillSections" not in serialized
 
 
+def _write_registered_dependency_skills(tmp_path):
+    suffix = uuid.uuid4().hex[:8]
+    child_name = f"child-skill-{suffix}"
+    parent_name = f"parent-skill-{suffix}"
+
+    child_v1 = tmp_path / f"{child_name}-v1"
+    child_v1.mkdir()
+    (child_v1 / "SKILL.md").write_text(
+        textwrap.dedent(
+            f"""\
+            ---
+            name: {child_name}
+            description: Child skill v1.
+            ---
+            ## Workflow
+            Child dependency version one.
+            """
+        )
+    )
+    scripts = child_v1 / "scripts"
+    scripts.mkdir()
+    script = scripts / "echo_args.py"
+    script.write_text(
+        "#!/usr/bin/env python3\nimport sys\nprint('CHILD_V1:' + ' '.join(sys.argv[1:]))\n"
+    )
+    script.chmod(0o755)
+    refs = child_v1 / "references"
+    refs.mkdir()
+    (refs / "guide.md").write_text("CHILD_GUIDE_V1\n")
+
+    parent = tmp_path / parent_name
+    parent.mkdir()
+    (parent / "SKILL.md").write_text(
+        textwrap.dedent(
+            f"""\
+            ---
+            name: {parent_name}
+            description: Parent skill.
+            ---
+            ## Workflow
+            Use the {child_name} skill for the request.
+            """
+        )
+    )
+
+    child_v2 = tmp_path / f"{child_name}-v2"
+    child_v2.mkdir()
+    (child_v2 / "SKILL.md").write_text(
+        textwrap.dedent(
+            f"""\
+            ---
+            name: {child_name}
+            description: Child skill v2.
+            ---
+            ## Workflow
+            Child dependency version two.
+            """
+        )
+    )
+
+    return parent_name, parent, child_name, child_v1, child_v2
+
+
 def _stop_process(proc: subprocess.Popen) -> None:
     if proc.poll() is not None:
         return
@@ -234,6 +298,123 @@ class TestSuite16CliSkills:
 
         missing = _run_cli(cli_path, "skill", "get", skill_name, "--version", version, timeout=60)
         assert missing.returncode != 0
+
+    def test_registered_cross_skill_dependency_versions_are_pinned(self, cli_path, tmp_path):
+        """Registered parent skills compile against dependency versions pinned at registration."""
+        parent_name, parent_dir, child_name, child_v1, child_v2 = _write_registered_dependency_skills(tmp_path)
+
+        child_v1_version = f"v1-{uuid.uuid4().hex[:8]}"
+        parent_version = f"v1-{uuid.uuid4().hex[:8]}"
+        child_v2_version = f"v2-{uuid.uuid4().hex[:8]}"
+
+        child_register = _run_cli(
+            cli_path,
+            "skill",
+            "register",
+            str(child_v1),
+            "--version",
+            child_v1_version,
+            "--model",
+            MODEL,
+            timeout=60,
+        )
+        assert child_register.returncode == 0, (
+            f"stdout:\n{child_register.stdout}\nstderr:\n{child_register.stderr}"
+        )
+
+        parent_register = _run_cli(
+            cli_path,
+            "skill",
+            "register",
+            str(parent_dir),
+            "--version",
+            parent_version,
+            "--model",
+            MODEL,
+            timeout=60,
+        )
+        assert parent_register.returncode == 0, (
+            f"stdout:\n{parent_register.stdout}\nstderr:\n{parent_register.stderr}"
+        )
+        parent_detail = _json_from_cli(parent_register.stdout)
+        pinned = parent_detail["rawConfig"]["crossSkillRefs"][child_name]["skillRef"]
+        assert pinned["version"] == child_v1_version
+
+        child_v2_register = _run_cli(
+            cli_path,
+            "skill",
+            "register",
+            str(child_v2),
+            "--version",
+            child_v2_version,
+            "--model",
+            MODEL,
+            timeout=60,
+        )
+        assert child_v2_register.returncode == 0, (
+            f"stdout:\n{child_v2_register.stdout}\nstderr:\n{child_v2_register.stderr}"
+        )
+
+        compile_response = requests.post(
+            f"{BASE_URL}/api/agent/compile",
+            json={
+                "framework": "skill",
+                "skillRef": {
+                    "name": parent_name,
+                    "version": parent_version,
+                    "model": MODEL,
+                },
+            },
+            timeout=30,
+        )
+        assert compile_response.status_code == 200, compile_response.text
+        compiled = compile_response.json()
+        agent_def = compiled["workflowDef"]["metadata"]["agentDef"]
+        child_ref = agent_def["crossSkillRefs"][child_name]
+        assert child_ref["skillRef"]["version"] == child_v1_version
+        assert "Child dependency version one" in child_ref["skillMd"]
+        assert "Child dependency version two" not in child_ref["skillMd"]
+        assert "echo_args" in child_ref["scripts"]
+        assert "references/guide.md" in child_ref["resourceFiles"]
+
+    def test_cli_skill_run_registered_executes_downloaded_script_worker(self, cli_path, cli_skill_dir):
+        """`agentspan skill run <name>` downloads a registered skill and runs its script workers."""
+        skill_name, skill_dir = cli_skill_dir
+        version = f"run-{uuid.uuid4().hex[:8]}"
+
+        register = _run_cli(
+            cli_path,
+            "skill",
+            "register",
+            str(skill_dir),
+            "--version",
+            version,
+            "--model",
+            MODEL,
+            timeout=60,
+        )
+        assert register.returncode == 0, f"stdout:\n{register.stdout}\nstderr:\n{register.stderr}"
+
+        result = _run_cli(
+            cli_path,
+            "skill",
+            "run",
+            skill_name,
+            "registered_run_proof",
+            "--version",
+            version,
+            "--model",
+            MODEL,
+            "--timeout",
+            "120",
+            timeout=180,
+        )
+
+        assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        execution_id = _execution_id(result.stdout)
+        workflow = get_workflow(execution_id)
+        assert workflow.get("status") == "COMPLETED", workflow
+        _assert_echo_worker_completed(workflow, "CLI_SKILL_ECHO:")
 
     def test_cli_skill_run_ephemeral_executes_script_worker(self, cli_path, cli_skill_dir):
         """`agentspan skill run` starts local workers and completes a real execution."""

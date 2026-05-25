@@ -223,6 +223,14 @@ func runSkillRun(cmd *cobra.Command, args []string) error {
 	if workspaceCfg.Enabled {
 		config["workspace"] = workspaceCfg.RawConfig()
 	}
+	if registered != nil {
+		if refs, ok := registered.RawConfig["crossSkillRefs"]; ok {
+			config["crossSkillRefs"] = refs
+		}
+		if err := hydrateRegisteredCrossSkillRefs(c, config, map[string]bool{}); err != nil {
+			return err
+		}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	startSkillWorkers(ctx, c, skillName, skillPath, config, workspaceCfg)
@@ -243,6 +251,13 @@ func runSkillRun(cmd *cobra.Command, args []string) error {
 		}
 		if workspaceCfg.Enabled {
 			skillRef["workspace"] = workspaceCfg.RawConfig()
+		}
+		paramMap, err := parseParamMap(skillParams)
+		if err != nil {
+			return err
+		}
+		if len(paramMap) > 0 {
+			skillRef["params"] = paramMap
 		}
 		startPayload["skillRef"] = skillRef
 	} else {
@@ -1240,6 +1255,18 @@ func ensureCachedSkillPackage(c *client.Client, detail *client.SkillDetail) (str
 	if err != nil {
 		return "", err
 	}
+	if checksum := strings.TrimSpace(detail.Checksum); checksum != "" {
+		actual := skillPackageChecksum(data)
+		if !strings.EqualFold(actual, checksum) {
+			return "", fmt.Errorf(
+				"downloaded skill package checksum mismatch for %s@%s: expected %s, got %s",
+				detail.Name,
+				detail.Version,
+				checksum,
+				actual,
+			)
+		}
+	}
 
 	parentDir := filepath.Dir(cacheDir)
 	if err := os.MkdirAll(parentDir, 0o700); err != nil {
@@ -1275,6 +1302,90 @@ func ensureCachedSkillPackage(c *client.Client, detail *client.SkillDetail) (str
 	return filesDir, nil
 }
 
+func hydrateRegisteredCrossSkillRefs(c *client.Client, config map[string]interface{}, seen map[string]bool) error {
+	skillMd, _ := config["skillMd"].(string)
+	if skillMd == "" {
+		return nil
+	}
+	skillName := skillNameFromConfig(config, "")
+	if skillName != "" {
+		if seen[skillName] {
+			return fmt.Errorf("circular skill reference detected: %s", skillName)
+		}
+		seen[skillName] = true
+		defer delete(seen, skillName)
+	}
+
+	refs := make(map[string]interface{})
+	refVersions := registeredCrossSkillRefVersions(config["crossSkillRefs"])
+	refNames := make([]string, 0, len(refVersions))
+	for refName := range refVersions {
+		refNames = append(refNames, refName)
+	}
+	if len(refNames) == 0 {
+		refNames = referencedSkillNames(skillMd)
+	}
+	sort.Strings(refNames)
+	for _, refName := range refNames {
+		if seen[refName] {
+			return fmt.Errorf("circular skill reference detected: %s", refName)
+		}
+		detail, err := c.GetSkill(refName, refVersions[refName])
+		if err != nil {
+			continue
+		}
+		refDir, err := ensureCachedSkillPackage(c, detail)
+		if err != nil {
+			return fmt.Errorf("cache referenced skill %q: %w", refName, err)
+		}
+		payload, _, err := buildSkillPayloadInternal(refDir, map[string]bool{})
+		if err != nil {
+			return fmt.Errorf("load referenced skill %q: %w", refName, err)
+		}
+		refConfig, _ := payload["config"].(map[string]interface{})
+		if refConfig == nil {
+			continue
+		}
+		refConfig["skillRef"] = map[string]interface{}{
+			"name":     detail.Name,
+			"version":  detail.Version,
+			"checksum": detail.Checksum,
+		}
+		nextSeen := make(map[string]bool, len(seen)+1)
+		for k, v := range seen {
+			nextSeen[k] = v
+		}
+		if err := hydrateRegisteredCrossSkillRefs(c, refConfig, nextSeen); err != nil {
+			return err
+		}
+		refs[refName] = refConfig
+	}
+	config["crossSkillRefs"] = refs
+	return nil
+}
+
+func registeredCrossSkillRefVersions(v interface{}) map[string]string {
+	versions := make(map[string]string)
+	refs, ok := v.(map[string]interface{})
+	if !ok {
+		return versions
+	}
+	for refName, raw := range refs {
+		refConfig, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		skillRef, ok := refConfig["skillRef"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if version, _ := skillRef["version"].(string); version != "" {
+			versions[refName] = version
+		}
+	}
+	return versions
+}
+
 func skillCachePaths(detail *client.SkillDetail) (cacheDir string, filesDir string, checksumPath string) {
 	cacheDir = filepath.Join(
 		cliConfig.ConfigDir(),
@@ -1298,6 +1409,11 @@ func safeCacheSegment(value string) string {
 		cleaned = cleaned + "-" + hex.EncodeToString(sum[:])[:8]
 	}
 	return cleaned
+}
+
+func skillPackageChecksum(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func isCachedSkillCurrent(filesDir string, checksumPath string, checksum string) bool {
@@ -1330,13 +1446,28 @@ func buildSkillPackage(skillPath string) ([]byte, []skillPackageFile, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve path: %w", err)
 	}
+	ignoreMatcher, err := loadSkillPackageIgnore(absPath)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	var sources []skillPackageSource
 	err = filepath.WalkDir(absPath, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
+		rel, err := filepath.Rel(absPath, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			return nil
+		}
 		if entry.IsDir() {
+			if shouldExcludeSkillPackagePath(rel, true, ignoreMatcher) {
+				return filepath.SkipDir
+			}
 			switch entry.Name() {
 			case ".git", "__pycache__", "node_modules":
 				return filepath.SkipDir
@@ -1351,12 +1482,7 @@ func buildSkillPackage(skillPath string) ([]byte, []skillPackageFile, error) {
 		if !info.Mode().IsRegular() {
 			return nil
 		}
-		rel, err := filepath.Rel(absPath, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if rel == ".DS_Store" {
+		if shouldExcludeSkillPackagePath(rel, false, ignoreMatcher) {
 			return nil
 		}
 		sources = append(sources, skillPackageSource{
@@ -1457,6 +1583,110 @@ func extractSkillPackage(data []byte, dest string) error {
 		}
 	}
 	return nil
+}
+
+type skillPackageIgnoreMatcher struct {
+	patterns []string
+}
+
+func loadSkillPackageIgnore(skillRoot string) (skillPackageIgnoreMatcher, error) {
+	matcher := skillPackageIgnoreMatcher{}
+	data, err := os.ReadFile(filepath.Join(skillRoot, ".agentspanignore"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return matcher, nil
+		}
+		return matcher, fmt.Errorf("read .agentspanignore: %w", err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		matcher.patterns = append(matcher.patterns, filepath.ToSlash(line))
+	}
+	return matcher, nil
+}
+
+func shouldExcludeSkillPackagePath(relPath string, isDir bool, matcher skillPackageIgnoreMatcher) bool {
+	relPath = filepath.ToSlash(strings.TrimPrefix(relPath, "./"))
+	if relPath == "" || relPath == "." {
+		return false
+	}
+	base := pathpkg.Base(relPath)
+	if base == ".agentspanignore" || isDefaultSecretSkillFile(base) {
+		return true
+	}
+	if isDir && isDefaultGeneratedSkillDir(base) {
+		return true
+	}
+	return matcher.matches(relPath, isDir)
+}
+
+func (m skillPackageIgnoreMatcher) matches(relPath string, isDir bool) bool {
+	for _, pattern := range m.patterns {
+		if skillIgnorePatternMatches(pattern, relPath, isDir) {
+			return true
+		}
+	}
+	return false
+}
+
+func skillIgnorePatternMatches(pattern, relPath string, isDir bool) bool {
+	pattern = filepath.ToSlash(strings.TrimSpace(pattern))
+	if pattern == "" || strings.HasPrefix(pattern, "!") {
+		return false
+	}
+	dirOnly := strings.HasSuffix(pattern, "/")
+	pattern = strings.TrimSuffix(pattern, "/")
+	if dirOnly && !isDir {
+		if relPath == pattern || strings.HasPrefix(relPath, pattern+"/") {
+			return true
+		}
+		return false
+	}
+	if strings.Contains(pattern, "/") {
+		if ok, err := pathpkg.Match(pattern, relPath); err == nil && ok {
+			return true
+		}
+		if relPath == pattern || strings.HasPrefix(relPath, pattern+"/") {
+			return true
+		}
+		return false
+	}
+	parts := strings.Split(relPath, "/")
+	for _, part := range parts {
+		if ok, err := pathpkg.Match(pattern, part); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
+
+func isDefaultGeneratedSkillDir(name string) bool {
+	switch name {
+	case ".git", "__pycache__", "node_modules", ".venv", "venv", ".tox", "dist", "build", "target", ".gradle", ".pytest_cache", ".mypy_cache":
+		return true
+	default:
+		return false
+	}
+}
+
+func isDefaultSecretSkillFile(name string) bool {
+	lower := strings.ToLower(name)
+	if lower == ".ds_store" || lower == ".env" || strings.HasPrefix(lower, ".env.") {
+		return true
+	}
+	switch lower {
+	case "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "known_hosts":
+		return true
+	}
+	for _, suffix := range []string{".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".crt", ".cer"} {
+		if strings.HasSuffix(lower, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func safePackagePath(root, relPath string) (string, error) {
@@ -1752,6 +1982,10 @@ func detectScriptLanguage(filename string) string {
 // and other root files (excluding SKILL.md and *-agent.md) as relative paths.
 func collectResourceFiles(skillDir string) ([]string, error) {
 	var result []string
+	ignoreMatcher, err := loadSkillPackageIgnore(skillDir)
+	if err != nil {
+		return nil, err
+	}
 
 	// Scan resource subdirectories
 	for _, subdir := range []string{"references", "examples", "assets"} {
@@ -1769,6 +2003,10 @@ func collectResourceFiles(skillDir string) ([]string, error) {
 			rel, err := filepath.Rel(skillDir, path)
 			if err != nil {
 				return err
+			}
+			rel = filepath.ToSlash(rel)
+			if shouldExcludeSkillPackagePath(rel, false, ignoreMatcher) {
+				return nil
 			}
 			result = append(result, rel)
 			return nil
@@ -1789,6 +2027,9 @@ func collectResourceFiles(skillDir string) ([]string, error) {
 			continue
 		}
 		name := entry.Name()
+		if shouldExcludeSkillPackagePath(name, false, ignoreMatcher) {
+			continue
+		}
 		if name == "SKILL.md" {
 			continue
 		}
@@ -1803,10 +2044,8 @@ func collectResourceFiles(skillDir string) ([]string, error) {
 
 // resolveCrossSkills packages referenced sibling/project/user skills recursively.
 func resolveCrossSkills(skillMd, skillDir string, seen map[string]bool) (map[string]interface{}, error) {
-	body := extractBody(skillMd)
-	pattern := regexp.MustCompile(`(?i)(?:invoke|use|call)\s+(?:the\s+)?([a-z][a-z0-9-]*)\s+skill`)
-	matches := pattern.FindAllStringSubmatch(body, -1)
-	if len(matches) == 0 {
+	refNames := referencedSkillNames(skillMd)
+	if len(refNames) == 0 {
 		return map[string]interface{}{}, nil
 	}
 
@@ -1817,11 +2056,7 @@ func resolveCrossSkills(skillMd, skillDir string, seen map[string]bool) (map[str
 	searchDirs = append(searchDirs, skillSearchPaths...)
 
 	refs := make(map[string]interface{})
-	for _, match := range matches {
-		refName := strings.ToLower(match[1])
-		if _, exists := refs[refName]; exists {
-			continue
-		}
+	for _, refName := range refNames {
 		refDir, ok := findSkillDir(refName, searchDirs)
 		if !ok {
 			continue
@@ -1853,6 +2088,24 @@ func resolveCrossSkills(skillMd, skillDir string, seen map[string]bool) (map[str
 		refs[refName] = payload["config"]
 	}
 	return refs, nil
+}
+
+func referencedSkillNames(skillMd string) []string {
+	body := extractBody(skillMd)
+	pattern := regexp.MustCompile(`(?i)(?:invoke|use|call)\s+(?:the\s+)?([a-z][a-z0-9-]*)\s+skill`)
+	matches := pattern.FindAllStringSubmatch(body, -1)
+	seen := make(map[string]bool)
+	var names []string
+	for _, match := range matches {
+		refName := strings.ToLower(match[1])
+		if seen[refName] {
+			continue
+		}
+		seen[refName] = true
+		names = append(names, refName)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func findSkillDir(name string, dirs []string) (string, bool) {

@@ -30,7 +30,13 @@ var prompt = args.Length > 1
 if (!File.Exists(System.IO.Path.Combine(skillPath, "SKILL.md")))
     throw new ArgumentException($"Expected a skill directory containing SKILL.md: {skillPath}");
 
-var skillAgent = Skill.Load(skillPath, Settings.LlmModel);
+var skillAgent = Skill.Load(
+    skillPath,
+    Settings.LlmModel,
+    searchPath: [System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".agents",
+        "skills")]);
 
 await using var runtime = new AgentRuntime();
 var direct = await runtime.RunAsync(skillAgent, prompt);

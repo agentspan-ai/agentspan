@@ -44,7 +44,12 @@ public class Example69Skills {
                 "Expected a skill directory containing SKILL.md: " + skillPath.toAbsolutePath());
         }
 
-        Agent skillAgent = Skill.skill(skillPath, Settings.LLM_MODEL);
+        Agent skillAgent = Skill.skill(
+            skillPath,
+            Settings.LLM_MODEL,
+            null,
+            null,
+            List.of(Paths.get(System.getProperty("user.home"), ".agents", "skills")));
 
         AgentResult direct = Agentspan.run(skillAgent, prompt);
         direct.printResult();

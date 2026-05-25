@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,8 @@ public class SkillRegistryService {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final Pattern FRONTMATTER_PATTERN =
             Pattern.compile("^---\\s*\\R(.*?)\\R---\\s*\\R?(.*)", Pattern.DOTALL);
+    private static final Pattern CROSS_SKILL_PATTERN =
+            Pattern.compile("(?:invoke|use|call)\\s+(?:the\\s+)?([a-z][a-z0-9-]*)\\s+skill", Pattern.CASE_INSENSITIVE);
     private static final Pattern SKILL_NAME_PATTERN = Pattern.compile("[A-Za-z0-9._-]{1,128}");
     private static final Pattern VERSION_PATTERN = Pattern.compile("[A-Za-z0-9._+-]{1,128}");
     private static final Set<String> TEXT_EXTENSIONS = Set.of(
@@ -137,6 +140,7 @@ public class SkillRegistryService {
         ParsedSkillPackage parsed = parseSkillPackage(bytes, manifest);
         String name = parsed.name();
         String ownerId = currentUserId();
+        Map<String, Object> rawConfig = parsed.rawConfig();
         String manifestName = stringValue(manifest.get("name"));
         if (manifestName != null && !manifestName.isBlank() && !manifestName.equals(name)) {
             throw new IllegalArgumentException(
@@ -148,10 +152,12 @@ public class SkillRegistryService {
             version = checksum.substring(0, 12);
         }
         validateVersion(version);
+        pinRegisteredCrossSkillRefs(ownerId, rawConfig);
 
         long now = Instant.now().toEpochMilli();
-        Path versionDir = versionDir(name, version);
-        Path metadataPath = metadataPath(name, version);
+        String storageName = packageStoreName(ownerId, name);
+        Path versionDir = versionDir(ownerId, name, version);
+        Path metadataPath = metadataPath(ownerId, name, version);
 
         if (Files.exists(metadataPath)) {
             SkillDetail existing = readDetail(metadataPath);
@@ -161,7 +167,7 @@ public class SkillRegistryService {
                         "Skill " + name + " version " + version + " already exists with a different checksum");
             }
             if (!packageExists(existing)) {
-                StoredSkillPackage restored = packageStore.store(name, version, checksum, bytes);
+                StoredSkillPackage restored = packageStore.store(storageName, version, checksum, bytes);
                 existing.setPackageFileHandleId(restored.handle());
                 existing.setStorageType(restored.storageType());
                 existing.setPackageSize(restored.size());
@@ -174,7 +180,7 @@ public class SkillRegistryService {
         StoredSkillPackage stored = null;
         try {
             Files.createDirectories(versionDir);
-            stored = packageStore.store(name, version, checksum, bytes);
+            stored = packageStore.store(storageName, version, checksum, bytes);
 
             SkillDetail detail = SkillDetail.builder()
                     .name(name)
@@ -191,10 +197,10 @@ public class SkillRegistryService {
                     .fileCount(parsed.files().size())
                     .files(parsed.files())
                     .metadata(parsed.metadata())
-                    .rawConfig(parsed.rawConfig())
+                    .rawConfig(rawConfig)
                     .build();
             writeDetail(metadataPath, detail);
-            Files.writeString(latestPath(name), version, StandardCharsets.UTF_8);
+            Files.writeString(latestPath(ownerId, name), version, StandardCharsets.UTF_8);
             return detail;
         } catch (IOException e) {
             if (stored != null) {
@@ -210,11 +216,12 @@ public class SkillRegistryService {
     }
 
     public List<SkillSummary> list(boolean allVersions) {
-        if (!Files.isDirectory(storageRoot)) {
+        Path ownerRoot = ownerRoot(currentUserId());
+        if (!Files.isDirectory(ownerRoot)) {
             return List.of();
         }
         List<SkillSummary> summaries = new ArrayList<>();
-        try (var skillDirs = Files.list(storageRoot)) {
+        try (var skillDirs = Files.list(ownerRoot)) {
             for (Path skillDir : skillDirs.filter(Files::isDirectory).toList()) {
                 if (allVersions) {
                     try (var versions = Files.list(skillDir)) {
@@ -240,8 +247,9 @@ public class SkillRegistryService {
     }
 
     public SkillDetail get(String name, String version) {
-        String resolvedVersion = resolveVersion(name, version);
-        Path metadataPath = metadataPath(name, resolvedVersion);
+        String ownerId = currentUserId();
+        String resolvedVersion = resolveVersion(ownerId, name, version);
+        Path metadataPath = metadataPath(ownerId, name, resolvedVersion);
         if (!Files.exists(metadataPath)) {
             throw new IllegalArgumentException("Skill not found: " + name + "@" + resolvedVersion);
         }
@@ -300,13 +308,7 @@ public class SkillRegistryService {
         String name = requiredString(skillRef, "name");
         String version = stringValue(skillRef.get("version"));
         SkillDetail detail = get(name, version);
-        Map<String, Object> rawConfig = deepCopy(detail.getRawConfig());
-        rawConfig.put(
-                "skillRef",
-                Map.of(
-                        "name", detail.getName(),
-                        "version", detail.getVersion(),
-                        "checksum", detail.getChecksum()));
+        Map<String, Object> rawConfig = rawConfigForDetail(detail, new HashSet<>());
         Object model = skillRef.get("model");
         if (model instanceof String s && !s.isBlank()) {
             rawConfig.put("model", s);
@@ -319,35 +321,37 @@ public class SkillRegistryService {
         if (workspace instanceof Map<?, ?> map && !map.isEmpty()) {
             rawConfig.put("workspace", MAPPER.convertValue(map, Map.class));
         }
+        Object params = skillRef.get("params");
+        if (params instanceof Map<?, ?> map) {
+            applySkillParams(rawConfig, MAPPER.convertValue(map, Map.class));
+        } else {
+            applySkillParams(rawConfig, Map.of());
+        }
         return rawConfig;
     }
 
     public Map<String, Object> rawConfigForDeploy(
             String name, String version, String model, Map<String, String> agentModels) {
         SkillDetail detail = get(name, version);
-        Map<String, Object> rawConfig = deepCopy(detail.getRawConfig());
-        rawConfig.put(
-                "skillRef",
-                Map.of(
-                        "name", detail.getName(),
-                        "version", detail.getVersion(),
-                        "checksum", detail.getChecksum()));
+        Map<String, Object> rawConfig = rawConfigForDetail(detail, new HashSet<>());
         if (model != null && !model.isBlank()) {
             rawConfig.put("model", model);
         }
         if (agentModels != null && !agentModels.isEmpty()) {
             rawConfig.put("agentModels", new LinkedHashMap<>(agentModels));
         }
+        applySkillParams(rawConfig, Map.of());
         return rawConfig;
     }
 
     public synchronized void delete(String name, String version) {
-        String resolvedVersion = resolveVersion(name, version);
-        Path dir = versionDir(name, resolvedVersion);
+        String ownerId = currentUserId();
+        String resolvedVersion = resolveVersion(ownerId, name, version);
+        Path dir = versionDir(ownerId, name, resolvedVersion);
         if (!Files.exists(dir)) {
             return;
         }
-        Path metadataPath = metadataPath(name, resolvedVersion);
+        Path metadataPath = metadataPath(ownerId, name, resolvedVersion);
         SkillDetail detail = null;
         if (Files.exists(metadataPath)) {
             detail = readDetail(metadataPath);
@@ -360,11 +364,11 @@ public class SkillRegistryService {
             if (detail != null) {
                 deletePackage(detail);
             }
-            Path latest = latestPath(name);
+            Path latest = latestPath(ownerId, name);
             if (Files.exists(latest)
                     && resolvedVersion.equals(
                             Files.readString(latest, StandardCharsets.UTF_8).trim())) {
-                updateLatestAfterDelete(name);
+                updateLatestAfterDelete(ownerId, name);
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to delete skill: " + e.getMessage(), e);
@@ -397,16 +401,16 @@ public class SkillRegistryService {
                 .build());
     }
 
-    private String resolveVersion(String name, String version) {
+    private String resolveVersion(String ownerId, String name, String version) {
         if ("latest".equals(version)) {
             version = null;
         }
         if (version != null && !version.isBlank()) {
-            Path direct = metadataPath(name, version);
+            Path direct = metadataPath(ownerId, name, version);
             if (Files.exists(direct)) {
                 return version;
             }
-            Path skillRoot = skillRoot(name);
+            Path skillRoot = skillRoot(ownerId, name);
             if (Files.isDirectory(skillRoot)) {
                 try (var versions = Files.list(skillRoot)) {
                     for (Path candidate : versions.filter(Files::isDirectory).toList()) {
@@ -421,7 +425,7 @@ public class SkillRegistryService {
             }
             return version;
         }
-        Path latest = latestPath(name);
+        Path latest = latestPath(ownerId, name);
         if (!Files.exists(latest)) {
             throw new IllegalArgumentException("Skill not found: " + name);
         }
@@ -560,6 +564,9 @@ public class SkillRegistryService {
         rawConfig.put("scripts", scripts);
         rawConfig.put("resourceFiles", resourceFiles);
         rawConfig.put("crossSkillRefs", Map.of());
+        Map<String, Object> defaultParams = extractDefaultParams(frontmatter);
+        rawConfig.put("defaultParams", defaultParams);
+        rawConfig.put("params", new LinkedHashMap<>(defaultParams));
 
         return new ParsedSkillPackage(
                 name,
@@ -702,6 +709,185 @@ public class SkillRegistryService {
         return merged;
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> rawConfigForDetail(SkillDetail detail, Set<String> stack) {
+        String key = detail.getName() + "@" + detail.getVersion();
+        if (!stack.add(key)) {
+            throw new IllegalArgumentException("Circular skill reference detected: " + key);
+        }
+        try {
+            Map<String, Object> rawConfig = deepCopy(detail.getRawConfig());
+            rawConfig.put(
+                    "skillRef",
+                    Map.of(
+                            "name", detail.getName(),
+                            "version", detail.getVersion(),
+                            "checksum", detail.getChecksum()));
+            Map<String, Object> pinnedRefs = toMap(rawConfig.get("crossSkillRefs"));
+            if (!pinnedRefs.isEmpty()) {
+                rawConfig.put("crossSkillRefs", hydratePinnedCrossSkills(pinnedRefs, stack));
+            } else if (!Boolean.TRUE.equals(rawConfig.get("crossSkillRefsPinned"))) {
+                Object skillMd = rawConfig.get("skillMd");
+                if (skillMd instanceof String md) {
+                    rawConfig.put("crossSkillRefs", resolveRegisteredCrossSkills(md, stack));
+                }
+            }
+            if (!rawConfig.containsKey("defaultParams")) {
+                Object md = rawConfig.get("skillMd");
+                if (md instanceof String skillMdText) {
+                    rawConfig.put("defaultParams", extractDefaultParams(parseSkillFrontmatter(skillMdText)));
+                } else {
+                    rawConfig.put("defaultParams", Map.of());
+                }
+            }
+            if (!rawConfig.containsKey("params")) {
+                rawConfig.put("params", new LinkedHashMap<>((Map<String, Object>)
+                        rawConfig.getOrDefault("defaultParams", Map.of())));
+            }
+            applySkillParams(rawConfig, Map.of());
+            return rawConfig;
+        } finally {
+            stack.remove(key);
+        }
+    }
+
+    private void pinRegisteredCrossSkillRefs(String ownerId, Map<String, Object> rawConfig) {
+        Object skillMd = rawConfig.get("skillMd");
+        if (!(skillMd instanceof String md)) {
+            rawConfig.put("crossSkillRefsPinned", true);
+            return;
+        }
+        Map<String, Object> refs = new LinkedHashMap<>();
+        Matcher matcher = CROSS_SKILL_PATTERN.matcher(extractBody(md));
+        while (matcher.find()) {
+            String refName = matcher.group(1).toLowerCase();
+            if (refs.containsKey(refName)) {
+                continue;
+            }
+            SkillDetail refDetail;
+            try {
+                String refVersion = resolveVersion(ownerId, refName, null);
+                refDetail = readDetail(metadataPath(ownerId, refName, refVersion));
+            } catch (IllegalArgumentException e) {
+                continue;
+            }
+            refs.put(
+                    refName,
+                    Map.of(
+                            "skillRef",
+                            Map.of(
+                                    "name", refDetail.getName(),
+                                    "version", refDetail.getVersion(),
+                                    "checksum", refDetail.getChecksum())));
+        }
+        rawConfig.put("crossSkillRefs", refs);
+        rawConfig.put("crossSkillRefsPinned", true);
+    }
+
+    private Map<String, Object> hydratePinnedCrossSkills(Map<String, Object> pinnedRefs, Set<String> stack) {
+        Map<String, Object> refs = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : pinnedRefs.entrySet()) {
+            Map<String, Object> refConfig = toMap(entry.getValue());
+            Map<String, Object> skillRef = toMap(refConfig.get("skillRef"));
+            if (skillRef.isEmpty()) {
+                refs.put(entry.getKey(), refConfig);
+                continue;
+            }
+            String refName = requiredString(skillRef, "name");
+            String refVersion = stringValue(skillRef.get("version"));
+            SkillDetail refDetail = get(refName, refVersion);
+            refs.put(entry.getKey(), rawConfigForDetail(refDetail, stack));
+        }
+        return refs;
+    }
+
+    private Map<String, Object> resolveRegisteredCrossSkills(String skillMd, Set<String> stack) {
+        Map<String, Object> refs = new LinkedHashMap<>();
+        Matcher matcher = CROSS_SKILL_PATTERN.matcher(extractBody(skillMd));
+        while (matcher.find()) {
+            String refName = matcher.group(1).toLowerCase();
+            if (refs.containsKey(refName)) {
+                continue;
+            }
+            SkillDetail refDetail;
+            try {
+                refDetail = get(refName, null);
+            } catch (IllegalArgumentException e) {
+                continue;
+            }
+            refs.put(refName, rawConfigForDetail(refDetail, stack));
+        }
+        return refs;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applySkillParams(Map<String, Object> rawConfig, Map<String, Object> overrides) {
+        Map<String, Object> defaults = new LinkedHashMap<>();
+        Object defaultParams = rawConfig.get("defaultParams");
+        if (defaultParams instanceof Map<?, ?> map) {
+            defaults.putAll(MAPPER.convertValue(map, MAP_TYPE));
+        }
+        Map<String, Object> merged = new LinkedHashMap<>(defaults);
+        if (overrides != null) {
+            merged.putAll(overrides);
+        }
+        rawConfig.put("params", merged);
+        Object skillMd = rawConfig.get("skillMd");
+        if (skillMd instanceof String md && !merged.isEmpty()) {
+            rawConfig.put("skillMd", stripSkillParameterBlock(md) + "\n\n" + formatSkillParams(merged) + "\n");
+        }
+    }
+
+    private Map<String, Object> extractDefaultParams(Map<String, Object> frontmatter) {
+        Object params = frontmatter.get("params");
+        if (!(params instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        Map<String, Object> defaults = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (!(entry.getKey() instanceof String key)) {
+                continue;
+            }
+            Object raw = entry.getValue();
+            if (raw instanceof Map<?, ?> paramDef && paramDef.containsKey("default")) {
+                defaults.put(key, paramDef.get("default"));
+            } else {
+                defaults.put(key, raw);
+            }
+        }
+        return defaults;
+    }
+
+    private String formatSkillParams(Map<String, Object> params) {
+        if (params == null || params.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("[Skill Parameters]\n");
+        params.keySet().stream().sorted().forEach(key -> {
+            if (sb.length() > "[Skill Parameters]\n".length()) {
+                sb.append('\n');
+            }
+            sb.append(key).append(": ").append(String.valueOf(params.get(key)));
+        });
+        return sb.toString();
+    }
+
+    private String stripSkillParameterBlock(String skillMd) {
+        int marker = skillMd.indexOf("\n\n[Skill Parameters]\n");
+        if (marker < 0) {
+            return skillMd;
+        }
+        return skillMd.substring(0, marker);
+    }
+
+    private String extractBody(String skillMd) {
+        Matcher matcher = FRONTMATTER_PATTERN.matcher(skillMd);
+        if (!matcher.matches()) {
+            return skillMd;
+        }
+        return matcher.group(2).trim();
+    }
+
     private SkillDetail readDetail(Path metadataPath) {
         try {
             return MAPPER.readValue(metadataPath.toFile(), SkillDetail.class);
@@ -729,7 +915,7 @@ public class SkillRegistryService {
                 // Fall through to legacy package path lookup.
             }
         }
-        return Files.exists(legacyPackagePath(detail.getName(), detail.getVersion()));
+        return Files.exists(legacyPackagePath(detail.getOwnerId(), detail.getName(), detail.getVersion()));
     }
 
     private byte[] packageBytes(SkillDetail detail) {
@@ -742,7 +928,7 @@ public class SkillRegistryService {
             }
         }
         try {
-            return Files.readAllBytes(legacyPackagePath(detail.getName(), detail.getVersion()));
+            return Files.readAllBytes(legacyPackagePath(detail.getOwnerId(), detail.getName(), detail.getVersion()));
         } catch (IOException e) {
             throw new IllegalArgumentException(
                     "Skill package not found: " + detail.getName() + "@" + detail.getVersion());
@@ -758,13 +944,13 @@ public class SkillRegistryService {
                 // Legacy records used synthetic handles before the package store existed.
             }
         }
-        Files.deleteIfExists(legacyPackagePath(detail.getName(), detail.getVersion()));
+        Files.deleteIfExists(legacyPackagePath(detail.getOwnerId(), detail.getName(), detail.getVersion()));
     }
 
-    private void updateLatestAfterDelete(String name) throws IOException {
-        Path skillRoot = skillRoot(name);
+    private void updateLatestAfterDelete(String ownerId, String name) throws IOException {
+        Path skillRoot = skillRoot(ownerId, name);
         if (!Files.isDirectory(skillRoot)) {
-            Files.deleteIfExists(latestPath(name));
+            Files.deleteIfExists(latestPath(ownerId, name));
             return;
         }
         List<SkillDetail> remaining = new ArrayList<>();
@@ -780,7 +966,7 @@ public class SkillRegistryService {
             }
         }
         if (remaining.isEmpty()) {
-            Files.deleteIfExists(latestPath(name));
+            Files.deleteIfExists(latestPath(ownerId, name));
             try (var children = Files.list(skillRoot)) {
                 if (children.findAny().isEmpty()) {
                     Files.deleteIfExists(skillRoot);
@@ -790,7 +976,8 @@ public class SkillRegistryService {
         }
         remaining.sort(Comparator.comparing(SkillDetail::getCreatedAt, Comparator.nullsFirst(Long::compareTo))
                 .thenComparing(SkillDetail::getVersion));
-        Files.writeString(latestPath(name), remaining.get(remaining.size() - 1).getVersion(), StandardCharsets.UTF_8);
+        Files.writeString(
+                latestPath(ownerId, name), remaining.get(remaining.size() - 1).getVersion(), StandardCharsets.UTF_8);
     }
 
     private String currentUserId() {
@@ -826,24 +1013,32 @@ public class SkillRegistryService {
         return normalized;
     }
 
-    private Path skillRoot(String name) {
-        return storageRoot.resolve(encoded(name));
+    private Path ownerRoot(String ownerId) {
+        return storageRoot.resolve("owners").resolve(encoded(ownerId));
     }
 
-    private Path versionDir(String name, String version) {
-        return skillRoot(name).resolve(encoded(version));
+    private Path skillRoot(String ownerId, String name) {
+        return ownerRoot(ownerId).resolve(encoded(name));
     }
 
-    private Path metadataPath(String name, String version) {
-        return versionDir(name, version).resolve("metadata.json");
+    private Path versionDir(String ownerId, String name, String version) {
+        return skillRoot(ownerId, name).resolve(encoded(version));
     }
 
-    private Path legacyPackagePath(String name, String version) {
-        return versionDir(name, version).resolve("skill.zip");
+    private Path metadataPath(String ownerId, String name, String version) {
+        return versionDir(ownerId, name, version).resolve("metadata.json");
     }
 
-    private Path latestPath(String name) {
-        return skillRoot(name).resolve("latest");
+    private Path legacyPackagePath(String ownerId, String name, String version) {
+        return versionDir(ownerId, name, version).resolve("skill.zip");
+    }
+
+    private Path latestPath(String ownerId, String name) {
+        return skillRoot(ownerId, name).resolve("latest");
+    }
+
+    private String packageStoreName(String ownerId, String name) {
+        return ownerId + ":" + name;
     }
 
     private String encoded(String value) {

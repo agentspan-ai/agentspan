@@ -64,7 +64,12 @@ agentspan skill run dg "Review auth.py" --model openai/gpt-4o --version 2026.05.
 
 When the CLI runs a registered skill, it downloads the package into
 `~/.agentspan/skills/<name>/<version>/files` and reuses that cached copy until
-the server checksum changes.
+the server checksum changes. Registered cross-skill references are resolved
+from the server registry at compile time. The CLI also downloads referenced
+packages before execution so their script tools and packaged resources have
+local workers. Dependency versions are pinned when the parent skill is
+registered, so `parent@v1` continues to use the same child version even if that
+child skill is updated later.
 
 Use `skill load` when you want to deploy a skill as an agent definition and run
 it later through regular agent commands:
@@ -188,17 +193,20 @@ var lead = new Agent("tech_lead")
 
 ## Server Registry And UI
 
-`agentspan skill register` uploads the full folder as an immutable server-side
-package. The server stores metadata separately from the package blob, validates
-size and file-count limits, derives the runtime skill config from package
-contents, and exposes the package in the UI under Skills.
+`agentspan skill register` uploads the skill folder as an immutable server-side
+package. The CLI excludes generated directories, common secret files such as
+`.env` and private keys, and any paths matched by `.agentspanignore`. The server
+stores owner-scoped metadata separately from the package blob, validates size
+and file-count limits, derives the runtime skill config from package contents,
+and exposes the package in the UI under Skills. Registered package downloads are
+verified against the server checksum before the CLI caches or executes them.
 
 Package storage is configurable:
 
 | Property | Default | Description |
 |---|---|---|
 | `agentspan.skills.package-store.type` | `filesystem` | `filesystem` for local deployments or `conductor-payload` for Conductor external payload storage |
-| `agentspan.skills.storage.directory` | `${java.io.tmpdir}/agentspan/skills` | Metadata root and default filesystem package root parent |
+| `agentspan.skills.storage.directory` | `${java.io.tmpdir}/agentspan/skills` | Owner-scoped metadata root and default filesystem package root parent |
 | `agentspan.skills.package-store.filesystem.directory` | `${agentspan.skills.storage.directory}/packages` | Filesystem package blob directory |
 | `agentspan.skills.max-package-bytes` | `52428800` | Maximum compressed upload size |
 | `agentspan.skills.max-uncompressed-bytes` | `209715200` | Maximum expanded package size |

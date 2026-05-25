@@ -275,8 +275,11 @@ function resolveCrossSkills(
   skillMd: string,
   skillPath: string,
   searchPath?: string[],
+  seen: Set<string> = new Set(),
 ): Record<string, unknown> {
   const body = extractBody(skillMd);
+  const resolvedSkillPath = path.resolve(skillPath);
+  seen.add(resolvedSkillPath);
 
   // Match patterns: invoke/use/call <name> skill
   const pattern = /(?:invoke|use|call)\s+(?:the\s+)?([a-z][a-z0-9-]*)\s+skill/gi;
@@ -302,9 +305,15 @@ function resolveCrossSkills(
   for (const refName of matches) {
     for (const d of dirs) {
       const refDir = path.join(d, refName);
+      const refResolved = path.resolve(refDir);
       const refSkillMd = path.join(refDir, "SKILL.md");
-      if (fs.existsSync(refSkillMd) && path.resolve(refDir) !== skillPath) {
+      if (fs.existsSync(refSkillMd) && refResolved !== resolvedSkillPath) {
+        if (seen.has(refResolved)) {
+          throw new SkillLoadError(`Circular skill reference detected: ${refName}`);
+        }
         const refMdContent = fs.readFileSync(refSkillMd, "utf-8");
+        const refFrontmatter = parseFrontmatter(refMdContent);
+        const refDefaultParams = defaultParamsFromFrontmatter(refFrontmatter);
         const refAgentFiles: Record<string, string> = {};
         for (const f of listGlob(refDir, "*-agent.md")) {
           const aname = path.basename(f, ".md").replace(/-agent$/, "");
@@ -328,17 +337,46 @@ function resolveCrossSkills(
             refResources.push(...listFilesRecursive(sd).map((f) => path.relative(refDir, f)));
           }
         }
+        const refBody = extractBody(refMdContent);
+        let refSkillSections: Record<string, string> = {};
+        if (refBody.length > SECTION_SPLIT_THRESHOLD) {
+          refSkillSections = splitIntoSections(refBody);
+          for (const sectionName of Object.keys(refSkillSections)) {
+            refResources.push(`skill_section:${sectionName}`);
+          }
+        }
+        const nextSeen = new Set(seen);
+        nextSeen.add(refResolved);
         crossRefs[refName] = {
           skillMd: refMdContent,
           agentFiles: refAgentFiles,
           scripts: refScripts,
           resourceFiles: refResources.sort(),
+          crossSkillRefs: resolveCrossSkills(refMdContent, refResolved, searchPath, nextSeen),
+          defaultParams: refDefaultParams,
+          params: refDefaultParams,
+          skillSections: refSkillSections,
         };
         break;
       }
     }
   }
   return crossRefs;
+}
+
+function defaultParamsFromFrontmatter(frontmatter: Record<string, unknown>): Record<string, unknown> {
+  const params = frontmatter.params;
+  const defaults: Record<string, unknown> = {};
+  if (params && typeof params === "object" && !Array.isArray(params)) {
+    for (const [pname, pdef] of Object.entries(params as Record<string, unknown>)) {
+      if (pdef && typeof pdef === "object" && !Array.isArray(pdef) && "default" in pdef) {
+        defaults[pname] = (pdef as Record<string, unknown>).default;
+      } else {
+        defaults[pname] = pdef;
+      }
+    }
+  }
+  return defaults;
 }
 
 // ── File system helpers ─────────────────────────────────────

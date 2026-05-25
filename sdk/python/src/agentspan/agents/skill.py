@@ -272,6 +272,7 @@ def resolve_cross_skills(
     skill_md: str,
     skill_path: Path,
     search_path: Optional[List[str]] = None,
+    _seen: Optional[set[Path]] = None,
 ) -> Dict[str, Any]:
     """Resolve cross-skill references found in SKILL.md body.
 
@@ -299,12 +300,27 @@ def resolve_cross_skills(
     if search_path:
         dirs.extend(Path(p).expanduser().resolve() for p in search_path)
 
+    seen = set(_seen or set())
+    resolved_skill_path = skill_path.resolve()
+    seen.add(resolved_skill_path)
     cross_refs: Dict[str, Any] = {}
     for ref_name in matches:
         for d in dirs:
             ref_dir = d / ref_name
-            if (ref_dir / "SKILL.md").exists() and ref_dir.resolve() != skill_path:
+            ref_dir_resolved = ref_dir.resolve()
+            if (ref_dir / "SKILL.md").exists() and ref_dir_resolved != resolved_skill_path:
+                if ref_dir_resolved in seen:
+                    raise SkillLoadError(f"Circular skill reference detected: {ref_name}")
                 ref_md = (ref_dir / "SKILL.md").read_text()
+                ref_frontmatter = parse_frontmatter(ref_md)
+                ref_default_params: Dict[str, Any] = {}
+                ref_fm_params = ref_frontmatter.get("params")
+                if isinstance(ref_fm_params, dict):
+                    for pname, pdef in ref_fm_params.items():
+                        if isinstance(pdef, dict) and "default" in pdef:
+                            ref_default_params[pname] = pdef["default"]
+                        else:
+                            ref_default_params[pname] = pdef
                 ref_agent_files = {}
                 for f in sorted(ref_dir.glob("*-agent.md")):
                     aname = f.stem.removesuffix("-agent")
@@ -329,11 +345,26 @@ def resolve_cross_skills(
                                 if f.is_file()
                             )
                         )
+                ref_body = extract_body(ref_md)
+                ref_sections: Dict[str, str] = {}
+                if len(ref_body) > SECTION_SPLIT_THRESHOLD:
+                    ref_sections = split_into_sections(ref_body)
+                    for section_name in ref_sections:
+                        ref_resources.append(f"skill_section:{section_name}")
                 cross_refs[ref_name] = {
                     "skillMd": ref_md,
                     "agentFiles": ref_agent_files,
                     "scripts": ref_scripts,
                     "resourceFiles": ref_resources,
+                    "crossSkillRefs": resolve_cross_skills(
+                        ref_md,
+                        ref_dir_resolved,
+                        search_path,
+                        seen | {ref_dir_resolved},
+                    ),
+                    "defaultParams": ref_default_params,
+                    "params": ref_default_params,
+                    "skillSections": ref_sections,
                 }
                 break
     return cross_refs

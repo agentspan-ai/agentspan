@@ -39,6 +39,29 @@ public sealed class Suite16_Skills
         var denied = await read.Handler(new Dictionary<string, object?> { ["path"] = "../SKILL.md" });
         Assert.Contains("ERROR:", Convert.ToString(denied));
 
+        var withParams = Skill.Load(
+            temp.Path,
+            Settings.LlmModel,
+            parameters: new Dictionary<string, object?> { ["mode"] = "slow", ["rounds"] = 2 });
+        Assert.NotNull(withParams.FrameworkConfig);
+        var cfg = withParams.FrameworkConfig!;
+        Assert.Contains("[Skill Parameters]", Convert.ToString(cfg["skillMd"]));
+        var merged = Assert.IsType<Dictionary<string, object?>>(cfg["params"]);
+        Assert.Equal("slow", merged["mode"]);
+        Assert.Equal(2, merged["rounds"]);
+
+        using var cross = new TempCrossSkillDir();
+        var crossAgent = Skill.Load(cross.ParentPath, Settings.LlmModel);
+        var crossRefs = Assert.IsType<Dictionary<string, object>>(crossAgent.FrameworkConfig!["crossSkillRefs"]);
+        var childRef = Assert.IsType<Dictionary<string, object>>(crossRefs["child-skill"]);
+        var nestedRefs = Assert.IsType<Dictionary<string, object>>(childRef["crossSkillRefs"]);
+        Assert.Contains("grandchild-skill", nestedRefs.Keys);
+
+        using var search = new TempSearchPathSkillDir();
+        var searchAgent = Skill.Load(search.ParentPath, Settings.LlmModel, searchPath: [search.SearchRoot]);
+        var searchRefs = Assert.IsType<Dictionary<string, object>>(searchAgent.FrameworkConfig!["crossSkillRefs"]);
+        Assert.Contains("external-child", searchRefs.Keys);
+
         await using var runtime = new AgentRuntime();
         var plan = await runtime.PlanAsync(agent);
         var wf = plan?["workflowDef"] ?? throw new Exception("plan missing workflowDef");
@@ -158,6 +181,86 @@ public sealed class Suite16_Skills
         public void Dispose()
         {
             try { Directory.Delete(Path, recursive: true); } catch { }
+        }
+    }
+
+    private sealed class TempCrossSkillDir : IDisposable
+    {
+        public string Root { get; } = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            $"agentspan-csharp-cross-skill-{Guid.NewGuid():N}");
+
+        public string ParentPath => System.IO.Path.Combine(Root, "parent-skill");
+
+        public TempCrossSkillDir()
+        {
+            Directory.CreateDirectory(ParentPath);
+            var child = System.IO.Path.Combine(Root, "child-skill");
+            var grandchild = System.IO.Path.Combine(Root, "grandchild-skill");
+            Directory.CreateDirectory(child);
+            Directory.CreateDirectory(grandchild);
+
+            File.WriteAllText(System.IO.Path.Combine(ParentPath, "SKILL.md"), string.Join('\n', [
+                "---",
+                "name: parent-skill",
+                "---",
+                "# Parent",
+                "Use the child-skill skill.",
+            ]));
+            File.WriteAllText(System.IO.Path.Combine(child, "SKILL.md"), string.Join('\n', [
+                "---",
+                "name: child-skill",
+                "---",
+                "# Child",
+                "Use the grandchild-skill skill.",
+            ]));
+            File.WriteAllText(System.IO.Path.Combine(grandchild, "SKILL.md"), string.Join('\n', [
+                "---",
+                "name: grandchild-skill",
+                "---",
+                "# Grandchild",
+            ]));
+        }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(Root, recursive: true); } catch { }
+        }
+    }
+
+    private sealed class TempSearchPathSkillDir : IDisposable
+    {
+        public string Root { get; } = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            $"agentspan-csharp-search-skill-{Guid.NewGuid():N}");
+
+        public string ParentPath => System.IO.Path.Combine(Root, "parent");
+        public string SearchRoot => System.IO.Path.Combine(Root, "external");
+
+        public TempSearchPathSkillDir()
+        {
+            Directory.CreateDirectory(ParentPath);
+            var child = System.IO.Path.Combine(SearchRoot, "external-child");
+            Directory.CreateDirectory(child);
+
+            File.WriteAllText(System.IO.Path.Combine(ParentPath, "SKILL.md"), string.Join('\n', [
+                "---",
+                "name: search-parent",
+                "---",
+                "# Parent",
+                "Use the external-child skill.",
+            ]));
+            File.WriteAllText(System.IO.Path.Combine(child, "SKILL.md"), string.Join('\n', [
+                "---",
+                "name: external-child",
+                "---",
+                "# External child",
+            ]));
+        }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(Root, recursive: true); } catch { }
         }
     }
 }

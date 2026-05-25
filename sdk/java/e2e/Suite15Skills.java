@@ -425,9 +425,6 @@ class Suite15Skills extends BaseTest {
      * a per-name model into the wire payload so the server compiles each sub-agent with
      * its own model.
      *
-     * Java has no Python-style {@code params} variant, so this exercises the actual
-     * per-sub-agent-model overload that exists in the Java SDK.
-     *
      * COUNTERFACTUAL: the default overload (no agentModels) must NOT carry a per-agent
      * model map in its wire payload.
      */
@@ -471,6 +468,52 @@ class Suite15Skills extends BaseTest {
             "Default Skill.skill() (no agentModels) must NOT carry a populated agentModels map. "
             + "Got: " + defaultThreaded
             + ". COUNTERFACTUAL: this proves the override path is actually taken when supplied.");
+    }
+
+    @Test
+    @Order(9)
+    @SuppressWarnings("unchecked")
+    void test_skill_params_and_cross_skill_refs_are_threaded(@TempDir Path parent) throws Exception {
+        Path main = parent.resolve("main-skill");
+        Path child = parent.resolve("child-skill");
+        Path grandchild = parent.resolve("grandchild-skill");
+        Files.createDirectories(main);
+        Files.createDirectories(child);
+        Files.createDirectories(grandchild);
+        Files.writeString(main.resolve("SKILL.md"), "---\nname: main-skill\nparams:\n  mode:\n    default: fast\n---\n# Main\nUse the child-skill skill.\n");
+        Files.writeString(child.resolve("SKILL.md"), "---\nname: child-skill\nparams:\n  childMode: compact\n---\n# Child\nUse the grandchild-skill skill.\n");
+        Files.writeString(grandchild.resolve("SKILL.md"), "---\nname: grandchild-skill\n---\n# Grandchild\n");
+
+        Agent agent = Skill.skill(main, MODEL, null, Map.of("mode", "slow", "rounds", 2));
+        Map<String, Object> cfg = agent.getFrameworkConfig();
+
+        Map<String, Object> params = (Map<String, Object>) cfg.get("params");
+        assertEquals("slow", params.get("mode"));
+        assertEquals(2, params.get("rounds"));
+        assertTrue(String.valueOf(cfg.get("skillMd")).contains("[Skill Parameters]"));
+
+        Map<String, Object> refs = (Map<String, Object>) cfg.get("crossSkillRefs");
+        assertTrue(refs.containsKey("child-skill"), "crossSkillRefs must include child-skill. Got: " + refs.keySet());
+        Map<String, Object> childRef = (Map<String, Object>) refs.get("child-skill");
+        Map<String, Object> nestedRefs = (Map<String, Object>) childRef.get("crossSkillRefs");
+        assertTrue(nestedRefs.containsKey("grandchild-skill"),
+            "child-skill crossSkillRefs must include grandchild-skill. Got: " + nestedRefs.keySet());
+
+        Path isolatedRoot = parent.resolve("isolated-root");
+        Path isolatedMain = parent.resolve("isolated-main");
+        Path isolatedChild = isolatedRoot.resolve("isolated-child");
+        Files.createDirectories(isolatedMain);
+        Files.createDirectories(isolatedChild);
+        Files.writeString(isolatedMain.resolve("SKILL.md"),
+            "---\nname: isolated-main\n---\n# Main\nUse the isolated-child skill.\n");
+        Files.writeString(isolatedChild.resolve("SKILL.md"),
+            "---\nname: isolated-child\n---\n# Child\n");
+
+        Agent isolated = Skill.skill(isolatedMain, MODEL, null, null, List.of(isolatedRoot));
+        Map<String, Object> isolatedCfg = isolated.getFrameworkConfig();
+        Map<String, Object> isolatedRefs = (Map<String, Object>) isolatedCfg.get("crossSkillRefs");
+        assertTrue(isolatedRefs.containsKey("isolated-child"),
+            "explicit searchPath must resolve isolated-child. Got: " + isolatedRefs.keySet());
     }
 
     /**
