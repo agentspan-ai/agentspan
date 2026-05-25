@@ -120,8 +120,7 @@ class SkillRegistryServiceTest {
         asUser("user-a");
 
         service.register(
-                "{\"name\":\"child-skill\",\"version\":\"v1\"}",
-                packageFile("child-skill", "Child instructions"));
+                "{\"name\":\"child-skill\",\"version\":\"v1\"}", packageFile("child-skill", "Child instructions"));
         service.register(
                 "{\"name\":\"parent-skill\",\"version\":\"v1\"}",
                 new MockMultipartFile(
@@ -140,13 +139,8 @@ class SkillRegistryServiceTest {
                                 "scripts/review.py",
                                 "print('review')"))));
 
-        Map<String, Object> raw = service.resolveRawConfig(Map.of(
-                "name",
-                "parent-skill",
-                "version",
-                "v1",
-                "params",
-                Map.of("mode", "slow")));
+        Map<String, Object> raw = service.resolveRawConfig(
+                Map.of("name", "parent-skill", "version", "v1", "params", Map.of("mode", "slow")));
 
         assertThat((String) raw.get("skillMd")).contains("[Skill Parameters]").contains("mode: slow");
         assertThat((Map<String, Object>) raw.get("params")).containsEntry("mode", "slow");
@@ -165,8 +159,7 @@ class SkillRegistryServiceTest {
         asUser("user-a");
 
         service.register(
-                "{\"name\":\"child-skill\",\"version\":\"v1\"}",
-                packageFile("child-skill", "Child version one"));
+                "{\"name\":\"child-skill\",\"version\":\"v1\"}", packageFile("child-skill", "Child version one"));
         service.register(
                 "{\"name\":\"parent-skill\",\"version\":\"v1\"}",
                 new MockMultipartFile(
@@ -174,11 +167,9 @@ class SkillRegistryServiceTest {
                         "skill.zip",
                         "application/zip",
                         zip(Map.of(
-                                "SKILL.md",
-                                "---\nname: parent-skill\n---\n# Parent\nUse the child-skill skill.\n"))));
+                                "SKILL.md", "---\nname: parent-skill\n---\n# Parent\nUse the child-skill skill.\n"))));
         service.register(
-                "{\"name\":\"child-skill\",\"version\":\"v2\"}",
-                packageFile("child-skill", "Child version two"));
+                "{\"name\":\"child-skill\",\"version\":\"v2\"}", packageFile("child-skill", "Child version two"));
 
         Map<String, Object> raw = service.resolveRawConfig(Map.of("name", "parent-skill", "version", "v1"));
         Map<String, Object> refs = (Map<String, Object>) raw.get("crossSkillRefs");
