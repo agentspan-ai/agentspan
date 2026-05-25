@@ -59,6 +59,10 @@ springBoot {
 
 dependencies {
 
+    // Compiler module — extracted to a standalone library so it can be embedded
+    // in other JVM apps (orkes-conductor) without dragging this Spring Boot app.
+    implementation "dev.agentspan:agentspan-compiler:0.1.0"
+
     // Conductor core
     implementation "org.conductoross:conductor-core:${conductorVersion}"
     implementation "org.conductoross:conductor-rest:${conductorVersion}"

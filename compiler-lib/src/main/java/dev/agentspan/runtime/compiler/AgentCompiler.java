@@ -9,7 +9,6 @@ import java.util.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
@@ -25,7 +24,6 @@ import dev.agentspan.runtime.util.ModelParser.ParsedModel;
  * Compiles an AgentConfig into a Conductor WorkflowDef.
  * Mirrors python/src/conductor/agents/compiler/agent_compiler.py.
  */
-@Component
 public class AgentCompiler {
 
     private static final Logger log = LoggerFactory.getLogger(AgentCompiler.class);

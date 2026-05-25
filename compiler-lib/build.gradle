@@ -1,0 +1,64 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'dev.agentspan'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+ext {
+    conductorVersion = '3.30.0.rc3'
+    lombokVersion    = '1.18.42'
+    jacksonVersion   = '2.17.1'
+    slf4jVersion     = '2.0.13'
+}
+
+dependencies {
+    api      "org.conductoross:conductor-common:${conductorVersion}"
+    api      "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    api      "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
+    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+
+    compileOnly      "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.assertj:assertj-core:3.25.1'
+    testCompileOnly  "org.projectlombok:lombok:${lombokVersion}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    testRuntimeOnly  "org.slf4j:slf4j-simple:${slf4jVersion}"
+}
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            pom {
+                name = 'Agentspan Compiler'
+                description = 'Compiles AgentConfig into a Conductor WorkflowDef. Extracted from agentspan-server so it can be embedded in other JVM apps (e.g. orkes-conductor) without dragging the server\'s Spring Boot app.'
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url  = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+            }
+        }
+    }
+}

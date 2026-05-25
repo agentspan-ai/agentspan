@@ -9,8 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.stereotype.Component;
-
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.TerminationConfig;
@@ -21,7 +19,6 @@ import dev.agentspan.runtime.util.JavaScriptBuilder;
  * No Python worker is needed -- the termination condition runs entirely
  * within the Conductor engine via GraalJS.
  */
-@Component
 public class TerminationCompiler {
 
     /**
