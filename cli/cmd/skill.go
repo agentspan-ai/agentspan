@@ -754,6 +754,7 @@ func startReadSkillFileWorker(ctx context.Context, c *client.Client, skillName, 
 		if path == "" {
 			return nil, fmt.Errorf("missing 'path' parameter")
 		}
+		path = normalizeSkillResourcePath(path)
 		if !resourceFiles[path] {
 			available := make([]string, 0, len(resourceFiles))
 			for k := range resourceFiles {
@@ -778,6 +779,13 @@ func startReadSkillFileWorker(ctx context.Context, c *client.Client, skillName, 
 		}
 		return string(data), nil
 	})
+}
+
+func normalizeSkillResourcePath(path string) string {
+	if strings.HasPrefix(path, "skill_section:") {
+		return path
+	}
+	return pathpkg.Clean(strings.ReplaceAll(path, "\\", "/"))
 }
 
 func startWorkspaceWorkers(ctx context.Context, c *client.Client, skillName string, cfg skillWorkspaceConfig) {

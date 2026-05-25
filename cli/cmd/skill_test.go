@@ -339,11 +339,11 @@ func TestCollectResourceFiles(t *testing.T) {
 
 	sort.Strings(files)
 	expected := []string{
-		filepath.Join("assets", "template.html"),
-		filepath.Join("examples", "usage.md"),
+		"assets/template.html",
+		"examples/usage.md",
 		"extra.txt",
-		filepath.Join("references", "api.md"),
-		filepath.Join("references", "guide.md"),
+		"references/api.md",
+		"references/guide.md",
 	}
 	sort.Strings(expected)
 
@@ -385,6 +385,18 @@ func TestCollectResourceFiles_ExcludesSkillAndAgentMd(t *testing.T) {
 	}
 	if !found {
 		t.Error("resource files should include comic-template.html")
+	}
+}
+
+func TestNormalizeSkillResourcePath_AcceptsWindowsSeparators(t *testing.T) {
+	got := normalizeSkillResourcePath(`references\api.md`)
+	if got != "references/api.md" {
+		t.Fatalf("normalizeSkillResourcePath() = %q, want references/api.md", got)
+	}
+
+	section := normalizeSkillResourcePath("skill_section:Workflow")
+	if section != "skill_section:Workflow" {
+		t.Fatalf("skill section path = %q, want unchanged section path", section)
 	}
 }
 
