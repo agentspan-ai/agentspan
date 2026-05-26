@@ -1,0 +1,52 @@
+# OCG-vs-no-OCG comparison.
+#
+# Two runs of the SAME example (examples/orkes_ocg/01_docs_writer_compare.py)
+# with different OCG_VARIANT env vars. The example reads OCG_VARIANT and
+# conditionally wires the `ocg` sub-agent into its tool set:
+#
+#   with_ocg  -> tools=[ocg sub-agent, gh (read-only)]
+#   no_ocg    -> tools=[gh (read-only)] only
+#
+# Both variants are propose-only (no gh_write, no branch creation, no
+# commits). Safe to rerun.
+#
+# Usage:
+#   cd sdk/python
+#   uv run python -m validation.scripts.run_examples --config validation/ocg_compare.toml
+#   uv run python -m validation.scripts.run_examples --config validation/ocg_compare.toml --judge
+
+[defaults]
+timeout = 600                # generous per-example timeout
+parallel = false             # serialize so we get clean A/B logs
+max_workers = 1
+retries = 0
+server_url = "http://localhost:6767/api"
+
+[env]
+
+[judge]
+# Positional pairing: because each run executes a *different* example file
+# (01_ocg_docs_writer vs 02_gh_docs_writer), the judge automatically falls
+# back to pairing by position — run-A's Nth example vs run-B's Nth example.
+#
+# To add more scenarios, add one file to each group in groups.py in the
+# same order. Pair 1 = position 1 of OCG_AGENT vs position 1 of GH_AGENT,
+# pair 2 = position 2 vs position 2, etc.
+baseline_run = "no_ocg"
+model = "gpt-4o-mini"
+max_output_chars = 4000
+max_tokens = 400
+rate_limit = 0.5
+
+[display]
+max_example_rows = 20
+
+# ── Runs ─────────────────────────────────────────────────────────────────
+
+[runs.with_ocg]
+group = "OCG_AGENT"
+model = "anthropic/claude-sonnet-4-20250514"
+
+[runs.no_ocg]
+group = "GH_AGENT"
+model = "anthropic/claude-sonnet-4-20250514"

@@ -198,6 +198,16 @@ GROUPS: dict[str, list[str]] = {
         "adk/01_basic_agent",
         "adk/03_structured_output",
     ],
+    # Two independent agents doing the same docs task.
+    # Agent A: uses the OCG sub-agent for discovery + gh for reading.
+    # Agent B: uses only gh (no OCG awareness whatsoever).
+    # See validation/ocg_compare.toml.
+    "OCG_AGENT": [
+        "orkes_ocg/01_ocg_docs_writer",
+    ],
+    "GH_AGENT": [
+        "orkes_ocg/02_gh_docs_writer",
+    ],
 }
 
 HITL_STDIN: dict[str, str] = {

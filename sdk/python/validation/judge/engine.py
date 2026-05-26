@@ -48,7 +48,55 @@ def judge_across_runs(
         data = json.loads((rd / "run_results.json").read_text())
         run_examples[name] = data.get("examples", {})
 
-    all_example_names = sorted({name for examples in run_examples.values() for name in examples})
+    # Build the list of (run_a_example, run_b_example) pairs to judge.
+    #
+    # Two pairing modes:
+    #
+    # 1. SAME-NAME (default): examples with the same name across runs are
+    #    compared. Use this when every run executes identical scenario files.
+    #
+    # 2. POSITIONAL (automatic fallback): when exactly 2 runs are present and
+    #    their example names don't overlap at all (i.e. each run executed a
+    #    different set of files), the examples are paired by their sorted
+    #    position — run-A's first example vs run-B's first, second vs second,
+    #    and so on.  This lets you keep Agent-A and Agent-B implementations in
+    #    completely separate files while still getting a side-by-side judge
+    #    comparison.
+    #
+    #    Convention for multiple scenarios with positional pairing:
+    #      OCG_AGENT group:  01_log_level, 02_retry_policy, 03_memory_config …
+    #      GH_AGENT  group:  01_log_level, 02_retry_policy, 03_memory_config …
+    #    List them in the same order in groups.py and they will pair correctly.
+
+    all_example_names_by_run: dict[str, list[str]] = {
+        name: sorted(examples.keys()) for name, examples in run_examples.items()
+    }
+    all_names_union = sorted({n for names in all_example_names_by_run.values() for n in names})
+    all_names_intersection = sorted(
+        set.intersection(*[set(n) for n in all_example_names_by_run.values()])
+        if all_example_names_by_run else set()
+    )
+
+    # Use positional pairing when: exactly 2 runs, zero name overlap
+    _use_positional = (
+        len(run_dirs) == 2
+        and len(all_names_intersection) == 0
+        and len(all_names_union) > 0
+    )
+
+    if _use_positional:
+        _run_a, _run_b = list(all_example_names_by_run.keys())
+        _names_a = all_example_names_by_run[_run_a]
+        _names_b = all_example_names_by_run[_run_b]
+        # Pair by position; pad shorter list with None
+        _positional_pairs: list[tuple[str | None, str | None]] = list(
+            zip(_names_a + [None] * max(0, len(_names_b) - len(_names_a)),
+                _names_b + [None] * max(0, len(_names_a) - len(_names_b)))
+        )
+    else:
+        _positional_pairs = []
+
+    all_example_names = all_names_union
 
     state = JudgeState()
     judge_dir = parent_dir / "judge"
@@ -76,6 +124,31 @@ def judge_across_runs(
     judge_rows: list[dict] = []
 
     from .display import _judge_plain, _judge_with_rich, _print_rich_summary
+
+    # In positional mode, rewrite run_examples so both runs appear under the
+    # same synthetic example key ("pair_N"), enabling the existing judge logic
+    # to compare them as if they were the same example.
+    if _use_positional:
+        _run_a, _run_b = list(all_example_names_by_run.keys())
+        _merged_examples: dict[str, dict[str, dict]] = {_run_a: {}, _run_b: {}}
+        _synthetic_names: list[str] = []
+        for i, (name_a, name_b) in enumerate(_positional_pairs):
+            key = f"pair_{i + 1}"
+            _synthetic_names.append(key)
+            if name_a and name_a in run_examples.get(_run_a, {}):
+                _merged_examples[_run_a][key] = run_examples[_run_a][name_a]
+                _merged_examples[_run_a][key] = dict(
+                    _merged_examples[_run_a][key],
+                    _original_name=name_a,
+                )
+            if name_b and name_b in run_examples.get(_run_b, {}):
+                _merged_examples[_run_b][key] = run_examples[_run_b][name_b]
+                _merged_examples[_run_b][key] = dict(
+                    _merged_examples[_run_b][key],
+                    _original_name=name_b,
+                )
+        run_examples = _merged_examples
+        all_example_names = _synthetic_names
 
     if use_rich:
         _judge_with_rich(

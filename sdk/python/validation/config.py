@@ -17,6 +17,7 @@ SUBDIRS = {
     "adk": "google.adk",
     "langgraph": "langgraph",
     "langchain": "langchain",
+    "orkes_ocg": "httpx",  # OCG client uses httpx; always available
 }
 
 # ── Settings ─────────────────────────────────────────────────────────────
