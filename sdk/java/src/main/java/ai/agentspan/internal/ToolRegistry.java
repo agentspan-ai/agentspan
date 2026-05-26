@@ -151,7 +151,7 @@ public class ToolRegistry {
     /**
      * Build the JSON Schema for the given method's parameters.
      */
-    public static Map<String, Object> generateSchema(Method method) {
+    private static Map<String, Object> generateSchema(Method method) {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         Map<String, Object> props = new LinkedHashMap<>();
@@ -290,9 +290,13 @@ public class ToolRegistry {
 
     /**
      * Coerce a raw value (typically from JSON deserialization) to the target Java type.
+     *
+     * <p>Public so framework bridges (e.g. {@code AdkBridge}) can share the same
+     * coercion table — String/primitives/collections/{@code java.time}/enums via
+     * Jackson — without duplicating the logic.
      */
-    private static Object coerce(Object value, Class<?> targetType) {
-        return coerce(value, targetType, targetType);
+    public static Object coerceArgument(Object value, Class<?> targetType, Type genericType) {
+        return coerce(value, targetType, genericType);
     }
 
     /**

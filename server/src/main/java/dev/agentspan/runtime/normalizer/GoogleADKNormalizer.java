@@ -230,6 +230,18 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
             config.setPlanner(true);
         }
 
+        // Guardrails — propagate Agentspan-side safety hooks attached to an
+        // ADK agent via AdkBridge.agentBuilder(...).guardrails(...). Without
+        // this, the SDK ships `guardrails: [...]` in the rawConfig but the
+        // server never compiles the DoWhile loop with output-guardrail tasks.
+        List<GuardrailConfig> guardrails = new ArrayList<>();
+        addGuardrails(guardrails, getList(raw, "guardrails"), null);
+        addGuardrails(guardrails, getList(raw, "input_guardrails"), "input");
+        addGuardrails(guardrails, getList(raw, "output_guardrails"), "output");
+        if (!guardrails.isEmpty()) {
+            config.setGuardrails(guardrails);
+        }
+
         // Include contents: control context passed to sub-agents
         String includeContents = getString(raw, "include_contents");
         if (includeContents != null) {
@@ -348,6 +360,48 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
                 log.warn("Skipping unrecognized Google ADK tool: {}", raw);
                 return null;
         }
+    }
+
+    // ── Guardrail helpers (mirrors OpenAINormalizer) ────────────────
+
+    private void addGuardrails(
+            List<GuardrailConfig> guardrails, List<Map<String, Object>> rawGuardrails, String defaultPosition) {
+        if (rawGuardrails == null || rawGuardrails.isEmpty()) return;
+        for (Map<String, Object> g : rawGuardrails) {
+            GuardrailConfig gc = normalizeGuardrail(g, defaultPosition);
+            if (gc != null) guardrails.add(gc);
+        }
+    }
+
+    private GuardrailConfig normalizeGuardrail(Map<String, Object> raw, String defaultPosition) {
+        GuardrailConfig gc = new GuardrailConfig();
+        gc.setName(getString(raw, "name", "guardrail"));
+
+        String position = getString(raw, "position", defaultPosition);
+        if (position == null || position.isEmpty()) position = "output";
+        gc.setPosition(position);
+
+        // The Java SDK's serializeGuardrail emits the worker task name in a
+        // top-level `taskName` field (matches Python's
+        // `{agentName}_output_guardrail` convention). Honor it first so the
+        // server schedules a task whose name matches the worker the SDK
+        // actually registers. Fall back to legacy worker_ref shapes that
+        // other serializers (older Python) may emit.
+        String workerRef = getString(raw, "taskName", null);
+        if (workerRef == null) workerRef = getString(raw, "_worker_ref", null);
+        if (workerRef == null) workerRef = extractNestedWorkerRef(raw, "execute");
+        if (workerRef == null) workerRef = extractNestedWorkerRef(raw, "guardrail_function");
+        if (workerRef == null) workerRef = extractNestedWorkerRef(raw, "guardrailFunction");
+
+        gc.setGuardrailType("custom");
+        gc.setTaskName(workerRef != null && !workerRef.isEmpty() ? workerRef : getString(raw, "name", "guardrail"));
+        return gc;
+    }
+
+    private String extractNestedWorkerRef(Map<String, Object> raw, String key) {
+        Map<String, Object> nested = getMap(raw, key);
+        if (nested == null) return null;
+        return getString(nested, "_worker_ref", null);
     }
 
     // ── Utility methods ─────────────────────────────────────────────

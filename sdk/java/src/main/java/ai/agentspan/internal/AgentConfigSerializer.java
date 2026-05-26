@@ -45,6 +45,72 @@ public class AgentConfigSerializer {
             return skillMap;
         }
 
+        // OpenAI Agents SDK and Google ADK use the framework+rawConfig path.
+        // The server normalizers (OpenAINormalizer, GoogleADKNormalizer) read
+        // the raw config map directly. We also emit the tools list (when present)
+        // so the SDK worker poller registers handlers for any locally-defined
+        // @Tool-annotated worker tools the agent declares.
+        String fw = agent.getFramework();
+        if ("openai".equals(fw) || "google_adk".equals(fw)) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("name", agent.getName());
+            if (agent.getModel() != null && !agent.getModel().isEmpty()) {
+                map.put("model", agent.getModel());
+            }
+            // OpenAI uses `instructions`; ADK uses `instruction` (singular).
+            if (agent.getInstructions() != null && !agent.getInstructions().isEmpty()) {
+                map.put("google_adk".equals(fw) ? "instruction" : "instructions",
+                        agent.getInstructions());
+            }
+            // Tools: framework normalizers (OpenAINormalizer, GoogleADKNormalizer)
+            // expect the worker_ref shape `{_worker_ref, description, parameters}`
+            // — matching Python's frameworks/serializer.py. The default
+            // `{name, description, inputSchema, toolType}` shape gets dropped on
+            // the floor by these normalizers (no _worker_ref → no schema → LLM
+            // sees a paramless tool → calls it with empty inputData → NPE in
+            // the worker). The SDK still registers worker handlers separately.
+            if (agent.getTools() != null && !agent.getTools().isEmpty()) {
+                List<Map<String, Object>> toolsList = new ArrayList<>();
+                for (ToolDef tool : agent.getTools()) {
+                    // Agent-as-tool: emit `{_type: "AgentTool", name, description, agent}`
+                    // so the framework normalizer can compile this as a SUB_WORKFLOW
+                    // task (toolType=agent_tool). Matches Python's
+                    // _try_extract_agent_tool in frameworks/serializer.py.
+                    if ("agent_tool".equals(tool.getToolType()) && tool.getAgentRef() != null) {
+                        Map<String, Object> t = new LinkedHashMap<>();
+                        t.put("_type", "AgentTool");
+                        t.put("name", tool.getName());
+                        t.put("description", tool.getDescription() != null ? tool.getDescription() : "");
+                        t.put("agent", serializeAgent(tool.getAgentRef()));
+                        toolsList.add(t);
+                        continue;
+                    }
+                    // Regular worker tool: _worker_ref shape.
+                    Map<String, Object> t = new LinkedHashMap<>();
+                    t.put("_worker_ref", tool.getName());
+                    t.put("description", tool.getDescription());
+                    t.put("parameters", tool.getInputSchema());
+                    toolsList.add(t);
+                }
+                map.put("tools", toolsList);
+            }
+            // Guardrails — emit so framework normalizers can preserve
+            // Agentspan-side safety hooks. Without this, attaching
+            // .guardrails(...) to a bridged ADK / OpenAI agent silently
+            // drops them at the wire layer.
+            if (agent.getGuardrails() != null && !agent.getGuardrails().isEmpty()) {
+                List<Map<String, Object>> guardrailsList = new ArrayList<>();
+                for (GuardrailDef g : agent.getGuardrails()) {
+                    guardrailsList.add(serializeGuardrail(g, agent.getName()));
+                }
+                map.put("guardrails", guardrailsList);
+            }
+            // Framework-specific extras (handoffs, sub_agents, output_type, etc.)
+            Map<String, Object> cfg = agent.getFrameworkConfig();
+            if (cfg != null) map.putAll(cfg);
+            return map;
+        }
+
         Map<String, Object> agentMap = new LinkedHashMap<>();
 
         agentMap.put("name", agent.getName());
@@ -364,10 +430,6 @@ public class AgentConfigSerializer {
         }
 
         return agentMap;
-    }
-
-    private Map<String, Object> serializeTool(ToolDef tool) {
-        return serializeTool(tool, false);
     }
 
     private Map<String, Object> serializeTool(ToolDef tool, boolean agentStateful) {

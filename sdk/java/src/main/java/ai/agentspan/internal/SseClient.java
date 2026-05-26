@@ -16,7 +16,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
@@ -63,26 +62,6 @@ public class SseClient implements AutoCloseable {
         try {
             AgentEvent event = eventQueue.take();
             if (event == DONE_SENTINEL) {
-                return null;
-            }
-            return event;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return null;
-        }
-    }
-
-    /**
-     * Block with a timeout until the next event is available.
-     *
-     * @param timeout the timeout value
-     * @param unit    the timeout unit
-     * @return the next event, or null if timed out or done
-     */
-    public AgentEvent nextEvent(long timeout, TimeUnit unit) {
-        try {
-            AgentEvent event = eventQueue.poll(timeout, unit);
-            if (event == null || event == DONE_SENTINEL) {
                 return null;
             }
             return event;

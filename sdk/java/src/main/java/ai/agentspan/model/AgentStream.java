@@ -90,7 +90,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
      * use {@link #approve(AgentEvent)} with the {@code WAITING} event instead.
      */
     public void approve() {
-        httpApi.respondToAgent(executionId, true, null);
+        httpApi.respond(executionId, approveBody(null));
     }
 
     /**
@@ -103,7 +103,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
      * @param event the WAITING event whose pending HUMAN task should be approved
      */
     public void approve(AgentEvent event) {
-        httpApi.respondToAgent(targetExecutionId(event), true, null);
+        httpApi.respond(targetExecutionId(event), approveBody(null));
     }
 
     /**
@@ -112,7 +112,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
      * @param reason optional rejection reason
      */
     public void reject(String reason) {
-        httpApi.respondToAgent(executionId, false, reason);
+        httpApi.respond(executionId, rejectBody(reason));
     }
 
     /**
@@ -122,7 +122,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
      * @param reason optional rejection reason
      */
     public void reject(AgentEvent event, String reason) {
-        httpApi.respondToAgent(targetExecutionId(event), false, reason);
+        httpApi.respond(targetExecutionId(event), rejectBody(reason));
     }
 
     /**
@@ -133,7 +133,7 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     public void send(String message) {
         java.util.Map<String, Object> body = new java.util.HashMap<>();
         body.put("message", message);
-        httpApi.respondWithData(executionId, body);
+        httpApi.respond(executionId, body);
     }
 
     /**
@@ -145,7 +145,21 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     public void send(AgentEvent event, String message) {
         java.util.Map<String, Object> body = new java.util.HashMap<>();
         body.put("message", message);
-        httpApi.respondWithData(targetExecutionId(event), body);
+        httpApi.respond(targetExecutionId(event), body);
+    }
+
+    private static java.util.Map<String, Object> approveBody(String reason) {
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("approved", true);
+        if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+        return body;
+    }
+
+    private static java.util.Map<String, Object> rejectBody(String reason) {
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("approved", false);
+        if (reason != null && !reason.isEmpty()) body.put("reason", reason);
+        return body;
     }
 
     private static String targetExecutionId(AgentEvent event) {

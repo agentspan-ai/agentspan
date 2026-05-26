@@ -3,14 +3,15 @@
 
 package ai.agentspan.exceptions;
 
-/** Thrown when a requested agent is not found on the server. */
-public class AgentNotFoundException extends AgentspanException {
-    private final String agentName;
-
-    public AgentNotFoundException(String agentName) {
-        super("Agent not found: " + agentName);
-        this.agentName = agentName;
+/**
+ * Thrown when the workflow / agent / execution ID is not found (HTTP 404).
+ *
+ * <p>Subclass of {@link AgentAPIException} — catch this when you want to
+ * distinguish "doesn't exist" from generic server errors. Mirrors
+ * {@code AgentNotFoundError} in the Python SDK.
+ */
+public class AgentNotFoundException extends AgentAPIException {
+    public AgentNotFoundException(int statusCode, String responseBody) {
+        super(statusCode, responseBody);
     }
-
-    public String getAgentName() { return agentName; }
 }
