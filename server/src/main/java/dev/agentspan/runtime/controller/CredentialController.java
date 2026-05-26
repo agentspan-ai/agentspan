@@ -84,6 +84,11 @@ public class CredentialController {
         if (name == null || name.isBlank() || value == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "name and value are required"));
         }
+        try {
+            CredentialValueValidator.validate(name, value);
+        } catch (CredentialValueValidator.InvalidCredentialValueException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
         storeProvider.set(userId, name, value);
         log.info("Credential created: user={}, name={}", userId, name);
         return ResponseEntity.status(HttpStatus.CREATED).build();
@@ -96,6 +101,11 @@ public class CredentialController {
         String value = body.get("value");
         if (value == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "value is required"));
+        }
+        try {
+            CredentialValueValidator.validate(name, value);
+        } catch (CredentialValueValidator.InvalidCredentialValueException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
         storeProvider.set(userId, name, value);
         log.info("Credential updated: user={}, name={}", userId, name);

@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/tabwriter"
+	"unicode"
 
 	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/agentspan-ai/agentspan/cli/config"
@@ -57,9 +59,33 @@ Advanced form (custom store name, explicit binding needed):
 }
 
 func runCredentialsSet(name, value string) error {
+	if err := validateCredentialValue(name, value); err != nil {
+		return err
+	}
 	cfg := config.Load()
 	c := client.New(cfg)
 	return c.SetCredential(name, value)
+}
+
+func validateCredentialValue(name, value string) error {
+	if value != strings.TrimSpace(value) {
+		return fmt.Errorf("credential %q contains leading or trailing whitespace; re-enter it on one line without surrounding spaces", name)
+	}
+	for _, r := range value {
+		switch r {
+		case '\n':
+			return fmt.Errorf("credential %q contains a newline; re-export it on a single line and store it again", name)
+		case '\r':
+			return fmt.Errorf("credential %q contains a carriage return; re-export it on a single line and store it again", name)
+		case '\t':
+			return fmt.Errorf("credential %q contains a tab; re-export it on a single line and store it again", name)
+		default:
+			if unicode.IsControl(r) {
+				return fmt.Errorf("credential %q contains control character 0x%02x; re-export it on a single line and store it again", name, r)
+			}
+		}
+	}
+	return nil
 }
 
 // ─── credentials list ─────────────────────────────────────────────────────────

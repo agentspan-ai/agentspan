@@ -54,6 +54,31 @@ class CredentialControllerTest {
     }
 
     @Test
+    void createCredential_rejectsNewlineValue() throws Exception {
+        mvc.perform(post("/api/credentials")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"sk-test\\nwrapped\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString(CRED_NAME)))
+                .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("newline")));
+    }
+
+    @Test
+    void updateCredential_rejectsSurroundingWhitespace() throws Exception {
+        mvc.perform(post("/api/credentials")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"original-value-here\"}"))
+                .andExpect(status().isCreated());
+
+        mvc.perform(put("/api/credentials/" + CRED_NAME)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"value\":\" updated-value-here\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString(CRED_NAME)))
+                .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("leading or trailing")));
+    }
+
+    @Test
     void deleteCredential_returns204() throws Exception {
         // Create first
         mvc.perform(post("/api/credentials")

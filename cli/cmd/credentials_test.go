@@ -73,6 +73,42 @@ func TestCredentialsSetWithStoreName(t *testing.T) {
 	}
 }
 
+func TestCredentialsSetRejectsNewlineValue(t *testing.T) {
+	newTempHome(t)
+
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	saveTestConfig(t, srv.URL)
+
+	err := runCredentialsSet("OPENAI_API_KEY", "sk-test\nwrapped")
+	if err == nil {
+		t.Fatalf("runCredentialsSet should reject newline-containing credentials")
+	}
+	if !strings.Contains(err.Error(), "OPENAI_API_KEY") || !strings.Contains(err.Error(), "newline") {
+		t.Fatalf("error = %q, want credential name and newline hint", err.Error())
+	}
+	if called {
+		t.Fatalf("server should not be called for invalid credentials")
+	}
+}
+
+func TestCredentialsSetRejectsSurroundingWhitespace(t *testing.T) {
+	newTempHome(t)
+
+	err := runCredentialsSet("OPENAI_API_KEY", " sk-test")
+	if err == nil {
+		t.Fatalf("runCredentialsSet should reject credentials with surrounding whitespace")
+	}
+	if !strings.Contains(err.Error(), "leading or trailing whitespace") {
+		t.Fatalf("error = %q, want whitespace hint", err.Error())
+	}
+}
+
 func TestCredentialsList(t *testing.T) {
 	newTempHome(t)
 

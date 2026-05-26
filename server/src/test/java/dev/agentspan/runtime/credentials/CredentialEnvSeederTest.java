@@ -124,6 +124,23 @@ class CredentialEnvSeederTest {
     }
 
     @Test
+    void seeder_skipsEnvVarWithNewline_inRealDb() throws Exception {
+        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+
+        Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-test\nwrapped" : null;
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        assertThat(value).isNull();
+    }
+
+    @Test
     void seeder_skipsWhenStoreIsNotBuiltIn() throws Exception {
         storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
 

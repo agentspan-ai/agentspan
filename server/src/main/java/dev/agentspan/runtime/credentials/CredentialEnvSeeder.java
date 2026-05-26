@@ -131,10 +131,18 @@ public class CredentialEnvSeeder implements ApplicationRunner {
 
         int created = 0;
         int skipped = 0;
+        int invalid = 0;
 
         for (String name : KNOWN_ENV_VARS) {
             String value = envLookup.apply(name);
             if (value == null || value.isBlank()) {
+                continue;
+            }
+            try {
+                CredentialValueValidator.validate(name, value);
+            } catch (CredentialValueValidator.InvalidCredentialValueException e) {
+                log.warn("Credential env import skipped: {}", e.getMessage());
+                invalid++;
                 continue;
             }
 
@@ -178,8 +186,12 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             }
         }
 
-        if (created > 0 || skipped > 0) {
-            log.info("Credential env seeding complete: {} created, {} already existed (skipped)", created, skipped);
+        if (created > 0 || skipped > 0 || invalid > 0) {
+            log.info(
+                    "Credential env seeding complete: {} created, {} already existed (skipped), {} invalid (skipped)",
+                    created,
+                    skipped,
+                    invalid);
         }
     }
 }
