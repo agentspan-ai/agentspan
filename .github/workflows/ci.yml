@@ -195,7 +195,7 @@ jobs:
         with:
           name: server-jar
           path: server/build/libs/agentspan-runtime.jar
-          retention-days: 1
+          retention-days: 7
 
   # ── Python E2E Tests ───────────────────────────────────────────────
   python-e2e:
