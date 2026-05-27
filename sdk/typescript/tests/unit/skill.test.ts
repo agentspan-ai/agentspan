@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import {
   skill,
@@ -189,6 +191,31 @@ describe("skill", () => {
     expect(params.rounds).toBe(5); // overridden
     expect(params.style).toBe("verbose"); // default kept
     expect(params.extra).toBe(true); // new
+  });
+
+  it("resolves nested cross-skill references", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentspan-ts-cross-skill-"));
+    try {
+      const parent = path.join(root, "parent-skill");
+      const child = path.join(root, "child-skill");
+      const grandchild = path.join(root, "grandchild-skill");
+      fs.mkdirSync(parent);
+      fs.mkdirSync(child);
+      fs.mkdirSync(grandchild);
+      fs.writeFileSync(path.join(parent, "SKILL.md"), "---\nname: parent-skill\n---\n# Parent\nUse the child-skill skill.\n");
+      fs.writeFileSync(path.join(child, "SKILL.md"), "---\nname: child-skill\n---\n# Child\nUse the grandchild-skill skill.\n");
+      fs.writeFileSync(path.join(grandchild, "SKILL.md"), "---\nname: grandchild-skill\n---\n# Grandchild\n");
+
+      const agent = skill(parent);
+      const a = agent as unknown as Record<string, unknown>;
+      const config = a._framework_config as Record<string, unknown>;
+      const refs = config.crossSkillRefs as Record<string, Record<string, unknown>>;
+      const childRef = refs["child-skill"];
+      const nestedRefs = childRef.crossSkillRefs as Record<string, unknown>;
+      expect(nestedRefs).toHaveProperty("grandchild-skill");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("throws SkillLoadError for missing SKILL.md", () => {

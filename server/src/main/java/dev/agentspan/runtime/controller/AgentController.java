@@ -30,11 +30,13 @@ import dev.agentspan.runtime.model.CreateTrackingWorkflowRequest;
 import dev.agentspan.runtime.model.CreateTrackingWorkflowResponse;
 import dev.agentspan.runtime.model.InjectTaskRequest;
 import dev.agentspan.runtime.model.InjectTaskResponse;
+import dev.agentspan.runtime.model.InspectPlanRequest;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
 import dev.agentspan.runtime.model.TaskListResponse;
 import dev.agentspan.runtime.service.AgentDagService;
 import dev.agentspan.runtime.service.AgentService;
+import dev.agentspan.runtime.service.PlanAndCompileTask;
 
 import lombok.RequiredArgsConstructor;
 
@@ -57,6 +59,22 @@ public class AgentController {
     @PostMapping("/compile")
     public CompileResponse compileAgent(@RequestBody StartRequest request) {
         return agentService.compile(request);
+    }
+
+    /**
+     * /dg #6: compile a plan against a PLAN_EXECUTE harness config and
+     * return the resulting Conductor WorkflowDef, error string, warnings
+     * list, and stats — without dispatching the SUB_WORKFLOW.
+     *
+     * <p>Useful for IDE tooling, plan-debug REPLs, and CI checks that
+     * validate a plan compiles cleanly against a fixed agent config
+     * before deploy. Uses the same compile path the runtime would,
+     * so the inspected output is byte-equal to what the real run
+     * would produce for the same plan.
+     */
+    @PostMapping("/inspect-plan")
+    public PlanAndCompileTask.InspectResult inspectPlan(@RequestBody InspectPlanRequest request) {
+        return agentService.inspectPlan(request);
     }
 
     /**

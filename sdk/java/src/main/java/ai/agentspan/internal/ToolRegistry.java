@@ -99,6 +99,7 @@ public class ToolRegistry {
                 .func(func)
                 .approvalRequired(ann.approvalRequired())
                 .timeoutSeconds(ann.timeoutSeconds())
+                .maxCalls(ann.maxCalls())
                 .retryCount(ann.retryCount())
                 .retryDelaySeconds(ann.retryDelaySeconds())
                 .retryPolicy(ann.retryPolicy())

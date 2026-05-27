@@ -12,6 +12,7 @@ Tests cover the full skill lifecycle:
 - Script discovery, params injection, worker creation
 """
 
+import json
 import os
 import textwrap
 from pathlib import Path
@@ -45,13 +46,18 @@ def skill_dir(tmp_path):
         A test skill with two sub-agents and a script tool.
 
         ## Workflow
-        1. Call the echo_args tool once with the user's input as the argument.
-        2. Return the echo_args result to the user. Do NOT call any more tools after echo_args.
+        1. If no prior tool result is available, call the test_skill__echo_args tool exactly once.
+        2. Pass the original user's input as the argument.
+        3. After a tool result containing ECHO_ARGS_RESULT: is available, return that exact line as the final answer.
+        4. If asked to continue, do not call any tool. Return the most recent ECHO_ARGS_RESULT: line exactly.
     """)
     (tmp_path / "SKILL.md").write_text(skill_md)
 
     (tmp_path / "alpha-agent.md").write_text("# Alpha Agent\nYou analyze the input.\n")
     (tmp_path / "beta-agent.md").write_text("# Beta Agent\nYou summarize the analysis.\n")
+    references_dir = tmp_path / "references"
+    references_dir.mkdir()
+    (references_dir / "guide.md").write_text("# REFERENCE_GUIDE\nUse this deterministic guide.\n")
 
     # Script tool: echoes args with a deterministic prefix for algorithmic validation
     scripts_dir = tmp_path / "scripts"
@@ -78,11 +84,15 @@ def fresh_runtime():
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _verify_skill_sub_workflow(execution_id: str, skill_task_name: str = "test_skill"):
+def _verify_skill_sub_workflow(
+    execution_id: str,
+    skill_task_name: str = "test_skill",
+    required_tool_marker: str = "ECHO_ARGS_RESULT:",
+):
     """Fetch a skill sub-workflow from a parent execution and verify:
     1. The skill SUB_WORKFLOW task exists and COMPLETED
     2. No tasks stuck in SCHEDULED inside the sub-workflow (pollCount=0 regression)
-    3. If echo_args was invoked, it COMPLETED with ECHO_ARGS_RESULT marker
+    3. The echo_args script tool was invoked and returned the deterministic marker
 
     Returns (sub_wf_id, sub_tasks) for further inspection.
     """
@@ -122,26 +132,80 @@ def _verify_skill_sub_workflow(execution_id: str, skill_task_name: str = "test_s
         f"{[(t.get('taskDefName'), t.get('pollCount', 0)) for t in scheduled]}"
     )
 
-    # If echo_args was invoked, verify it completed with deterministic marker
+    # Verify echo_args was invoked and completed with the deterministic marker.
     echo_tasks = [
         t for t in sub_tasks if "echo_args" in t.get("taskDefName", "")
     ]
-    if echo_tasks:
-        for t in echo_tasks:
-            assert t.get("status") == "COMPLETED", (
-                f"echo_args status='{t.get('status')}' pollCount={t.get('pollCount', 0)} "
-                f"in sub-workflow {sub_wf_id}"
-            )
-        any_marker = any(
-            "ECHO_ARGS_RESULT:" in str(t.get("outputData", {}))
-            for t in echo_tasks
+    assert echo_tasks, (
+        f"echo_args was not invoked in sub-workflow {sub_wf_id}. "
+        f"Task defs: {[t.get('taskDefName') for t in sub_tasks]}"
+    )
+    for t in echo_tasks:
+        assert t.get("status") == "COMPLETED", (
+            f"echo_args status='{t.get('status')}' pollCount={t.get('pollCount', 0)} "
+            f"in sub-workflow {sub_wf_id}"
         )
-        assert any_marker, (
-            f"echo_args completed but no ECHO_ARGS_RESULT marker in {sub_wf_id}. "
-            f"Outputs: {[t.get('outputData') for t in echo_tasks]}"
-        )
+    any_marker = any(
+        required_tool_marker in str(t.get("outputData", {}))
+        for t in echo_tasks
+    )
+    assert any_marker, (
+        f"echo_args completed but no {required_tool_marker} marker in {sub_wf_id}. "
+        f"Outputs: {[t.get('outputData') for t in echo_tasks]}"
+    )
 
     return sub_wf_id, sub_tasks
+
+
+def _verify_script_worker_task(
+    workflow: dict,
+    task_name: str = "test_skill__echo_args",
+    required_tool_marker: str = "ECHO_ARGS_RESULT:",
+):
+    """Verify a skill script was executed as a real Conductor worker tool."""
+    tasks = workflow.get("tasks", [])
+    matching_tasks = [
+        t for t in tasks
+        if task_name in t.get("taskDefName", "")
+        or task_name in t.get("referenceTaskName", "")
+        or task_name in t.get("taskType", "")
+    ]
+
+    assert matching_tasks, (
+        f"{task_name} was not invoked. "
+        f"Task defs: {[t.get('taskDefName') for t in tasks]}"
+    )
+
+    scheduled = [t for t in matching_tasks if t.get("status") == "SCHEDULED"]
+    assert not scheduled, (
+        f"{task_name} stuck in SCHEDULED; worker did not poll. "
+        f"{[(t.get('taskDefName'), t.get('pollCount', 0)) for t in scheduled]}"
+    )
+
+    for task in matching_tasks:
+        assert task.get("status") == "COMPLETED", (
+            f"{task_name} status='{task.get('status')}' "
+            f"pollCount={task.get('pollCount', 0)}"
+        )
+
+    workflow_task_types = {
+        t.get("workflowTask", {}).get("type")
+        for t in matching_tasks
+        if isinstance(t.get("workflowTask"), dict)
+        and t.get("workflowTask", {}).get("type")
+    }
+    assert not workflow_task_types or workflow_task_types == {"SIMPLE"}, (
+        f"{task_name} did not execute as a SIMPLE worker task: {workflow_task_types}"
+    )
+
+    any_marker = any(
+        required_tool_marker in str(t.get("outputData", {}))
+        for t in matching_tasks
+    )
+    assert any_marker, (
+        f"{task_name} completed but no {required_tool_marker} marker was returned. "
+        f"Outputs: {[t.get('outputData') for t in matching_tasks]}"
+    )
 
 
 def _all_tasks_flat(workflow_def: dict) -> list:
@@ -174,6 +238,21 @@ def _recurse_task(t: dict) -> list:
 
 def _task_type_set(tasks: list) -> set:
     return {t.get("type", "") for t in tasks}
+
+
+def _all_dicts(value) -> list:
+    """Recursively collect dictionaries from a JSON-like structure."""
+    if isinstance(value, dict):
+        found = [value]
+        for child in value.values():
+            found.extend(_all_dicts(child))
+        return found
+    if isinstance(value, list):
+        found = []
+        for child in value:
+            found.extend(_all_dicts(child))
+        return found
+    return []
 
 
 # ── Tests ────────────────────────────────────────────────────────────
@@ -240,6 +319,29 @@ class TestSuite15Skills:
         assert config.get("_framework") != "skill"
         tool_names = [t["name"] for t in config.get("tools", [])]
         assert "test_skill" in tool_names
+
+    def test_skill_agent_tool_predeploy_sets_worker_names(self, skill_dir, fresh_runtime):
+        """Pre-deployed skill agent_tools carry worker names for server domain routing."""
+        skill_agent = skill(skill_dir, model=MODEL)
+        at = agent_tool(skill_agent, description="Run test skill")
+        parent = Agent(
+            name="parent_predeploy_skill_tool",
+            model=MODEL,
+            instructions="Use the skill tool.",
+            tools=[at],
+        )
+
+        deployed = fresh_runtime._pre_deploy_nested_skills(parent)
+
+        td = get_tool_def(at)
+        assert deployed == [skill_agent]
+        assert td.config is not None
+        assert "agent" not in td.config
+        assert td.config.get("workflowName")
+        assert sorted(td.config.get("workerNames", [])) == [
+            "test_skill__echo_args",
+            "test_skill__read_skill_file",
+        ]
 
     def test_counterfactual_skill_serialization_lost(self, skill_dir):
         """Counterfactual: plain Agent with same name produces no skill data."""
@@ -311,6 +413,20 @@ class TestSuite15Skills:
         result = echo_worker.func()
         assert "ECHO_ARGS_RESULT:no-args" in result
 
+    def test_skill_read_file_worker_creation(self, skill_dir):
+        """Resource files produce a deterministic read_skill_file worker."""
+        from agentspan.agents.skill import create_skill_workers
+
+        agent = skill(skill_dir, model=MODEL)
+        workers = create_skill_workers(agent)
+
+        read_worker = next(w for w in workers if w.name.endswith("__read_skill_file"))
+        result = read_worker.func(path="references/guide.md")
+        assert "REFERENCE_GUIDE" in result
+
+        denied = read_worker.func(path="../SKILL.md")
+        assert "ERROR:" in denied
+
     def test_dg_skill_loading(self):
         """DG skill loads gilfoyle + dinesh agents."""
         if not DG_SKILL_PATH.exists():
@@ -338,6 +454,32 @@ class TestSuite15Skills:
         assert "LLM_CHAT_COMPLETE" in task_types
         assert "DO_WHILE" in task_types or "FORK_JOIN_DYNAMIC" in task_types
 
+    def test_skill_plan_exposes_multi_agent_script_and_resource_tools(
+        self, skill_dir, fresh_runtime
+    ):
+        """Server compilation sees sub-agent tools, script workers, and resources."""
+        agent = skill(skill_dir, model=MODEL)
+        result = fresh_runtime.plan(agent)
+
+        wf_str = json.dumps(result.get("workflowDef", {}), sort_keys=True)
+        for expected in [
+            "test_skill__alpha",
+            "test_skill__beta",
+            "test_skill__echo_args",
+            "test_skill__read_skill_file",
+            "references/guide.md",
+            "SUB_WORKFLOW",
+            "SIMPLE",
+        ]:
+            assert expected in wf_str, f"compiled workflow missing {expected}"
+
+        tool_specs = [
+            d for d in _all_dicts(result.get("workflowDef", {}))
+            if d.get("name") == "test_skill__echo_args"
+        ]
+        assert tool_specs, "compiled workflow missing echo_args script tool spec"
+        assert any(t.get("type") == "SIMPLE" for t in tool_specs), tool_specs
+
     def test_skill_params_in_compiled_workflow(self, skill_dir, fresh_runtime):
         """Params injected into SKILL.md appear in the compiled workflow."""
         agent = skill(skill_dir, model=MODEL, params={"mode": "turbo", "rounds": 1})
@@ -349,6 +491,32 @@ class TestSuite15Skills:
         )
 
     # ── Execution (real LLM calls) ────────────────────────────────
+
+    def test_standalone_skill_script_runs_as_worker_tool(self, skill_dir, fresh_runtime):
+        """Standalone skill scripts execute through the same worker-tool path as @tool."""
+        from conftest import get_workflow
+
+        agent = skill(skill_dir, model=MODEL)
+        result = fresh_runtime.run(
+            agent,
+            (
+                "tool_parity_proof. Call test_skill__echo_args exactly once with "
+                "tool_parity_proof as the command argument, then return the tool output."
+            ),
+            timeout=120,
+        )
+
+        assert str(result.status) in ("COMPLETED", "completed", "Status.COMPLETED"), (
+            f"execution_id={result.execution_id} status={result.status}. "
+            f"TIMED_OUT = skill script worker did not poll."
+        )
+
+        workflow = get_workflow(result.execution_id)
+        _verify_script_worker_task(
+            workflow,
+            task_name="test_skill__echo_args",
+            required_tool_marker="ECHO_ARGS_RESULT:tool_parity_proof",
+        )
 
     def test_agent_tool_skill_workers_registered(self, skill_dir, fresh_runtime):
         """Skill workers are registered and polled when skill is nested in agent_tool.

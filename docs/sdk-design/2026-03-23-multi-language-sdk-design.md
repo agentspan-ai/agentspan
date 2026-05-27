@@ -310,7 +310,7 @@ This is the JSON structure that every SDK must produce when serializing an Agent
 {
   "name": "agent_name",
   "model": "provider/model_name",
-  "strategy": "handoff|sequential|parallel|router|round_robin|random|swarm|manual",
+  "strategy": "handoff|sequential|parallel|router|round_robin|random|swarm|manual|plan_execute",
   "maxTurns": 25,
   "timeoutSeconds": 300,
   "external": false,
@@ -329,7 +329,16 @@ This is the JSON structure that every SDK must produce when serializing an Agent
   "allowedTransitions": { "agent_a": ["agent_b", "agent_c"] },
   "introduction": "I am agent X, I specialize in...",
   "metadata": { "key": "value" },
-  "planner": true,
+
+  // Plan-first preamble (Google ADK feature) — Boolean.
+  "enablePlanning": true,
+
+  // PLAN_EXECUTE named slots (only with strategy=plan_execute).
+  // Both nest as full AgentConfig objects, NOT booleans. See §3.9.
+  "planner":  AgentConfig,
+  "fallback": AgentConfig,
+  "fallbackMaxTurns": 5,
+
   "callbacks": [ { "position": "before_agent", "taskName": "agent_name_before_agent" } ],
   "includeContents": "default|none",
   "thinkingConfig": { "enabled": true, "budgetTokens": 1024 },
@@ -481,6 +490,89 @@ Composable with AND/OR operators:
   "className": "ArticleScore"
 }
 ```
+
+### 3.9 PLAN_EXECUTE — Typed Plan Builders + `Ref`
+
+`Strategy.PLAN_EXECUTE` (also called PAC/PAE — Plan-and-Compile / Plan-and-Execute) splits a task into two phases: a **planner** agent emits a JSON DAG of operations, and the server compiles that JSON into a deterministic Conductor sub-workflow. See `docs/concepts/plan-execute.md` for the conceptual overview.
+
+Every SDK that exposes PLAN_EXECUTE **must** provide:
+
+1. A `Strategy.plan_execute` enum value.
+2. `Agent.planner` (required when strategy is `plan_execute`) and `Agent.fallback` (optional) — both nest as full `AgentConfig` objects, NOT booleans. The legacy "plan-first preamble" boolean lives at `Agent.enablePlanning` (renamed to free the `planner` JSON key for this sub-agent slot).
+3. Typed plan builders: `Plan`, `Step`, `Op`, `Generate`, `Validation`, `Action`.
+4. A `Ref(stepId)` helper for cross-step output piping.
+5. A `runtime.run(harness, prompt, plan=...)` overload that forwards the plan as `static_plan` on the start payload.
+
+#### Plan JSON shape
+
+The wire format is identical across SDKs — what every SDK's `Plan.to_dict()` (or equivalent) must produce:
+
+```json
+{
+  "steps": [
+    {
+      "id": "<unique step id>",
+      "depends_on": ["<other step id>"],
+      "parallel": false,
+      "operations": [
+        { "tool": "<tool>", "args": { <literal arg map> } },
+        { "tool": "<tool>", "generate": {
+            "instructions": "<what the LLM should produce>",
+            "output_schema": "<JSON shape that becomes the tool's args>",
+            "max_tokens": 4096,
+            "context": "<optional extra context (string or Ref)>"
+        }}
+      ]
+    }
+  ],
+  "validation": [
+    { "tool": "<validator>", "args": {...}, "success_condition": "$.passed === true" }
+  ],
+  "on_success": [{ "tool": "<tool>", "args": {...} }],
+  "on_failure": [{ "tool": "<tool>", "args": {...} }]
+}
+```
+
+#### `Ref` — cross-step output piping
+
+`Ref("step_id")` wires the **whole output** of an upstream step into a downstream step's args. The serializer walks every plan-value tree (`Op.args`, `Generate.context`, `Validation.args`, `Action.args`) recursively and replaces nested `Ref` instances with their wire marker:
+
+```json
+{ "$ref": "step_id" }
+```
+
+The server's PAC compiler rewrites these markers to Conductor template expressions pointing at a per-step `step_output_<id>` INLINE wrapper that normalises dict-vs-string worker returns into `.output.result`. Users get "the whole output of step X" with no JSONPath syntax.
+
+**Plan-validation rules every SDK must trigger via the server (the SDK can also pre-validate for nicer errors):**
+
+- Self-Refs (`Ref(stepId)` inside `stepId`) are a hard error.
+- A `Ref` whose target doesn't exist in the plan is a hard error.
+- A `Ref` whose target isn't in the step's `depends_on` is a hard error. Explicit deps keep the data flow visible in the plan instead of hidden behind a runtime Conductor template.
+
+#### `static_plan` — skip the planner LLM
+
+The SDK's `runtime.run(harness, prompt, plan=...)` (or equivalent) must forward the supplied plan as a new top-level field `static_plan` on `POST /api/agent/start`:
+
+```json
+{
+  "agentConfig": { ... },
+  "prompt": "...",
+  "static_plan": { "steps": [...] }
+}
+```
+
+The server's `extract_json` INLINE reads `workflow.input.static_plan` as **Case-0** (highest priority) and discards whatever the planner sub-agent emits. The planner LLM still runs (the workflow shape is fixed at compile time) but its output is ignored. Use this for tests, replays, and pipelines where planning lives outside the agent.
+
+#### Reference implementations
+
+| Language | Plan builders | Example | `Ref` impl |
+|---|---|---|---|
+| Python | `agentspan.agents.plans` (Plan/Step/Op/Generate/Validation/Action) | `sdk/python/examples/108_plan_execute_refs.py` | `Ref` dataclass + `_serialize_value` walk |
+| TypeScript | `Plan`, `Step`, `Op`, `Generate`, `Validation`, `Action` in `src/plans.ts` | `sdk/typescript/examples/108-plan-execute-refs.ts` | `Ref` class + `serializePlanValue` walk |
+| Java | `ai.agentspan.plans.*` builders | `sdk/java/examples/.../Example108PlanExecuteRefs.java` | `Ref` final class + `PlanValues.serializeValue` walk |
+| C# | `Agentspan.Plans.*` records | `sdk/csharp/examples/108_PlanExecuteRefs/` | `Ref` sealed class + `PlanValues.SerializeValue` walk |
+
+When adding a new SDK, mirror the Python file as the reference; **the wire JSON must match byte-for-byte** for round-tripping with the Python SDK and the existing server PAC compiler.
 
 ---
 

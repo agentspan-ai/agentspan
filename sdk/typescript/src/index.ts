@@ -22,6 +22,7 @@ export type {
   CliConfig,
   RunOptions,
   ToolDef,
+  PrefillToolCall,
   AgentResult,
 } from "./types.js";
 
@@ -165,6 +166,18 @@ export { guardrail, RegexGuardrail, LLMGuardrail, Guardrail, guardrailsFrom } fr
 // ── Memory ──────────────────────────────────────────────
 export type { MemoryEntry, MemoryStore, SemanticMemoryOptions } from "./memory.js";
 export { ConversationMemory, SemanticMemory, InMemoryStore } from "./memory.js";
+
+// ── Plans (Strategy.PLAN_EXECUTE typed builders) ────────
+export type {
+  GenerateOptions,
+  OpOptions,
+  StepOptions,
+  ValidationOptions,
+  ActionOptions,
+  PlanOptions,
+  PlanLike,
+} from "./plans.js";
+export { Plan, Step, Op, Generate, Validation, Action, Ref, Context, coercePlan, serializePlanValue } from "./plans.js";
 
 // ── Termination ─────────────────────────────────────────
 export {

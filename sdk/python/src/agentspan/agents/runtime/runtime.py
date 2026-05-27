@@ -20,7 +20,7 @@ import re
 import threading
 import time
 import uuid
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Union
 
 from agentspan.agents.agent import Agent
 from agentspan.agents.exceptions import _raise_api_error
@@ -479,11 +479,14 @@ class AgentRuntime:
             if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                 nested = td.config["agent"]
                 if getattr(nested, "_framework", None) == "skill":
+                    from agentspan.agents.skill import create_skill_workers
+
                     workflow_name = self._deploy_via_server(nested, framework="skill")
                     logger.info("Pre-deployed skill '%s' as workflow '%s'", nested.name, workflow_name)
                     # Save for later registration with domain (run_id not known yet)
                     skills_to_register.append(nested)
                     td.config["workflowName"] = workflow_name
+                    td.config["workerNames"] = [sw.name for sw in create_skill_workers(nested)]
                     td.config.pop("agent", None)
 
         for sub in getattr(agent, "agents", []):
@@ -503,6 +506,7 @@ class AgentRuntime:
         credentials: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         run_id: Optional[str] = None,
+        static_plan: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -537,6 +541,11 @@ class AgentRuntime:
             payload["credentials"] = credentials
         if run_id:
             payload["runId"] = run_id
+        if static_plan is not None:
+            # Server's extract_json INLINE reads `workflow.input.static_plan`
+            # as the Case-0 plan source. Whatever the planner LLM emits is
+            # discarded when this is set.
+            payload["static_plan"] = static_plan
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -2549,6 +2558,16 @@ class AgentRuntime:
                 **kwargs,
             )
 
+        # Static plan for Strategy.PLAN_EXECUTE harness — the SDK forwards
+        # the user-supplied Plan/dict into `workflow.input.static_plan`,
+        # which the server's extract_json picks up as the Case-0 source
+        # (wins over the planner LLM's output). See plan-execute.md.
+        plan_kwarg = kwargs.pop("plan", None)
+        static_plan: Optional[Dict[str, Any]] = None
+        if plan_kwarg is not None:
+            from agentspan.agents.plans import coerce_plan
+            static_plan = coerce_plan(plan_kwarg)
+
         if kwargs:
             logger.warning("Unrecognized keyword arguments: %s", ", ".join(kwargs.keys()))
 
@@ -2593,6 +2612,7 @@ class AgentRuntime:
             credentials=credentials,
             context=context,
             run_id=run_id,
+            static_plan=static_plan,
         )
 
         worker_domain = self._resolve_worker_domain(execution_id, run_id)
@@ -3175,6 +3195,8 @@ class AgentRuntime:
         if not workers:
             return
 
+        from conductor.client.worker.worker_task import worker_task
+
         from agentspan.agents.frameworks.langgraph import (
             make_llm_finish_worker,
             make_llm_prep_worker,
@@ -3183,7 +3205,6 @@ class AgentRuntime:
             make_subgraph_finish_worker,
             make_subgraph_prep_worker,
         )
-        from conductor.client.worker.worker_task import worker_task
 
         graph_info = raw_config.get("_graph", {})
         router_refs = {
@@ -3263,12 +3284,11 @@ class AgentRuntime:
                 credential_names=credentials,
             )
         elif framework == "claude_agent_sdk":
+            from agentspan.agents.agent import Agent as AgentClass
             from agentspan.agents.frameworks.claude_agent_sdk import (
                 agent_to_claude_code_options,
                 make_claude_agent_sdk_worker,
             )
-
-            from agentspan.agents.agent import Agent as AgentClass
 
             # CRITICAL: convert Agent → ClaudeCodeOptions before passing to worker
             if isinstance(agent_obj, AgentClass):
@@ -3950,7 +3970,6 @@ class AgentRuntime:
                         has_waiting_human = True
                         if task_id and task_id not in seen_human_task_ids:
                             seen_human_task_ids.add(task_id)
-                            input_data = getattr(task, "input_data", {}) or {}
                             task_ref = getattr(task, "reference_task_name", "")
                             yield AgentEvent(
                                 type=EventType.WAITING,

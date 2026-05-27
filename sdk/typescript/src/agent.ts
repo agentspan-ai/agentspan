@@ -1,9 +1,10 @@
-import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig } from "./types.js";
+import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig, PrefillToolCall } from "./types.js";
 import { agentTool } from "./tool.js";
 import { ConfigurationError } from "./errors.js";
 import { ClaudeCode } from "./claude-code.js";
 import type { CliConfigOptions } from "./cli-config.js";
 import { makeCliTool } from "./cli-config.js";
+import { Context } from "./plans.js";
 
 // ── Validation constants ──────────────────────────────────
 
@@ -109,10 +110,31 @@ export interface AgentOptions {
   introduction?: string;
   metadata?: Record<string, unknown>;
   callbacks?: CallbackHandler[];
-  planner?: boolean;
+  /**
+   * Plan-first preamble (Google ADK feature). When true, the server augments
+   * the system prompt with a "plan first, then execute" instruction. Not to
+   * be confused with the {@link planner} sub-agent slot below — those serve
+   * different purposes.
+   */
+  enablePlanning?: boolean;
+  /**
+   * PLAN_EXECUTE: the agent that produces the JSON plan. Required when
+   * {@link strategy} is {@code "plan_execute"}. The planner can be a simple
+   * agent or a multi-agent (e.g. SEQUENTIAL of explorer + planner).
+   * Replaces the old positional {@code agents=[planner, fallback]} shape.
+   */
+  planner?: Agent;
+  /**
+   * PLAN_EXECUTE: the agent that runs agentically when the plan can't
+   * compile or the compiled SUB_WORKFLOW fails at execution. Optional — if
+   * absent, plan failures TERMINATE the workflow.
+   */
+  fallback?: Agent;
   includeContents?: "default" | "none";
   thinkingBudgetTokens?: number;
   requiredTools?: string[];
+  /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+  prefillTools?: PrefillToolCall[];
   gate?: GateCondition;
   codeExecutionConfig?: CodeExecutionConfig;
   cliConfig?: CliConfig | CliConfigOptions;
@@ -123,6 +145,31 @@ export interface AgentOptions {
   credentials?: (string | CredentialFile)[];
   /** Stateful execution — each run gets a unique domain UUID for worker isolation. */
   stateful?: boolean;
+  /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+  fallbackMaxTurns?: number;
+  /**
+   * Optional deterministic plan source for PLAN_EXECUTE strategy.
+   * A SIMPLE task is called after the planner to read the plan from an
+   * external source (e.g. contextbook). If the planner's text output fails
+   * extraction, this fallback source is tried.
+   * Format: { tool: "tool_name", args: { key: "value" } }.
+   */
+  planSource?: { tool: string; args?: Record<string, unknown> };
+  /**
+   * PLAN_EXECUTE planner context: a list of text snippets and/or URLs whose
+   * contents are appended to the planner's user prompt as a
+   * `## Reference Context` block on every planner invocation. URLs are
+   * fetched dynamically — no compile-time fetch, no cache — so doc edits
+   * go live without recompile.
+   *
+   * Bare strings auto-wrap to `Context(text=...)`. Use a {@link Context}
+   * instance directly for URL entries (with optional credentialed
+   * `headers`, `required`, `maxBytes`). Hand-rolled dicts in the wire
+   * shape are also accepted for power users.
+   *
+   * Only valid with `strategy='plan_execute'`.
+   */
+  plannerContext?: (string | Context | Record<string, unknown>)[];
 }
 
 // ── Agent class ───────────────────────────────────────────
@@ -157,14 +204,27 @@ export class Agent {
   readonly introduction?: string;
   readonly metadata?: Record<string, unknown>;
   readonly callbacks: CallbackHandler[];
-  readonly planner: boolean;
+  readonly enablePlanning: boolean;
+  /** PLAN_EXECUTE named slot (sub-agent that produces the JSON plan). */
+  readonly planner?: Agent;
+  /** PLAN_EXECUTE named slot (sub-agent that runs agentically on plan failure). */
+  readonly fallback?: Agent;
   readonly includeContents?: "default" | "none";
   readonly thinkingBudgetTokens?: number;
   readonly requiredTools?: string[];
+  readonly prefillTools?: PrefillToolCall[];
   readonly gate?: GateCondition;
   readonly codeExecutionConfig?: CodeExecutionConfig;
   readonly cliConfig?: CliConfig;
   readonly credentials?: (string | CredentialFile)[];
+  readonly fallbackMaxTurns?: number;
+  readonly planSource?: { tool: string; args?: Record<string, unknown> };
+  /**
+   * Normalised planner-context entries — bare strings auto-wrapped to
+   * `Context(text=...)`, raw dicts passed through. `undefined` when
+   * the option wasn't supplied.
+   */
+  readonly plannerContext?: (Context | Record<string, unknown>)[];
 
   /** @internal Stored ClaudeCode config when model is ClaudeCode instance. */
   private readonly _claudeCodeConfig?: ClaudeCode;
@@ -210,13 +270,75 @@ export class Agent {
     this.introduction = options.introduction;
     this.metadata = options.metadata;
     this.callbacks = options.callbacks ?? [];
-    this.planner = options.planner ?? false;
+    this.enablePlanning = options.enablePlanning ?? false;
+    this.planner = options.planner;
+    this.fallback = options.fallback;
+    // ── PLAN_EXECUTE named-slot validation ────────────────
+    // Named slots (planner=, fallback=) only valid with strategy=plan_execute;
+    // passing them elsewhere would either NPE deep in a strategy compiler or
+    // be silently ignored. Reject at construction with a clear message.
+    if ((this.planner !== undefined || this.fallback !== undefined)
+        && this.strategy !== "plan_execute") {
+      throw new ConfigurationError(
+        `Named slots 'planner' and 'fallback' are only valid with strategy='plan_execute'. ` +
+          `Got strategy=${this.strategy ?? "<undefined>"}. ` +
+          `Either set strategy='plan_execute' or pass sub-agents via agents=[...] instead.`,
+      );
+    }
+    if (this.strategy === "plan_execute") {
+      if (this.planner === undefined) {
+        if (this.agents.length > 0) {
+          throw new ConfigurationError(
+            `strategy='plan_execute' no longer accepts agents=[planner, fallback]. ` +
+              `Use the named slots: planner=<Agent> (required) and fallback=<Agent> (optional).`,
+          );
+        }
+        throw new ConfigurationError(
+          `strategy='plan_execute' requires planner=<Agent> (the agent that produces the JSON plan).`,
+        );
+      }
+    }
     this.includeContents = options.includeContents;
     this.thinkingBudgetTokens = options.thinkingBudgetTokens;
     this.requiredTools = options.requiredTools;
+    this.prefillTools = options.prefillTools;
     this.gate = options.gate;
     this.codeExecutionConfig = options.codeExecutionConfig;
     this.credentials = options.credentials;
+    this.fallbackMaxTurns = options.fallbackMaxTurns;
+    this.planSource = options.planSource;
+
+    // ── plannerContext normalisation + validation ─────────
+    // Bare strings auto-wrap to Context(text=...); Context instances and
+    // raw dicts pass through. Rejected for non-PLAN_EXECUTE strategies
+    // with a clear message (matches the planner=/fallback= guard).
+    if (options.plannerContext !== undefined) {
+      if (this.strategy !== "plan_execute") {
+        throw new ConfigurationError(
+          `'plannerContext' is only valid with strategy='plan_execute'. ` +
+            `Got strategy=${this.strategy ?? "<undefined>"}. ` +
+            `The context block is appended to the planner's user prompt at ` +
+            `runtime, which only exists in PLAN_EXECUTE.`,
+        );
+      }
+      const normalised: (Context | Record<string, unknown>)[] = [];
+      options.plannerContext.forEach((entry, i) => {
+        if (entry instanceof Context) {
+          normalised.push(entry);
+        } else if (typeof entry === "string") {
+          normalised.push(new Context({ text: entry }));
+        } else if (entry !== null && typeof entry === "object") {
+          // Hand-rolled wire-shape dicts (matches how planSource is typed).
+          normalised.push(entry as Record<string, unknown>);
+        } else {
+          throw new ConfigurationError(
+            `plannerContext[${i}]: must be a Context, a string, or a dict; ` +
+              `got ${typeof entry}`,
+          );
+        }
+      });
+      this.plannerContext = normalised;
+    }
 
     // ── Duplicate sub-agent name detection ────────────────
     if (this.agents.length > 0) {
@@ -448,7 +570,7 @@ export function agentsFrom(instance: object): Agent[] {
         timeoutSeconds: metadata.timeoutSeconds,
         external: metadata.external,
         metadata: metadata.metadata,
-        planner: metadata.planner,
+        enablePlanning: metadata.enablePlanning,
         credentials: metadata.credentials,
       }),
     );

@@ -39,6 +39,9 @@ const CALLBACK_POSITION_MAP: Record<string, string> = {
   onToolEnd: "after_tool",
 };
 
+type CallbackCallable = (agentName: string, data: unknown) => unknown | Promise<unknown>;
+type WorkerCallable = (inputData: Record<string, unknown>) => unknown | Promise<unknown>;
+
 // ── AgentHandle ─────────────────────────────────────────
 
 /**
@@ -124,6 +127,12 @@ export class AgentRuntime {
     }
     if (runId) {
       payload.runId = runId;
+    }
+    if (options?.plan !== undefined) {
+      const { coercePlan } = await import("./plans.js");
+      // Server reads ${workflow.input.static_plan} as the Case-0 plan source
+      // — wins over the planner LLM's output. See plans.ts for wire shape.
+      payload.static_plan = coercePlan(options.plan as Parameters<typeof coercePlan>[0]);
     }
 
     // Register tool workers with domain (for stateful isolation)
@@ -243,6 +252,10 @@ export class AgentRuntime {
     }
     if (runId) {
       payload.runId = runId;
+    }
+    if (options?.plan !== undefined) {
+      const { coercePlan } = await import("./plans.js");
+      payload.static_plan = coercePlan(options.plan as Parameters<typeof coercePlan>[0]);
     }
 
     // Register tool workers with domain
@@ -697,6 +710,7 @@ export class AgentRuntime {
             });
             const workflowName = (deployResult as Record<string, unknown>).agentName as string;
             td.config.workflowName = workflowName;
+            td.config.workerNames = createSkillWorkers(skillAgent).map((sw) => sw.name);
             skillAgents.push(skillAgent);
             delete td.config.agent;
           }
@@ -897,7 +911,7 @@ export class AgentRuntime {
 
   /**
    * Register a termination condition worker.
-   * Server dispatches {agent}_termination with {result, iteration, messages}.
+   * Server dispatches {agent}_termination with {result, iteration}.
    * Worker returns {should_continue, reason}.
    */
   private async _registerTerminationWorker(
@@ -928,7 +942,8 @@ export class AgentRuntime {
     const taskName = gDef.taskName!;
     const fn = gDef.func!;
     this.workerManager.addWorker(taskName, async (inputData) => {
-      const content = String(inputData["content"] ?? "");
+      const raw = inputData["content"] ?? "";
+      const content = typeof raw === "object" ? JSON.stringify(raw) : String(raw);
       try {
         const result = await fn(content);
         return {
@@ -953,7 +968,7 @@ export class AgentRuntime {
 
   /**
    * Register a stopWhen callback worker.
-   * Server dispatches {agent}_stop_when with {result, iteration}.
+   * Server dispatches {agent}_stop_when with {result, iteration, messages}.
    * Worker returns {should_continue}.
    */
   private async _registerStopWhenWorker(
@@ -1000,7 +1015,7 @@ export class AgentRuntime {
         try {
           let result: unknown = {};
           for (const handler of handlers) {
-            const fn = (handler as Record<string, unknown>)[methodName] as Function;
+            const fn = (handler as Record<string, unknown>)[methodName] as CallbackCallable;
             // Pass server data matching CallbackHandler method signatures:
             // before/after_agent: (agentName, data)
             // before/after_model: (agentName, messages|response)
@@ -1327,12 +1342,12 @@ export class AgentRuntime {
    * Register extracted worker functions for framework-based agents.
    */
   private _registerExtractedWorkers(
-    workers: { name: string; func?: Function | null }[],
+    workers: { name: string; func?: unknown | null }[],
     credentials?: string[],
   ): void {
     for (const worker of workers) {
-      if (worker.func) {
-        const fn = worker.func;
+      if (typeof worker.func === "function") {
+        const fn = worker.func as WorkerCallable;
         this.workerManager.addWorker(
           worker.name,
           async (inputData) => {
@@ -1356,7 +1371,7 @@ export class AgentRuntime {
    */
   private _serializeSkill(
     agent: Agent,
-  ): [Record<string, unknown>, { name: string; func?: Function }[]] {
+  ): [Record<string, unknown>, { name: string; func?: WorkerCallable }[]] {
     const a = agent as unknown as Record<string, unknown>;
     const rawConfig = a._framework_config as Record<string, unknown>;
     const skillWorkers = createSkillWorkers(agent);

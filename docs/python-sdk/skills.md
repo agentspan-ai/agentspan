@@ -22,8 +22,11 @@ with AgentRuntime() as rt:
 ```
 
 ```bash
-# Or via CLI
+# Or via CLI from a local directory
 agentspan skill run ~/.claude/skills/dg "Review this code..." --model openai/gpt-4o
+
+# Register the full skill package on the server for browsing/reuse
+agentspan skill register ~/.claude/skills/dg --model openai/gpt-4o
 ```
 
 ---
@@ -215,18 +218,15 @@ agentspan skill run ~/.claude/skills/dg "Review auth.py" \
 
 ### How it works
 
-Parameters are injected as a structured prefix to the user prompt:
+Parameters are merged with frontmatter defaults and packaged into the skill instructions as a structured block:
 
 ```
 [Skill Parameters]
 rounds: 5
 style: verbose
-
-[User Request]
-Review this code for security issues
 ```
 
-The skill's orchestrator agent sees both the parameters and the original request, and can adjust its behavior accordingly (e.g., running more debate rounds, changing output format).
+The skill's orchestrator agent sees both the parameters and the original request, and can adjust its behavior accordingly (e.g., running more debate rounds, changing output format). The prompt-formatting helpers are still available when you explicitly want to include the same block in a user prompt.
 
 ---
 
@@ -337,7 +337,7 @@ team = Agent(name="team", agents=[dg, oai_agent], strategy="sequential")
 ### Ephemeral (run and exit)
 
 ```bash
-agentspan skill run <path> "<prompt>" [flags]
+agentspan skill run <path-or-name> "<prompt>" [flags]
 ```
 
 | Flag | Description |
@@ -348,6 +348,13 @@ agentspan skill run <path> "<prompt>" [flags]
 | `--param <key>=<value>` | Skill parameter override (repeatable) |
 | `--timeout <seconds>` | Execution timeout |
 | `--stream` | Stream SSE events to stdout |
+| `--version <version>` | Registered skill version or checksum prefix when running by name |
+| `--script-timeout <seconds>` | Per-script worker timeout. Default: `300`. |
+| `--script-output-limit <bytes>` | Maximum stdout/stderr captured from each script call. Default: `10485760`. |
+| `--workspace <dir>` | Local workspace root exposed to workspace tools. Default: current directory. |
+| `--no-workspace` | Disable local workspace exposure for this run. |
+| `--filesystem <name>=<path>` | Additional read-only filesystem root exposed to workspace tools (repeatable). |
+| `--workspace-file-limit <bytes>` | Maximum bytes returned by workspace file tools. Default: `1048576`. |
 
 Examples:
 
@@ -368,7 +375,62 @@ agentspan skill run ~/.claude/skills/dg "Review auth.py" \
 # Stream events
 agentspan skill run ~/.claude/skills/conductor "List all workflows" \
     --model anthropic/claude-sonnet-4-6 --stream
+
+# Run a registered code review skill against the current checkout
+agentspan skill run code-review "Review current changes" \
+    --model openai/gpt-4o \
+    --workspace .
+
+# Expose extra read-only filesystem roots
+agentspan skill run code-review "Review code and docs" \
+    --model openai/gpt-4o \
+    --workspace . \
+    --filesystem docs=./docs
 ```
+
+### Server registry
+
+Registering a skill uploads the skill folder as an immutable server-side package. The CLI excludes generated directories, common secret files such as `.env` and private keys, and paths matched by `.agentspanignore`. The server validates the zip, derives the runtime skill config from the package contents, stores owner-scoped metadata with a content checksum, exposes it in the UI under **Definitions → Skills**, and can later resolve it by name for that owner.
+
+```bash
+# Register a skill package on the server
+agentspan skill register ~/.claude/skills/dg --model openai/gpt-4o
+
+# List registered skills
+agentspan skill list
+
+# Inspect a registered skill and its file manifest
+agentspan skill get dg
+
+# Download a registered skill package
+agentspan skill pull dg ./dg
+
+# Delete a registered skill version
+agentspan skill delete dg --version 2026.05.21 --yes
+
+# Run a registered skill by name
+agentspan skill run dg "Review auth.py" --model openai/gpt-4o
+
+# Serve workers for a registered skill by name
+agentspan skill serve dg
+```
+
+Registered skill execution uses a compact `skillRef` on the server. The server resolves defaults and registered cross-skill references from the registry at compile time. Referenced skill versions are pinned when the parent is registered, so a parent version keeps using the same child version even if the child is updated later. When a registered skill or referenced skill has script tools or resource-file reads, the CLI downloads each package to `~/.agentspan/skills/<name>/<version>/files`, verifies the package checksum, and starts the same local workers used for path-based execution. The cached package is reused until the server checksum changes.
+
+For local context, `skill run` exposes the current directory as a read-only `workspace` root by default. The server compiles workspace tools for listing files, reading files, searching text, and reading git status/diff; the CLI serves those tools locally and enforces root boundaries. Additional read-only roots can be exposed with `--filesystem <name>=<path>`. Script workers run with the skill root as their working directory, expose `AGENTSPAN_SKILL_DIR`, expose `AGENTSPAN_WORKSPACE_DIR` when a workspace root is available, and expose each configured root as `AGENTSPAN_FILESYSTEM_ROOT_<NAME>`.
+
+### Registry storage
+
+The server separates registry metadata from package blob storage. Configure the package store with:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `agentspan.skills.package-store.type` | `filesystem` | `filesystem` for local or mounted-volume deployments; `conductor-payload` for Conductor external payload storage. |
+| `agentspan.skills.storage.directory` | `${java.io.tmpdir}/agentspan/skills` | Owner-scoped metadata root and default filesystem package root parent. |
+| `agentspan.skills.package-store.filesystem.directory` | `${agentspan.skills.storage.directory}/packages` | Filesystem package blob directory. |
+| `agentspan.skills.max-package-bytes` | `52428800` | Maximum compressed package upload size. |
+| `agentspan.skills.max-uncompressed-bytes` | `209715200` | Maximum expanded zip payload size. |
+| `agentspan.skills.max-file-count` | `2000` | Maximum files per package. |
 
 ### Production (deploy + serve)
 
@@ -377,10 +439,13 @@ agentspan skill run ~/.claude/skills/conductor "List all workflows" \
 agentspan skill load ~/.claude/skills/dg --model openai/gpt-4o
 
 # Start workers for script tools and read_skill_file (blocks)
-agentspan skill serve ~/.claude/skills/dg
+agentspan skill serve ~/.claude/skills/dg [--search-path <dir>]
+
+# Or serve workers from a registered server-side package
+agentspan skill serve dg
 
 # Trigger by name (existing command)
-agentspan run dg "Review the latest PR"
+agentspan agent run --name dg "Review the latest PR"
 ```
 
 ---

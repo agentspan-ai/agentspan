@@ -144,6 +144,24 @@ mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional
 | `tests/integration/test_basic_execution.py` | End-to-end single agent execution |
 | `tests/integration/test_multi_agent.py` | End-to-end multi-agent execution |
 
+### No Flaky Tests
+
+**There are NO flaky tests in this repo. Any test failure is a regression and must be fixed.**
+
+This is not negotiable and not subject to per-session interpretation:
+
+- A "flake" framing is forbidden. If a test fails once and passes on retry, that's still a regression — diagnose the underlying race, missing await, time-dependence, LLM non-determinism, or upstream-dep instability, and **fix the root cause**.
+- Never re-run CI to "make it pass" without first understanding why it failed. A re-run that turns green doesn't mean the bug went away; it means you got lucky and shipped the bug.
+- "Pre-existing flake" / "happens on main too" is not a get-out clause. If a test is flaky on main, that's a regression on main that we now own. File it, fix it, or remove the test — but don't tolerate it.
+- Re-enqueueing a failed CI job without changing code is only allowed AFTER you've identified the root cause and have a fix in flight.
+
+When a test reveals non-determinism that the test itself caused (timing-sensitive assertions, ordering assumptions), fix the **test** so it's robust. When the non-determinism is in the system under test (real race, real instability), fix the **system**. Don't add retries to mask either case.
+
+**The narrow exception — upstream LLM provider variability.** Some e2e tests validate a non-LLM property (a strategy compiles, a sub-workflow fires, a worker registers) but depend on the LLM to drive the scenario (call a tool, pick a route). When gpt-4o-mini occasionally skips a tool call or paraphrases away a number, that's external provider variability — not Agentspan's bug and not the test's bug. For these cases:
+- Strongly prefer asserting on deterministic server-side state (workflow status, task names, `outputData` shapes from `@tool` stubs that return fixed data).
+- When that's not enough, `{ retry: 2 }` is acceptable, but only with a comment explaining *which* property is the real subject of the test and *why* LLM variability is incidental. See the pattern in `test_suite20_plan_execute.test.ts`.
+- Never use retries to paper over a real race in the system or a brittle assertion in the test. The retry is a coping mechanism for upstream variability, not for our own bugs.
+
 ### Writing Tests
 
 - Unit tests must run without an Agentspan server (mock all external calls)
@@ -152,6 +170,7 @@ mypy src/agentspan/agents/ --ignore-missing-imports --no-strict-optional
 - Use `pytest` fixtures and parametrize where appropriate
 - do NOT use mocks.  Mocks considered harmful.  Write tests that use the actual server
 - SDK e2e tests MUST rely on the Agentspan server to ensure we are testing the actual communication
+- E2E tests that depend on an LLM's behavior (output content, tool-call timing) must assert on **deterministic** server-side state — workflow status, task names, compiled DAG structure, `outputData` shapes — never on free-form LLM text. If a test fails because the LLM didn't say the magic word, the test is wrong.
 
 ### Examples
 - Every feature MUST have an example in all the supported sdks (python/ etc)
@@ -226,6 +245,7 @@ The `server/` directory contains the Agent Runtime — a Spring Boot server that
 |---|---|---|
 | `/api/agent/start` | POST | Compile, register, and start an agent execution |
 | `/api/agent/compile` | POST | Compile agent config (inspect only) |
+| `/api/agent/inspect-plan` | POST | Compile a plan against a PLAN_EXECUTE harness config and return the resulting `WorkflowDef` + error + warnings + stats without dispatching the SUB_WORKFLOW. Body: `{agentConfig, plan}`. Same compile path PAC uses at runtime. See [docs/concepts/plan-execute.md](docs/concepts/plan-execute.md) |
 | `/api/agent/list` | GET | List all registered agents (filtered by `agent_sdk` metadata) |
 | `/api/agent/executions` | GET | Search agent executions (with `start`, `size`, `sort`, `freeText`, `status`, `agentName` params) |
 | `/api/agent/executions/{id}` | GET | Get detailed execution status (agent name, version, status, input, output, current task) |

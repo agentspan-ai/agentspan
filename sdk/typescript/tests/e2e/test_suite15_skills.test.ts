@@ -25,6 +25,8 @@ import {
   AgentConfigSerializer,
   skill,
   agentTool,
+  createSkillWorkers,
+  getToolDef,
 } from '@agentspan-ai/sdk';
 import { checkServerHealth, getWorkflow, MODEL } from './helpers';
 
@@ -55,8 +57,10 @@ beforeAll(async () => {
       'A test skill with two sub-agents and a script tool.',
       '',
       '## Workflow',
-      "1. Call the echo_args tool once with the user's input as the argument.",
-      '2. Return the echo_args result to the user. Do NOT call any more tools after echo_args.',
+      '1. If no prior tool result is available, call the ts_test_skill__echo_args tool exactly once.',
+      "2. Pass the original user's input as the argument.",
+      '3. After a tool result containing ECHO_ARGS_RESULT: is available, return that exact line as the final answer.',
+      '4. If asked to continue, do not call any tool. Return the most recent ECHO_ARGS_RESULT: line exactly.',
     ].join('\n'),
   );
 
@@ -71,6 +75,12 @@ beforeAll(async () => {
 
   fs.writeFileSync(path.join(skillDir, 'alpha-agent.md'), '# Alpha Agent\nYou analyze the input.\n');
   fs.writeFileSync(path.join(skillDir, 'beta-agent.md'), '# Beta Agent\nYou summarize the analysis.\n');
+  const referencesDir = path.join(skillDir, 'references');
+  fs.mkdirSync(referencesDir);
+  fs.writeFileSync(
+    path.join(referencesDir, 'guide.md'),
+    '# TS_REFERENCE_GUIDE\nUse this deterministic guide.\n',
+  );
   fs.writeFileSync(path.join(skillDir, 'template.html'), '<html><body>Test template</body></html>');
 });
 
@@ -89,7 +99,7 @@ const DG_SKILL_PATH = path.join(os.homedir(), '.claude', 'skills', 'dg');
  * Fetch a skill sub-workflow from a parent execution and verify:
  * 1. The skill SUB_WORKFLOW task exists and COMPLETED
  * 2. No tasks stuck in SCHEDULED inside the sub-workflow (pollCount=0 regression)
- * 3. If echo_args was invoked, it COMPLETED with ECHO_ARGS_RESULT marker
+ * 3. The echo_args script tool was invoked and returned the deterministic marker
  */
 async function verifySkillSubWorkflow(
   executionId: string,
@@ -118,19 +128,21 @@ async function verifySkillSubWorkflow(
   const scheduled = subTasks.filter((t) => t.status === 'SCHEDULED');
   expect(scheduled).toEqual([]);
 
-  // If echo_args was invoked, verify it completed with deterministic marker
+  // Verify echo_args was invoked and completed with deterministic marker.
   const echoTasks = subTasks.filter(
     (t) => ((t.taskDefName as string) ?? '').includes('echo_args'),
   );
-  if (echoTasks.length > 0) {
-    for (const t of echoTasks) {
-      expect(t.status).toBe('COMPLETED');
-    }
-    const anyMarker = echoTasks.some((t) =>
-      JSON.stringify(t.outputData ?? {}).includes('ECHO_ARGS_RESULT:'),
-    );
-    expect(anyMarker).toBe(true);
+  expect(
+    echoTasks.length,
+    `echo_args was not invoked. Tasks: ${JSON.stringify(subTasks.map((t) => t.taskDefName))}`,
+  ).toBeGreaterThan(0);
+  for (const t of echoTasks) {
+    expect(t.status).toBe('COMPLETED');
   }
+  const anyMarker = echoTasks.some((t) =>
+    JSON.stringify(t.outputData ?? {}).includes('ECHO_ARGS_RESULT:'),
+  );
+  expect(anyMarker).toBe(true);
 }
 
 // ── Tests ────────────────────────────────────────────────────
@@ -182,6 +194,34 @@ describe('Suite 15: Skills', () => {
     expect(tools.map((t) => t.name)).toContain('ts_test_skill');
   });
 
+  it('pre-deploys nested skill agent_tools with workerNames', async () => {
+    const skillAgent = skill(skillDir, { model: MODEL });
+    const at = agentTool(skillAgent, { description: 'Run test skill' });
+    const parent = new Agent({
+      name: 'e2e_ts_parent_predeploy_skill_tool',
+      model: MODEL,
+      instructions: 'Use the skill tool.',
+      tools: [at],
+    });
+
+    const deployed = await (
+      runtime as unknown as {
+        _preDeployNestedSkills(agent: Agent): Promise<Agent[]>;
+      }
+    )._preDeployNestedSkills(parent);
+
+    const td = getToolDef(at) as unknown as {
+      config?: Record<string, unknown>;
+    };
+    expect(deployed).toEqual([skillAgent]);
+    expect(td.config?.agent).toBeUndefined();
+    expect(td.config?.workflowName).toBeTruthy();
+    expect((td.config?.workerNames as string[]).sort()).toEqual([
+      'ts_test_skill__echo_args',
+      'ts_test_skill__read_skill_file',
+    ]);
+  });
+
   it('discovers scripts from scripts/ directory', () => {
     const agent = skill(skillDir, { model: MODEL }) as unknown as Record<string, unknown>;
     const raw = agent._framework_config as Record<string, unknown>;
@@ -190,6 +230,25 @@ describe('Suite 15: Skills', () => {
     expect(scripts.echo_args).toBeDefined();
     expect(scripts.echo_args.language).toBe('python');
     expect(scripts.echo_args.filename).toBe('echo_args.py');
+  });
+
+  it('script workers execute locally with deterministic output', () => {
+    const agent = skill(skillDir, { model: MODEL });
+    const workers = createSkillWorkers(agent);
+    const echoWorker = workers.find((w) => w.name.endsWith('__echo_args'));
+
+    expect(echoWorker).toBeDefined();
+    expect(echoWorker?.func('hello world')).toContain('ECHO_ARGS_RESULT:hello world');
+  });
+
+  it('read_skill_file worker reads resources deterministically', () => {
+    const agent = skill(skillDir, { model: MODEL });
+    const workers = createSkillWorkers(agent);
+    const readWorker = workers.find((w) => w.name.endsWith('__read_skill_file'));
+
+    expect(readWorker).toBeDefined();
+    expect(readWorker?.func('references/guide.md')).toContain('TS_REFERENCE_GUIDE');
+    expect(readWorker?.func('../SKILL.md')).toContain('ERROR:');
   });
 
   it('params are injected into SKILL.md for server visibility', () => {
@@ -246,6 +305,24 @@ describe('Suite 15: Skills', () => {
     expect(taskTypes.has('LLM_CHAT_COMPLETE') || taskTypes.has('DO_WHILE')).toBe(true);
   });
 
+  it('compiled skill workflow exposes sub-agent, script, and resource tools', async () => {
+    const agent = skill(skillDir, { model: MODEL });
+    const result = await runtime.plan(agent);
+
+    const wfStr = JSON.stringify(result.workflowDef);
+    for (const expected of [
+      'ts_test_skill__alpha',
+      'ts_test_skill__beta',
+      'ts_test_skill__echo_args',
+      'ts_test_skill__read_skill_file',
+      'references/guide.md',
+      'SUB_WORKFLOW',
+      'SIMPLE',
+    ]) {
+      expect(wfStr).toContain(expected);
+    }
+  });
+
   it('skill params visible in compiled workflow', async () => {
     const agent = skill(skillDir, { model: MODEL, params: { mode: 'turbo', rounds: 1 } });
     const result = await runtime.plan(agent);
@@ -280,9 +357,44 @@ describe('Suite 15: Skills', () => {
       maxTurns: 3,
     });
 
-    const result = await runtime.run(parent, "Echo 'proof42'");
+    const execRuntime = new AgentRuntime();
+    try {
+      const result = await execRuntime.run(parent, "Echo 'proof42'", { timeoutSeconds: 90 });
 
-    expect(String(result.status).toUpperCase()).toContain('COMPLETED');
-    await verifySkillSubWorkflow(result.executionId);
+      expect(String(result.status).toUpperCase()).toContain('COMPLETED');
+      await verifySkillSubWorkflow(result.executionId);
+    } finally {
+      await execRuntime.shutdown();
+    }
+  });
+
+  it('agent_tool skill workers registered with domain in stateful context', async () => {
+    /**
+     * Domain propagation regression: when a stateful parent invokes a skill via
+     * agent_tool, the skill script/read workers must poll in the same execution
+     * domain. A mismatch leaves the skill sub-workflow's worker tasks SCHEDULED.
+     */
+    const skillAgent = skill(skillDir, { model: MODEL });
+    const at = agentTool(skillAgent, { description: 'Run test skill with echo_args' });
+
+    const parent = new Agent({
+      name: 'e2e_ts_skill_at_domain',
+      model: MODEL,
+      stateful: true,
+      instructions:
+        "You have one tool: ts_test_skill. Call it once with the user's request, then return the result.",
+      tools: [at],
+      maxTurns: 3,
+    });
+
+    const execRuntime = new AgentRuntime();
+    try {
+      const result = await execRuntime.run(parent, "Echo 'domain_proof'", { timeoutSeconds: 90 });
+
+      expect(String(result.status).toUpperCase()).toContain('COMPLETED');
+      await verifySkillSubWorkflow(result.executionId);
+    } finally {
+      await execRuntime.shutdown();
+    }
   });
 });

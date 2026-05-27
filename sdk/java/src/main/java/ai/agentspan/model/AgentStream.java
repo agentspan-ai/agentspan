@@ -74,6 +74,92 @@ public class AgentStream implements Iterable<AgentEvent>, AutoCloseable {
     }
 
     /**
+     * Poll the server until the workflow reaches a terminal status, then return
+     * the result.
+     *
+     * <p>Use this instead of {@link #getResult()} when the original SSE stream
+     * may not deliver downstream events — most commonly after a HITL
+     * approve/reject, where the resumed sub-execution emits its
+     * {@code TOOL_RESULT}/{@code DONE} events on a separate SSE channel and
+     * the original stream's blocking {@code nextEvent()} would wait until the
+     * HttpClient request times out (~10 min).
+     *
+     * <p>Status is read from the server's view of the workflow
+     * ({@code /api/agent/{id}/status}); previously-captured SSE events are
+     * preserved on the returned {@link AgentResult}.
+     *
+     * @param timeoutMs       maximum wait time in milliseconds
+     * @param pollIntervalMs  polling interval in milliseconds
+     * @return the agent result reflecting the server's terminal status
+     * @throws RuntimeException if the poll deadline is hit before the workflow
+     *         reaches a terminal status
+     */
+    public AgentResult waitForResult(long timeoutMs, long pollIntervalMs) {
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            try {
+                Map<String, Object> status = httpApi.getAgentStatus(executionId);
+                String workflowStatus = (String) status.get("status");
+                if (workflowStatus != null && isTerminalStatus(workflowStatus)) {
+                    result = buildResultFromStatus(status, workflowStatus);
+                    return result;
+                }
+                Thread.sleep(pollIntervalMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting for stream result", e);
+            } catch (Exception e) {
+                logger.debug("Error polling stream status for {}: {}", executionId, e.getMessage());
+                try {
+                    Thread.sleep(pollIntervalMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted while waiting for stream result", ie);
+                }
+            }
+        }
+        throw new RuntimeException(
+            "Timed out after " + timeoutMs + "ms waiting for stream result: " + executionId);
+    }
+
+    private static boolean isTerminalStatus(String status) {
+        return "COMPLETED".equals(status)
+            || "FAILED".equals(status)
+            || "TERMINATED".equals(status)
+            || "TIMED_OUT".equals(status);
+    }
+
+    @SuppressWarnings("unchecked")
+    private AgentResult buildResultFromStatus(Map<String, Object> statusResponse, String workflowStatus) {
+        Object output = statusResponse.get("output");
+        if (output == null) output = statusResponse.get("result");
+
+        AgentStatus status;
+        try {
+            status = AgentStatus.valueOf(workflowStatus);
+        } catch (IllegalArgumentException e) {
+            status = AgentStatus.FAILED;
+        }
+
+        String error = null;
+        if (status != AgentStatus.COMPLETED) {
+            error = (String) statusResponse.get("reasonForIncompletion");
+            if (error == null) error = (String) statusResponse.get("error");
+        }
+
+        if (output == null) {
+            output = java.util.Collections.singletonMap("result", (Object) null);
+        } else if (!(output instanceof Map)) {
+            output = java.util.Collections.singletonMap("result", output);
+        }
+
+        return new AgentResult(
+            output, executionId, status,
+            new ArrayList<>(), new ArrayList<>(capturedEvents),
+            null, error);
+    }
+
+    /**
      * Approve a pending HUMAN task on the <b>top-level</b> workflow.
      *
      * <p>This targets the execution id from {@link #getExecutionId()} — i.e. the

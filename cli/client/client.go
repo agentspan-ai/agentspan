@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -64,6 +65,50 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	return resp, nil
 }
 
+func (c *Client) doMultipartRequest(path string, manifest []byte, packageBytes []byte) (*http.Response, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	manifestPart, err := writer.CreateFormField("manifest")
+	if err != nil {
+		return nil, fmt.Errorf("create manifest field: %w", err)
+	}
+	if _, err := manifestPart.Write(manifest); err != nil {
+		return nil, fmt.Errorf("write manifest field: %w", err)
+	}
+
+	packagePart, err := writer.CreateFormFile("package", "skill.zip")
+	if err != nil {
+		return nil, fmt.Errorf("create package field: %w", err)
+	}
+	if _, err := packagePart.Write(packageBytes); err != nil {
+		return nil, fmt.Errorf("write package field: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("close multipart body: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.baseURL+path, &body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		defer resp.Body.Close()
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+	return resp, nil
+}
+
 // HealthCheck pings the server
 func (c *Client) HealthCheck() error {
 	resp, err := c.doRequest("GET", "/health", nil)
@@ -83,8 +128,9 @@ type StartRequest struct {
 
 // StartResponse from the runtime
 type StartResponse struct {
-	ExecutionID string `json:"executionId"`
-	AgentName   string `json:"agentName"`
+	ExecutionID     string   `json:"executionId,omitempty"`
+	AgentName       string   `json:"agentName,omitempty"`
+	RequiredWorkers []string `json:"requiredWorkers,omitempty"`
 }
 
 // Start compiles, registers, and starts an agent execution
@@ -116,15 +162,55 @@ func (c *Client) StartFramework(payload map[string]interface{}) (*StartResponse,
 	return &result, nil
 }
 
-// PollTask polls for a task of the given type. Returns nil if no task available.
-func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
-	resp, err := c.doRequest("GET", "/api/tasks/poll/"+url.PathEscape(taskType), nil)
+// CompileFramework compiles a framework agent with a top-level framework payload.
+func (c *Client) CompileFramework(payload map[string]interface{}) (map[string]interface{}, error) {
+	resp, err := c.doRequest("POST", "/api/agent/compile", payload)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return result, nil
+}
+
+// DeployFramework compiles and registers a framework agent with a top-level framework payload.
+func (c *Client) DeployFramework(payload map[string]interface{}) (*StartResponse, error) {
+	resp, err := c.doRequest("POST", "/api/agent/deploy", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result StartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// PollTask polls for a task of the given type. Returns nil if no task available.
+func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
+	req, err := http.NewRequest("GET", c.baseURL+"/api/tasks/poll/"+url.PathEscape(taskType), nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
 		return nil, nil // no task available
+	}
+	if resp.StatusCode >= 400 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 	var task map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
@@ -208,6 +294,148 @@ func (c *Client) DeleteAgent(name string, version *int) error {
 	if version != nil {
 		path += fmt.Sprintf("?version=%d", *version)
 	}
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// SkillFileEntry describes a file inside a registered skill package.
+type SkillFileEntry struct {
+	Path        string `json:"path"`
+	Size        int64  `json:"size"`
+	SHA256      string `json:"sha256"`
+	ContentType string `json:"contentType"`
+}
+
+// SkillDetail is the full server-side skill package record.
+type SkillDetail struct {
+	Name                string                 `json:"name"`
+	Version             string                 `json:"version"`
+	Description         string                 `json:"description"`
+	Checksum            string                 `json:"checksum"`
+	PackageFileHandleID string                 `json:"packageFileHandleId"`
+	StorageType         string                 `json:"storageType"`
+	Status              string                 `json:"status"`
+	OwnerID             string                 `json:"ownerId"`
+	CreatedAt           *int64                 `json:"createdAt"`
+	UpdatedAt           *int64                 `json:"updatedAt"`
+	PackageSize         int64                  `json:"packageSize"`
+	FileCount           int                    `json:"fileCount"`
+	Files               []SkillFileEntry       `json:"files"`
+	Metadata            map[string]interface{} `json:"metadata"`
+	RawConfig           map[string]interface{} `json:"rawConfig"`
+}
+
+// SkillSummary is the list-view for registered skills.
+type SkillSummary struct {
+	Name          string `json:"name"`
+	Version       string `json:"version"`
+	Description   string `json:"description"`
+	Checksum      string `json:"checksum"`
+	Status        string `json:"status"`
+	OwnerID       string `json:"ownerId"`
+	PackageSize   int64  `json:"packageSize"`
+	FileCount     int    `json:"fileCount"`
+	ScriptCount   int    `json:"scriptCount"`
+	SubAgentCount int    `json:"subAgentCount"`
+	ResourceCount int    `json:"resourceCount"`
+}
+
+// RegisterSkill uploads and registers a skill package.
+func (c *Client) RegisterSkill(manifest map[string]interface{}, packageBytes []byte) (*SkillDetail, error) {
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal skill manifest: %w", err)
+	}
+	resp, err := c.doMultipartRequest("/api/skills/register", manifestBytes, packageBytes)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result SkillDetail
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// ListSkills returns server-registered skills.
+func (c *Client) ListSkills(allVersions bool) ([]SkillSummary, error) {
+	path := "/api/skills"
+	if allVersions {
+		path += "?allVersions=true"
+	}
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result []SkillSummary
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return result, nil
+}
+
+// GetSkill returns a registered skill detail. Empty version means latest.
+func (c *Client) GetSkill(name string, version string) (*SkillDetail, error) {
+	path := "/api/skills/" + url.PathEscape(name)
+	if version != "" {
+		path += "/versions/" + url.PathEscape(version)
+	}
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result SkillDetail
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// DownloadSkillPackage returns the zipped package bytes for a registered skill.
+func (c *Client) DownloadSkillPackage(name string, version string) ([]byte, error) {
+	if version == "" {
+		version = "latest"
+	}
+	path := "/api/skills/" + url.PathEscape(name) + "/versions/" + url.PathEscape(version) + "/package"
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
+
+// DeploySkill deploys a registered skill as an agent definition.
+func (c *Client) DeploySkill(name string, version string, body map[string]interface{}) (*StartResponse, error) {
+	if version == "" {
+		version = "latest"
+	}
+	path := "/api/skills/" + url.PathEscape(name) + "/versions/" + url.PathEscape(version) + "/deploy"
+	resp, err := c.doRequest("POST", path, body)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result StartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// DeleteSkill removes a registered skill version.
+func (c *Client) DeleteSkill(name string, version string) error {
+	if version == "" {
+		version = "latest"
+	}
+	path := "/api/skills/" + url.PathEscape(name) + "/versions/" + url.PathEscape(version)
 	resp, err := c.doRequest("DELETE", path, nil)
 	if err != nil {
 		return err

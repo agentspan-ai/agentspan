@@ -18,6 +18,7 @@ Agentspan is a durable runtime for AI agents. Execution state lives server-side,
 
 - [Agents](concepts/agents.md) - The `Agent` class, parameters, results, and handles.
 - [Tools](concepts/tools.md) - `@tool`, `http_tool()`, `api_tool()`, `mcp_tool()`, credentials, and approval-required tools.
+- [Skills](concepts/skills.md) - Load, register, run, and test agentskills.io skill folders.
 - [Multi-Agent Strategies](concepts/multi-agent.md) - Sequential, parallel, handoff, router, and nested agent coordination.
 - [Guardrails](concepts/guardrails.md) - Input and output safety, retry, block, and fix behavior.
 - [Memory](concepts/memory.md) - Conversation history and semantic search across sessions.

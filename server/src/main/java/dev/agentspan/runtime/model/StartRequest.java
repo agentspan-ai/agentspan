@@ -39,6 +39,13 @@ public class StartRequest {
     /** Raw framework-specific agent config. Used when {@code framework} is non-null. */
     private Map<String, Object> rawConfig;
 
+    /**
+     * Reference to a server-registered skill package. Used with {@code framework="skill"}
+     * when the caller wants the server to resolve the raw skill config from the
+     * skill registry instead of sending it inline.
+     */
+    private Map<String, Object> skillRef;
+
     /** Per-call timeout override (seconds). Applied server-side to the workflow definition. */
     private Integer timeoutSeconds;
 
@@ -53,4 +60,15 @@ public class StartRequest {
      * the same agent script are running.
      */
     private String runId;
+
+    /**
+     * Optional deterministic plan for {@code Strategy.PLAN_EXECUTE} harnesses.
+     * The SDK forwards a user-supplied {@code Plan}/dict here; the server
+     * stuffs it into {@code workflow.input.static_plan} so PAC's extract_json
+     * INLINE picks it up as Case-0 (highest priority) and discards whatever
+     * the planner LLM emitted. Lets callers replay a recorded plan or run a
+     * fully deterministic pipeline without an LLM planner.
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty("static_plan")
+    private Map<String, Object> staticPlan;
 }

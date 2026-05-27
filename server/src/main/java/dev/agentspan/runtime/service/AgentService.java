@@ -44,6 +44,7 @@ import com.netflix.conductor.service.WorkflowService;
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
 import dev.agentspan.runtime.compiler.AgentCompiler;
+import dev.agentspan.runtime.compiler.MultiAgentCompiler;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
@@ -71,6 +72,9 @@ public class AgentService {
 
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
+
+    @Autowired(required = false)
+    private SkillRegistryService skillRegistryService;
 
     /** Package-private constructor for testing with ExecutionTokenService */
     AgentService(
@@ -127,6 +131,60 @@ public class AgentService {
                 .workflowDef(defMap)
                 .requiredWorkers(requiredWorkers)
                 .build();
+    }
+
+    /**
+     * /dg #6: compile a plan against a PLAN_EXECUTE harness config and
+     * return the resulting Conductor WorkflowDef — without dispatching
+     * it. Lets callers inspect what PAC would produce before running.
+     *
+     * <p>Uses the same {@link PlanAndCompileTask#inspectPlan(Map, String,
+     * String, int, Set, Map)} path the runtime SUB_WORKFLOW dispatch
+     * uses, so there's exactly one compiler — no inspect-only divergence.
+     *
+     * <p>Caller must supply both the agent config (so the compile knows
+     * about the tool list, model, harness timeout) and the plan
+     * (typically what the planner LLM emitted, but can be a hand-rolled
+     * static plan for offline validation).
+     */
+    public PlanAndCompileTask.InspectResult inspectPlan(InspectPlanRequest request) {
+        if (request == null || request.getAgentConfig() == null) {
+            throw new IllegalArgumentException("inspectPlan: agentConfig is required");
+        }
+        if (request.getPlan() == null) {
+            throw new IllegalArgumentException("inspectPlan: plan is required");
+        }
+        AgentConfig config = request.getAgentConfig();
+        if (config.getName() == null || config.getName().isEmpty()) {
+            config.setName("agent_inspect");
+        }
+        if (!"plan_execute".equals(config.getStrategy())) {
+            throw new IllegalArgumentException(
+                    "inspectPlan: agentConfig.strategy must be 'plan_execute', got '" + config.getStrategy() + "'");
+        }
+
+        // Replicate what MultiAgentCompiler.compilePlanExecute computes
+        // before calling PAC at runtime — so the inspect compile sees the
+        // same inputs the real one would.
+        String workflowName = MultiAgentCompiler.planWorkflowName(config.getName());
+        String model = config.getModel() != null ? config.getModel() : "";
+        int harnessTimeout = config.getTimeoutSeconds();
+        List<ToolConfig> parentTools = config.getTools() != null ? config.getTools() : List.of();
+        Set<String> knownToolNames = new HashSet<>();
+        for (ToolConfig t : parentTools) {
+            if (t.getName() != null && !t.getName().isEmpty()) {
+                knownToolNames.add(t.getName());
+            }
+        }
+        Map<String, ToolConfig> parentToolsByName = new LinkedHashMap<>();
+        for (ToolConfig t : parentTools) {
+            if (t.getName() != null && !t.getName().isEmpty()) {
+                parentToolsByName.put(t.getName(), t);
+            }
+        }
+
+        return new PlanAndCompileTask()
+                .inspectPlan(request.getPlan(), workflowName, model, harnessTimeout, knownToolNames, parentToolsByName);
     }
 
     /**
@@ -218,6 +276,11 @@ public class AgentService {
         input.put("session_id", request.getSessionId() != null ? request.getSessionId() : "");
         if (request.getCredentials() != null && !request.getCredentials().isEmpty()) {
             input.put("credentials", request.getCredentials());
+        }
+        // Static plan for PLAN_EXECUTE: SDK forwards Plan dict here; PAC's
+        // extract_json INLINE reads ${workflow.input.static_plan} as Case-0.
+        if (request.getStaticPlan() != null) {
+            input.put("static_plan", request.getStaticPlan());
         }
         // Extract cwd from rawConfig for frameworks that pass it
         String cwd = ".";
@@ -677,6 +740,10 @@ public class AgentService {
                 ? request.getRawConfig()
                 : (request.getAgentConfig() != null ? MAPPER.convertValue(request.getAgentConfig(), Map.class) : null);
         if (agentDef != null) {
+            if (request.getSkillRef() != null) {
+                agentDef = new LinkedHashMap<>(agentDef);
+                agentDef.put("skillRef", request.getSkillRef());
+            }
             metadata.put("agentDef", agentDef);
         }
     }
@@ -1045,7 +1112,16 @@ public class AgentService {
                 if (agentConfigObj instanceof AgentConfig) {
                     childConfig = (AgentConfig) agentConfigObj;
                 } else if (agentConfigObj instanceof Map) {
-                    childConfig = MAPPER.convertValue(agentConfigObj, AgentConfig.class);
+                    Map<String, Object> childMap = (Map<String, Object>) agentConfigObj;
+                    Object framework = childMap.get("_framework");
+                    if (!(framework instanceof String) || ((String) framework).isEmpty()) {
+                        framework = childMap.get("framework");
+                    }
+                    if (framework instanceof String frameworkId && !frameworkId.isEmpty()) {
+                        childConfig = normalizerRegistry.normalize(frameworkId, childMap);
+                    } else {
+                        childConfig = MAPPER.convertValue(childMap, AgentConfig.class);
+                    }
                 } else {
                     log.warn(
                             "Unexpected agentConfig type for tool '{}': {}", tool.getName(), agentConfigObj.getClass());
@@ -1111,6 +1187,14 @@ public class AgentService {
     private AgentConfig resolveConfig(StartRequest request) {
         if (request.getFramework() != null && !request.getFramework().isEmpty()) {
             log.info("Normalizing framework '{}' agent config", request.getFramework());
+            if ("skill".equals(request.getFramework())
+                    && request.getRawConfig() == null
+                    && request.getSkillRef() != null) {
+                if (skillRegistryService == null) {
+                    throw new IllegalStateException("Skill registry is not available");
+                }
+                request.setRawConfig(skillRegistryService.resolveRawConfig(request.getSkillRef()));
+            }
             return normalizerRegistry.normalize(request.getFramework(), request.getRawConfig());
         }
         return request.getAgentConfig();
@@ -1352,6 +1436,17 @@ public class AgentService {
                 if (tool.isStateful()) {
                     taskToDomain.put(tool.getName(), domain);
                 }
+                Map<String, Object> toolConfig = tool.getConfig();
+                if ("agent_tool".equals(tool.getToolType()) && toolConfig != null) {
+                    Object workerNames = toolConfig.get("workerNames");
+                    if (workerNames instanceof List<?> names) {
+                        for (Object workerName : names) {
+                            if (workerName instanceof String name && !name.isBlank()) {
+                                taskToDomain.put(name, domain);
+                            }
+                        }
+                    }
+                }
             }
         }
         if (config.getAgents() != null) {
@@ -1387,10 +1482,17 @@ public class AgentService {
                     collectSimpleTaskNamesFromTasks(branch, names);
                 }
             }
-            // Inline sub-workflows
-            if (task.getSubWorkflowParam() != null && task.getSubWorkflowParam().getWorkflowDef() != null) {
-                collectSimpleTaskNamesFromTasks(
-                        task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
+            // Inline sub-workflows. Skip when workflowDefinition is a runtime
+            // expression String (e.g. "${compile_task.output.workflowDef}")
+            // used by plan-execute inline sub-workflows — the compiled DAG
+            // is built at runtime by PlanAndCompileTask, not statically here,
+            // so there are no SIMPLE task names to collect at this point.
+            // Without this guard, getWorkflowDef() would ClassCastException
+            // on the String.
+            if (task.getSubWorkflowParam() != null
+                    && task.getSubWorkflowParam().getWorkflowDefinition() instanceof WorkflowDef nestedWfDef
+                    && nestedWfDef.getTasks() != null) {
+                collectSimpleTaskNamesFromTasks(nestedWfDef.getTasks(), names);
             }
         }
     }

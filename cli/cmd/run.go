@@ -46,6 +46,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	c := newClient(cfg)
 
 	var startReq *client.StartRequest
+	var frameworkPayload map[string]interface{}
 
 	if runConfigFile != "" {
 		// Config file mode (existing behavior)
@@ -68,19 +69,37 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get agent '%s': %w", runAgentName, err)
 		}
-		startReq = &client.StartRequest{
-			AgentConfig: agentDef,
-			Prompt:      prompt,
+		if framework := detectStoredFramework(agentDef); framework != "" {
+			frameworkPayload = map[string]interface{}{
+				"framework": framework,
+				"rawConfig": agentDef,
+				"prompt":    prompt,
+			}
+		} else {
+			startReq = &client.StartRequest{
+				AgentConfig: agentDef,
+				Prompt:      prompt,
+			}
 		}
 	} else {
 		return fmt.Errorf("specify either --name or --config")
 	}
 
 	if runSessionID != "" {
-		startReq.SessionID = runSessionID
+		if frameworkPayload != nil {
+			frameworkPayload["sessionId"] = runSessionID
+		} else {
+			startReq.SessionID = runSessionID
+		}
 	}
 
-	resp, err := c.Start(startReq)
+	var resp *client.StartResponse
+	var err error
+	if frameworkPayload != nil {
+		resp, err = c.StartFramework(frameworkPayload)
+	} else {
+		resp, err = c.Start(startReq)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to start agent: %w", err)
 	}
@@ -93,6 +112,16 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	return streamExecution(c, resp.ExecutionID, "")
+}
+
+func detectStoredFramework(agentDef map[string]interface{}) string {
+	if framework, _ := agentDef["_framework"].(string); framework != "" {
+		return framework
+	}
+	if skillMd, _ := agentDef["skillMd"].(string); skillMd != "" {
+		return "skill"
+	}
+	return ""
 }
 
 func streamExecution(c *client.Client, executionID string, lastEventID string) error {

@@ -44,7 +44,7 @@ internal sealed class AgentHttpClient : IDisposable
     /// <summary>Deploy (register) an agent on the server without starting execution.</summary>
     public async Task<string> DeployAsync(JsonObject agentConfig, CancellationToken ct = default)
     {
-        var payload = new JsonObject { ["agentConfig"] = agentConfig };
+        var payload = FrameworkAwarePayload(agentConfig);
         var json = payload.ToJsonString();
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var resp = await _client.PostAsync($"{_baseUrl}/agent/deploy", content, ct);
@@ -60,7 +60,7 @@ internal sealed class AgentHttpClient : IDisposable
     /// <summary>Compile an agent to a Conductor WorkflowDef without executing it.</summary>
     public async Task<JsonNode?> CompileAsync(JsonObject agentConfig, CancellationToken ct = default)
     {
-        var payload = new JsonObject { ["agentConfig"] = agentConfig };
+        var payload = FrameworkAwarePayload(agentConfig);
         var json = payload.ToJsonString();
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var resp = await _client.PostAsync($"{_baseUrl}/agent/compile", content, ct);
@@ -335,6 +335,21 @@ internal sealed class AgentHttpClient : IDisposable
             return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
         }
         catch { return null; }
+    }
+
+    private static JsonObject FrameworkAwarePayload(JsonObject agentConfig)
+    {
+        var framework = agentConfig["_framework"]?.GetValue<string>();
+        if (!string.IsNullOrEmpty(framework))
+        {
+            return new JsonObject
+            {
+                ["framework"] = framework,
+                ["rawConfig"] = agentConfig.DeepClone(),
+            };
+        }
+
+        return new JsonObject { ["agentConfig"] = agentConfig };
     }
 
     public void Dispose() => _client.Dispose();

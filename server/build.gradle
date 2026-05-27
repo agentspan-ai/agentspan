@@ -30,11 +30,11 @@ def pnpmCommand = { String args ->
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.30.0.rc3'
+    conductorVersion   = '3.30.0.rc17'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
     sqliteJdbcVersion  = '3.47.0.0'
-    springSecVersion   = '6.3.4'
+    springSecVersion   = '6.3.5'  // bumped for GHSA-mg83-c7gq-rv5c (BCrypt 72-char)
     jsonSchemaVersion  = '1.0.73'
     junitVersion       = '5.10.2'
     assertjVersion     = '3.25.1'
@@ -109,6 +109,13 @@ dependencies {
     testImplementation "org.mockito:mockito-core:${mockitoVersion}"
     testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
     testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    // GraalVM polyglot API — needed to compile/run the PLAN_EXECUTE compiler
+    // script tests (SynthOutputScriptTest, EnrichToolsScriptTest). Runtime jars
+    // come transitively via conductor-graalvm, but the compile-only API jar
+    // must be on the test classpath so javac can resolve org.graalvm.polyglot.
+    testImplementation 'org.graalvm.polyglot:polyglot:25.0.2'
+    testImplementation 'org.graalvm.js:js:25.0.2'
 
     // Logging
     implementation('org.apache.logging.log4j:log4j-core')

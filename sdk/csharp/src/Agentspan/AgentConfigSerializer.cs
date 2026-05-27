@@ -21,7 +21,7 @@ internal static class AgentConfigSerializer
         // {framework, rawConfig, prompt, sessionId}. The server routes these to
         // OpenAINormalizer / GoogleADKNormalizer based on `framework`. Mirrors
         // Java's HttpApi.startFrameworkAgent (POST /api/agent/start with framework).
-        if (agent.Framework is "openai" or "google_adk")
+        if (agent.Framework is "openai" or "google_adk" or "skill")
         {
             var env = new JsonObject
             {
@@ -48,6 +48,22 @@ internal static class AgentConfigSerializer
         // GoogleADKNormalizer) consume a different wire shape than the default.
         // Tools are emitted as {_worker_ref, description, parameters}; raw
         // framework config (handoffs, sub_agents, output_type) is folded in.
+        if (agent.Framework == "skill")
+        {
+            var skill = new JsonObject
+            {
+                ["name"] = agent.Name,
+                ["model"] = agent.Model,
+                ["_framework"] = "skill",
+            };
+            if (agent.FrameworkConfig is not null)
+            {
+                foreach (var (k, v) in agent.FrameworkConfig)
+                    skill[k] = JsonNode.Parse(JsonSerializer.Serialize(v, AgentspanJson.Options));
+            }
+            return skill;
+        }
+
         if (agent.Framework is "openai" or "google_adk")
         {
             return SerializeFrameworkAgent(agent);
@@ -65,7 +81,35 @@ internal static class AgentConfigSerializer
         if (agent.IncludeContents  is not null) cfg["includeContents"]  = agent.IncludeContents;
         if (agent.Introduction     is not null) cfg["introduction"]     = agent.Introduction;
         if (agent.External)                     cfg["external"]         = true;
-        if (agent.Planner)                      cfg["planner"]          = true;
+        // Legacy "plan-first preamble" flag — server expects `enablePlanning`
+        // (Boolean) since the `planner` JSON key was repurposed for the
+        // PAC/PAE sub-agent slot below.
+        if (agent.EnablePlanning)               cfg["enablePlanning"]   = true;
+
+        // PLAN_EXECUTE named slots: planner (required when Strategy=PlanExecute)
+        // + fallback (optional). Both serialize as nested AgentConfig objects.
+        if (agent.Planner  is not null)         cfg["planner"]  = SerializeAgent(agent.Planner);
+        if (agent.Fallback is not null)         cfg["fallback"] = SerializeAgent(agent.Fallback);
+        if (agent.FallbackMaxTurns.HasValue)    cfg["fallbackMaxTurns"] = agent.FallbackMaxTurns.Value;
+
+        // Planner context (PLAN_EXECUTE strategy) — text snippets + URLs
+        // injected into the planner's prompt. Reject if set on a non-
+        // PLAN_EXECUTE strategy to match the Python/TS/Java SDK guard
+        // shape (caught at build time elsewhere; serialization is the
+        // last line of defence).
+        if (agent.PlannerContext is { Count: > 0 })
+        {
+            if (agent.Strategy != Strategy.PlanExecute)
+            {
+                throw new InvalidOperationException(
+                    "PlannerContext is only valid with Strategy.PlanExecute. " +
+                    $"Got Strategy={agent.Strategy}. The context block is appended " +
+                    "to the planner's user prompt at runtime, which only exists in PLAN_EXECUTE.");
+            }
+            var arr = new JsonArray();
+            foreach (var entry in agent.PlannerContext) arr.Add(entry.ToJson());
+            cfg["plannerContext"] = arr;
+        }
 
         if (agent.LocalCodeExecution || agent.CodeExecution is not null
             || agent.AllowedLanguages is not null || agent.AllowedCommands is not null)
@@ -302,6 +346,7 @@ internal static class AgentConfigSerializer
     private static string StrategyToWire(Strategy strategy) => strategy switch
     {
         Strategy.RoundRobin => "round_robin",
+        Strategy.PlanExecute => "plan_execute",
         _ => strategy.ToString().ToLowerInvariant(),
     };
 
@@ -357,6 +402,13 @@ internal static class AgentConfigSerializer
             {
                 ["agentConfig"] = SerializeAgent(tool.WrappedAgent),
             };
+            if (tool.WrappedAgent.Framework == "skill")
+            {
+                config["workerNames"] = new JsonArray(
+                    Skill.CreateSkillWorkers(tool.WrappedAgent)
+                        .Select(w => (JsonNode?)w.Name)
+                        .ToArray());
+            }
             if (tool.AgentToolRetryCount.HasValue)
                 config["retryCount"] = tool.AgentToolRetryCount.Value;
             if (tool.AgentToolRetryDelaySeconds.HasValue)

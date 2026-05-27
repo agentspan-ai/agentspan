@@ -212,4 +212,68 @@ class GuardrailCompilerTest {
         var toolResults = gc.compileToolGuardrailTasks(List.of(inputGuard), "agent", "${ref}");
         assertThat(toolResults).hasSize(1);
     }
+
+    // ── Reachable-cases-only emission tests ───────────────────────────
+    //
+    // Previously every guardrail emitted retry+raise+fix unconditionally,
+    // even when the configured ``on_fail`` could never trigger them. That
+    // wasted Conductor TaskDefs and obscured intent in the workflow JSON.
+
+    @Test
+    void testRoutingRaise_emitsOnlyRaiseCase() {
+        GuardrailConfig g = GuardrailConfig.builder()
+                .name("test")
+                .guardrailType("regex")
+                .position("output")
+                .onFail("raise")
+                .build();
+        var routing = new GuardrailCompiler().compileGuardrailRouting(g, "guard_ref", "${content}", "agent", "", true);
+
+        assertThat(routing.getSwitchTask().getDecisionCases())
+                .as("on_fail=raise emits ONLY the raise case (no dead retry/fix branches)")
+                .containsOnlyKeys("raise");
+    }
+
+    @Test
+    void testRoutingRetry_emitsRetryAndRaiseFallback() {
+        GuardrailConfig g = GuardrailConfig.builder()
+                .name("test")
+                .guardrailType("regex")
+                .position("output")
+                .onFail("retry")
+                .build();
+        var routing = new GuardrailCompiler().compileGuardrailRouting(g, "guard_ref", "${content}", "agent", "", true);
+
+        // retry needs raise too — the JS coerces retry to raise once
+        // ``iteration >= max_retries``.
+        assertThat(routing.getSwitchTask().getDecisionCases()).containsOnlyKeys("retry", "raise");
+    }
+
+    @Test
+    void testRoutingFix_emitsFixAndRaiseFallback() {
+        GuardrailConfig g = GuardrailConfig.builder()
+                .name("test")
+                .guardrailType("regex")
+                .position("output")
+                .onFail("fix")
+                .build();
+        var routing = new GuardrailCompiler().compileGuardrailRouting(g, "guard_ref", "${content}", "agent", "", true);
+
+        // Custom guardrails can return on_fail=fix directly; regex/llm scripts
+        // coerce fix to raise. Both paths land on cases the SWITCH knows about.
+        assertThat(routing.getSwitchTask().getDecisionCases()).containsOnlyKeys("fix", "raise");
+    }
+
+    @Test
+    void testRoutingHuman_emitsHumanAndRaiseFallback() {
+        GuardrailConfig g = GuardrailConfig.builder()
+                .name("test")
+                .guardrailType("regex")
+                .position("output")
+                .onFail("human")
+                .build();
+        var routing = new GuardrailCompiler().compileGuardrailRouting(g, "guard_ref", "${content}", "agent", "", true);
+
+        assertThat(routing.getSwitchTask().getDecisionCases()).containsOnlyKeys("human", "raise");
+    }
 }

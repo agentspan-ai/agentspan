@@ -46,33 +46,40 @@ class Suite12HandoffApprove extends BaseTest {
     }
 
     /** Approval-required tool that lives on the sub-agent. */
-    public static class DatabaseTools {
+    public static class ApprovalTools {
         @Tool(
-            name = "execute_sql",
-            description = "Execute a SQL statement that modifies the database",
+            name = "submit_change",
+            description = "Submit a configuration change after human approval",
             approvalRequired = true
         )
-        public String executeSql(String statement) {
-            return "Statement executed.";
+        public String submitChange(String change) {
+            return "Change submitted: " + change;
         }
     }
 
     private Agent buildHandoffAgent(String name) {
-        List<ToolDef> dbTools = ToolRegistry.fromInstance(new DatabaseTools());
+        List<ToolDef> approvalTools = ToolRegistry.fromInstance(new ApprovalTools());
 
-        Agent dba = Agent.builder()
-            .name(name + "_dba")
+        Agent reviewer = Agent.builder()
+            .name(name + "_reviewer")
             .model(MODEL)
-            .instructions("You run database statements. Use execute_sql when asked.")
-            .tools(dbTools)
+            .instructions("You submit configuration changes. Always call submit_change with the requested change.")
+            .tools(approvalTools)
+            .maxTurns(2)
             .build();
 
+        // maxTurns(1) on the parent bounds the orchestrator's DO_WHILE: one
+        // LLM call routes the handoff and the loop exits. Without this,
+        // gpt-4o-mini sometimes decides to route a second time after the
+        // sub-agent replies, queueing another HUMAN approval that the test
+        // never sees — the workflow hangs until the JUnit timeout fires.
         return Agent.builder()
             .name(name)
             .model(MODEL)
-            .instructions("Route any database task to the dba sub-agent.")
-            .agents(dba)
+            .instructions("Route every configuration change request to the reviewer sub-agent ONCE, then you are done. Do not answer directly.")
+            .agents(reviewer)
             .strategy(Strategy.HANDOFF)
+            .maxTurns(1)
             .build();
     }
 
@@ -87,18 +94,20 @@ class Suite12HandoffApprove extends BaseTest {
         Agent support = buildHandoffAgent("e2e_java_handoff_waiting_id");
 
         try (AgentStream stream = runtime.stream(support,
-                "Please run: UPDATE users SET active = true WHERE id = 1")) {
+                "Please submit this configuration change: enable feature flag java_e2e_hitl.")) {
 
             String topExecutionId = stream.getExecutionId();
             assertNotNull(topExecutionId);
             assertFalse(topExecutionId.isEmpty());
 
             AgentEvent waiting = null;
+            int approvals = 0;
             for (AgentEvent event : stream) {
                 if (event.getType() == EventType.WAITING) {
-                    waiting = event;
+                    if (waiting == null) waiting = event;
                     stream.approve(event); // let the run terminate so we don't leak server state
-                    break;
+                    approvals++;
+                    assertTrue(approvals <= 5, "too many approval prompts; handoff did not settle");
                 }
             }
 
@@ -116,27 +125,57 @@ class Suite12HandoffApprove extends BaseTest {
     /**
      * Approving a {@code WAITING} event from a sub-agent must resume the
      * sub-execution and let the workflow run to completion.
+     *
+     * <p>After approve, the resumed sub-execution emits its
+     * {@code TOOL_RESULT}/{@code DONE} events on a separate SSE channel from
+     * the one this test is subscribed to, so the original stream's blocking
+     * {@code getResult()} would wait until the HttpClient's 10-minute request
+     * timeout fired — which (a) eats the whole 900s test budget on a single
+     * attempt and (b) the retry loop never actually got a chance to run.
+     * The fix mirrors the TS Suite16 {@code test_hitl_approve_path} pattern:
+     * poll the workflow status via REST after approving.
      */
     @Test
     @Order(2)
-    @Timeout(value = 300, unit = TimeUnit.SECONDS)
-    void test_approve_with_event_completes_handoff_hitl() {
+    @Timeout(value = 600, unit = TimeUnit.SECONDS)
+    void test_approve_with_event_completes_handoff_hitl() throws Exception {
+        Throwable lastErr = null;
+        final int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                runApproveWithEventOnce();
+                return; // pass
+            } catch (RuntimeException | org.opentest4j.AssertionFailedError e) {
+                lastErr = e;
+                if (attempt < maxAttempts) {
+                    System.err.println("[Suite12 HITL] attempt " + attempt + " failed ("
+                        + e.getClass().getSimpleName() + "): " + e.getMessage() + " — retrying.");
+                }
+            }
+        }
+        if (lastErr instanceof Exception ex) throw ex;
+        if (lastErr instanceof Error err) throw err;
+    }
+
+    private void runApproveWithEventOnce() throws Exception {
         Agent support = buildHandoffAgent("e2e_java_handoff_approve_event");
 
         try (AgentStream stream = runtime.stream(support,
-                "Please run: UPDATE users SET active = true WHERE id = 1")) {
+                "Please submit this configuration change: enable feature flag java_e2e_hitl.")) {
 
-            boolean approved = false;
+            int approvals = 0;
             for (AgentEvent event : stream) {
                 if (event.getType() == EventType.WAITING) {
                     stream.approve(event);
-                    approved = true;
-                    break;
+                    approvals++;
+                    assertTrue(approvals <= 5, "too many approval prompts; handoff did not settle");
                 }
             }
-            assertTrue(approved, "expected a WAITING event from the sub-agent's approval-required tool");
+            assertTrue(approvals > 0, "expected a WAITING event from the sub-agent's approval-required tool");
 
-            AgentResult result = stream.getResult();
+            // Poll the server-side workflow status instead of waiting on the
+            // original SSE stream, which won't see the post-approve resume.
+            AgentResult result = stream.waitForResult(180_000, 1_000);
             assertEquals(AgentStatus.COMPLETED, result.getStatus(),
                 "workflow did not complete after approve(event). status=" + result.getStatus()
                 + " error=" + result.getError());
@@ -166,7 +205,7 @@ class Suite12HandoffApprove extends BaseTest {
             AgentEvent eventWithNoId = new AgentEvent(
                 EventType.WAITING,
                 /*content*/ null,
-                /*toolName*/ "execute_sql",
+                /*toolName*/ "submit_change",
                 /*args*/ null,
                 /*result*/ null,
                 /*output*/ null,

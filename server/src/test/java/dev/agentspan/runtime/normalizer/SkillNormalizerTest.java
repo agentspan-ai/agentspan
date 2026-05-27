@@ -70,6 +70,68 @@ class SkillNormalizerTest {
         assertTrue(config.getTools() == null || config.getTools().isEmpty());
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void workspaceConfigCreatesWorkspaceTools() throws Exception {
+        Map<String, Object> raw = loadFixture("simple-skill");
+        raw.put(
+                "workspace",
+                Map.of(
+                        "enabled",
+                        true,
+                        "roots",
+                        List.of(
+                                Map.of("name", "workspace", "kind", "workspace"),
+                                Map.of("name", "docs", "kind", "filesystem"))));
+
+        AgentConfig config = normalizer.normalize(raw);
+        List<ToolConfig> tools = config.getTools();
+        assertNotNull(tools);
+
+        List<String> names = tools.stream().map(ToolConfig::getName).toList();
+        assertTrue(names.contains("simple-skill__list_workspace_files"));
+        assertTrue(names.contains("simple-skill__read_workspace_file"));
+        assertTrue(names.contains("simple-skill__search_workspace"));
+        assertTrue(names.contains("simple-skill__git_status"));
+        assertTrue(names.contains("simple-skill__git_diff"));
+
+        String instructions = (String) config.getInstructions();
+        assertTrue(instructions.contains("Workspace Context"));
+        assertTrue(instructions.contains("Available root names: workspace, docs"));
+
+        ToolConfig readFile = tools.stream()
+                .filter(t -> "simple-skill__read_workspace_file".equals(t.getName()))
+                .findFirst()
+                .orElseThrow();
+        Map<String, Object> schema = readFile.getInputSchema();
+        Map<String, Object> props = (Map<String, Object>) schema.get("properties");
+        Map<String, Object> root = (Map<String, Object>) props.get("root");
+        List<String> enumValues = (List<String>) root.get("enum");
+        assertEquals(List.of("workspace", "docs"), enumValues);
+    }
+
+    @Test
+    void workspaceConfigPropagatesToSubAgents() throws Exception {
+        Map<String, Object> raw = loadFixture("dg-skill");
+        raw.put(
+                "workspace",
+                Map.of("enabled", true, "roots", List.of(Map.of("name", "workspace", "kind", "workspace"))));
+
+        AgentConfig config = normalizer.normalize(raw);
+        ToolConfig gilfoyleTool = config.getTools().stream()
+                .filter(t -> t.getName().contains("gilfoyle"))
+                .findFirst()
+                .orElseThrow();
+        AgentConfig gilfoyle = (AgentConfig) gilfoyleTool.getConfig().get("agentConfig");
+
+        assertTrue(((String) gilfoyle.getInstructions()).contains("Workspace Context"));
+        assertNotNull(gilfoyle.getTools());
+        List<String> toolNames =
+                gilfoyle.getTools().stream().map(ToolConfig::getName).toList();
+        assertTrue(toolNames.contains("dg-skill__read_workspace_file"));
+        assertTrue(toolNames.contains("dg-skill__git_diff"));
+    }
+
     // --- DG skill tests (sub-agents + resources) ---
 
     @Test

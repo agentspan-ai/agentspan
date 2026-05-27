@@ -1,6 +1,6 @@
 ---
 title: CLI Reference
-description: Agentspan CLI commands — server, credentials, agent status, execution history
+description: Agentspan CLI commands for server, credentials, agents, skills, status, and execution history
 ---
 
 # CLI Reference
@@ -102,6 +102,42 @@ agentspan agent list                    # List all registered agents
 agentspan agent get my_agent            # Get agent configuration JSON
 agentspan agent compile my_agent        # Compile and inspect execution plan (dry run)
 ```
+
+### Skills
+
+```bash
+agentspan skill run ./my-skill "Do the task" --model openai/gpt-4o
+agentspan skill run my-skill "Do the task" --model openai/gpt-4o --version 2026.05.21
+agentspan skill run code-review "Review current changes" --model openai/gpt-4o --workspace .
+agentspan skill run code-review "Review docs too" --model openai/gpt-4o --filesystem docs=./docs
+agentspan skill load ./my-skill --model openai/gpt-4o
+agentspan skill register ./my-skill --model openai/gpt-4o --version 2026.05.21
+agentspan skill list --all-versions
+agentspan skill get my-skill --version 2026.05.21
+agentspan skill pull my-skill ./my-skill-copy --version 2026.05.21
+agentspan skill delete my-skill --version 2026.05.21 --yes
+agentspan skill serve my-skill --version 2026.05.21 --script-timeout 300
+```
+
+When `skill run` or `skill serve` is given a registered skill name instead of
+a local directory, the CLI downloads the package into
+`~/.agentspan/skills/<name>/<version>/files` and reuses that cached copy until
+the server checksum changes. Downloaded packages are checksum-verified before
+the cache is installed or any script worker is started. If a registered skill
+references another registered skill, the server resolves that reference at
+compile time and the CLI downloads the referenced package too, so script tools
+and `read_skill_file` work for both the parent and referenced skills. Referenced
+skill versions are pinned when the parent is registered; running `parent@v1`
+continues to use the child version that was latest at registration time.
+
+`skill register` excludes generated directories, common secret files such as
+`.env` and private keys, and paths matched by `.agentspanignore`.
+
+`skill run` exposes the current directory as the `workspace` filesystem root by
+default. Skills can list, read, search, and inspect git status/diff through
+workspace tools served by the CLI. Use `--workspace <dir>` to point at a
+different checkout, `--filesystem <name>=<path>` to expose additional read-only
+roots, or `--no-workspace` to run without local filesystem context.
 
 ## Configuration
 

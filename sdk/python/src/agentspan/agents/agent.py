@@ -41,6 +41,7 @@ class Strategy(str, Enum):
     RANDOM = "random"
     SWARM = "swarm"
     MANUAL = "manual"
+    PLAN_EXECUTE = "plan_execute"
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,8 @@ class AgentDef:
     cli_config: Optional[Any] = None
     cli_allowed_commands: List[str] = field(default_factory=list)
     credentials: List[Any] = field(default_factory=list)
+    context_window_budget: Optional[int] = None
+    prefill_tools: List[Any] = field(default_factory=list)
 
 
 # ── @agent decorator ────────────────────────────────────────────────────
@@ -135,6 +138,7 @@ def agent(
     cli_config: Optional[Any] = None,
     cli_allowed_commands: Optional[List[str]] = None,
     credentials: Optional[List[Any]] = None,
+    context_window_budget: Optional[int] = None,
 ) -> Any:
     """Register a Python function as an agent definition.
 
@@ -187,6 +191,7 @@ def agent(
             cli_config=cli_config,
             cli_allowed_commands=list(cli_allowed_commands) if cli_allowed_commands else [],
             credentials=list(credentials) if credentials else [],
+            context_window_budget=context_window_budget,
         )
 
         @functools.wraps(fn)
@@ -244,6 +249,8 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
             cli_config=ad.cli_config,
             cli_allowed_commands=ad.cli_allowed_commands or None,
             credentials=ad.credentials or None,
+            context_window_budget=ad.context_window_budget,
+            prefill_tools=ad.prefill_tools or None,
         )
     raise TypeError(f"Expected an Agent or @agent-decorated function, got {type(obj).__name__}")
 
@@ -336,6 +343,7 @@ class Agent:
         max_tokens: Optional[int] = None,
         timeout_seconds: int = 0,
         temperature: Optional[float] = None,
+        reasoning_effort: Optional[str] = None,
         stop_when: Optional[Callable[..., bool]] = None,
         termination: Optional[Any] = None,
         handoffs: Optional[List[Any]] = None,
@@ -349,7 +357,7 @@ class Agent:
         cli_commands: bool = False,
         cli_allowed_commands: Optional[List[str]] = None,
         cli_config: Optional[Any] = None,
-        planner: bool = False,
+        enable_planning: bool = False,
         callbacks: Optional[List[Any]] = None,
         before_agent_callback: Optional[Callable[..., Any]] = None,
         after_agent_callback: Optional[Callable[..., Any]] = None,
@@ -362,8 +370,16 @@ class Agent:
         base_url: Optional[str] = None,
         credentials: Optional[List[Any]] = None,
         stateful: bool = False,
+        context_window_budget: Optional[int] = None,
+        prefill_tools: Optional[List[Any]] = None,
+        fallback_max_turns: Optional[int] = None,
+        plan_source: Optional[Dict[str, Any]] = None,
         synthesize: bool = True,
         masked_fields: Optional[List[str]] = None,
+        # PLAN_EXECUTE named slots (replace positional ``agents=[planner, fallback]``)
+        planner: Optional["Agent"] = None,
+        fallback: Optional["Agent"] = None,
+        planner_context: Optional[List[Any]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -380,6 +396,42 @@ class Agent:
             raise ValueError(f"Invalid strategy {strategy!r}. Must be one of: {valid}")
         if strategy == "router" and router is None:
             raise ValueError("strategy='router' requires a router argument")
+        # Named slots (``planner=``/``fallback=``) are PLAN_EXECUTE-only.
+        # Every other strategy compiler iterates the ``agents=[…]`` list
+        # directly; passing named slots with another strategy would either
+        # NPE deep inside a strategy compiler or be silently ignored.
+        # Reject at construction with a clear message rather than letting
+        # the misconfig propagate to the server.
+        if (planner is not None or fallback is not None) and strategy != "plan_execute":
+            raise ValueError(
+                "Named slots ``planner=`` and ``fallback=`` are only valid with "
+                f"``strategy=Strategy.PLAN_EXECUTE``. Got strategy={strategy!r}. "
+                "Either set ``strategy=Strategy.PLAN_EXECUTE`` or pass the sub-agents "
+                "via ``agents=[…]`` instead."
+            )
+        # PLAN_EXECUTE shape — named-slot API. Reject the legacy
+        # ``agents=[planner, fallback]`` indexing with a clear migration
+        # message rather than silently doing the wrong thing if the user
+        # mixes both shapes.
+        if strategy == "plan_execute":
+            if planner is None:
+                if agents:
+                    raise ValueError(
+                        "Strategy.PLAN_EXECUTE no longer accepts ``agents=[planner, fallback]``. "
+                        "Use the named slots: ``planner=<Agent>`` (required) and "
+                        "``fallback=<Agent>`` (optional)."
+                    )
+                raise ValueError(
+                    "Strategy.PLAN_EXECUTE requires ``planner=<Agent>`` (the agent that "
+                    "produces the JSON plan)."
+                )
+            if not tools:
+                raise ValueError(
+                    "Strategy.PLAN_EXECUTE requires ``tools=[...]`` on the parent agent. "
+                    "These are the canonical plan-executable tools — every ``op.tool`` in "
+                    "the planner's JSON plan must be one of these. Listing tools here also "
+                    "ensures the runtime starts workers for them."
+                )
         if max_turns is not None and max_turns < 1:
             raise ValueError(f"max_turns must be >= 1, got {max_turns}")
 
@@ -451,8 +503,18 @@ class Agent:
         self.dependencies: Dict[str, Any] = dict(dependencies) if dependencies else {}
         self.max_turns = max_turns
         self.max_tokens = max_tokens
+        self.context_window_budget = context_window_budget
+        self.prefill_tools: List[Any] = list(prefill_tools) if prefill_tools else []
+        self.fallback_max_turns = fallback_max_turns
+        self.plan_source = plan_source
+        self.synthesize = synthesize
+        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
         self.timeout_seconds = timeout_seconds
         self.temperature = temperature
+        # OpenAI reasoning models (o1, gpt-5-codex, etc.) accept
+        # "minimal" | "low" | "medium" | "high". Server forwards to the
+        # ChatCompletion.reasoningEffort field; ignored by non-reasoning models.
+        self.reasoning_effort = reasoning_effort
         self.stop_when = stop_when
         self.termination = termination
         self.handoffs: List[Any] = list(handoffs) if handoffs else []
@@ -462,8 +524,48 @@ class Agent:
         self.introduction = introduction
         self.metadata: Dict[str, Any] = dict(metadata) if metadata else {}
         self.stateful = stateful
-        self.synthesize = synthesize
-        self.planner = planner
+        self.enable_planning = enable_planning
+        # PLAN_EXECUTE named slots — see __init__ docstring.
+        self.planner: Optional["Agent"] = planner
+        self.fallback: Optional["Agent"] = fallback
+
+        # PLAN_EXECUTE planner context (text snippets + URLs whose
+        # bodies are fetched per-planner-invocation and appended to
+        # the planner's prompt). Normalise bare strings to
+        # ``Context(text=...)`` so users can pass either shape.
+        # Reject when set on a non-PLAN_EXECUTE strategy with a
+        # clear migration message — same pattern as planner=/fallback=.
+        if planner_context is not None:
+            if strategy != "plan_execute":
+                raise ValueError(
+                    "``planner_context=`` is only valid with "
+                    f"``strategy=Strategy.PLAN_EXECUTE``. Got strategy={strategy!r}. "
+                    "The context block is appended to the planner's user prompt "
+                    "at runtime, which only exists in PLAN_EXECUTE."
+                )
+            # Local import — Context lives in plans.py which imports Agent
+            # transitively. Doing the import lazily avoids the cycle.
+            from agentspan.agents.plans import Context as _Context
+
+            normalised: List[Any] = []
+            for i, entry in enumerate(planner_context):
+                if isinstance(entry, _Context):
+                    normalised.append(entry)
+                elif isinstance(entry, str):
+                    normalised.append(_Context(text=entry))
+                elif isinstance(entry, dict):
+                    # Already in wire shape — accept as-is so power users
+                    # can hand-roll Maps if they prefer (matches how
+                    # ``plan_source`` is typed as ``Dict[str, Any]``).
+                    normalised.append(entry)
+                else:
+                    raise ValueError(
+                        f"planner_context[{i}]: must be a Context, a string, "
+                        f"or a dict; got {type(entry).__name__}"
+                    )
+            self.planner_context: Optional[List[Any]] = normalised
+        else:
+            self.planner_context = None
         self.callbacks: List[Any] = list(callbacks) if callbacks else []
         self.before_agent_callback = before_agent_callback
         self.after_agent_callback = after_agent_callback
@@ -525,9 +627,6 @@ class Agent:
             self.credentials: List[Any] = list(credentials)
         else:
             self.credentials = []
-
-        # Fields whose values are redacted in execution history and UI.
-        self.masked_fields: List[str] = list(masked_fields) if masked_fields else []
 
         # Propagate agent-level credentials to CLI/code tools so the
         # dispatch layer can resolve them per-tool (the dispatch only

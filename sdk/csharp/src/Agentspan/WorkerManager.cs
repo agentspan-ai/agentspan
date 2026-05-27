@@ -356,6 +356,9 @@ internal sealed class WorkerManager : IAsyncDisposable
 
     public void RegisterAgentTools(Agent agent, string? domain = null)
     {
+        if (agent.Framework == "skill")
+            RegisterSkillWorkers(agent, domain);
+
         RegisterTools(agent.Tools, domain);
         RegisterGuardrails(agent.Guardrails, domain);
         foreach (var tool in agent.Tools)
@@ -386,6 +389,34 @@ internal sealed class WorkerManager : IAsyncDisposable
             if (tool.ToolType == "agent_tool" && tool.WrappedAgent is not null)
                 RegisterAgentTools(tool.WrappedAgent, domain);
         }
+    }
+
+    private void RegisterSkillWorkers(Agent agent, string? domain = null)
+    {
+        foreach (var worker in Skill.CreateSkillWorkers(agent))
+        {
+            _workers.Add(NewLoop(worker.Name, async (args, _ctx) =>
+            {
+                var input = args.ToDictionary(
+                    kv => kv.Key,
+                    kv => JsonElementToObject(kv.Value));
+                return await worker.Handler(input);
+            }, domain: domain));
+        }
+    }
+
+    private static object? JsonElementToObject(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number when value.TryGetInt64(out var l) => l,
+            JsonValueKind.Number when value.TryGetDouble(out var d) => d,
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => value.GetRawText(),
+        };
     }
 
     private void RegisterLocalCodeExecutionWorker(Agent agent, string? domain)

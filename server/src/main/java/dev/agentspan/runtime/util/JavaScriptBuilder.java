@@ -37,6 +37,304 @@ public class JavaScriptBuilder {
     }
 
     /**
+     * Validate a parsed-args instance against a tool's ``inputSchema``.
+     *
+     * <p>Closes the dg-review F3 finding: ``Generate.output_schema`` is a
+     * shape-hint string baked into the LLM prompt, NOT a real schema, so
+     * without this validator a confused or adversarial LLM could emit
+     * args of the wrong shape ({@code {"path": "/etc/passwd"}}) and have
+     * them flow directly into the downstream SIMPLE worker. PAC now
+     * inserts a {@code v_<stepId>_<opIdx>} INLINE that runs this
+     * validator between the parse INLINE and the tool task.
+     *
+     * <p>The script supports a Draft-07 subset:
+     * <ul>
+     *   <li>{@code type} — object/string/number/integer/boolean/array/null
+     *       (including union via array of types)</li>
+     *   <li>{@code required} — list of required property names on objects</li>
+     *   <li>{@code properties} — recursive schema per property</li>
+     *   <li>{@code additionalProperties} — boolean only ({@code false}
+     *       rejects unknown keys; default {@code true})</li>
+     *   <li>{@code enum} — value must equal one of the listed members</li>
+     *   <li>{@code pattern} — regex test on strings</li>
+     *   <li>{@code minLength}/{@code maxLength} on strings</li>
+     *   <li>{@code minimum}/{@code maximum} on numbers</li>
+     *   <li>{@code items} — recursive schema for array elements</li>
+     *   <li>{@code minItems}/{@code maxItems} on arrays</li>
+     * </ul>
+     *
+     * <p>Input contract: ``$.parsed`` is the parse INLINE's output
+     * (either the parsed args object OR ``{__parse_error: true, ...}``
+     * when parsing failed). ``$.schema`` is the tool's input schema.
+     * The script passes ``__parse_error`` through unchanged (so the
+     * downstream parseGate sees a single error sentinel for either
+     * parse or schema failure) and otherwise either returns the
+     * parsed object as-is (validation passed) or sets
+     * ``{__parse_error: true, reason: "schema: <details>"}``.
+     */
+    public static String schemaValidatorScript() {
+        return iife(
+                // Walk a GraalJS-side Java Map / List value to a JS-native
+                // object so JSON-Schema introspection works without the
+                // Map keyset weirdness that bit the AML INLINEs.
+                "function toJS(v) {"
+                        + "  if (v === null || v === undefined) return v;"
+                        + "  if (typeof v !== 'object') return v;"
+                        + "  if (typeof v.keySet === 'function' && typeof v.get === 'function') {"
+                        + "    var out = {}; var it = v.keySet().iterator();"
+                        + "    while (it.hasNext()) { var k = it.next(); out[String(k)] = toJS(v.get(k)); }"
+                        + "    return out;"
+                        + "  }"
+                        + "  if (typeof v.iterator === 'function' && typeof v.size === 'function'"
+                        + "      && typeof v.keySet !== 'function') {"
+                        + "    var arr = []; var lit = v.iterator();"
+                        + "    while (lit.hasNext()) arr.push(toJS(lit.next()));"
+                        + "    return arr;"
+                        + "  }"
+                        + "  if (Array.isArray(v)) return v.map(toJS);"
+                        + "  var keys = Object.keys(v); var o2 = {};"
+                        + "  for (var i = 0; i < keys.length; i++) o2[keys[i]] = toJS(v[keys[i]]);"
+                        + "  return o2;"
+                        + "}"
+                        + "function jsType(v) {"
+                        + "  if (v === null) return 'null';"
+                        + "  if (Array.isArray(v)) return 'array';"
+                        + "  var t = typeof v;"
+                        + "  if (t === 'number') return Number.isInteger(v) ? 'integer' : 'number';"
+                        + "  return t;"
+                        + "}"
+                        + "function typeMatches(declared, actual) {"
+                        + "  if (declared === undefined || declared === null) return true;"
+                        + "  if (Array.isArray(declared)) {"
+                        + "    for (var i = 0; i < declared.length; i++) {"
+                        + "      if (typeMatches(declared[i], actual)) return true;"
+                        + "    }"
+                        + "    return false;"
+                        + "  }"
+                        + "  if (declared === 'number') return actual === 'number' || actual === 'integer';"
+                        + "  return declared === actual;"
+                        + "}"
+                        + "function validate(instance, schema, path, errs) {"
+                        + "  if (schema === null || schema === undefined) return;"
+                        + "  if (typeof schema !== 'object') return;"
+                        + "  var actual = jsType(instance);"
+                        + "  if (schema.type !== undefined && !typeMatches(schema.type, actual)) {"
+                        + "    errs.push(path + ': type ' + JSON.stringify(schema.type) + ' expected, got ' + actual);"
+                        + "    return;"
+                        + "  }"
+                        + "  if (Array.isArray(schema.enum)) {"
+                        + "    var found = false;"
+                        + "    for (var i = 0; i < schema.enum.length; i++) {"
+                        + "      if (JSON.stringify(schema.enum[i]) === JSON.stringify(instance)) { found = true; break; }"
+                        + "    }"
+                        + "    if (!found) errs.push(path + ': not in enum ' + JSON.stringify(schema.enum));"
+                        + "  }"
+                        + "  if (actual === 'string') {"
+                        + "    if (typeof schema.minLength === 'number' && instance.length < schema.minLength)"
+                        + "      errs.push(path + ': length ' + instance.length + ' < minLength ' + schema.minLength);"
+                        + "    if (typeof schema.maxLength === 'number' && instance.length > schema.maxLength)"
+                        + "      errs.push(path + ': length ' + instance.length + ' > maxLength ' + schema.maxLength);"
+                        + "    if (typeof schema.pattern === 'string') {"
+                        + "      try { if (!(new RegExp(schema.pattern)).test(instance))"
+                        + "        errs.push(path + ': string does not match pattern ' + JSON.stringify(schema.pattern));"
+                        + "      } catch(e) {}"
+                        + "    }"
+                        + "  }"
+                        + "  if (actual === 'number' || actual === 'integer') {"
+                        + "    if (typeof schema.minimum === 'number' && instance < schema.minimum)"
+                        + "      errs.push(path + ': ' + instance + ' < minimum ' + schema.minimum);"
+                        + "    if (typeof schema.maximum === 'number' && instance > schema.maximum)"
+                        + "      errs.push(path + ': ' + instance + ' > maximum ' + schema.maximum);"
+                        + "  }"
+                        + "  if (actual === 'object' && schema.properties && typeof schema.properties === 'object') {"
+                        + "    if (Array.isArray(schema.required)) {"
+                        + "      for (var ri = 0; ri < schema.required.length; ri++) {"
+                        + "        var req = schema.required[ri];"
+                        + "        if (instance[req] === undefined) errs.push(path + ': missing required property \\'' + req + '\\'');"
+                        + "      }"
+                        + "    }"
+                        + "    var keys = Object.keys(instance);"
+                        + "    for (var ki = 0; ki < keys.length; ki++) {"
+                        + "      var k = keys[ki];"
+                        + "      if (schema.properties[k] !== undefined) {"
+                        + "        validate(instance[k], schema.properties[k], path + '/' + k, errs);"
+                        + "      } else if (schema.additionalProperties === false) {"
+                        + "        errs.push(path + ': unexpected property \\'' + k + '\\' (additionalProperties: false)');"
+                        + "      }"
+                        + "    }"
+                        + "  }"
+                        + "  if (actual === 'array') {"
+                        + "    if (typeof schema.minItems === 'number' && instance.length < schema.minItems)"
+                        + "      errs.push(path + ': ' + instance.length + ' items < minItems ' + schema.minItems);"
+                        + "    if (typeof schema.maxItems === 'number' && instance.length > schema.maxItems)"
+                        + "      errs.push(path + ': ' + instance.length + ' items > maxItems ' + schema.maxItems);"
+                        + "    if (schema.items && typeof schema.items === 'object') {"
+                        + "      for (var ai = 0; ai < instance.length; ai++) {"
+                        + "        validate(instance[ai], schema.items, path + '[' + ai + ']', errs);"
+                        + "      }"
+                        + "    }"
+                        + "  }"
+                        + "}"
+                        // Entry point — pass parse errors through; otherwise
+                        // validate ``parsed`` against ``schema`` and emit a
+                        // schema-error sentinel on failure.
+                        + "var parsed = toJS($.parsed);"
+                        + "if (parsed && parsed.__parse_error === true) return parsed;"
+                        + "var schema = toJS($.schema);"
+                        + "if (!schema || typeof schema !== 'object') return parsed;"
+                        + "var errs = []; validate(parsed, schema, '', errs);"
+                        + "if (errs.length > 0) {"
+                        + "  return {__parse_error: true, reason: 'schema: ' + errs.join('; ')};"
+                        + "}"
+                        + "return parsed;");
+    }
+
+    /**
+     * Parse an LLM's text output into a JSON object, with a structured
+     * ``__parse_error`` sentinel on failure that the downstream parseGate
+     * SWITCH consumes.
+     *
+     * <p>Input contract: {@code $.llmOut} is the planner LLM's raw output
+     * (either an already-parsed Map from JSON-mode or a string).
+     *
+     * <p>Returns either the parsed object or:
+     * {@code {__parse_error: true, reason: '...'}}.
+     *
+     * <p>Used by every PAC ``generate`` op (PAC compiles to LLM_CHAT_COMPLETE
+     * → parse INLINE → SWITCH). /dg #10 extracted it from a string-literal
+     * inside ``PlanAndCompileTask.java`` into this method so quoting bugs
+     * don't break every plan one typo away.
+     */
+    public static String parseLlmOutputScript() {
+        return "(function(){ var r = $.llmOut; if (r == null || r === '')"
+                + " return {__parse_error: true, reason: 'empty LLM output'};"
+                + " try { var p = typeof r === 'string' ? JSON.parse(r) : r;"
+                + " if (!p || typeof p !== 'object' || Object.keys(p).length === 0)"
+                + " return {__parse_error: true, reason: 'empty JSON object'};"
+                + " return p; } catch(e) { return {__parse_error: true, reason: 'JSON parse: ' + e.message}; } })()";
+    }
+
+    /**
+     * Build the planner-context aggregator script.
+     *
+     * <p>Input contract: {@code $.entries} is a list of per-entry descriptors
+     * produced by {@code MultiAgentCompiler.emitPlannerContextBuilder}. Each
+     * entry is either:
+     * <ul>
+     *   <li>{@code {type: 'text', text: <literal>}} — inlined verbatim.</li>
+     *   <li>{@code {type: 'url', url, body, statusCode, required, maxBytes}}
+     *       — the {@code body} and {@code statusCode} fields are Conductor
+     *       templates that have already been resolved to the HTTP fetch
+     *       output by the time the INLINE script runs.</li>
+     * </ul>
+     *
+     * <p>The script:
+     * <ul>
+     *   <li>Coerces non-string bodies (JSON-parsed Maps) to strings via
+     *       {@code JSON.stringify} — the planner gets text, not a Java
+     *       Map.</li>
+     *   <li>Truncates each body at {@code maxBytes} with a
+     *       {@code [doc truncated]} marker.</li>
+     *   <li>For non-{@code required=false} URLs whose fetch failed
+     *       (non-2xx status or missing body), substitutes
+     *       {@code [doc unavailable]} so the planner sees an explicit
+     *       gap instead of silent omission.</li>
+     *   <li>Returns {@code {result: <concatenated markdown>}}.</li>
+     * </ul>
+     */
+    public static String plannerContextBuilderScript() {
+        return iife(
+                // Reuse the toJS walker pattern from schemaValidatorScript —
+                // Conductor hands us Java Map/List values whose .keySet /
+                // .iterator behave differently than native JS objects.
+                "function toJS(v) {"
+                        + "  if (v === null || v === undefined) return v;"
+                        + "  if (typeof v !== 'object') return v;"
+                        + "  if (typeof v.keySet === 'function' && typeof v.get === 'function') {"
+                        + "    var out = {}; var it = v.keySet().iterator();"
+                        + "    while (it.hasNext()) { var k = it.next(); out[String(k)] = toJS(v.get(k)); }"
+                        + "    return out;"
+                        + "  }"
+                        + "  if (typeof v.iterator === 'function' && typeof v.size === 'function'"
+                        + "      && typeof v.keySet !== 'function') {"
+                        + "    var arr = []; var lit = v.iterator();"
+                        + "    while (lit.hasNext()) arr.push(toJS(lit.next()));"
+                        + "    return arr;"
+                        + "  }"
+                        + "  return v;"
+                        + "}"
+                        + "function stringify(b) {"
+                        + "  if (b === null || b === undefined) return '';"
+                        + "  if (typeof b === 'string') return b;"
+                        + "  try { return JSON.stringify(b); } catch (e) { return String(b); }"
+                        + "}"
+                        + "var entries = toJS($.entries) || [];"
+                        + "var parts = [];"
+                        + "for (var i = 0; i < entries.length; i++) {"
+                        + "  var e = entries[i];"
+                        + "  if (!e) continue;"
+                        + "  if (e.type === 'text') {"
+                        + "    if (e.text == null) continue;"
+                        + "    parts.push('### Inline note ' + (i+1) + '\\n' + e.text);"
+                        + "    continue;"
+                        + "  }"
+                        + "  if (e.type === 'url') {"
+                        + "    var url = e.url || ('doc ' + (i+1));"
+                        + "    var status = e.statusCode;"
+                        + "    var rawBody = e.body;"
+                        // statusCode is a JS Number when set, but Conductor
+                        // can leave it as the literal template string when
+                        // the underlying HTTP task didn't run (optional
+                        // task skipped). Detect both shapes.
+                        + "    var statusOk = (status == null) || "
+                        + "        (typeof status === 'number' && status >= 200 && status < 300);"
+                        // ``$ + {`` is split across two literals so the JS
+                        // source string we hand Conductor doesn't itself
+                        // contain ``${``. Conductor's ParametersUtils scans
+                        // ALL input-parameter values for ``${path}`` and
+                        // interpolates them — it doesn't understand JS
+                        // quoting, so a literal ``${`` inside our script
+                        // would be eaten at task-dispatch time, breaking
+                        // the script. Defer the concat to JS runtime.
+                        + "    var TPL_OPEN = '$' + '{';"
+                        + "    var unresolvedTpl = typeof status === 'string' && status.indexOf(TPL_OPEN) === 0;"
+                        + "    if (unresolvedTpl) {"
+                        + "      parts.push('### ' + url + '\\n[doc unavailable]');"
+                        + "      continue;"
+                        + "    }"
+                        + "    if (!statusOk) {"
+                        + "      if (e.required === false) {"
+                        + "        parts.push('### ' + url + '\\n[doc unavailable]');"
+                        + "      } else {"
+                        + "        parts.push('### ' + url + '\\n[doc fetch failed status=' + status + ']');"
+                        + "      }"
+                        + "      continue;"
+                        + "    }"
+                        + "    var body = stringify(rawBody);"
+                        // Same ``${`` avoidance — match the unresolved-template
+                        // string ``${body}`` by building it at JS runtime.
+                        + "    if (!body || body === TPL_OPEN + 'body}') {"
+                        + "      parts.push('### ' + url + '\\n[doc unavailable]');"
+                        + "      continue;"
+                        + "    }"
+                        + "    var max = (typeof e.maxBytes === 'number') ? e.maxBytes : 16384;"
+                        + "    var truncated = false;"
+                        + "    if (body.length > max) {"
+                        + "      body = body.substring(0, max);"
+                        + "      truncated = true;"
+                        + "    }"
+                        + "    parts.push('### ' + url + '\\n' + body + (truncated ? '\\n[doc truncated]' : ''));"
+                        + "  }"
+                        + "}"
+                        // Return the joined string directly — Conductor's
+                        // INLINE wraps the script's return value as
+                        // ``outputData = {result: <return>}`` automatically.
+                        // Returning ``{result: …}`` from the script would
+                        // produce a double-nested ``output.result.result``.
+                        + "return parts.join('\\n\\n');");
+    }
+
+    /**
      * Build the regex guardrail JavaScript.
      */
     public static String regexGuardrailScript(
@@ -227,7 +525,8 @@ public class JavaScriptBuilder {
             String ragConfigJson,
             String cliConfigJson,
             String humanConfigJson,
-            String wmqConfigJson) {
+            String wmqConfigJson,
+            String knownToolNamesJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = "
                 + mcpConfigJson + ";" + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
@@ -235,11 +534,41 @@ public class JavaScriptBuilder {
                 + ragConfigJson + ";" + "  var cliCfg = "
                 + cliConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
-                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
+                + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
                 + "    var tc = tcs[i]; var n = tc.name;"
+                // Validate the tool name. If the LLM hallucinates a name we
+                // didn't expose, replace the SIMPLE task with an INLINE task
+                // that returns an error to the conversation. Without this the
+                // SIMPLE task gets queued under the unknown name with no worker
+                // polling for it and the workflow hangs forever.
+                + "    var isCfg = !!(httpCfg[n] || mcpCfg[n] || agentToolCfg[n] ||"
+                + "                  mediaCfg[n] || ragCfg[n] || humanCfg[n] || wmqCfg[n]);"
+                // Reject any name not in the agent's declared tools. The
+                // previous gate (``hasKnownNames``) skipped this check when
+                // ``knownNames`` was empty, which allowed an agent declared
+                // with ``tools=[]`` and only ``prefill_tools`` to dispatch
+                // hallucinated calls to the prefill workers (registered for
+                // prefill execution but never advertised to the LLM). With
+                // this tighter check, an empty knownNames means NO tool is
+                // callable by the LLM — exactly the prefill-only contract.
+                + "    var isUnknown = !isCfg && !(knownNames && knownNames[n]);"
+                + "    if (isUnknown) {"
+                + "      var availList = [];"
+                + "      for (var nm in knownNames) availList.push(nm);"
+                + "      var unknownErr = ('Unknown tool \\'' + n + '\\'. Available tools: ' + availList.join(', '));"
+                + "      var errTask = {name: n, taskReferenceName: tc.taskReferenceName || n,"
+                + "                     type: 'INLINE',"
+                + "                     inputParameters: {evaluatorType: 'graaljs',"
+                + "                       expression: 'function e(){return {result: $.errorMessage, is_error: true};} e();',"
+                + "                       errorMessage: unknownErr},"
+                + "                     optional: true};"
+                + "      result.push(errTask);"
+                + "      continue;"
+                + "    }"
                 + "    var t = {name: n, taskReferenceName: tc.taskReferenceName || n,"
                 + "             type: tc.type || 'SIMPLE', inputParameters: tc.inputParameters || {},"
                 + "             optional: true,"
@@ -789,7 +1118,8 @@ public class JavaScriptBuilder {
             String agentToolConfigJson,
             String ragConfigJson,
             String humanConfigJson,
-            String wmqConfigJson) {
+            String wmqConfigJson,
+            String knownToolNamesJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = $.mcpConfig || {};"
                 + "  var apiCfg = $.apiConfig || {};"
                 + "  var mediaCfg = "
@@ -797,11 +1127,34 @@ public class JavaScriptBuilder {
                 + agentToolConfigJson + ";" + "  var ragCfg = "
                 + ragConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
-                + wmqConfigJson + ";" + "  var agentState = $.agentState || {};"
+                + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
+                + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
                 + "  for (var i = 0; i < tcs.length; i++) {"
                 + "    var tc = tcs[i]; var n = tc.name;"
+                // Reject hallucinated tool names (see enrichToolsScript above
+                // for context). Without this the SIMPLE task gets queued under
+                // an unknown name and the workflow hangs forever.
+                + "    var isCfg = !!(httpCfg[n] || mcpCfg[n] || apiCfg[n] || agentToolCfg[n] ||"
+                + "                  mediaCfg[n] || ragCfg[n] || humanCfg[n] || wmqCfg[n]);"
+                // See ``enrichToolsScript`` above — empty knownNames means
+                // NO tool is callable by the LLM (locks down the prefill-only
+                // leak path).
+                + "    var isUnknown = !isCfg && !(knownNames && knownNames[n]);"
+                + "    if (isUnknown) {"
+                + "      var availList = [];"
+                + "      for (var nm in knownNames) availList.push(nm);"
+                + "      var unknownErr = ('Unknown tool \\'' + n + '\\'. Available tools: ' + availList.join(', '));"
+                + "      var errTask = {name: n, taskReferenceName: tc.taskReferenceName || n,"
+                + "                     type: 'INLINE',"
+                + "                     inputParameters: {evaluatorType: 'graaljs',"
+                + "                       expression: 'function e(){return {result: $.errorMessage, is_error: true};} e();',"
+                + "                       errorMessage: unknownErr},"
+                + "                     optional: true};"
+                + "      result.push(errTask);"
+                + "      continue;"
+                + "    }"
                 + "    var t = {name: n, taskReferenceName: tc.taskReferenceName || n,"
                 + "             type: tc.type || 'SIMPLE', inputParameters: tc.inputParameters || {},"
                 + "             optional: true,"
@@ -1155,12 +1508,24 @@ public class JavaScriptBuilder {
     }
 
     /**
-     * Context injection script: prepends context JSON block to user prompt.
-     * If context is empty, returns the prompt unchanged.
-     * Enforces size limits: per-value truncation and total size budget.
-     * Input: {@code state} → the _agent_state dict, {@code prompt} → original prompt,
-     *        {@code maxSize} → max total context bytes, {@code maxValueSize} → max per-value bytes.
-     * Output: the prompt string with context prepended.
+     * Context injection script: builds the state/signals prefix for the user prompt.
+     *
+     * <p>Returns ONLY the context prefix (state JSON + signals), with a trailing
+     * {@code "\n\n"} separator when the prefix is non-empty so the caller can append
+     * the base prompt without injecting a separator literal. The caller concatenates
+     * via Conductor template resolution as {@code ${ctx_inject.output.result}${workflow.input.prompt}}
+     * (no literal separator). When state and signals are both empty, this returns
+     * the empty string — so the LLM sees the prompt unchanged, not a {@code "\n\n<prompt>"}
+     * leading-whitespace artifact that would shift token alignment at temperature 0.</p>
+     *
+     * <p>This split avoids storing the full prompt (which never changes) in every
+     * iteration's task output, reducing workflow payload by ~N × prompt_size.</p>
+     *
+     * <p>Input: {@code state} → the _agent_state dict,
+     *        {@code signals} → signal injection string,
+     *        {@code maxSize} → max total context bytes,
+     *        {@code maxValueSize} → max per-value bytes.</p>
+     * <p>Output: the context prefix string with trailing {@code "\n\n"} (or empty).</p>
      */
     public static String contextInjectionScript() {
         return iife(
@@ -1171,9 +1536,8 @@ public class JavaScriptBuilder {
                 // properties, not map entries. Use state.get(k) for value access
                 // since bracket notation may not work for Java Maps.
                 "var rawState = $.state;"
-                        + "var prompt = $.prompt || '';"
                         + "var signals = $.signals || '';"
-                        + "if (!rawState && !signals) return prompt;"
+                        + "if (!rawState && !signals) return '';"
                         + "var maxSize = $.maxSize || 32768;"
                         + "var maxValueSize = $.maxValueSize || 4096;"
                         // Collect map entries via for-in (works on Java Maps in GraalJS)
@@ -1200,14 +1564,17 @@ public class JavaScriptBuilder {
                         + "  delete truncated[tKeys.shift()];"
                         + "  json = JSON.stringify(truncated);"
                         + "}"
-                        // Build result: signals (if any) + context (if any) + prompt
+                        // Build prefix: signals (if any) + context (if any).
+                        // Trailing '\n\n' is part of the prefix so the message
+                        // template can be ${ctx.result}${prompt} without
+                        // injecting a leading-whitespace artifact when empty.
                         + "var parts = [];"
                         + "if (signals) { parts.push('[SIGNALS]\\n' + signals + '\\n[/SIGNALS]'); }"
                         + "if (Object.keys(truncated).length > 0) {"
                         + "  parts.push('Context:\\n```json\\n' + JSON.stringify(truncated, null, 2) + '\\n```');"
                         + "}"
-                        + "parts.push(prompt);"
-                        + "return parts.join('\\n\\n');");
+                        + "if (parts.length === 0) return '';"
+                        + "return parts.join('\\n\\n') + '\\n\\n';");
     }
 
     /**
@@ -1226,5 +1593,202 @@ public class JavaScriptBuilder {
                 + "  merged[agents[i]] = $['child_' + i] || {};"
                 + "}"
                 + "return merged;");
+    }
+
+    /**
+     * Extract a JSON plan from the planner's output.
+     *
+     * <p>Handles two cases:
+     * <ol>
+     *   <li>The LLM returned a JSON object directly (no markdown) — detected by checking
+     *       if {@code $.rawResult} is an object with a {@code steps} key.</li>
+     *   <li>The LLM returned Markdown with an embedded {@code ```json} fence — extracted
+     *       via regex from {@code $.coercedResult} (the stringified version).</li>
+     * </ol>
+     *
+     * <p>Input: {@code $.rawResult} — the raw sub-workflow result (may be Java Map),
+     *         {@code $.coercedResult} — the stringified version,
+     *         {@code $.planReaderContent} — optional content from plan_source tool (deterministic fallback).
+     * <p>Output: {@code {plan_json: "<JSON string>", markdown_plan: "<full text>"}}
+     * Returns {@code plan_json: null} when no valid plan is found.
+     */
+    public static String extractJsonFenceScript() {
+        return iife(
+                // Helper: convert a Java Map / JS object to a proper JS object
+                // GraalJS Java Maps don't serialize with JSON.stringify, so we
+                // manually copy entries into a plain JS object.
+                "function toJS(obj) {"
+                        + "  if (obj == null) return null;"
+                        + "  if (typeof obj !== 'object') return obj;"
+                        + "  if (Array.isArray(obj)) {"
+                        + "    var arr = []; for (var i = 0; i < obj.length; i++) arr.push(toJS(obj[i])); return arr;"
+                        + "  }"
+                        + "  var out = {};"
+                        + "  var keys = obj.keySet ? obj.keySet().toArray() : Object.keys(obj);"
+                        + "  for (var i = 0; i < keys.length; i++) {"
+                        + "    var k = keys[i]; var v = obj.get ? obj.get(k) : obj[k];"
+                        + "    out[k] = toJS(v);"
+                        + "  }"
+                        + "  return out;"
+                        + "}"
+
+                        // Helper: scan ``text`` from ``openIdx`` (at a ``{``) and return the
+                        // index of the matching ``}``, accounting for string literals so
+                        // braces inside string values don't miscount. Returns -1 if no
+                        // matching brace is found. Handles backslash-escaped quotes.
+                        + "function findMatchingBrace(text, openIdx) {"
+                        + "  var depth = 0;"
+                        + "  var inStr = false;"
+                        + "  var prev = '';"
+                        + "  for (var ci = openIdx; ci < text.length; ci++) {"
+                        + "    var cc = text[ci];"
+                        + "    if (inStr) {"
+                        + "      if (cc === '\\\\') { prev = (prev === '\\\\') ? '' : '\\\\'; }"
+                        + "      else if (cc === '\"' && prev !== '\\\\') { inStr = false; prev = ''; }"
+                        + "      else { prev = cc; }"
+                        + "    } else {"
+                        + "      if (cc === '\"') { inStr = true; prev = ''; }"
+                        + "      else if (cc === '{') { depth++; }"
+                        + "      else if (cc === '}') { depth--; if (depth === 0) return ci; }"
+                        + "    }"
+                        + "  }"
+                        + "  return -1;"
+                        + "}"
+
+                        // Case 0 (highest priority): static_plan from workflow input.
+                        // The SDK's ``runtime.run(harness, plan=...)`` plumbs a
+                        // user-supplied plan dict/Plan into ``workflow.input.static_plan``;
+                        // the planner LLM still runs (the workflow shape is fixed at
+                        // compile time) but its output is ignored. This makes
+                        // deterministic plans first-class — no more plan_source tool
+                        // dance to inject a fixed plan.
+                        + "var sp = $.staticPlan;"
+                        + "if (sp != null) {"
+                        + "  if (typeof sp === 'object') {"
+                        + "    var hasStepsSp = false;"
+                        + "    try { hasStepsSp = sp.steps != null || (sp.get && sp.get('steps') != null); } catch(e) {}"
+                        + "    if (hasStepsSp) {"
+                        + "      var planSp = toJS(sp);"
+                        + "      return {plan_json: JSON.stringify(planSp), markdown_plan: '[static plan]'};"
+                        + "    }"
+                        + "  } else if (typeof sp === 'string' && sp.length > 2) {"
+                        + "    try {"
+                        + "      var parsedSp = JSON.parse(sp);"
+                        + "      if (parsedSp && parsedSp.steps) {"
+                        + "        return {plan_json: JSON.stringify(parsedSp), markdown_plan: '[static plan]'};"
+                        + "      }"
+                        + "    } catch(e) {}"
+                        + "  }"
+                        + "}"
+
+                        // Case 1: rawResult is already a plan object (has "steps" key)
+                        // markdown_plan is the original planner text when available — the
+                        // fallback agent benefits from seeing the LLM's actual prose, not a
+                        // re-stringified pretty-print of the parsed object.
+                        + "var raw = $.rawResult;"
+                        + "if (raw != null && typeof raw === 'object') {"
+                        + "  var hasSteps = false;"
+                        + "  try { hasSteps = raw.steps != null || (raw.get && raw.get('steps') != null); } catch(e) {}"
+                        + "  if (hasSteps) {"
+                        + "    var plan = toJS(raw);"
+                        + "    var origText = ($.coercedResult && String($.coercedResult).length > 0) ? String($.coercedResult) : JSON.stringify(plan);"
+                        + "    return {plan_json: JSON.stringify(plan), markdown_plan: origText};"
+                        + "  }"
+                        + "}"
+
+                        // Case 2: coercedResult is a JSON string (the LLM output was pure JSON text)
+                        + "var coerced = $.coercedResult || '';"
+                        + "if (typeof coerced === 'string' && coerced.length > 2) {"
+                        + "  try {"
+                        + "    var parsed = JSON.parse(coerced);"
+                        + "    if (parsed && parsed.steps) {"
+                        + "      return {plan_json: JSON.stringify(parsed), markdown_plan: coerced};"
+                        + "    }"
+                        + "  } catch(e) {}"
+                        + "}"
+
+                        // Case 3: coercedResult is Markdown with a ```json fence
+                        // Try multiple fence patterns: with/without newlines, with/without space
+                        + "var text = String(coerced);"
+                        + "var fencePatterns = ["
+                        + "  /```json\\s*\\n([\\s\\S]*?)\\n\\s*```/," // standard: ```json\n...\n```
+                        + "  /```json\\s*([\\s\\S]*?)```/," // lenient: no newline required
+                        + "  /```\\s*\\n(\\{[\\s\\S]*?\\})\\n\\s*```/" // plain fence with JSON object
+                        + "];"
+                        + "for (var pi = 0; pi < fencePatterns.length; pi++) {"
+                        + "  var fmatch = text.match(fencePatterns[pi]);"
+                        + "  if (fmatch) {"
+                        + "    try {"
+                        + "      var fenced = JSON.parse(fmatch[1].trim());"
+                        + "      if (fenced && fenced.steps) {"
+                        + "        return {plan_json: JSON.stringify(fenced), markdown_plan: text};"
+                        + "      }"
+                        + "    } catch(e) {}"
+                        + "  }"
+                        + "}"
+
+                        // Case 4: Find JSON object with "steps" key anywhere in text via
+                        // string-aware brace matching (see findMatchingBrace helper above).
+                        + "var stepsIdx = text.indexOf('\"steps\"');"
+                        + "if (stepsIdx >= 0) {"
+                        + "  var openIdx = text.lastIndexOf('{', stepsIdx);"
+                        + "  if (openIdx >= 0) {"
+                        + "    var closeIdx = findMatchingBrace(text, openIdx);"
+                        + "    if (closeIdx > openIdx) {"
+                        + "      try {"
+                        + "        var extracted = JSON.parse(text.substring(openIdx, closeIdx + 1));"
+                        + "        if (extracted && extracted.steps) {"
+                        + "          return {plan_json: JSON.stringify(extracted), markdown_plan: text};"
+                        + "        }"
+                        + "      } catch(e) {}"
+                        + "    }"
+                        + "  }"
+                        + "}"
+
+                        // Case 5: planReaderContent — deterministic fallback from plan_source tool
+                        // If the planner text failed extraction, try the external source content.
+                        + "var readerText = $.planReaderContent ? String($.planReaderContent) : '';"
+                        + "if (readerText && readerText.length > 2) {"
+                        // 5a: direct JSON parse
+                        + "  try {"
+                        + "    var rParsed = JSON.parse(readerText);"
+                        + "    if (rParsed && rParsed.steps) {"
+                        + "      return {plan_json: JSON.stringify(rParsed), markdown_plan: readerText};"
+                        + "    }"
+                        + "  } catch(e) {}"
+                        // 5b: ```json fence in reader content
+                        + "  for (var ri = 0; ri < fencePatterns.length; ri++) {"
+                        + "    var rmatch = readerText.match(fencePatterns[ri]);"
+                        + "    if (rmatch) {"
+                        + "      try {"
+                        + "        var rfenced = JSON.parse(rmatch[1].trim());"
+                        + "        if (rfenced && rfenced.steps) {"
+                        + "          return {plan_json: JSON.stringify(rfenced), markdown_plan: readerText};"
+                        + "        }"
+                        + "      } catch(e) {}"
+                        + "    }"
+                        + "  }"
+                        // 5c: string-aware brace-matching in reader content (uses the
+                        // same findMatchingBrace helper as Case 4 — keeps both extraction
+                        // paths in sync for braces inside string values).
+                        + "  var rStepsIdx = readerText.indexOf('\"steps\"');"
+                        + "  if (rStepsIdx >= 0) {"
+                        + "    var rOpenIdx = readerText.lastIndexOf('{', rStepsIdx);"
+                        + "    if (rOpenIdx >= 0) {"
+                        + "      var rCloseIdx = findMatchingBrace(readerText, rOpenIdx);"
+                        + "      if (rCloseIdx > rOpenIdx) {"
+                        + "        try {"
+                        + "          var rExtracted = JSON.parse(readerText.substring(rOpenIdx, rCloseIdx + 1));"
+                        + "          if (rExtracted && rExtracted.steps) {"
+                        + "            return {plan_json: JSON.stringify(rExtracted), markdown_plan: readerText};"
+                        + "          }"
+                        + "        } catch(e) {}"
+                        + "      }"
+                        + "    }"
+                        + "  }"
+                        + "}"
+
+                        // Nothing found
+                        + "return {plan_json: null, markdown_plan: text};");
     }
 }

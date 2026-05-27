@@ -11,6 +11,7 @@ import ai.agentspan.model.AgentHandle;
 import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.AgentStream;
 import ai.agentspan.model.ToolDef;
+import ai.agentspan.skill.Skill;
 import ai.agentspan.termination.AndTermination;
 import ai.agentspan.termination.MaxMessageTermination;
 import ai.agentspan.termination.OrTermination;
@@ -94,7 +95,7 @@ public class AgentRuntime implements AutoCloseable {
         // agents (openai / google_adk / langgraph) need to round-trip through
         // the server normalizer or compile fails on a missing top-level model.
         String framework = agent.getFramework();
-        boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
+        boolean isFramework = framework != null && !framework.isEmpty();
         Map<String, Object> payload = new java.util.HashMap<>();
         if (isFramework) {
             payload.put("framework", framework);
@@ -116,6 +117,25 @@ public class AgentRuntime implements AutoCloseable {
      */
     public AgentResult run(Agent agent, String prompt) {
         return runAsync(agent, prompt).join();
+    }
+
+    /**
+     * Execute a {@code Strategy.PLAN_EXECUTE} harness with a deterministic
+     * {@link ai.agentspan.plans.Plan} — skips the planner LLM entirely.
+     *
+     * <p>The SDK forwards the plan as {@code static_plan} on the start
+     * payload; the server's PAC extract_json picks it up as Case-0
+     * (highest priority) and discards whatever the planner sub-agent
+     * emits. Use this for deterministic pipelines, replays of a
+     * previously-emitted plan, or testing.
+     *
+     * @param agent  the PLAN_EXECUTE harness
+     * @param prompt the user's input message
+     * @param plan   the deterministic plan to execute
+     * @return the agent result
+     */
+    public AgentResult run(Agent agent, String prompt, ai.agentspan.plans.Plan plan) {
+        return runAsync(agent, prompt, plan).join();
     }
 
     /**
@@ -150,10 +170,18 @@ public class AgentRuntime implements AutoCloseable {
      * @return a CompletableFuture that resolves to the agent result
      */
     public CompletableFuture<AgentResult> runAsync(Agent agent, String prompt) {
+        return runAsync(agent, prompt, null);
+    }
+
+    /**
+     * Async variant of {@link #run(Agent, String, ai.agentspan.plans.Plan)}.
+     */
+    public CompletableFuture<AgentResult> runAsync(
+            Agent agent, String prompt, ai.agentspan.plans.Plan plan) {
         prepareWorkers(agent);
         workerManager.startAll();
 
-        return startAsync(agent, prompt).thenCompose(handle ->
+        return startAsync(agent, prompt, plan).thenCompose(handle ->
             CompletableFuture.supplyAsync(() -> handle.waitForResult())
         );
     }
@@ -166,6 +194,16 @@ public class AgentRuntime implements AutoCloseable {
      * @return a CompletableFuture that resolves to an AgentHandle
      */
     public CompletableFuture<AgentHandle> startAsync(Agent agent, String prompt) {
+        return startAsync(agent, prompt, null);
+    }
+
+    /**
+     * Async variant that forwards a deterministic {@link ai.agentspan.plans.Plan}
+     * to the server as {@code static_plan}. Only meaningful for
+     * {@code Strategy.PLAN_EXECUTE} harnesses; ignored otherwise.
+     */
+    public CompletableFuture<AgentHandle> startAsync(
+            Agent agent, String prompt, ai.agentspan.plans.Plan plan) {
         // Stateful agents get a per-execution domain UUID. The server uses it
         // as taskToDomain for every worker task in this run; local workers are
         // registered under the same domain so they poll the per-execution
@@ -175,6 +213,7 @@ public class AgentRuntime implements AutoCloseable {
         final String runId = hasStatefulTools(agent)
             ? java.util.UUID.randomUUID().toString().replace("-", "")
             : null;
+        final Map<String, Object> staticPlan = plan == null ? null : plan.toJson();
         prepareWorkers(agent, runId);
         workerManager.startAll();
 
@@ -184,12 +223,11 @@ public class AgentRuntime implements AutoCloseable {
 
             logger.debug("Starting agent '{}' with prompt: {}", agent.getName(), prompt);
 
-            // Framework-backed agents (openai, google_adk, langgraph, vercel_ai)
+            // Framework-backed agents (openai, google_adk, langgraph, vercel_ai, skill)
             // must be sent via the server's framework+rawConfig fields so the
-            // matching normalizer runs server-side. The "skill" framework keeps
-            // the legacy path because its serialized config still includes model.
+            // matching normalizer runs server-side.
             String framework = agent.getFramework();
-            boolean isFramework = framework != null && !framework.isEmpty() && !"skill".equals(framework);
+            boolean isFramework = framework != null && !framework.isEmpty();
             Map<String, Object> payload = new java.util.HashMap<>();
             if (isFramework) {
                 payload.put("framework", framework);
@@ -200,6 +238,7 @@ public class AgentRuntime implements AutoCloseable {
             payload.put("prompt", prompt);
             if (sessionId != null && !sessionId.isEmpty()) payload.put("sessionId", sessionId);
             if (runId != null && !runId.isEmpty()) payload.put("runId", runId);
+            if (staticPlan != null) payload.put("static_plan", staticPlan);
             Map<String, Object> response = httpApi.startAgent(payload);
             String executionId = extractExecutionId(response);
 
@@ -266,13 +305,13 @@ public class AgentRuntime implements AutoCloseable {
         for (Agent agent : agents) {
             Map<String, Object> agentConfig = serializer.serialize(agent);
             Map<String, Object> payload = new java.util.LinkedHashMap<>();
-            // Framework-backed agents (openai, google_adk, langgraph) ship via
+            // Framework-backed agents (openai, google_adk, langgraph, skill) ship via
             // {framework, rawConfig} so the matching server-side normalizer
             // runs — same dispatch as startAsync. Without this, the server
             // tries to compile the agent as a native Agentspan agent and
             // fails on a missing model / null taskDef name.
             String framework = agent.getFramework();
-            if (framework != null && !framework.isEmpty() && !"skill".equals(framework)) {
+            if (framework != null && !framework.isEmpty()) {
                 payload.put("framework", framework);
                 payload.put("rawConfig", agentConfig);
             } else {
@@ -390,6 +429,12 @@ public class AgentRuntime implements AutoCloseable {
     }
 
     public void prepareWorkers(Agent agent) {
+        if ("skill".equals(agent.getFramework())) {
+            for (Skill.SkillWorker worker : Skill.createSkillWorkers(agent)) {
+                workerManager.register(worker.getName(), worker.getFunc());
+            }
+        }
+
         // Register tools for this agent
         for (ToolDef tool : agent.getTools()) {
             if (tool.getFunc() != null && "worker".equals(tool.getToolType())) {

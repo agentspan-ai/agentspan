@@ -11,7 +11,8 @@ export type Strategy =
   | "round_robin"
   | "random"
   | "swarm"
-  | "manual";
+  | "manual"
+  | "plan_execute";
 
 /**
  * Agent event types emitted during execution.
@@ -239,6 +240,15 @@ export interface RunOptions {
    * Required for LangGraph agents that don't use the @agentspan-ai/sdk/langgraph wrapper.
    */
   model?: unknown;
+  /**
+   * Optional deterministic plan for `Strategy.PLAN_EXECUTE` harnesses.
+   * Accepts a typed `Plan` (recommended) or a raw JSON-shaped dict. When
+   * present, the SDK forwards it on the start payload as `static_plan`;
+   * the server's extract_json INLINE picks it up as Case-0, which wins
+   * over the planner LLM's output. The planner sub-agent still runs (the
+   * workflow shape is fixed at compile time) but its output is discarded.
+   */
+  plan?: unknown;
 }
 
 // ── Tool definition ──────────────────────────────────────
@@ -265,12 +275,25 @@ export interface ToolDef {
   config?: Record<string, unknown>;
   /** Stateful tool — worker registers under execution's domain for isolation. */
   stateful?: boolean;
+  /** Maximum number of times this tool can be called. */
+  maxCalls?: number;
   /** Number of times Conductor retries the task on failure. */
   retryCount?: number;
   /** Seconds between retries. */
   retryDelaySeconds?: number;
   /** Retry strategy: "fixed", "linear_backoff", or "exponential_backoff". */
   retryPolicy?: string;
+  /** Create a pre-declared tool call for use with `Agent({ prefillTools: [...] })`.
+   *  Optional — only tools intended to be usable as prefill (e.g. via the
+   *  @tool decorator) supply this method. ToolDef literals constructed by
+   *  helpers like ``CodeExecutor.asTool()`` may omit it. */
+  call?(args: Record<string, unknown>): PrefillToolCall;
+}
+
+/** A tool call to execute before the LLM runs. */
+export interface PrefillToolCall {
+  toolName: string;
+  arguments: Record<string, unknown>;
 }
 
 // ── Agent result ─────────────────────────────────────────

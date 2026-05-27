@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/agentspan-ai/agentspan/cli/config"
@@ -11,6 +12,11 @@ func newTempHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	if vol := filepath.VolumeName(dir); vol != "" {
+		t.Setenv("HOMEDRIVE", vol)
+		t.Setenv("HOMEPATH", dir[len(vol):])
+	}
 	t.Setenv("AGENTSPAN_SERVER_URL", "")
 	t.Setenv("AGENT_SERVER_URL", "")
 	t.Setenv("AGENTSPAN_API_KEY", "")

@@ -130,6 +130,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             sanitizeMessages(chatCompletion);
             validateRunnableConversation(chatCompletion);
             ensureEndsWithUserMessage(chatCompletion, taskModel);
+            ensureJsonOutputUserMessage(chatCompletion);
         } catch (Exception e) {
             if (e instanceof TerminateWorkflowException) {
                 throw (TerminateWorkflowException) e;
@@ -141,6 +142,35 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             }
         }
         return taskModel;
+    }
+
+    /**
+     * OpenAI's JSON mode validation checks user input messages for the word "json".
+     * System/developer instructions are not sufficient for the Responses API.
+     */
+    private void ensureJsonOutputUserMessage(ChatCompletion chatCompletion) {
+        if (!chatCompletion.isJsonOutput()) {
+            return;
+        }
+
+        List<ChatMessage> messages = chatCompletion.getMessages();
+        if (messages == null) {
+            messages = new ArrayList<>();
+            chatCompletion.setMessages(messages);
+        }
+
+        boolean userMentionsJson = messages.stream()
+                .filter(Objects::nonNull)
+                .filter(message -> message.getRole() == ChatMessage.Role.user)
+                .map(ChatMessage::getMessage)
+                .filter(Objects::nonNull)
+                .anyMatch(message -> message.toLowerCase().contains("json"));
+
+        if (userMentionsJson) {
+            return;
+        }
+
+        messages.add(new ChatMessage(ChatMessage.Role.user, "Formatting instruction: return the response as json."));
     }
 
     private void updateTaskModel(ChatCompletion chatCompletion, TaskModel simpleTask) {

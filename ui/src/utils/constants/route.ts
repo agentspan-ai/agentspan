@@ -22,6 +22,11 @@ export const AGENT_DEFINITION_URL = {
   NAME_VERSION: "/agentDef/:name/:version?",
 };
 
+export const SKILLS_URL = {
+  BASE: "/skills",
+  NAME_VERSION: "/skills/:name/:version?",
+};
+
 export const SCHEDULER_DEFINITION_URL = {
   BASE: "/scheduleDef",
   NAME: "/scheduleDef/:name?",

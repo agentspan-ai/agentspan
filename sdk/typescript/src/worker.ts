@@ -315,8 +315,8 @@ export class WorkerManager {
    * credential injection, state capture, error mapping.
    */
   private _wrapWorker(pw: PendingWorker): ConductorWorker {
-    const mgr = this;
-    return {
+    const { serverUrl, headers } = this;
+    const worker: ConductorWorker & { leaseExtendEnabled?: boolean } = {
       taskDefName: pw.taskName,
       pollInterval: this.pollIntervalMs,
       concurrency: 1,
@@ -355,12 +355,12 @@ export class WorkerManager {
           }
           try {
             const resolved = await resolveCredentials(
-              mgr.serverUrl,
-              mgr.headers,
+              serverUrl,
+              headers,
               execToken,
               pw.credentials,
             );
-            cleanupCreds = injectCredentials(mgr.serverUrl, mgr.headers, execToken, resolved);
+            cleanupCreds = injectCredentials(serverUrl, headers, execToken, resolved);
           } catch (err) {
             throw new NonRetryableException(
               `Credential resolution failed for ${pw.taskName}: ${err instanceof Error ? err.message : String(err)}`,
@@ -403,10 +403,11 @@ export class WorkerManager {
         // share (and clobber) module-level state. Runs even without an exec
         // token so handlers see a consistent context shape.
         if (execToken) {
-          return runWithCredentialContext(mgr.serverUrl, mgr.headers, execToken, runHandler);
+          return runWithCredentialContext(serverUrl, headers, execToken, runHandler);
         }
         return runHandler();
       },
     };
+    return worker;
   }
 }

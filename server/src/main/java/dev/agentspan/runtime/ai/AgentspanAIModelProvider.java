@@ -14,7 +14,6 @@ import org.conductoross.conductor.ai.models.LLMWorkerInput;
 import org.conductoross.conductor.ai.providers.anthropic.AnthropicConfiguration;
 import org.conductoross.conductor.ai.providers.azureopenai.AzureOpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.cohere.CohereAIConfiguration;
-import org.conductoross.conductor.ai.providers.gemini.GeminiVertex;
 import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
@@ -33,6 +32,8 @@ import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
+import okhttp3.OkHttpClient;
+
 /**
  * Per-user LLM model provider that creates fresh AIModel instances with
  * API keys from the credential store.
@@ -50,6 +51,7 @@ import dev.agentspan.runtime.credentials.ExecutionTokenService;
 public class AgentspanAIModelProvider extends AIModelProvider {
 
     private static final Logger log = LoggerFactory.getLogger(AgentspanAIModelProvider.class);
+    private static final OkHttpClient CONDUCTOR_AI_HTTP_CLIENT = new OkHttpClient();
 
     /** Maps Conductor provider names to credential env var names. */
     private static final Map<String, String> PROVIDER_TO_ENV_VAR = Map.ofEntries(
@@ -263,7 +265,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     private AIModel createModelWithKey(String provider, String apiKey, String baseUrl) {
         ModelConfiguration<? extends AIModel> config =
                 switch (provider.toLowerCase()) {
-                    case "openai" -> new OpenAIConfiguration(apiKey, baseUrl, null);
+                    case "openai" -> openAIConfiguration(apiKey, baseUrl);
                     case "anthropic" -> new AnthropicConfiguration(apiKey, baseUrl, null, null, null);
                     case "azureopenai" -> new AzureOpenAIConfiguration(apiKey, baseUrl, null, null);
                     case "mistral" -> new MistralAIConfiguration(apiKey, baseUrl);
@@ -283,26 +285,30 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             return config.get();
         }
 
-        // Gemini with API key: use REST transport (AI Studio), not gRPC (Vertex AI)
+        // Gemini uses the upstream configuration object so Conductor owns the concrete model path.
         String providerLower = provider.toLowerCase();
         if (providerLower.equals("gemini") || providerLower.equals("google_gemini")) {
-            return createGeminiApiKeyModel(apiKey);
+            return createGeminiModel(apiKey);
         }
 
         return null;
     }
 
+    static OpenAIConfiguration openAIConfiguration(String apiKey, String baseUrl) {
+        OpenAIConfiguration config = new OpenAIConfiguration(apiKey, baseUrl, null);
+        config.setConductorAiHttpClient(CONDUCTOR_AI_HTTP_CLIENT);
+        return config;
+    }
+
     /**
-     * Create a Gemini model using API key auth via REST transport.
-     * Uses the upstream GeminiVertex which handles the API key path properly
-     * with GoogleGenAiChatModel (full tool calling support).
+     * Create a Gemini model using API key auth through the upstream Conductor configuration.
      */
-    private AIModel createGeminiApiKeyModel(String apiKey) {
+    private AIModel createGeminiModel(String apiKey) {
         String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
         var config = new GeminiVertexConfiguration();
         config.setApiKey(apiKey);
         config.setProjectId(projectId != null ? projectId : "google-ai-studio");
         config.setLocation("us-central1");
-        return new GeminiVertex(config);
+        return config.get();
     }
 }

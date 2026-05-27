@@ -5,10 +5,12 @@ package ai.agentspan;
 
 import ai.agentspan.internal.AgentConfigSerializer;
 import ai.agentspan.model.ToolDef;
+import ai.agentspan.skill.Skill;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Factory for wrapping an {@link Agent} as a callable tool (agent_tool).
@@ -59,6 +61,11 @@ public class AgentTool {
 
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("agentConfig", agentConfig);
+        if ("skill".equals(agent.getFramework())) {
+            config.put("workerNames", Skill.createSkillWorkers(agent).stream()
+                .map(Skill.SkillWorker::getName)
+                .collect(Collectors.toList()));
+        }
 
         Map<String, Object> inputSchema = Map.of(
             "type", "object",

@@ -58,6 +58,10 @@ class AgentCompileE2ETest {
         return "http://localhost:" + port + "/api/agent/" + executionId + "/status";
     }
 
+    private String workflowUrl(String executionId) {
+        return "http://localhost:" + port + "/api/workflow/" + executionId + "?includeTasks=true";
+    }
+
     private JsonNode postCompile(Map<String, Object> body) throws Exception {
         return post(compileUrl(), body);
     }
@@ -428,7 +432,10 @@ class AgentCompileE2ETest {
     @Test
     void compileWithPlanner() throws Exception {
         Map<String, Object> config = agentConfig("planner_e2e", "openai/gpt-4o", "You are a planner.");
-        config.put("planner", true);
+        // ``enablePlanning`` (formerly the boolean ``planner`` field) toggles
+        // the plan-then-execute system-prompt preamble. The JSON field
+        // ``planner`` is now reserved for the PLAN_EXECUTE sub-agent slot.
+        config.put("enablePlanning", true);
 
         JsonNode resp = postCompile(request(config));
         List<Map<String, Object>> tasks = getTasks(resp);
@@ -607,6 +614,58 @@ class AgentCompileE2ETest {
 
         // Total tasks: SUB_WORKFLOW(parallel) + coercion INLINE + SUB_WORKFLOW(summarizer)
         assertThat(tasks.size()).isGreaterThanOrEqualTo(3);
+    }
+
+    @Test
+    void compileSkillFrameworkWithSubAgentsScriptsAndResources() throws Exception {
+        Map<String, Object> rawConfig = new LinkedHashMap<>();
+        rawConfig.put("model", "openai/gpt-4o");
+        rawConfig.put("agentModels", Map.of("alpha", "anthropic/claude-sonnet-4-20250514"));
+        rawConfig.put(
+                "skillMd",
+                "---\nname: skill_e2e\ndescription: Skill compile e2e.\n---\n"
+                        + "## Workflow\nUse alpha, beta, echo_args, and references as needed.\n\n"
+                        + "[Skill Parameters]\nmode: deterministic");
+        rawConfig.put(
+                "agentFiles",
+                Map.of(
+                        "alpha", "# Alpha Agent\nAnalyze the request.",
+                        "beta", "# Beta Agent\nSummarize the analysis."));
+        rawConfig.put("scripts", Map.of("echo_args", Map.of("filename", "echo_args.py", "language", "python")));
+        rawConfig.put("resourceFiles", List.of("references/guide.md"));
+        rawConfig.put("crossSkillRefs", Map.of());
+
+        JsonNode resp = postCompile(Map.of("framework", "skill", "rawConfig", rawConfig, "prompt", "test"));
+        assertThat(resp.get("workflowDef").get("name").asText()).isEqualTo("skill_e2e");
+
+        List<Map<String, Object>> llmTasks = findAllTasksByType(getTasks(resp), "LLM_CHAT_COMPLETE");
+        assertThat(llmTasks).isNotEmpty();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) llmTasks.get(0).get("inputParameters");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> toolSpecs = (List<Map<String, Object>>) inputs.get("tools");
+
+        List<String> toolNames =
+                toolSpecs.stream().map(t -> (String) t.get("name")).toList();
+        assertThat(toolNames)
+                .contains("skill_e2e__alpha", "skill_e2e__beta", "skill_e2e__echo_args", "skill_e2e__read_skill_file");
+        assertThat(toolSpecs)
+                .anySatisfy(t -> {
+                    assertThat(t.get("name")).isEqualTo("skill_e2e__alpha");
+                    assertThat(t.get("type")).isEqualTo("SUB_WORKFLOW");
+                })
+                .anySatisfy(t -> {
+                    assertThat(t.get("name")).isEqualTo("skill_e2e__echo_args");
+                    assertThat(t.get("type")).isEqualTo("SIMPLE");
+                })
+                .anySatisfy(t -> {
+                    assertThat(t.get("name")).isEqualTo("skill_e2e__read_skill_file");
+                    assertThat(t.get("type")).isEqualTo("SIMPLE");
+                });
+
+        String workflowJson = MAPPER.writeValueAsString(resp.get("workflowDef"));
+        assertThat(workflowJson).contains("references/guide.md", "Skill Parameters");
     }
 
     // ── Google ADK normalization e2e ─────────────────────────────────
@@ -860,6 +919,50 @@ class AgentCompileE2ETest {
         assertThat(resp.get("executionId")).isNotNull();
         assertThat(resp.get("executionId").asText()).isNotEmpty();
         assertThat(resp.get("agentName").asText()).isEqualTo("start_creds_e2e");
+    }
+
+    @Test
+    void startStatefulAgentToolRoutesNestedSkillWorkersToDomain() throws Exception {
+        Map<String, Object> agentTool = new LinkedHashMap<>();
+        agentTool.put("name", "skill_tool");
+        agentTool.put("description", "Invoke a pre-deployed skill");
+        agentTool.put(
+                "inputSchema",
+                Map.of(
+                        "type",
+                        "object",
+                        "properties",
+                        Map.of("request", Map.of("type", "string")),
+                        "required",
+                        List.of("request")));
+        agentTool.put("toolType", "agent_tool");
+        agentTool.put("stateful", true);
+        agentTool.put(
+                "config",
+                Map.of(
+                        "workflowName",
+                        "skill_child_e2e",
+                        "workerNames",
+                        List.of("skill_child_e2e__echo_args", "skill_child_e2e__read_skill_file")));
+
+        Map<String, Object> config = agentConfig("stateful_skill_route_e2e", "openai/gpt-4o", "Use the skill.");
+        config.put("stateful", true);
+        config.put("tools", List.of(agentTool));
+
+        String runId = "domain123";
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("agentConfig", config);
+        body.put("prompt", "Hello");
+        body.put("runId", runId);
+
+        JsonNode resp = postStart(body);
+        JsonNode workflow = get(workflowUrl(resp.get("executionId").asText()));
+        JsonNode taskToDomain = workflow.get("taskToDomain");
+
+        assertThat(taskToDomain.get("skill_tool").asText()).isEqualTo(runId);
+        assertThat(taskToDomain.get("skill_child_e2e__echo_args").asText()).isEqualTo(runId);
+        assertThat(taskToDomain.get("skill_child_e2e__read_skill_file").asText())
+                .isEqualTo(runId);
     }
 
     // ══════════════════════════════════════════════════════════════════

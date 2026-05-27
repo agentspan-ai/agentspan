@@ -11,11 +11,12 @@ No mocks. Real server, real CLI, real LLM.
 """
 
 import os
+import time
 
 import pytest
 import requests
 
-from agentspan.agents import Agent, tool
+from agentspan.agents import Agent, AgentRuntime, tool
 from agentspan.agents.tool import get_tool_def
 
 pytestmark = [
@@ -131,7 +132,6 @@ def _tool_diagnostics(execution_id: str) -> str:
     tool_tasks = []
     for task in wf.get("tasks", []):
         ref = task.get("referenceTaskName", "")
-        task_type = task.get("taskType", task.get("type", ""))
         status = task.get("status", "")
         reason = task.get("reasonForIncompletion", "")
 
@@ -303,177 +303,192 @@ class TestSuite2ToolCalling:
 
     def _run_lifecycle(self, runtime, cli_credentials, model):
         agent = _make_agent(model)
+        owned_runtimes: list[AgentRuntime] = []
 
-        # ── Step 1: Clean slate ─────────────────────────────────────
-        cli_credentials.delete(CRED_A)
-        cli_credentials.delete(CRED_B)
+        def restart_runtime(current: AgentRuntime) -> AgentRuntime:
+            current.shutdown()
+            # Let old poll loops drain before new workers start with fresh
+            # execution tokens for the updated credential state.
+            time.sleep(2)
+            fresh = AgentRuntime()
+            owned_runtimes.append(fresh)
+            return fresh
 
-        # ── Step 2: No credentials — paid tools should fail ─────────
-        result = runtime.run(agent, "Call all three tools.", timeout=TIMEOUT)
+        try:
+            # ── Step 1: Clean slate ─────────────────────────────────────
+            cli_credentials.delete(CRED_A)
+            cli_credentials.delete(CRED_B)
 
-        assert result.execution_id, (
-            f"[Step 2: No credentials] No execution_id returned. "
-            f"{_run_diagnostic(result)}"
-        )
+            # ── Step 2: No credentials — paid tools should fail ─────────
+            result = runtime.run(agent, "Call all three tools.", timeout=TIMEOUT)
 
-        # The run should reach a terminal state (COMPLETED or FAILED).
-        # Paid tools should raise RuntimeError because credentials are missing.
-        assert result.status in ("COMPLETED", "FAILED", "TERMINATED"), (
-            f"[Step 2: No credentials] Expected terminal status, "
-            f"got '{result.status}'. The agent should either complete "
-            f"(reporting tool errors) or fail outright when credentials "
-            f"are missing.\n"
-            f"  {_run_diagnostic(result)}\n"
-            f"  {_tool_diagnostics(result.execution_id)}"
-        )
+            assert result.execution_id, (
+                f"[Step 2: No credentials] No execution_id returned. "
+                f"{_run_diagnostic(result)}"
+            )
 
-        # Verify via workflow tasks: paid tools must be terminal (not retryable).
-        # Conductor maps TaskResult.FAILED_WITH_TERMINAL_ERROR → Task.COMPLETED_WITH_ERRORS
-        tool_tasks_s2 = _find_tool_tasks_for(result.execution_id)
-        terminal_statuses = {"FAILED_WITH_TERMINAL_ERROR", "COMPLETED_WITH_ERRORS"}
-        for paid in ("paid_tool_a", "paid_tool_b"):
-            if paid in tool_tasks_s2:
-                task_info = tool_tasks_s2[paid]
-                assert task_info["status"] in terminal_statuses, (
-                    f"[Step 2: No credentials] {paid} should be terminal "
-                    f"(not retryable), got '{task_info['status']}'. Missing "
-                    f"credentials are a config issue — retries are pointless.\n"
-                    f"  task={task_info}"
+            # The run should reach a terminal state (COMPLETED or FAILED).
+            # Paid tools should raise RuntimeError because credentials are missing.
+            assert result.status in ("COMPLETED", "FAILED", "TERMINATED"), (
+                f"[Step 2: No credentials] Expected terminal status, "
+                f"got '{result.status}'. The agent should either complete "
+                f"(reporting tool errors) or fail outright when credentials "
+                f"are missing.\n"
+                f"  {_run_diagnostic(result)}\n"
+                f"  {_tool_diagnostics(result.execution_id)}"
+            )
+
+            # Verify via workflow tasks: paid tools must be terminal (not retryable).
+            # Conductor maps TaskResult.FAILED_WITH_TERMINAL_ERROR → Task.COMPLETED_WITH_ERRORS
+            tool_tasks_s2 = _find_tool_tasks_for(result.execution_id)
+            terminal_statuses = {"FAILED_WITH_TERMINAL_ERROR", "COMPLETED_WITH_ERRORS"}
+            for paid in ("paid_tool_a", "paid_tool_b"):
+                if paid in tool_tasks_s2:
+                    task_info = tool_tasks_s2[paid]
+                    assert task_info["status"] in terminal_statuses, (
+                        f"[Step 2: No credentials] {paid} should be terminal "
+                        f"(not retryable), got '{task_info['status']}'. Missing "
+                        f"credentials are a config issue — retries are pointless.\n"
+                        f"  task={task_info}"
+                    )
+
+            # ── Step 3: Env vars should NOT be read ─────────────────────
+            os.environ[CRED_A] = "from-env-aaa"
+            os.environ[CRED_B] = "from-env-bbb"
+            try:
+                result_env = runtime.run(
+                    agent, "Call all three tools.", timeout=TIMEOUT
                 )
 
-        # ── Step 3: Env vars should NOT be read ─────────────────────
-        os.environ[CRED_A] = "from-env-aaa"
-        os.environ[CRED_B] = "from-env-bbb"
-        try:
-            result_env = runtime.run(
+                # The paid tools should STILL fail despite env vars being set.
+                # The SDK resolves credentials from the server, not env.
+                output_env = _get_output_text(result_env)
+
+                # Check for "from-env" (unique prefix of our test env values).
+                # Using "fro" caused false positives when LLM prose contained
+                # "from" in normal words.
+                assert "from-env" not in output_env, (
+                    "SECURITY VIOLATION: env vars were read for credential "
+                    "resolution! The SDK MUST NOT resolve credentials from "
+                    "environment variables — only from the server.\n"
+                    f"  {_run_diagnostic(result_env)}\n"
+                    f"  output_text={output_env[:300]}"
+                )
+            finally:
+                os.environ.pop(CRED_A, None)
+                os.environ.pop(CRED_B, None)
+
+            # ── Step 4: Add credentials via CLI ─────────────────────────
+            runtime = restart_runtime(runtime)
+            cli_credentials.set(CRED_A, "secret-aaa-value")
+            cli_credentials.set(CRED_B, "secret-bbb-value")
+
+            result_with_creds = runtime.run(
                 agent, "Call all three tools.", timeout=TIMEOUT
             )
+            _assert_run_completed(result_with_creds, "Step 4: With credentials", agent)
 
-            # The paid tools should STILL fail despite env vars being set.
-            # The SDK resolves credentials from the server, not env.
-            output_env = _get_output_text(result_env)
+            # Primary: validate via workflow task data
+            tool_tasks_s4 = _find_tool_tasks_for(result_with_creds.execution_id)
 
-            # Check for "from-env" (unique prefix of our test env values).
-            # Using "fro" caused false positives when LLM prose contained
-            # "from" in normal words.
-            assert "from-env" not in output_env, (
-                "SECURITY VIOLATION: env vars were read for credential "
-                "resolution! The SDK MUST NOT resolve credentials from "
-                "environment variables — only from the server.\n"
-                f"  {_run_diagnostic(result_env)}\n"
-                f"  output_text={output_env[:300]}"
+            assert "free_tool" in tool_tasks_s4, (
+                f"[Step 4] free_tool task not found in workflow.\n"
+                f"  found_tasks={list(tool_tasks_s4.keys())}"
+            )
+            assert tool_tasks_s4["free_tool"]["status"] == "COMPLETED", (
+                f"[Step 4] free_tool not COMPLETED.\n"
+                f"  task={tool_tasks_s4['free_tool']}"
+            )
+
+            assert "paid_tool_a" in tool_tasks_s4, (
+                f"[Step 4] paid_tool_a task not found in workflow.\n"
+                f"  found_tasks={list(tool_tasks_s4.keys())}"
+            )
+            assert tool_tasks_s4["paid_tool_a"]["status"] == "COMPLETED", (
+                f"[Step 4] paid_tool_a not COMPLETED.\n"
+                f"  task={tool_tasks_s4['paid_tool_a']}"
+            )
+            s4_paid_a_output = str(tool_tasks_s4["paid_tool_a"]["output"])
+            assert "sec" in s4_paid_a_output, (
+                f"[Step 4] paid_tool_a output should contain 'sec' "
+                f"(first 3 chars of 'secret-aaa-value').\n"
+                f"  task_output={s4_paid_a_output}"
+            )
+
+            assert "paid_tool_b" in tool_tasks_s4, (
+                f"[Step 4] paid_tool_b task not found in workflow.\n"
+                f"  found_tasks={list(tool_tasks_s4.keys())}"
+            )
+            assert tool_tasks_s4["paid_tool_b"]["status"] == "COMPLETED", (
+                f"[Step 4] paid_tool_b not COMPLETED.\n"
+                f"  task={tool_tasks_s4['paid_tool_b']}"
+            )
+            s4_paid_b_output = str(tool_tasks_s4["paid_tool_b"]["output"])
+            assert "sec" in s4_paid_b_output, (
+                f"[Step 4] paid_tool_b output should contain 'sec' "
+                f"(first 3 chars of 'secret-bbb-value').\n"
+                f"  task_output={s4_paid_b_output}"
+            )
+
+            # Secondary: also check LLM output text
+            output_creds = _get_output_text(result_with_creds)
+
+            assert "free" in output_creds.lower(), (
+                f"[Step 4: With credentials] free_tool output not found in "
+                f"agent response. free_tool always returns 'free:ok' — if "
+                f"missing, the agent may not have called it.\n"
+                f"  {_run_diagnostic(result_with_creds)}\n"
+                f"  output_text={output_creds[:300]}\n"
+                f"  {_tool_diagnostics(result_with_creds.execution_id)}"
+            )
+            assert "sec" in output_creds, (
+                f"[Step 4: With credentials] paid_tool_a should return 'sec' "
+                f"(first 3 chars of 'secret-aaa-value'). If missing, credential "
+                f"'{CRED_A}' may not have been resolved correctly.\n"
+                f"  {_run_diagnostic(result_with_creds)}\n"
+                f"  output_text={output_creds[:300]}\n"
+                f"  {_tool_diagnostics(result_with_creds.execution_id)}"
+            )
+
+            # ── Step 5: Update credentials via CLI ──────────────────────
+            runtime = restart_runtime(runtime)
+            cli_credentials.set(CRED_A, "newval-xxx-updated")
+            cli_credentials.set(CRED_B, "newval-yyy-updated")
+
+            result_updated = runtime.run(
+                agent, "Call all three tools.", timeout=TIMEOUT
+            )
+            _assert_run_completed(result_updated, "Step 5: Updated credentials", agent)
+
+            # Primary: validate via workflow task data
+            tool_tasks_s5 = _find_tool_tasks_for(result_updated.execution_id)
+
+            assert "paid_tool_a" in tool_tasks_s5, (
+                f"[Step 5] paid_tool_a task not found in workflow.\n"
+                f"  found_tasks={list(tool_tasks_s5.keys())}"
+            )
+            assert tool_tasks_s5["paid_tool_a"]["status"] == "COMPLETED", (
+                f"[Step 5] paid_tool_a not COMPLETED.\n"
+                f"  task={tool_tasks_s5['paid_tool_a']}"
+            )
+            s5_paid_a_output = str(tool_tasks_s5["paid_tool_a"]["output"])
+            assert "new" in s5_paid_a_output, (
+                f"[Step 5] paid_tool_a output should contain 'new' "
+                f"(first 3 chars of 'newval-xxx-updated').\n"
+                f"  task_output={s5_paid_a_output}"
+            )
+
+            # Secondary: also check LLM output text
+            output_updated = _get_output_text(result_updated)
+
+            assert "new" in output_updated, (
+                f"[Step 5: Updated credentials] paid_tool_a should return 'new' "
+                f"(first 3 chars of 'newval-xxx-updated'). If missing, the "
+                f"credential update via CLI may not have propagated.\n"
+                f"  {_run_diagnostic(result_updated)}\n"
+                f"  output_text={output_updated[:300]}\n"
+                f"  {_tool_diagnostics(result_updated.execution_id)}"
             )
         finally:
-            os.environ.pop(CRED_A, None)
-            os.environ.pop(CRED_B, None)
-
-        # ── Step 4: Add credentials via CLI ─────────────────────────
-        cli_credentials.set(CRED_A, "secret-aaa-value")
-        cli_credentials.set(CRED_B, "secret-bbb-value")
-
-        result_with_creds = runtime.run(
-            agent, "Call all three tools.", timeout=TIMEOUT
-        )
-        _assert_run_completed(result_with_creds, "Step 4: With credentials", agent)
-
-        # Primary: validate via workflow task data
-        tool_tasks_s4 = _find_tool_tasks_for(result_with_creds.execution_id)
-
-        assert "free_tool" in tool_tasks_s4, (
-            f"[Step 4] free_tool task not found in workflow.\n"
-            f"  found_tasks={list(tool_tasks_s4.keys())}"
-        )
-        assert tool_tasks_s4["free_tool"]["status"] == "COMPLETED", (
-            f"[Step 4] free_tool not COMPLETED.\n"
-            f"  task={tool_tasks_s4['free_tool']}"
-        )
-
-        assert "paid_tool_a" in tool_tasks_s4, (
-            f"[Step 4] paid_tool_a task not found in workflow.\n"
-            f"  found_tasks={list(tool_tasks_s4.keys())}"
-        )
-        assert tool_tasks_s4["paid_tool_a"]["status"] == "COMPLETED", (
-            f"[Step 4] paid_tool_a not COMPLETED.\n"
-            f"  task={tool_tasks_s4['paid_tool_a']}"
-        )
-        s4_paid_a_output = str(tool_tasks_s4["paid_tool_a"]["output"])
-        assert "sec" in s4_paid_a_output, (
-            f"[Step 4] paid_tool_a output should contain 'sec' "
-            f"(first 3 chars of 'secret-aaa-value').\n"
-            f"  task_output={s4_paid_a_output}"
-        )
-
-        assert "paid_tool_b" in tool_tasks_s4, (
-            f"[Step 4] paid_tool_b task not found in workflow.\n"
-            f"  found_tasks={list(tool_tasks_s4.keys())}"
-        )
-        assert tool_tasks_s4["paid_tool_b"]["status"] == "COMPLETED", (
-            f"[Step 4] paid_tool_b not COMPLETED.\n"
-            f"  task={tool_tasks_s4['paid_tool_b']}"
-        )
-        s4_paid_b_output = str(tool_tasks_s4["paid_tool_b"]["output"])
-        assert "sec" in s4_paid_b_output, (
-            f"[Step 4] paid_tool_b output should contain 'sec' "
-            f"(first 3 chars of 'secret-bbb-value').\n"
-            f"  task_output={s4_paid_b_output}"
-        )
-
-        # Secondary: also check LLM output text
-        output_creds = _get_output_text(result_with_creds)
-
-        assert "free" in output_creds.lower(), (
-            f"[Step 4: With credentials] free_tool output not found in "
-            f"agent response. free_tool always returns 'free:ok' — if "
-            f"missing, the agent may not have called it.\n"
-            f"  {_run_diagnostic(result_with_creds)}\n"
-            f"  output_text={output_creds[:300]}\n"
-            f"  {_tool_diagnostics(result_with_creds.execution_id)}"
-        )
-        assert "sec" in output_creds, (
-            f"[Step 4: With credentials] paid_tool_a should return 'sec' "
-            f"(first 3 chars of 'secret-aaa-value'). If missing, credential "
-            f"'{CRED_A}' may not have been resolved correctly.\n"
-            f"  {_run_diagnostic(result_with_creds)}\n"
-            f"  output_text={output_creds[:300]}\n"
-            f"  {_tool_diagnostics(result_with_creds.execution_id)}"
-        )
-
-        # ── Step 5: Update credentials via CLI ──────────────────────
-        cli_credentials.set(CRED_A, "newval-xxx-updated")
-        cli_credentials.set(CRED_B, "newval-yyy-updated")
-
-        result_updated = runtime.run(
-            agent, "Call all three tools.", timeout=TIMEOUT
-        )
-        _assert_run_completed(result_updated, "Step 5: Updated credentials", agent)
-
-        # Primary: validate via workflow task data
-        tool_tasks_s5 = _find_tool_tasks_for(result_updated.execution_id)
-
-        assert "paid_tool_a" in tool_tasks_s5, (
-            f"[Step 5] paid_tool_a task not found in workflow.\n"
-            f"  found_tasks={list(tool_tasks_s5.keys())}"
-        )
-        assert tool_tasks_s5["paid_tool_a"]["status"] == "COMPLETED", (
-            f"[Step 5] paid_tool_a not COMPLETED.\n"
-            f"  task={tool_tasks_s5['paid_tool_a']}"
-        )
-        s5_paid_a_output = str(tool_tasks_s5["paid_tool_a"]["output"])
-        assert "new" in s5_paid_a_output, (
-            f"[Step 5] paid_tool_a output should contain 'new' "
-            f"(first 3 chars of 'newval-xxx-updated').\n"
-            f"  task_output={s5_paid_a_output}"
-        )
-
-        # Secondary: also check LLM output text
-        output_updated = _get_output_text(result_updated)
-
-        assert "new" in output_updated, (
-            f"[Step 5: Updated credentials] paid_tool_a should return 'new' "
-            f"(first 3 chars of 'newval-xxx-updated'). If missing, the "
-            f"credential update via CLI may not have propagated.\n"
-            f"  {_run_diagnostic(result_updated)}\n"
-            f"  output_text={output_updated[:300]}\n"
-            f"  {_tool_diagnostics(result_updated.execution_id)}"
-        )
-
+            for owned in reversed(owned_runtimes):
+                owned.shutdown()

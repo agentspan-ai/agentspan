@@ -154,10 +154,14 @@ export class AgentConfigSerializer {
     // Sub-agents (recursive)
     if (agent.agents.length > 0) {
       config.agents = agent.agents.map((a) => this.serializeAgent(a));
-      // Strategy ONLY when agents is non-empty
-      if (agent.strategy) {
-        config.strategy = agent.strategy;
-      }
+    }
+    // Strategy is emitted when the agent has any sub-agent declaration:
+    // legacy agents=[...] OR PLAN_EXECUTE's named slots (planner / fallback).
+    // Without the slot check, a PLAN_EXECUTE coordinator built with
+    // planner=... would serialize with strategy: undefined and the server's
+    // dispatch would fall to compileWithTools.
+    if (agent.strategy && (agent.agents.length > 0 || agent.planner !== undefined || agent.fallback !== undefined)) {
+      config.strategy = agent.strategy;
     }
 
     // Router
@@ -213,8 +217,18 @@ export class AgentConfigSerializer {
     // Metadata
     if (agent.metadata) config.metadata = agent.metadata;
 
-    // Planner
-    if (agent.planner) config.planner = agent.planner;
+    // Plan-first preamble (Google ADK feature) — boolean.
+    // Renamed from the legacy `planner: boolean` to free the `planner` JSON
+    // slot for the PLAN_EXECUTE sub-agent below.
+    if (agent.enablePlanning) config.enablePlanning = true;
+
+    // PLAN_EXECUTE named slots: planner (required) + fallback (optional).
+    // Both serialize as nested AgentConfig dicts so the server's
+    // MultiAgentCompiler.compilePlanExecute can dispatch.
+    // (fallbackMaxTurns + planSource are serialized below alongside the
+    // other PLAN_EXECUTE knobs.)
+    if (agent.planner) config.planner = this.serializeAgent(agent.planner);
+    if (agent.fallback) config.fallback = this.serializeAgent(agent.fallback);
 
     // Callbacks
     if (agent.callbacks.length > 0) {
@@ -237,6 +251,11 @@ export class AgentConfigSerializer {
       config.requiredTools = agent.requiredTools;
     }
 
+    // prefillTools
+    if (agent.prefillTools && agent.prefillTools.length > 0) {
+      config.prefillTools = agent.prefillTools;
+    }
+
     // Gate
     if (agent.gate) {
       config.gate = this.serializeGate(agent.gate, agent.name);
@@ -255,6 +274,31 @@ export class AgentConfigSerializer {
     // Credentials
     if (agent.credentials && agent.credentials.length > 0) {
       config.credentials = agent.credentials;
+    }
+
+    // Fallback max turns (PLAN_EXECUTE strategy)
+    if (agent.fallbackMaxTurns !== undefined) {
+      config.fallbackMaxTurns = agent.fallbackMaxTurns;
+    }
+
+    // Plan source (PLAN_EXECUTE strategy) — deterministic fallback for plan
+    // extraction. Forwarded as `planSource` on the wire to match server-side
+    // AgentConfig.planSource.
+    if (agent.planSource !== undefined) {
+      config.planSource = agent.planSource;
+    }
+
+    // Planner context (PLAN_EXECUTE strategy) — text snippets + URLs
+    // injected into the planner's prompt. Each entry is either a Context
+    // instance (has toJSON) or a raw wire-shape dict; the constructor
+    // already validated and normalised so we just dispatch via toJSON.
+    if (agent.plannerContext !== undefined && agent.plannerContext.length > 0) {
+      config.plannerContext = agent.plannerContext.map((entry) => {
+        if (entry !== null && typeof entry === "object" && "toJSON" in entry) {
+          return (entry as { toJSON: () => unknown }).toJSON();
+        }
+        return entry;
+      });
     }
 
     return config;
@@ -279,6 +323,7 @@ export class AgentConfigSerializer {
       config.timeoutSeconds = toolDef.timeoutSeconds;
     }
     if (agentStateful || toolDef.stateful) config.stateful = true;
+    if (toolDef.maxCalls !== undefined) config.maxCalls = toolDef.maxCalls;
     if (toolDef.retryCount !== undefined) config.retryCount = toolDef.retryCount;
     if (toolDef.retryDelaySeconds !== undefined) config.retryDelaySeconds = toolDef.retryDelaySeconds;
     if (toolDef.retryPolicy !== undefined) config.retryPolicy = toolDef.retryPolicy;

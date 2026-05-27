@@ -322,6 +322,29 @@ class TestCrossSkillResolution:
         # Unresolved refs are silently skipped
         assert "nonexistent-skill" not in agent._framework_config["crossSkillRefs"]
 
+    def test_cross_ref_resolves_nested_refs(self, tmp_path):
+        from agentspan.agents.skill import skill
+
+        parent = tmp_path / "parent-skill"
+        child = tmp_path / "child-skill"
+        grandchild = tmp_path / "grandchild-skill"
+        parent.mkdir()
+        child.mkdir()
+        grandchild.mkdir()
+        (parent / "SKILL.md").write_text(
+            "---\nname: parent-skill\n---\n# Parent\nUse the child-skill skill.\n"
+        )
+        (child / "SKILL.md").write_text(
+            "---\nname: child-skill\n---\n# Child\nUse the grandchild-skill skill.\n"
+        )
+        (grandchild / "SKILL.md").write_text(
+            "---\nname: grandchild-skill\n---\n# Grandchild\n"
+        )
+
+        agent = skill(parent, model="openai/gpt-4o")
+        child_ref = agent._framework_config["crossSkillRefs"]["child-skill"]
+        assert "grandchild-skill" in child_ref["crossSkillRefs"]
+
 
 # ── Auto-splitting of large SKILL.md files ──────────────────────────────
 

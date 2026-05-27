@@ -38,8 +38,14 @@ import com.zaxxer.hikari.HikariDataSource;
  * The driver class and connection pool size are derived automatically from the
  * {@code spring.datasource.url} value — no extra configuration is required.</p>
  *
- * <p>SQLite: maximumPoolSize=1 (no concurrent writers). In-memory SQLite also
- * requires minimumIdle=1 so the database is not dropped between operations.</p>
+ * <p>SQLite: maximumPoolSize=8. WAL mode (enabled via the JDBC URL) supports
+ * concurrent readers and a single writer; HikariCP serializes writes at the
+ * pool level when contention is rare, and busy_timeout=15000 absorbs the
+ * occasional write conflict. The previous cap of 1 was a conservative legacy
+ * setting that serialized all reads — under PAC/PAE workloads (planner +
+ * parallel generate-block LLM calls, each resolving credentials), a single
+ * connection caused pool exhaustion (waiting=39, timeout=30s). minimumIdle=1
+ * keeps the connection alive for in-memory shared-cache DBs.</p>
  *
  * <p>PostgreSQL: uses {@code org.postgresql.Driver} with a larger pool (default 8).</p>
  */
@@ -49,6 +55,7 @@ public class CredentialDataSourceConfig {
     private static final Logger log = LoggerFactory.getLogger(CredentialDataSourceConfig.class);
 
     private static final int POSTGRES_POOL_SIZE = 8;
+    private static final int SQLITE_POOL_SIZE = 8;
 
     @Value("${spring.datasource.url:jdbc:sqlite:agent-runtime.db}")
     private String datasourceUrl;
@@ -80,9 +87,11 @@ public class CredentialDataSourceConfig {
             if (!datasourcePassword.isEmpty()) config.setPassword(datasourcePassword);
         } else {
             config.setDriverClassName("org.sqlite.JDBC");
-            // SQLite does not support concurrent writers; cap at 1 connection.
-            // minimumIdle=1 keeps the connection alive for in-memory shared-cache DBs.
-            config.setMaximumPoolSize(1);
+            // SQLite WAL mode supports concurrent readers and one writer. The
+            // pool of 8 lets credential reads run in parallel (the hot path
+            // for AgentspanAIModelProvider's per-LLM-call credential
+            // resolution). busy_timeout below absorbs write contention.
+            config.setMaximumPoolSize(SQLITE_POOL_SIZE);
             config.setMinimumIdle(1);
             config.setConnectionTestQuery("SELECT 1");
             // busy_timeout: wait up to 15s when another connection holds a write lock.
