@@ -78,15 +78,24 @@ class AgentConfigSerializer:
                 ]
             return stub
 
+        # Strategy is emitted when the agent has any sub-agent declaration:
+        # legacy ``agents=[…]`` OR PLAN_EXECUTE's named slots (``planner``,
+        # ``fallback``). Without the slot check, a PLAN_EXECUTE coordinator
+        # built with ``planner=…`` would have ``strategy: None`` on the wire
+        # and the server's dispatch would fall to compileWithTools.
+        has_sub_agents = (
+            bool(agent.agents)
+            or getattr(agent, "planner", None) is not None
+            or getattr(agent, "fallback", None) is not None
+        )
         config: Dict[str, Any] = {
             "name": agent.name,
             "model": agent.model or None,
             "baseUrl": getattr(agent, "base_url", None),
-            "strategy": agent.strategy if agent.agents else None,
+            "strategy": agent.strategy if has_sub_agents else None,
             "maxTurns": agent.max_turns,
             "timeoutSeconds": agent.timeout_seconds,
             "external": agent.external,
-            "synthesize": getattr(agent, "synthesize", True),
         }
 
         # Instructions
@@ -105,7 +114,9 @@ class AgentConfigSerializer:
         # Tools
         if agent.tools:
             agent_stateful = getattr(agent, "stateful", False)
-            config["tools"] = [self._serialize_tool(t, agent_stateful=agent_stateful) for t in agent.tools]
+            config["tools"] = [
+                self._serialize_tool(t, agent_stateful=agent_stateful) for t in agent.tools
+            ]
 
         # Sub-agents (recursive)
         if agent.agents:
@@ -131,9 +142,17 @@ class AgentConfigSerializer:
         if agent.max_tokens is not None:
             config["maxTokens"] = agent.max_tokens
 
+        # Context window budget for proactive condensation
+        if agent.context_window_budget is not None:
+            config["contextWindowBudget"] = agent.context_window_budget
+
         # Temperature
         if agent.temperature is not None:
             config["temperature"] = agent.temperature
+
+        # Reasoning effort (OpenAI reasoning models)
+        if getattr(agent, "reasoning_effort", None) is not None:
+            config["reasoningEffort"] = agent.reasoning_effort
 
         # Stop when
         if agent.stop_when is not None:
@@ -160,9 +179,22 @@ class AgentConfigSerializer:
         if agent.metadata:
             config["metadata"] = agent.metadata
 
-        # Planner
-        if getattr(agent, "planner", False):
-            config["planner"] = True
+        # Plan-first preamble (Google ADK feature; renamed from ``planner``
+        # boolean to ``enable_planning`` to free the ``planner`` JSON slot
+        # for the PLAN_EXECUTE sub-agent below).
+        if getattr(agent, "enable_planning", False):
+            config["enablePlanning"] = True
+
+        # PLAN_EXECUTE named slots: planner (required) + fallback (optional).
+        # Both serialize as nested AgentConfig dicts. The server reads them
+        # in MultiAgentCompiler.compilePlanExecute; the parent's ``tools``
+        # list (already serialized above) becomes ``knownToolNames`` on PAC.
+        planner_agent = getattr(agent, "planner", None)
+        if planner_agent is not None and not isinstance(planner_agent, bool):
+            config["planner"] = self._serialize_agent(planner_agent)
+        fallback_agent = getattr(agent, "fallback", None)
+        if fallback_agent is not None:
+            config["fallback"] = self._serialize_agent(fallback_agent)
 
         # Callbacks — emit for any position that has handlers or legacy callables
         from agentspan.agents.callback import (
@@ -200,6 +232,40 @@ class AgentConfigSerializer:
         if getattr(agent, "required_tools", None):
             config["requiredTools"] = agent.required_tools
 
+        if getattr(agent, "prefill_tools", None):
+            config["prefillTools"] = [
+                {"toolName": pt.tool_name, "arguments": pt.arguments} for pt in agent.prefill_tools
+            ]
+
+        if getattr(agent, "fallback_max_turns", None) is not None:
+            config["fallbackMaxTurns"] = agent.fallback_max_turns
+
+        if getattr(agent, "plan_source", None) is not None:
+            config["planSource"] = agent.plan_source
+
+        if getattr(agent, "planner_context", None):
+            # Entries are Context dataclasses (normalised by Agent.__init__)
+            # or raw dicts when hand-rolled. Call .to_dict() when present;
+            # otherwise pass through.
+            wire_entries = []
+            for entry in agent.planner_context:
+                if hasattr(entry, "to_dict"):
+                    wire_entries.append(entry.to_dict())
+                else:
+                    wire_entries.append(entry)
+            config["plannerContext"] = wire_entries
+
+        # Synthesize flag — whether to append a final LLM synthesis step
+        # after specialist agents complete. Default true; pass through only
+        # when explicitly disabled to keep payloads small.
+        if not getattr(agent, "synthesize", True):
+            config["synthesize"] = False
+
+        # Masked fields — input/output field names to redact in execution
+        # history and UI. Maps to Conductor's WorkflowDef.maskedFields.
+        if getattr(agent, "masked_fields", None):
+            config["maskedFields"] = list(agent.masked_fields)
+
         # Gate condition (for sequential pipelines)
         if getattr(agent, "gate", None) is not None:
             config["gate"] = self._serialize_gate(agent)
@@ -232,10 +298,6 @@ class AgentConfigSerializer:
                 c if isinstance(c, str) else c.env_var for c in agent.credentials
             ]
 
-        # Masked fields — redacted in execution history and UI
-        if getattr(agent, "masked_fields", None):
-            config["maskedFields"] = list(agent.masked_fields)
-
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}
 
@@ -262,6 +324,9 @@ class AgentConfigSerializer:
 
         if td.timeout_seconds is not None:
             result["timeoutSeconds"] = td.timeout_seconds
+
+        if td.max_calls is not None:
+            result["maxCalls"] = td.max_calls
 
         if td.config:
             if td.tool_type == "agent_tool" and "agent" in td.config:

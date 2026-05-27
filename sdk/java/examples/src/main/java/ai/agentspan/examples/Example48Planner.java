@@ -62,7 +62,7 @@ public class Example48Planner {
                 "You are a research writer. Research topics thoroughly and "
                 + "write structured reports with multiple sections.")
             .tools(tools)
-            .planner(true)
+            .enablePlanning(true)
             .build();
 
         AgentResult result = Agentspan.run(agent,

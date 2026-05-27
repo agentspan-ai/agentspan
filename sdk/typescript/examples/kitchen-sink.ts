@@ -846,7 +846,7 @@ const analyticsAgent = new Agent({
   },
   credentials: ['GITHUB_TOKEN', 'GH_TOKEN'],
   metadata: { stage: 'analytics', version: '1.0' },
-  planner: true,                          // #69
+  enablePlanning: true,                   // #69 — plan-first preamble (Google ADK style)
 });
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
  * Mirrors the Python Agent class fields for server-side compilation.
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -57,14 +57,26 @@ public class AgentConfig {
     private MemoryConfig memory;
 
     @Builder.Default
-    private int maxTurns = 25;
+    private int maxTurns = 100;
 
     private Integer maxTokens;
+
+    /** Token budget for context condensation. When the estimated prompt token count
+     *  exceeds this value, condensation fires proactively — even if well below
+     *  the model's actual context window. */
+    private Integer contextWindowBudget;
 
     @Builder.Default
     private int timeoutSeconds = 0;
 
     private Double temperature;
+
+    /**
+     * OpenAI reasoning models (o1, gpt-5-codex, etc.) accept
+     * "minimal" | "low" | "medium" | "high". Forwarded to
+     * {@code ChatCompletion.reasoningEffort}; ignored by non-reasoning models.
+     */
+    private String reasoningEffort;
 
     /** Worker reference for stop_when callable. */
     private WorkerRef stopWhen;
@@ -90,11 +102,35 @@ public class AgentConfig {
     /** Extended thinking/reasoning config. */
     private ThinkingConfig thinkingConfig;
 
-    /** Whether the agent should plan before executing. */
-    private Boolean planner;
+    /**
+     * Whether the agent should plan before executing. Augments the system
+     * prompt with a "plan first, then execute" preamble. Used by the Google
+     * ADK normalizer; unrelated to the {@link #planner} sub-agent slot
+     * below.
+     */
+    private Boolean enablePlanning;
+
+    /**
+     * PLAN_EXECUTE: the agent that produces the JSON plan. Required when
+     * {@link #strategy} is {@code "plan_execute"}. The planner can be a
+     * simple agent or a multi-agent (e.g. SEQUENTIAL of explorer + planner).
+     * Replaces the old positional {@code agents.get(0)}.
+     */
+    private AgentConfig planner;
+
+    /**
+     * PLAN_EXECUTE: the agent that runs agentically when the plan can't
+     * compile or the compiled SUB_WORKFLOW fails at execution. Optional —
+     * if absent, plan failures TERMINATE the workflow. Replaces the old
+     * positional {@code agents.get(1)}.
+     */
+    private AgentConfig fallback;
 
     /** Tools that must be called before the agent can complete. */
     private List<String> requiredTools;
+
+    /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+    private List<PrefillToolCallConfig> prefillTools;
 
     /**
      * Gate condition for conditional sequential pipelines.
@@ -104,6 +140,47 @@ public class AgentConfig {
 
     /** Agent-level credential names (e.g. ["GH_TOKEN", "AWS_ACCESS_KEY_ID"]). */
     private List<String> credentials;
+
+    /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+    private Integer fallbackMaxTurns;
+
+    /**
+     * Optional deterministic plan source for PLAN_EXECUTE strategy.
+     * A SIMPLE task is called after the planner to read the plan from an external source
+     * (e.g. contextbook). If the planner's text output fails extraction, this fallback
+     * source is tried. Format: {"tool": "tool_name", "args": {"key": "value"}}.
+     */
+    private Map<String, Object> planSource;
+
+    /**
+     * PLAN_EXECUTE planner context: a list of text snippets and/or URLs whose
+     * contents are appended to the planner's user prompt as a {@code ## Reference
+     * Context} block at runtime. URLs are fetched <em>per planner invocation</em>
+     * (no compile-time fetch, no cache) so doc edits go live without recompile.
+     *
+     * <p>Each entry has either {@code text} (inlined verbatim) or {@code url}
+     * (HTTP GET, body included). URL entries may declare:
+     * <ul>
+     *   <li>{@code headers}: arbitrary HTTP headers. Values may contain
+     *       {@code ${CRED_NAME}} placeholders that resolve against the agent's
+     *       credential store at request time — same shape as
+     *       {@code ToolConfig.config.headers}, so e.g. Confluence/Notion
+     *       bearer tokens work without a separate auth pipeline.</li>
+     *   <li>{@code required}: when {@code true} (default) a fetch failure
+     *       fails the workflow; when {@code false} a {@code [doc unavailable]}
+     *       marker is substituted and the planner runs on partial context.</li>
+     *   <li>{@code maxBytes}: per-doc truncation cap (default 16384).
+     *       Larger responses are truncated with a {@code [doc truncated]}
+     *       marker so a single oversized wiki page can't blow the planner's
+     *       context window.</li>
+     * </ul>
+     *
+     * <p>Only meaningful when {@link #strategy} is {@code "plan_execute"};
+     * the compiler emits HTTP fetch tasks for URL entries inside the
+     * planner-route live branch (skipped when {@code static_plan} is set,
+     * so the static-plan path stays free of fetch latency).
+     */
+    private List<Map<String, Object>> plannerContext;
 
     /**
      * Input/output field names whose values should be redacted in the execution

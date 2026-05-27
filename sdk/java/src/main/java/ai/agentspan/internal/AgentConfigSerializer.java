@@ -120,8 +120,16 @@ public class AgentConfigSerializer {
             agentMap.put("model", agent.getModel());
         }
 
-        // Strategy — only if sub-agents present
-        if (agent.getAgents() != null && !agent.getAgents().isEmpty()) {
+        // Strategy — emit when any of the multi-agent inputs is set: the legacy
+        // ``agents=[…]`` positional list OR PLAN_EXECUTE's named slots
+        // (``planner=`` / ``fallback=``). Without the slot check, a
+        // PLAN_EXECUTE coordinator built with ``.planner(...).fallback(...)``
+        // sent an empty agents list, no strategy field, and the server
+        // dispatched it as ``handoff`` (the default) — then rejected the
+        // named slots with HTTP 400.
+        boolean hasAgents = agent.getAgents() != null && !agent.getAgents().isEmpty();
+        boolean hasNamedSlots = agent.getPlanner() != null || agent.getFallback() != null;
+        if (hasAgents || hasNamedSlots) {
             agentMap.put("strategy", agent.getStrategy().toJsonValue());
         }
 
@@ -223,9 +231,24 @@ public class AgentConfigSerializer {
             agentMap.put("allowedTransitions", agent.getAllowedTransitions());
         }
 
-        // Planner mode
-        if (agent.isPlanner()) {
-            agentMap.put("planner", true);
+        // Plan-first preamble (Google ADK style). Renamed from "planner"
+        // because the server's AgentConfig now uses that JSON key for the
+        // PLAN_EXECUTE planner sub-agent slot. Emitting "planner": true
+        // (boolean) into a slot the server expects to be an AgentConfig
+        // object would either fail Jackson deserialisation or silently null.
+        if (agent.isEnablePlanning()) {
+            agentMap.put("enablePlanning", true);
+        }
+
+        // PLAN_EXECUTE named slots: planner (required) + fallback (optional).
+        // Both serialize as nested AgentConfig dicts. The server reads them
+        // in MultiAgentCompiler.compilePlanExecute; the parent's ``tools``
+        // list (serialized above) becomes the planner's allowed-tool set.
+        if (agent.getPlanner() != null) {
+            agentMap.put("planner", serializeAgent(agent.getPlanner()));
+        }
+        if (agent.getFallback() != null) {
+            agentMap.put("fallback", serializeAgent(agent.getFallback()));
         }
 
         // Synthesize — only emit when explicitly disabled (true is the server default)
@@ -325,6 +348,18 @@ public class AgentConfigSerializer {
             agentMap.put("requiredTools", agent.getRequiredTools());
         }
 
+        // Prefill tools (tool calls to execute before the first LLM turn)
+        if (agent.getPrefillTools() != null && !agent.getPrefillTools().isEmpty()) {
+            List<Map<String, Object>> prefillList = new ArrayList<>();
+            for (var pt : agent.getPrefillTools()) {
+                Map<String, Object> ptMap = new LinkedHashMap<>();
+                ptMap.put("toolName", pt.getToolName());
+                ptMap.put("arguments", pt.getArguments());
+                prefillList.add(ptMap);
+            }
+            agentMap.put("prefillTools", prefillList);
+        }
+
         // Agent-level credentials
         if (agent.getCredentials() != null && !agent.getCredentials().isEmpty()) {
             agentMap.put("credentials", agent.getCredentials());
@@ -340,6 +375,22 @@ public class AgentConfigSerializer {
             Map<String, Object> stopWhen = new LinkedHashMap<>();
             stopWhen.put("taskName", agent.getStopWhenTaskName());
             agentMap.put("stopWhen", stopWhen);
+        }
+
+        // Fallback max turns (PLAN_EXECUTE strategy)
+        if (agent.getFallbackMaxTurns() != null) {
+            agentMap.put("fallbackMaxTurns", agent.getFallbackMaxTurns());
+        }
+
+        // Planner context (PLAN_EXECUTE strategy) — text snippets + URLs
+        // injected into the planner's prompt. Each Context entry serialises
+        // via toJson() — defaults are omitted so the payload stays tight.
+        if (agent.getPlannerContext() != null && !agent.getPlannerContext().isEmpty()) {
+            java.util.List<Map<String, Object>> ctx = new java.util.ArrayList<>();
+            for (ai.agentspan.plans.Context entry : agent.getPlannerContext()) {
+                ctx.add(entry.toJson());
+            }
+            agentMap.put("plannerContext", ctx);
         }
 
         // Stateful mode
@@ -452,6 +503,9 @@ public class AgentConfigSerializer {
         }
         if (tool.getTimeoutSeconds() > 0) {
             toolMap.put("timeoutSeconds", tool.getTimeoutSeconds());
+        }
+        if (tool.getMaxCalls() > 0) {
+            toolMap.put("maxCalls", tool.getMaxCalls());
         }
         if (tool.getRetryCount() != 2) {
             toolMap.put("retryCount", tool.getRetryCount());

@@ -181,11 +181,21 @@ class TestSuite12TerminationGates:
         Counterfactual: if MaxMessageTermination is broken, the termination
         task either does not run or returns should_continue=true.
         """
+        # Force tool use so the loop iterates more than once. Conductor's
+        # newer chat-model provider would otherwise answer "Count from 1 to
+        # 100" directly in a single STOP turn — which makes the test about
+        # LLM tool-calling proclivity rather than about MaxMessageTermination
+        # semantics, which is what we actually want to verify here.
         agent = Agent(
             name="e2e_s12_max_msg",
             model=model,
             max_turns=25,
-            instructions="Answer briefly.",
+            instructions=(
+                "You are a counting assistant. You MUST use the echo_tool for every "
+                "step — never answer directly. Call echo_tool once per number with "
+                "{text: \"<number>\"}. After each tool result, call echo_tool again "
+                "for the next number. Continue until told to stop."
+            ),
             tools=[echo_tool],
             termination=MaxMessageTermination(1),
         )

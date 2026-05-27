@@ -11,13 +11,23 @@ export class AgentspanError extends Error {
 
 /**
  * HTTP API error with status code and response body.
+ *
+ * The message includes a snippet of the response body so test failures
+ * (and other call sites that only surface ``error.message``) carry the
+ * server's actual diagnostic instead of just the status code — without
+ * which 500 responses on /agent/start become impossible to triage from
+ * CI logs alone.
  */
 export class AgentAPIError extends AgentspanError {
   readonly statusCode: number;
   readonly responseBody: string;
 
   constructor(message: string, statusCode: number, responseBody: string) {
-    super(message);
+    const snippet = (responseBody ?? "").trim();
+    const composed = snippet
+      ? `${message} — body: ${snippet.slice(0, 500)}${snippet.length > 500 ? "…" : ""}`
+      : message;
+    super(composed);
     this.name = "AgentAPIError";
     this.statusCode = statusCode;
     this.responseBody = responseBody;

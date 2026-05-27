@@ -7,6 +7,7 @@ import ai.agentspan.enums.Strategy;
 import ai.agentspan.execution.CliConfig;
 import ai.agentspan.handoff.Handoff;
 import ai.agentspan.model.GuardrailDef;
+import ai.agentspan.model.PrefillToolCall;
 import ai.agentspan.model.PromptTemplate;
 import ai.agentspan.model.ToolDef;
 import ai.agentspan.termination.TerminationCondition;
@@ -56,7 +57,11 @@ public class Agent {
     private final String sessionId;
     private final List<Handoff> handoffs;
     private final Map<String, List<String>> allowedTransitions;
-    private final boolean planner;
+    /** Plan-first preamble flag (Google ADK style). Renamed from
+     *  ``planner`` because the server-side AgentConfig now uses that JSON
+     *  key for the PLAN_EXECUTE planner sub-agent slot. Wire-incompatible
+     *  with the old name. */
+    private final boolean enablePlanning;
     private final boolean localCodeExecution;
     private final java.util.List<String> allowedLanguages;
     private final int codeExecutionTimeout;
@@ -72,6 +77,18 @@ public class Agent {
     private final Map<String, Object> metadata;
     private final List<String> allowedCommands;
     private final String stopWhenTaskName;
+    private final Integer fallbackMaxTurns;
+    /** PLAN_EXECUTE named slots: planner (required) and fallback (optional).
+     *  The server rejects the legacy ``agents=[planner, fallback]`` positional
+     *  shape with HTTP 400 once strategy is PLAN_EXECUTE — set these instead. */
+    private final Agent planner;
+    private final Agent fallback;
+    /** PLAN_EXECUTE planner context — text snippets / URLs whose bodies are
+     *  fetched at planner-run time and appended to the planner prompt as a
+     *  ``## Reference Context`` block. Only meaningful with PLAN_EXECUTE;
+     *  the server compiler skips emission for any other strategy. */
+    private final List<ai.agentspan.plans.Context> plannerContext;
+    private final List<PrefillToolCall> prefillTools;
     private final boolean synthesize;
     private final boolean stateful;
     private final String baseUrl;
@@ -100,7 +117,7 @@ public class Agent {
         this.sessionId = builder.sessionId;
         this.handoffs = builder.handoffs != null ? new ArrayList<>(builder.handoffs) : new ArrayList<>();
         this.allowedTransitions = builder.allowedTransitions;
-        this.planner = builder.planner;
+        this.enablePlanning = builder.enablePlanning;
         this.localCodeExecution = builder.localCodeExecution;
         this.allowedLanguages = builder.allowedLanguages != null ? new ArrayList<>(builder.allowedLanguages) : null;
         this.codeExecutionTimeout = builder.codeExecutionTimeout;
@@ -116,6 +133,25 @@ public class Agent {
         this.metadata = builder.metadata;
         this.allowedCommands = builder.allowedCommands != null ? new ArrayList<>(builder.allowedCommands) : new ArrayList<>();
         this.stopWhenTaskName = builder.stopWhenTaskName;
+        this.fallbackMaxTurns = builder.fallbackMaxTurns;
+        this.planner = builder.planner;
+        this.fallback = builder.fallback;
+        // plannerContext is only meaningful for PLAN_EXECUTE. Reject loudly
+        // here so misconfig doesn't propagate to the server — same shape
+        // as the planner/fallback validation in Python/TS SDKs.
+        if (builder.plannerContext != null && !builder.plannerContext.isEmpty()) {
+            if (builder.strategy != ai.agentspan.enums.Strategy.PLAN_EXECUTE) {
+                throw new IllegalArgumentException(
+                        "plannerContext is only valid with strategy=PLAN_EXECUTE. "
+                                + "Got strategy=" + builder.strategy + ". The context block "
+                                + "is appended to the planner's user prompt at runtime, "
+                                + "which only exists in PLAN_EXECUTE.");
+            }
+            this.plannerContext = new ArrayList<>(builder.plannerContext);
+        } else {
+            this.plannerContext = null;
+        }
+        this.prefillTools = builder.prefillTools != null ? new ArrayList<>(builder.prefillTools) : new ArrayList<>();
         this.synthesize = builder.synthesize;
         this.stateful = builder.stateful;
         this.baseUrl = builder.baseUrl;
@@ -182,7 +218,7 @@ public class Agent {
     public String getSessionId() { return sessionId; }
     public List<Handoff> getHandoffs() { return handoffs; }
     public Map<String, List<String>> getAllowedTransitions() { return allowedTransitions; }
-    public boolean isPlanner() { return planner; }
+    public boolean isEnablePlanning() { return enablePlanning; }
     public boolean isLocalCodeExecution() { return localCodeExecution; }
     public java.util.List<String> getAllowedLanguages() { return allowedLanguages; }
     public int getCodeExecutionTimeout() { return codeExecutionTimeout; }
@@ -198,6 +234,11 @@ public class Agent {
     public Map<String, Object> getMetadata() { return metadata; }
     public List<String> getAllowedCommands() { return allowedCommands; }
     public String getStopWhenTaskName() { return stopWhenTaskName; }
+    public Integer getFallbackMaxTurns() { return fallbackMaxTurns; }
+    public Agent getPlanner() { return planner; }
+    public Agent getFallback() { return fallback; }
+    public List<ai.agentspan.plans.Context> getPlannerContext() { return plannerContext; }
+    public List<PrefillToolCall> getPrefillTools() { return prefillTools; }
     public boolean isSynthesize() { return synthesize; }
     public boolean isStateful() { return stateful; }
     public String getBaseUrl() { return baseUrl; }
@@ -246,7 +287,7 @@ public class Agent {
         private String sessionId;
         private List<Handoff> handoffs;
         private Map<String, List<String>> allowedTransitions;
-        private boolean planner = false;
+        private boolean enablePlanning = false;
         private boolean localCodeExecution = false;
         private java.util.List<String> allowedLanguages = null;
         private int codeExecutionTimeout = 30;
@@ -262,6 +303,11 @@ public class Agent {
         private Map<String, Object> metadata;
         private List<String> allowedCommands;
         private String stopWhenTaskName;
+        private Integer fallbackMaxTurns;
+        private Agent planner;
+        private Agent fallback;
+        private List<ai.agentspan.plans.Context> plannerContext;
+        private List<PrefillToolCall> prefillTools;
         private boolean synthesize = true;
         private boolean stateful = false;
         private String baseUrl;
@@ -402,11 +448,15 @@ public class Agent {
         }
 
         /**
-         * Enable planner mode. The server enhances the system prompt with planning
-         * instructions so the agent creates a step-by-step plan before executing tools.
+         * Enable plan-first preamble (Google ADK style). When true, the
+         * server enhances the system prompt with "create a step-by-step
+         * plan before executing tools." Renamed from {@code planner(...)}
+         * because the server now uses the {@code planner} JSON key for the
+         * PLAN_EXECUTE planner sub-agent slot — keeping the old name would
+         * ship a boolean into a sub-agent slot.
          */
-        public Builder planner(boolean planner) {
-            this.planner = planner;
+        public Builder enablePlanning(boolean enablePlanning) {
+            this.enablePlanning = enablePlanning;
             return this;
         }
 
@@ -567,6 +617,67 @@ public class Agent {
          */
         public Builder stopWhen(String taskName) {
             this.stopWhenTaskName = taskName;
+            return this;
+        }
+
+        /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
+        public Builder fallbackMaxTurns(int fallbackMaxTurns) {
+            this.fallbackMaxTurns = fallbackMaxTurns;
+            return this;
+        }
+
+        /**
+         * PLAN_EXECUTE planner sub-agent (required when ``strategy == PLAN_EXECUTE``).
+         * The server rejects ``agents=[planner, fallback]`` for this strategy with
+         * HTTP 400 — use this named slot instead.
+         */
+        public Builder planner(Agent planner) {
+            this.planner = planner;
+            return this;
+        }
+
+        /**
+         * PLAN_EXECUTE fallback sub-agent (optional). Used when the planner's
+         * output cannot be compiled into a sub-workflow, or when the compiled
+         * sub-workflow itself fails at runtime.
+         */
+        public Builder fallback(Agent fallback) {
+            this.fallback = fallback;
+            return this;
+        }
+
+        /**
+         * PLAN_EXECUTE planner context — a list of text snippets and/or URLs
+         * appended to the planner's user prompt as a {@code ## Reference Context}
+         * block at runtime. URLs are fetched per planner invocation (no
+         * compile-time fetch, no cache) so doc edits go live without recompile.
+         *
+         * <p>Pass {@link ai.agentspan.plans.Context} entries built via
+         * {@code Context.text(...)} or {@code Context.url(...)} /
+         * {@code Context.builder().url(...).header(...).build()} for credentialed
+         * fetches — credential placeholders in the {@code ${CRED_NAME}} shape
+         * are escaped server-side and resolved by the same credential pipeline
+         * as HTTP tool headers.
+         */
+        public Builder plannerContext(List<ai.agentspan.plans.Context> plannerContext) {
+            this.plannerContext = plannerContext;
+            return this;
+        }
+
+        /** Shorthand: single-entry text-only planner context. Equivalent to
+         *  {@code plannerContext(List.of(Context.text(text)))}. */
+        public Builder plannerContext(String... texts) {
+            List<ai.agentspan.plans.Context> ctx = new ArrayList<>();
+            for (String t : texts) {
+                ctx.add(ai.agentspan.plans.Context.text(t));
+            }
+            this.plannerContext = ctx;
+            return this;
+        }
+
+        /** Tool calls to execute before the first LLM turn. Results are injected into context. */
+        public Builder prefillTools(List<PrefillToolCall> prefillTools) {
+            this.prefillTools = prefillTools;
             return this;
         }
 
