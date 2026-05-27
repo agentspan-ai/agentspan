@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -436,7 +437,14 @@ public class AgentService {
      * Search agent executions with optional filters.
      */
     public Map<String, Object> searchAgentExecutions(
-            int start, int size, String sort, String freeText, String status, String agentName, String sessionId) {
+            int start,
+            int size,
+            String sort,
+            String freeText,
+            String status,
+            String agentName,
+            String sessionId,
+            boolean includeEvalRuns) {
         // Determine which workflow types to query
         List<String> workflowNames;
         if (agentName != null && !agentName.isEmpty()) {
@@ -469,7 +477,9 @@ public class AgentService {
         SearchResult<WorkflowSummary> searchResult =
                 workflowService.searchWorkflows(start, size, sort, searchText, query.toString());
 
-        List<AgentExecutionSummary> results = searchResult.getResults().stream()
+        List<WorkflowSummary> rawPage = searchResult.getResults();
+        List<AgentExecutionSummary> results = rawPage.stream()
+                .filter(ws -> includeEvalRuns || !isEvalRun(ws.getInput()))
                 .map(ws -> AgentExecutionSummary.builder()
                         .executionId(ws.getWorkflowId())
                         .agentName(ws.getWorkflowType())
@@ -485,10 +495,37 @@ public class AgentService {
                         .build())
                 .collect(Collectors.toList());
 
+        // Adjust totalHits to account for eval runs filtered out on this page.
+        // Exact cross-page total is not available without a separate query, so we
+        // subtract the per-page filtered count as a best-effort approximation.
+        long filteredOut = rawPage.size() - results.size();
+        long totalHits = Math.max(0, searchResult.getTotalHits() - filteredOut);
+
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("totalHits", searchResult.getTotalHits());
+        response.put("totalHits", totalHits);
         response.put("results", results);
         return response;
+    }
+
+    /**
+     * Returns true when the workflow input indicates an eval run.
+     *
+     * <p>Conductor's WorkflowSummary serializes input via SummaryUtil which uses either JSON
+     * ({@code "key":"value"}) or Map.toString() ({@code key=value}) depending on config. Both
+     * formats are checked to ensure eval runs are detected regardless of Conductor configuration.
+     */
+    private static final Pattern EVAL_SESSION_PATTERN = Pattern.compile("\"session_id\"\\s*:\\s*\"eval:");
+
+    private boolean isEvalRun(String input) {
+        if (input == null) return false;
+        // JSON format: {"_eval_run":true, ...}
+        if (input.contains("\"_eval_run\":true")) return true;
+        // Map.toString() format: {_eval_run=true, ...}
+        if (input.contains("_eval_run=true")) return true;
+        // JSON format: {"session_id": "eval:..."}
+        if (EVAL_SESSION_PATTERN.matcher(input).find()) return true;
+        // Map.toString() format: {session_id=eval:...}
+        return input.contains("session_id=eval:");
     }
 
     /**
@@ -1502,8 +1539,15 @@ public class AgentService {
     }
 
     public SearchResult<WorkflowSummary> searchExecutionsRaw(
-            int start, int size, String sort, String freeText, String query) {
-        return workflowService.searchWorkflows(start, size, sort, freeText, query);
+            int start, int size, String sort, String freeText, String query, boolean includeEvalRuns) {
+        SearchResult<WorkflowSummary> result = workflowService.searchWorkflows(start, size, sort, freeText, query);
+        if (!includeEvalRuns) {
+            List<WorkflowSummary> filtered = result.getResults().stream()
+                    .filter(ws -> !isEvalRun(ws.getInput()))
+                    .collect(Collectors.toList());
+            return new SearchResult<>(result.getTotalHits(), filtered);
+        }
+        return result;
     }
 
     public WorkflowDef getAgentDefinition(String name, Integer version) {

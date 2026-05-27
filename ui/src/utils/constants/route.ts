@@ -151,3 +151,11 @@ export const API_REFERENCE_URL = {
 };
 
 export const CREDENTIALS_URL = "/credentials";
+
+export const EXPERIMENTS_URL = {
+  BASE: "/experiments",
+  EVAL_RUNS: "/experiments/eval-runs",
+  EVAL_RUN_DETAIL: "/experiments/eval-runs/:id",
+  DATASETS: "/experiments/datasets",
+  DATASET_DETAIL: "/experiments/datasets/:name",
+};

@@ -50,6 +50,7 @@ const SwitchComponent = ({
 
 export default function AgentPanel() {
   const [asQuery, setAsQuery] = useQueryState("asQuery", false);
+  const [includeEvalRuns, setIncludeEvalRuns] = useQueryState("includeEvalRuns", false);
   const [freeText, setFreeText] = useQueryState("freeText", "");
   const [status, setStatus] = useQueryState<string[]>("status", []);
   const [openDateSelect, setOpenDateSelect] = useState(false);
@@ -191,6 +192,8 @@ export default function AgentPanel() {
             openEndDatePicker={openEndDatePicker}
             setEndOpenDatePicker={setEndOpenDatePicker}
             recentSearches={recentSearches}
+            includeEvalRuns={includeEvalRuns}
+            onToggleEvalRuns={() => setIncludeEvalRuns(!includeEvalRuns)}
           />
         ) : (
           <BasicSearch
@@ -226,6 +229,8 @@ export default function AgentPanel() {
             openEndDatePicker={openEndDatePicker}
             setEndOpenDatePicker={setEndOpenDatePicker}
             recentSearches={recentSearches}
+            includeEvalRuns={includeEvalRuns}
+            onToggleEvalRuns={() => setIncludeEvalRuns(!includeEvalRuns)}
           />
         )}
       </SectionContainer>

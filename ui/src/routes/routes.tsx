@@ -36,6 +36,11 @@ import {
   Agent as AgentDefinitions,
 } from "pages/definitions";
 import ErrorPage from "pages/error/ErrorPage";
+import {
+  DatasetsList,
+  EvalRunDetail,
+  EvalRunsList,
+} from "pages/experiments";
 import { SchedulerExecutions, AgentSearch } from "pages/executions";
 import { SkillDetailPage, SkillsPage } from "pages/skills";
 import { pluginRegistry } from "plugins/registry";
@@ -43,6 +48,7 @@ import { featureFlags, FEATURES } from "utils";
 import {
   API_REFERENCE_URL,
   CREDENTIALS_URL,
+  EXPERIMENTS_URL,
   RUN_AGENT_URL,
   SCHEDULER_DEFINITION_URL,
   TASK_QUEUE_URL,
@@ -120,6 +126,26 @@ const getCoreAuthenticatedRoutes = () => [
   {
     path: API_REFERENCE_URL.BASE,
     element: <ApiReferencePage />,
+  },
+
+  // Experiments — Eval Runs
+  {
+    path: EXPERIMENTS_URL.EVAL_RUNS,
+    element: <EvalRunsList />,
+  },
+  {
+    path: EXPERIMENTS_URL.EVAL_RUN_DETAIL,
+    element: <EvalRunDetail />,
+  },
+
+  // Experiments — Datasets (split-panel; DATASET_DETAIL also renders DatasetsList with selection)
+  {
+    path: EXPERIMENTS_URL.DATASETS,
+    element: <DatasetsList />,
+  },
+  {
+    path: EXPERIMENTS_URL.DATASET_DETAIL,
+    element: <DatasetsList />,
   },
 
 ];
