@@ -24,10 +24,22 @@ public class UserRepository {
 
     private static final BCryptPasswordEncoder BCRYPT = new BCryptPasswordEncoder();
 
+    // BCrypt hashes only the first 72 bytes of the input (GHSA-mg83-c7gq-rv5c).
+    // Reject longer inputs at this boundary so that two passwords sharing
+    // their first 72 chars but differing in the tail never collide.
+    private static final int MAX_PASSWORD_LENGTH = 72;
+
     private final NamedParameterJdbcTemplate jdbc;
 
     public UserRepository(@Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
+    }
+
+    private static void requireValidPasswordLength(String raw) {
+        if (raw != null && raw.length() > MAX_PASSWORD_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Password exceeds maximum length of " + MAX_PASSWORD_LENGTH + " characters");
+        }
     }
 
     public Optional<User> findByUsername(String username) {
@@ -61,6 +73,7 @@ public class UserRepository {
      * Returns the created User (password hash never in User DTO).
      */
     public User create(String username, String name, String email, String plainPassword) {
+        requireValidPasswordLength(plainPassword);
         String id = UUID.randomUUID().toString();
         String hash = plainPassword != null ? BCRYPT.encode(plainPassword) : null;
         String now = Instant.now().toString();
@@ -88,6 +101,11 @@ public class UserRepository {
      * Returns false if user not found, or password does not match.
      */
     public boolean checkPassword(String username, String plainPassword) {
+        // Reject over-length attempts before hashing so we don't leak the
+        // first-72-byte truncation behaviour of BCrypt to attackers.
+        if (plainPassword != null && plainPassword.length() > MAX_PASSWORD_LENGTH) {
+            return false;
+        }
         try {
             String hash = jdbc.queryForObject(
                     "SELECT password_hash FROM users WHERE username = :u", Map.of("u", username), String.class);

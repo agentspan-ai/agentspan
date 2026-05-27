@@ -167,4 +167,38 @@ class ModelContextWindowsTest {
         OptionalInt result = ModelContextWindows.getContextWindowFromDefaults("");
         assertThat(result).isEmpty();
     }
+
+    // ── Regression: gpt-5.3-codex must be known so proactive condensation
+    // fires before the conversation blows past the model's context window
+    // (execution cfca8846 failed at coder iteration 19 with 400
+    // context_length_exceeded because this lookup returned empty).
+    @Test
+    void getContextWindow_exactMatch_gpt53Codex() {
+        OptionalInt result = ModelContextWindows.getContextWindowFromDefaults("gpt-5.3-codex");
+        assertThat(result).isPresent();
+        assertThat(result.getAsInt()).isEqualTo(400_000);
+    }
+
+    @Test
+    void getContextWindow_prefixMatch_gpt53WithSuffix() {
+        OptionalInt result = ModelContextWindows.getContextWindowFromDefaults("gpt-5.3-codex-2026-04");
+        assertThat(result).isPresent();
+        assertThat(result.getAsInt()).isEqualTo(400_000);
+    }
+
+    @Test
+    void getContextWindow_prefixMatch_gpt53Plain() {
+        OptionalInt result = ModelContextWindows.getContextWindowFromDefaults("gpt-5.3");
+        assertThat(result).isPresent();
+        assertThat(result.getAsInt()).isEqualTo(400_000);
+    }
+
+    @Test
+    void getContextWindow_catchAll_unknownGpt5Variant() {
+        // Catch-all "gpt-5" entry — better a conservative 400k than empty,
+        // which would silently disable proactive condensation.
+        OptionalInt result = ModelContextWindows.getContextWindowFromDefaults("gpt-5.9-future-variant");
+        assertThat(result).isPresent();
+        assertThat(result.getAsInt()).isEqualTo(400_000);
+    }
 }

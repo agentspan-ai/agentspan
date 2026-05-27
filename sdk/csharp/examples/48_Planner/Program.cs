@@ -21,8 +21,8 @@ var agent = new Agent("research_writer_48")
     Instructions =
         "You are a research writer. Research topics thoroughly and " +
         "write structured reports with multiple sections.",
-    Tools   = ToolRegistry.FromInstance(new ResearchTools()),
-    Planner = true,
+    Tools          = ToolRegistry.FromInstance(new ResearchTools()),
+    EnablePlanning = true,
 };
 
 await using var runtime = new AgentRuntime();

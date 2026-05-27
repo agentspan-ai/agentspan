@@ -224,10 +224,12 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
             config.setCallbacks(callbacks);
         }
 
-        // Planner: detect planner field and set flag
+        // Planner: detect planner field and set the plan-first flag.
+        // Google ADK's "planner" is a config that says "plan then execute" —
+        // not a sub-agent ref. Maps to AgentConfig.enablePlanning.
         Object planner = raw.get("planner");
         if (planner != null) {
-            config.setPlanner(true);
+            config.setEnablePlanning(true);
         }
 
         // Guardrails — propagate Agentspan-side safety hooks attached to an

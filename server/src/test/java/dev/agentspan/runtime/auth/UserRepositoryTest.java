@@ -80,4 +80,34 @@ class UserRepositoryTest {
         assertThat(found).isPresent();
         assertThat(found.get().getUsername()).isEqualTo("test_eve");
     }
+
+    // ── BCrypt 72-char truncation guard (GHSA-mg83-c7gq-rv5c) ──────────
+    //
+    // BCryptPasswordEncoder only hashes the first 72 bytes. Without an
+    // explicit length cap, a 73+-char password silently truncates — and an
+    // attacker who knows the first 72 chars can authenticate with any
+    // suffix. Reject longer passwords at the SDK boundary instead.
+
+    @Test
+    void create_rejects_password_longer_than_72_chars() {
+        String tooLong = "a".repeat(73);
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> userRepository.create("test_long", "Long", "long@test.com", tooLong));
+    }
+
+    @Test
+    void checkPassword_rejects_attempt_longer_than_72_chars() {
+        // Create with a 72-char password; an attempt that shares the first
+        // 72 chars but differs at position 73 must NOT authenticate.
+        String base = "a".repeat(72);
+        userRepository.create("test_long_ok", "Long OK", "lo@test.com", base);
+
+        // Sanity: exact match succeeds.
+        assertThat(userRepository.checkPassword("test_long_ok", base)).isTrue();
+
+        // A 73-char attempt is rejected wholesale (length guard) rather
+        // than silently truncated. The result is FALSE, never TRUE.
+        assertThat(userRepository.checkPassword("test_long_ok", base + "X")).isFalse();
+    }
 }

@@ -131,6 +131,9 @@ public class ToolCompiler {
             if (tool.getOutputSchema() != null) {
                 spec.put("outputSchema", tool.getOutputSchema());
             }
+            if (tool.getMaxCalls() != null) {
+                spec.put("maxCalls", tool.getMaxCalls());
+            }
 
             // MCP tools need configParams with server info
             if ("mcp".equals(toolType) && tool.getConfig() != null) {
@@ -360,8 +363,20 @@ public class ToolCompiler {
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
         String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
 
+        // Build the set of all known tool names so the enrich script can
+        // catch hallucinated tool names (LLM emits e.g. "find" when only
+        // "shell" + "list_files" are exposed) and turn them into INLINE
+        // error tasks instead of SCHEDULED-with-no-poller hangs.
+        Map<String, Object> knownToolNames = new LinkedHashMap<>();
+        if (tools != null) {
+            for (ToolConfig t : tools) {
+                if (t.getName() != null) knownToolNames.put(t.getName(), Boolean.TRUE);
+            }
+        }
+        String knownToolNamesJson = JavaScriptBuilder.toJson(knownToolNames);
+
         String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson);
+                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson, knownToolNamesJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -530,7 +545,7 @@ public class ToolCompiler {
 
         Map<String, Object> userMsg = new LinkedHashMap<>();
         userMsg.put("role", "user");
-        userMsg.put("message", "${workflow.input.prompt}");
+        userMsg.put("message", "${workflow.input.prompt}\n\nRespond in json format.");
 
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(systemMsg);
@@ -539,6 +554,7 @@ public class ToolCompiler {
         Map<String, Object> filterLlmInput = new LinkedHashMap<>();
         filterLlmInput.put("llmProvider", provider);
         filterLlmInput.put("model", model);
+        filterLlmInput.put("maxTokens", 4096);
         filterLlmInput.put("messages", messages);
         filterLlmInput.put("temperature", 0);
         filterLlmInput.put("jsonOutput", true);
@@ -1185,11 +1201,12 @@ public class ToolCompiler {
                 + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
                 + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
 
+        filterLlmInputs.put("maxTokens", 4096);
         filterLlmInputs.put(
                 "messages",
                 List.of(
                         Map.of("role", "system", "message", systemPrompt),
-                        Map.of("role", "user", "message", "${workflow.input.prompt}")));
+                        Map.of("role", "user", "message", "${workflow.input.prompt}\n\nRespond in json format.")));
         filterLlmInputs.put("temperature", 0);
         filterLlmInputs.put("jsonOutput", true);
         filterLlm.setInputParameters(filterLlmInputs);
@@ -1251,11 +1268,12 @@ public class ToolCompiler {
                 + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
                 + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
 
+        filterLlmInputs.put("maxTokens", 4096);
         filterLlmInputs.put(
                 "messages",
                 List.of(
                         Map.of("role", "system", "message", systemPrompt),
-                        Map.of("role", "user", "message", "${workflow.input.prompt}")));
+                        Map.of("role", "user", "message", "${workflow.input.prompt}\n\nRespond in json format.")));
         filterLlmInputs.put("temperature", 0);
         filterLlmInputs.put("jsonOutput", true);
         filterLlm.setInputParameters(filterLlmInputs);
@@ -1499,8 +1517,15 @@ public class ToolCompiler {
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String humanJson = JavaScriptBuilder.toJson(humanConfig);
         String wmqJson = JavaScriptBuilder.toJson(wmqConfig);
+        Map<String, Object> knownToolNames = new LinkedHashMap<>();
+        if (tools != null) {
+            for (ToolConfig t : tools) {
+                if (t.getName() != null) knownToolNames.put(t.getName(), Boolean.TRUE);
+            }
+        }
+        String knownToolNamesJson = JavaScriptBuilder.toJson(knownToolNames);
         String script = JavaScriptBuilder.enrichToolsScriptDynamic(
-                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson);
+                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson, knownToolNamesJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 

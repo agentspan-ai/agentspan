@@ -73,11 +73,13 @@ class TokenUsage:
         prompt_tokens: Total input/prompt tokens consumed.
         completion_tokens: Total output/completion tokens generated.
         total_tokens: Sum of prompt + completion tokens.
+        reasoning_tokens: Total reasoning tokens consumed, when reported by the provider.
     """
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    reasoning_tokens: int = 0
 
 
 # ── AgentResult (returned by run()) ─────────────────────────────────────
@@ -173,10 +175,15 @@ class AgentResult:
         if self.tool_calls:
             print(f"Tool calls: {len(self.tool_calls)}")
         if self.token_usage:
+            reasoning = (
+                f", {self.token_usage.reasoning_tokens} reasoning"
+                if self.token_usage.reasoning_tokens
+                else ""
+            )
             print(
                 f"Tokens: {self.token_usage.total_tokens} total "
                 f"({self.token_usage.prompt_tokens} prompt, "
-                f"{self.token_usage.completion_tokens} completion)"
+                f"{self.token_usage.completion_tokens} completion{reasoning})"
             )
         else:
             print("Tokens: —")
@@ -231,6 +238,11 @@ class AgentHandle:
     Args:
         execution_id: The Conductor execution ID.
         runtime: The :class:`AgentRuntime` that launched this workflow.
+        correlation_id: Optional correlation ID for tracing.
+        run_id: Domain UUID for stateful agents; None for stateless.
+        is_resumed: True when the server matched an existing execution
+            via idempotency_key replay. Workers were re-attached to the
+            existing domain rather than registered for a fresh run.
     """
 
     def __init__(
@@ -239,11 +251,16 @@ class AgentHandle:
         runtime: Any,
         correlation_id: Optional[str] = None,
         run_id: Optional[str] = None,
+        is_resumed: bool = False,
     ) -> None:
         self.execution_id = execution_id
         self.correlation_id = correlation_id
         self._runtime = runtime
         self.run_id = run_id  # domain UUID for stateful agents; None for stateless
+        self.is_resumed = is_resumed
+        self._stall_error: Optional["BaseException"] = None
+        self._liveness_monitor: Optional[Any] = None
+        self._stall_restart_count = 0
 
     # ── Status ──────────────────────────────────────────────────────
 
@@ -373,36 +390,62 @@ class AgentHandle:
         Raises:
             TimeoutError: If ``timeout`` is set and the agent execution has not
                 reached a terminal state before the deadline.
+            WorkerStallError: If the liveness monitor detects a SCHEDULED task
+                in our domain that has been queued past
+                ``liveness_stall_seconds`` with no polls, and the configured
+                stall policy is ``"raise"`` (or restarts have been exhausted).
 
         Warning:
             The :class:`AgentRuntime` that created this handle **must remain
             open** (i.e. its ``with`` block must still be active) while
             ``join()`` runs.  Closing the runtime cancels Conductor workers,
             which may stall the execution.
-
-        Example::
-
-            with AgentRuntime() as runtime:
-                handle = runtime.start(agent, "Hello")
-                result = handle.join(timeout=120)
-                print(result.output)
         """
+        import logging
         import time
 
+        logger = logging.getLogger("agentspan.agents.result")
         poll_interval = 1
         elapsed: float = 0.0
+        consecutive_errors = 0
 
-        while True:
-            status = self._runtime.get_status(self.execution_id)
-            if status.is_complete:
-                break
-            if timeout is not None and elapsed >= timeout:
-                raise TimeoutError(
-                    f"Agent execution {self.execution_id!r} did not complete "
-                    f"within {timeout}s."
-                )
-            time.sleep(poll_interval)
-            elapsed += poll_interval
+        self._maybe_start_liveness_monitor()
+
+        try:
+            while True:
+                if self._stall_error is not None:
+                    raise self._stall_error
+
+                try:
+                    status = self._runtime.get_status(self.execution_id)
+                    consecutive_errors = 0
+                except Exception as exc:
+                    consecutive_errors += 1
+                    if consecutive_errors >= 30:
+                        raise RuntimeError(
+                            f"Lost contact with server after 30 consecutive errors "
+                            f"while polling execution {self.execution_id!r}: {exc}"
+                        ) from exc
+                    logger.warning(
+                        "get_status failed (attempt %d/30, will retry): %s",
+                        consecutive_errors,
+                        exc,
+                    )
+                    time.sleep(poll_interval)
+                    elapsed += poll_interval
+                    continue
+
+                if status.is_complete:
+                    break
+                if timeout is not None and elapsed >= timeout:
+                    raise TimeoutError(
+                        f"Agent execution {self.execution_id!r} did not complete "
+                        f"within {timeout}s."
+                    )
+                time.sleep(poll_interval)
+                elapsed += poll_interval
+        finally:
+            self._stop_liveness_monitor()
 
         return self._build_result(status)
 
@@ -421,6 +464,10 @@ class AgentHandle:
         Raises:
             TimeoutError: If ``timeout`` is set and the deadline is reached
                 before the agent execution completes.
+            WorkerStallError: If the liveness monitor detects a SCHEDULED task
+                in our domain that has been queued past
+                ``liveness_stall_seconds`` with no polls, and the configured
+                stall policy is ``"raise"`` (or restarts have been exhausted).
 
         Warning:
             The :class:`AgentRuntime` must remain open while this coroutine
@@ -434,21 +481,50 @@ class AgentHandle:
                 print(result.output)
         """
         import asyncio
+        import logging
 
+        logger = logging.getLogger("agentspan.agents.result")
         poll_interval = 1
         elapsed: float = 0.0
+        consecutive_errors = 0
 
-        while True:
-            status = await self._runtime.get_status_async(self.execution_id)
-            if status.is_complete:
-                break
-            if timeout is not None and elapsed >= timeout:
-                raise TimeoutError(
-                    f"Agent execution {self.execution_id!r} did not complete "
-                    f"within {timeout}s."
-                )
-            await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
+        self._maybe_start_liveness_monitor()
+
+        try:
+            while True:
+                if self._stall_error is not None:
+                    raise self._stall_error
+
+                try:
+                    status = await self._runtime.get_status_async(self.execution_id)
+                    consecutive_errors = 0
+                except Exception as exc:
+                    consecutive_errors += 1
+                    if consecutive_errors >= 30:
+                        raise RuntimeError(
+                            f"Lost contact with server after 30 consecutive errors "
+                            f"while polling execution {self.execution_id!r}: {exc}"
+                        ) from exc
+                    logger.warning(
+                        "get_status_async failed (attempt %d/30, will retry): %s",
+                        consecutive_errors,
+                        exc,
+                    )
+                    await asyncio.sleep(poll_interval)
+                    elapsed += poll_interval
+                    continue
+
+                if status.is_complete:
+                    break
+                if timeout is not None and elapsed >= timeout:
+                    raise TimeoutError(
+                        f"Agent execution {self.execution_id!r} did not complete "
+                        f"within {timeout}s."
+                    )
+                await asyncio.sleep(poll_interval)
+                elapsed += poll_interval
+        finally:
+            self._stop_liveness_monitor()
 
         return self._build_result(status)
 
@@ -459,6 +535,13 @@ class AgentHandle:
         """
         output = self._runtime._normalize_output(status.output, status.status, status.reason)
         token_usage = self._runtime._extract_token_usage(self.execution_id)
+        metadata: Dict[str, Any] = {}
+        attach_reasoning = getattr(self._runtime, "_attach_reasoning_metadata", None)
+        if attach_reasoning is not None:
+            try:
+                output, metadata = attach_reasoning(output, metadata, self.execution_id)
+            except Exception:
+                pass  # Reasoning metadata is best-effort.
         return AgentResult(
             output=output,
             execution_id=self.execution_id,
@@ -467,7 +550,81 @@ class AgentHandle:
             finish_reason=self._runtime._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             token_usage=token_usage,
+            metadata=metadata,
         )
+
+    def _maybe_start_liveness_monitor(self) -> None:
+        """Start a ``ServerLivenessMonitor`` if one isn't already running."""
+        if self._liveness_monitor is not None:
+            return
+        cfg = getattr(self._runtime, "_config", None)
+        if cfg is None or not getattr(cfg, "liveness_enabled", True):
+            return
+        if self.run_id is None:
+            return  # stateless — nothing routed via domain
+        from agentspan.agents.runtime._liveness import ServerLivenessMonitor
+
+        self._liveness_monitor = ServerLivenessMonitor(
+            workflow_client=self._runtime._workflow_client,
+            execution_id=self.execution_id,
+            domain=self.run_id,
+            stall_seconds=cfg.liveness_stall_seconds,
+            check_interval=cfg.liveness_check_interval_seconds,
+            on_stall=self._handle_stall,
+        )
+        self._liveness_monitor.start()
+
+    def _stop_liveness_monitor(self) -> None:
+        """Stop the monitor if it was started."""
+        if self._liveness_monitor is not None:
+            self._liveness_monitor.stop()
+            self._liveness_monitor = None
+
+    def _handle_stall(self, err) -> None:
+        """Apply the configured stall policy to a detected stall.
+
+        - ``"restart_worker"`` (default): SIGKILL the stuck subprocess(es) so
+          Conductor's TaskHandler monitor respawns them. After
+          ``liveness_stall_max_restarts`` cumulative restarts, fall through
+          to ``"raise"``.
+        - ``"raise"``: store the error so the next ``join()`` poll raises.
+        - ``"warn"``: log only.
+        """
+        import logging as _logging
+
+        log = _logging.getLogger("agentspan.agents.result")
+        cfg = getattr(self._runtime, "_config", None)
+        policy = getattr(cfg, "liveness_stall_policy", "restart_worker")
+        max_restarts = getattr(cfg, "liveness_stall_max_restarts", 1)
+
+        stalled_names = sorted({t.task_def_name for t in err.stalled_tasks})
+
+        if policy == "warn":
+            log.warning(
+                "Worker stall detected on execution %s for tasks=%s "
+                "(policy=warn); not raising. %s",
+                err.execution_id, stalled_names, err.remediation,
+            )
+            return
+
+        if policy == "restart_worker" and self._stall_restart_count < max_restarts:
+            from agentspan.agents.runtime._liveness import WorkerRestarter
+
+            wm = getattr(self._runtime, "_worker_manager", None)
+            if wm is not None:
+                killed = WorkerRestarter.restart_for_tasks(wm, stalled_names)
+                self._stall_restart_count += 1
+                log.warning(
+                    "Worker stall detected on %s for tasks=%s (attempt "
+                    "%d/%d) — killed pid(s)=%s; TaskHandler monitor will "
+                    "respawn.",
+                    err.execution_id, stalled_names,
+                    self._stall_restart_count, max_restarts, killed,
+                )
+                return
+
+        # policy="raise" OR restart attempts exhausted
+        self._stall_error = err
 
     def __repr__(self) -> str:
         """Return a developer-friendly string representation.
@@ -633,6 +790,16 @@ class AgentStream:
             except Exception:
                 pass  # token tracking is best-effort
 
+        metadata: Dict[str, Any] = {}
+        attach_reasoning = getattr(self.handle._runtime, "_attach_reasoning_metadata", None)
+        if attach_reasoning is not None:
+            try:
+                output, metadata = attach_reasoning(
+                    output, metadata, self.handle.execution_id
+                )
+            except Exception:
+                pass  # Reasoning metadata is best-effort.
+
         self.result = AgentResult(
             output=output,
             execution_id=self.handle.execution_id,
@@ -644,6 +811,7 @@ class AgentStream:
             events=list(self.events),
             sub_results=sub_results,
             token_usage=token_usage,
+            metadata=metadata,
         )
 
     # ── HITL convenience (delegates to handle) ────────────────────
@@ -755,6 +923,14 @@ def _build_result_from_events(
         except Exception:
             pass  # token tracking is best-effort
 
+    metadata: Dict[str, Any] = {}
+    attach_reasoning = getattr(handle._runtime, "_attach_reasoning_metadata", None)
+    if attach_reasoning is not None:
+        try:
+            output, metadata = attach_reasoning(output, metadata, handle.execution_id)
+        except Exception:
+            pass  # Reasoning metadata is best-effort.
+
     return AgentResult(
         output=output,
         execution_id=handle.execution_id,
@@ -766,6 +942,7 @@ def _build_result_from_events(
         events=list(events),
         sub_results=sub_results,
         token_usage=token_usage,
+        metadata=metadata,
     )
 
 

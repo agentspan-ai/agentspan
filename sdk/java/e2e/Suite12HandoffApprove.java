@@ -65,14 +65,21 @@ class Suite12HandoffApprove extends BaseTest {
             .model(MODEL)
             .instructions("You submit configuration changes. Always call submit_change with the requested change.")
             .tools(approvalTools)
+            .maxTurns(2)
             .build();
 
+        // maxTurns(1) on the parent bounds the orchestrator's DO_WHILE: one
+        // LLM call routes the handoff and the loop exits. Without this,
+        // gpt-4o-mini sometimes decides to route a second time after the
+        // sub-agent replies, queueing another HUMAN approval that the test
+        // never sees — the workflow hangs until the JUnit timeout fires.
         return Agent.builder()
             .name(name)
             .model(MODEL)
-            .instructions("Route every configuration change request to the reviewer sub-agent. Do not answer directly.")
+            .instructions("Route the configuration change request to the reviewer sub-agent ONCE, then you are done. Do not answer directly.")
             .agents(reviewer)
             .strategy(Strategy.HANDOFF)
+            .maxTurns(1)
             .build();
     }
 
@@ -118,11 +125,39 @@ class Suite12HandoffApprove extends BaseTest {
     /**
      * Approving a {@code WAITING} event from a sub-agent must resume the
      * sub-execution and let the workflow run to completion.
+     *
+     * <p>After approve, the resumed sub-execution emits its
+     * {@code TOOL_RESULT}/{@code DONE} events on a separate SSE channel from
+     * the one this test is subscribed to, so the original stream's blocking
+     * {@code getResult()} would wait until the HttpClient's 10-minute request
+     * timeout fired — which (a) eats the whole 900s test budget on a single
+     * attempt and (b) the retry loop never actually got a chance to run.
+     * The fix mirrors the TS Suite16 {@code test_hitl_approve_path} pattern:
+     * poll the workflow status via REST after approving.
      */
     @Test
     @Order(2)
-    @Timeout(value = 300, unit = TimeUnit.SECONDS)
-    void test_approve_with_event_completes_handoff_hitl() {
+    @Timeout(value = 600, unit = TimeUnit.SECONDS)
+    void test_approve_with_event_completes_handoff_hitl() throws Exception {
+        Throwable lastErr = null;
+        final int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                runApproveWithEventOnce();
+                return; // pass
+            } catch (RuntimeException | org.opentest4j.AssertionFailedError e) {
+                lastErr = e;
+                if (attempt < maxAttempts) {
+                    System.err.println("[Suite12 HITL] attempt " + attempt + " failed ("
+                        + e.getClass().getSimpleName() + "): " + e.getMessage() + " — retrying.");
+                }
+            }
+        }
+        if (lastErr instanceof Exception ex) throw ex;
+        if (lastErr instanceof Error err) throw err;
+    }
+
+    private void runApproveWithEventOnce() throws Exception {
         Agent support = buildHandoffAgent("e2e_java_handoff_approve_event");
 
         try (AgentStream stream = runtime.stream(support,
@@ -138,7 +173,9 @@ class Suite12HandoffApprove extends BaseTest {
             }
             assertTrue(approvals > 0, "expected a WAITING event from the sub-agent's approval-required tool");
 
-            AgentResult result = stream.getResult();
+            // Poll the server-side workflow status instead of waiting on the
+            // original SSE stream, which won't see the post-approve resume.
+            AgentResult result = stream.waitForResult(180_000, 1_000);
             assertEquals(AgentStatus.COMPLETED, result.getStatus(),
                 "workflow did not complete after approve(event). status=" + result.getStatus()
                 + " error=" + result.getError());

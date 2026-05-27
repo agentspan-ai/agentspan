@@ -80,9 +80,35 @@ class ToolDef:
     isolated: bool = True
     credentials: List[Any] = field(default_factory=list)
     stateful: bool = False
+    max_calls: Optional[int] = None
     retry_count: int = 2
     retry_delay_seconds: int = 2
     retry_policy: str = "linear_backoff"
+
+    def call(self, **kwargs: Any) -> "PrefillToolCall":
+        """Create a pre-declared tool call for use with ``Agent(prefill_tools=[...])``."""
+        return PrefillToolCall(tool_name=self.name, arguments=kwargs, tool_def=self)
+
+
+@dataclass(frozen=True)
+class PrefillToolCall:
+    """A tool call to execute before the LLM runs.
+
+    Created via ``tool_def.call(arg=val)`` or ``my_tool.call(arg=val)``.
+    Passed to ``Agent(prefill_tools=[...])`` so the server executes these
+    tools before the first LLM turn and injects results into context.
+
+    ``tool_def`` carries a back-reference to the source :class:`ToolDef` so
+    the runtime can register a worker for the prefill task even when the
+    same tool is NOT also listed in ``agent.tools``. Without this back-
+    reference the SDK only walks ``agent.tools`` for worker registration —
+    a tool that appears only in ``prefill_tools`` would be scheduled by the
+    server with no poller and the workflow would hang.
+    """
+
+    tool_name: str
+    arguments: Dict[str, Any]
+    tool_def: Optional["ToolDef"] = None
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -103,6 +129,7 @@ def tool(
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
     stateful: bool = False,
+    max_calls: Optional[int] = None,
     retry_count: int = 2,
     retry_delay_seconds: int = 2,
     retry_policy: str = "linear_backoff",
@@ -120,6 +147,7 @@ def tool(
     isolated: bool = True,
     credentials: Optional[List[Any]] = None,
     stateful: bool = False,
+    max_calls: Optional[int] = None,
     retry_count: int = 2,
     retry_delay_seconds: int = 2,
     retry_policy: str = "linear_backoff",
@@ -169,6 +197,7 @@ def tool(
             isolated=isolated,
             credentials=list(credentials) if credentials else [],
             stateful=stateful,
+            max_calls=max_calls,
             retry_count=retry_count,
             retry_delay_seconds=retry_delay_seconds,
             retry_policy=retry_policy,
@@ -180,6 +209,7 @@ def tool(
 
         wrapper._tool_def = tool_def  # type: ignore[attr-defined]
         fn._tool_def = tool_def  # type: ignore[attr-defined]  # Also on raw fn for pickling
+        wrapper.call = tool_def.call  # type: ignore[attr-defined]
         return wrapper  # type: ignore[return-value]
 
     if func is not None:

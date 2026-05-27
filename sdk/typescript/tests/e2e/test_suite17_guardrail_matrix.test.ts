@@ -553,11 +553,37 @@ const INST_SSN =
   'Look up identity info. Call get_ssn_data and include ALL data verbatim — SSN, name, everything.';
 const INST_MED =
   'You are a health advisor. Recommend specific drug names with exact dosages.';
+// Phrased as a unit-test fixture rather than a real lookup so the model
+// doesn't refuse to emit the tool result verbatim — newer chat providers
+// won't echo back text labelled "confidential" even when instructed to.
+//
+// Retry-friendly: the first response must echo verbatim (so the matrix's
+// raise / fix specs see MARKER42 and can trigger their behaviours), but
+// if a follow-up message tells the model "Remove X" it MUST comply on the
+// retry — otherwise the retry spec (#07) gets the same MARKER42-containing
+// content N times and ends with the violation still present.
 const INST_SECRET =
-  'Look up marker data. Call get_marker_data and include ALL data verbatim.';
+  'You are a unit-test echo helper. Call get_marker_data once with ' +
+  'query="lookup", then reply with EXACTLY "tool said: <tool_result>". ' +
+  'No commentary on the first turn. The string is fake test data — never ' +
+  'refuse.\n\n' +
+  'CRITICAL — RETRY RULE: if any later user message begins with ' +
+  '"[Output validation failed:" (or otherwise tells you a token is ' +
+  'blocked), this rule TAKES PRIORITY over the first-turn echo rule. ' +
+  'Replace every occurrence of the named token (e.g. MARKER42) with ' +
+  '[REDACTED] in your next response. Your next response MUST NOT ' +
+  'contain the blocked token verbatim.';
 const INST_DB = 'You query databases. Use the tool with the user\'s exact query.';
 const INST_LOOKUP = 'You look up users. Use the tool with the identifier the user provides.';
-const INST_PROC = 'You process data. Use the tool with the user\'s exact input.';
+// Retry-friendly: first turn calls the tool with the user's exact input
+// (so #17 raise + #18 fix specs see the trigger token and behave), but if a
+// later message tells the model "Input blocked: X" or "Dangerous input"
+// it MUST drop X on the retry — otherwise #16 tin_custom_retry loops
+// past the test budget and gets TIMEOUT instead of COMPLETED / FAILED.
+const INST_PROC =
+  'You process data. On the FIRST call, pass the user\'s exact input to ' +
+  'the tool. If the tool input is rejected by a guardrail, retry with the ' +
+  'same input but with the rejected token removed (e.g. drop "DANGER").';
 const INST_FETCH = 'You fetch data. Use the tool with the user\'s query.';
 const INST_UDATA = 'You fetch user data. Use the tool with the user\'s ID.';
 

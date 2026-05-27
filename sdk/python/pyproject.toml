@@ -43,8 +43,15 @@ dev = [
     "mypy>=1.10",
 ]
 testing = [
-    "anthropic>=0.30",
-    "openai>=1.0",
+    # /dg #11: bound the anthropic floor at the patched range for CVE-2026-
+    # 34450 (memory-tool mode-0666) and CVE-2026-34452 (symlink-retarget
+    # TOCTOU). Loose upper bound — bump deliberately when a new major lands.
+    # No tight upper-bound on ``openai`` because ``openai-agents>=0.12.2``
+    # (already a transitive of the validation extras) pins ``openai>=2.26``,
+    # and we don't want to fight resolver fights with downstream deps that
+    # track the latest openai-python.
+    "anthropic>=0.40",
+    "openai>=2.0",
 ]
 validation = [
     "openai-agents>=0.1",

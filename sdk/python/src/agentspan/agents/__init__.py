@@ -34,6 +34,20 @@ from agentspan.agents.agent import (
     scatter_gather,
 )
 
+# Typed plan builders + convenience constructor (Strategy.PLAN_EXECUTE)
+from agentspan.agents.plans import (
+    Action,
+    Context,
+    Generate,
+    Op,
+    Plan,
+    Ref,
+    Step,
+    Validation,
+    coerce_plan,
+    plan_execute,
+)
+
 # Claude Code configuration
 from agentspan.agents.claude_code import ClaudeCode
 
@@ -184,6 +198,7 @@ from agentspan.agents.openai_compat import RunResult, Runner
 
 # Tool decorator and constructors
 from agentspan.agents.tool import (
+    PrefillToolCall,
     ToolContext,
     ToolDef,
     agent_tool,

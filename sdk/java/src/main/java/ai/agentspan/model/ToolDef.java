@@ -30,6 +30,7 @@ public class ToolDef {
     private final Map<String, Object> config;
     private final List<String> credentials;
     private final List<GuardrailDef> guardrails;
+    private final int maxCalls;
     /** For {@code agent_tool} type: the child Agent whose workers must be registered. Not serialized directly. */
     private final Agent agentRef;
     /**
@@ -55,6 +56,7 @@ public class ToolDef {
         this.config = builder.config;
         this.credentials = builder.credentials != null ? builder.credentials : new ArrayList<>();
         this.guardrails = builder.guardrails != null ? builder.guardrails : new ArrayList<>();
+        this.maxCalls = builder.maxCalls;
         this.agentRef = builder.agentRef;
         this.stateful = builder.stateful;
     }
@@ -73,6 +75,7 @@ public class ToolDef {
     public Map<String, Object> getConfig() { return config; }
     public List<String> getCredentials() { return credentials; }
     public List<GuardrailDef> getGuardrails() { return guardrails; }
+    public int getMaxCalls() { return maxCalls; }
     public Agent getAgentRef() { return agentRef; }
     public boolean isStateful() { return stateful; }
 
@@ -95,6 +98,7 @@ public class ToolDef {
         private Map<String, Object> config;
         private List<String> credentials;
         private List<GuardrailDef> guardrails;
+        private int maxCalls = 0;
         private Agent agentRef;
         private boolean stateful = false;
 
@@ -112,6 +116,7 @@ public class ToolDef {
         public Builder config(Map<String, Object> config) { this.config = config; return this; }
         public Builder credentials(List<String> credentials) { this.credentials = credentials; return this; }
         public Builder guardrails(List<GuardrailDef> guardrails) { this.guardrails = guardrails; return this; }
+        public Builder maxCalls(int maxCalls) { this.maxCalls = maxCalls; return this; }
         public Builder agentRef(Agent agentRef) { this.agentRef = agentRef; return this; }
         /**
          * Mark this tool as stateful so the runtime routes its tasks to a

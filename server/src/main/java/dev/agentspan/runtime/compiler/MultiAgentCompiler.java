@@ -9,6 +9,7 @@ import static dev.agentspan.runtime.compiler.AgentCompiler.ref;
 import static dev.agentspan.runtime.compiler.AgentCompiler.toRef;
 
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -20,9 +21,11 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.*;
+import dev.agentspan.runtime.service.PlanAndCompileTask;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ModelParser.ParsedModel;
+import dev.agentspan.runtime.util.WorkflowTaskUtils;
 
 /**
  * Compiles multi-agent strategies into Conductor workflows.
@@ -31,11 +34,170 @@ import dev.agentspan.runtime.util.ModelParser.ParsedModel;
 public class MultiAgentCompiler {
 
     private static final Logger log = LoggerFactory.getLogger(MultiAgentCompiler.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /**
+     * /dg #2: anchored credential-placeholder pattern for plannerContext
+     * HTTP headers. Matches ``${IDENTIFIER}`` only — leaves any other
+     * ``${...}`` substring (e.g. random characters that happen to start
+     * with ``${``) untouched. Replacement rewrites to ``#{IDENTIFIER}``
+     * so Conductor's ParametersUtils doesn't consume the placeholder;
+     * the runtime credential resolver substitutes the real value at
+     * request time.
+     */
+    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
 
     private final AgentCompiler agentCompiler;
 
     public MultiAgentCompiler(AgentCompiler agentCompiler) {
         this.agentCompiler = agentCompiler;
+    }
+
+    /**
+     * Return the deterministic workflow name used for the dynamic plan sub-workflow.
+     * Must match the name produced by {@link dev.agentspan.runtime.service.PlanAndCompileTask}
+     * for {@code workflowDef.name}.
+     */
+    public static String planWorkflowName(String parentName) {
+        return "pe_" + toRef(parentName) + "_plan";
+    }
+
+    /**
+     * Check whether a tool named ``toolName`` is registered on the harness
+     * itself (not on a deeper sub-agent). Used to validate
+     * ``plan_source.tool`` at compile time.
+     *
+     * <p>The check is intentionally non-recursive: the {@code plan_reader}
+     * SIMPLE task is emitted in the parent harness's task namespace, so a
+     * tool that exists only on a deeper sub-agent's worker won't be polled
+     * for the parent's task name. Forcing the user to declare the tool on
+     * the harness keeps registration and polling namespaces consistent and
+     * makes the misconfiguration surface at deploy with a clear message
+     * rather than as a silent runtime no-op.
+     */
+    private boolean isToolRegisteredInHarness(AgentConfig config, String toolName) {
+        if (config == null) return false;
+        List<ToolConfig> tools = config.getTools();
+        if (tools != null) {
+            for (ToolConfig t : tools) {
+                if (toolName.equals(t.getName())) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Render the parent's tool list as a Markdown block to append to the
+     * planner's user prompt. The planner sees each tool's name, description,
+     * and a compact summary of expected arguments — enough to write a valid
+     * plan without inventing tool names. PAC validates the resulting plan
+     * against the same set; this prompt and the validator share a contract.
+     */
+    private String buildAvailableToolsBlock(List<ToolConfig> tools) {
+        if (tools == null || tools.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("## Available tools\n\n");
+        sb.append("Your plan's ``operations[].tool`` field MUST use a tool name from "
+                + "the list below. Any other name will fail plan validation and route "
+                + "to the fallback agent.\n\n");
+        for (ToolConfig t : tools) {
+            String name = t.getName() == null ? "(unnamed)" : t.getName();
+            sb.append("- **`").append(name).append("`**");
+            if (t.getDescription() != null && !t.getDescription().isEmpty()) {
+                sb.append(" — ").append(t.getDescription());
+            }
+            sb.append('\n');
+            String argsSummary = summarizeToolArgs(t.getInputSchema());
+            if (!argsSummary.isEmpty()) {
+                sb.append("    args: ").append(argsSummary).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Render the canonical PAC plan schema as a Markdown block to append
+     * to the planner's user prompt. Spelling out the JSON shape, the
+     * args-vs-generate distinction, and the validation/on_success blocks
+     * means the planner agent's own ``instructions`` can focus on
+     * domain-level guidance (what to plan) instead of re-teaching the
+     * universal schema in every harness — which is what every existing
+     * example does today, copy-pasting ~50 lines of escape-laden JSON.
+     *
+     * <p>The block is intentionally minimal: schema, escape rules, one
+     * worked example. Users can still inline a richer example in their
+     * own ``instructions`` for domain-specific patterns. The server's
+     * block is the floor, not the ceiling.
+     */
+    private String buildPlanSchemaBlock() {
+        return "## Plan schema\n\n"
+                + "Your final response MUST end with a ```json fenced block containing a "
+                + "single JSON object with this shape:\n\n"
+                + "```json\n"
+                + "{\n"
+                + "  \"steps\": [\n"
+                + "    {\n"
+                + "      \"id\": \"<unique step id>\",\n"
+                + "      \"depends_on\": [\"<other step id>\"],   // optional; defaults to previous step\n"
+                + "      \"parallel\": false,                      // run operations[] in parallel\n"
+                + "      \"operations\": [\n"
+                + "        // EITHER a static call:\n"
+                + "        {\"tool\": \"<tool>\", \"args\": {<literal arg map>}},\n"
+                + "        // OR an LLM-generated call:\n"
+                + "        {\"tool\": \"<tool>\", \"generate\": {\n"
+                + "          \"instructions\": \"<what the LLM should produce>\",\n"
+                + "          \"output_schema\": \"<JSON shape that becomes the tool's args>\",\n"
+                + "          \"max_tokens\": 4096                  // optional\n"
+                + "        }}\n"
+                + "      ]\n"
+                + "    }\n"
+                + "  ],\n"
+                + "  \"validation\": [                              // optional\n"
+                + "    {\"tool\": \"<validator tool>\", \"args\": {...},\n"
+                + "     \"success_condition\": \"$.passed === true\"} // optional JS, $ = tool output\n"
+                + "  ],\n"
+                + "  \"on_success\": [{\"tool\": \"<tool>\", \"args\": {...}}],   // optional\n"
+                + "  \"on_failure\": [{\"tool\": \"<tool>\", \"args\": {...}}]    // optional\n"
+                + "}\n"
+                + "```\n\n"
+                + "Rules:\n"
+                + "- Every ``operations[].tool`` and ``validation[].tool`` MUST be from the "
+                + "Available tools list above. Other names fail plan validation and route to fallback.\n"
+                + "- Use ``args`` when arg values are literals you decide now. Use ``generate`` "
+                + "when an LLM should produce them at run time (e.g., the body of a write_file).\n"
+                + "- ``parallel: true`` runs that step's operations concurrently (FORK_JOIN). "
+                + "Cross-step concurrency is via ``depends_on`` — a step starts when all listed deps complete.\n"
+                + "- The JSON must parse cleanly. Match brackets and escape strings.\n";
+    }
+
+    /**
+     * Compact one-liner of an input schema's top-level properties.
+     * Avoids dumping the full JSON Schema (which inflates the planner prompt
+     * disproportionately for large tool lists).
+     */
+    @SuppressWarnings("unchecked")
+    private String summarizeToolArgs(Map<String, Object> inputSchema) {
+        if (inputSchema == null) return "";
+        Object propsObj = inputSchema.get("properties");
+        if (!(propsObj instanceof Map)) return "";
+        Map<String, Object> props = (Map<String, Object>) propsObj;
+        if (props.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, Object> e : props.entrySet()) {
+            if (!first) sb.append(", ");
+            sb.append("\"").append(e.getKey()).append("\": ");
+            String type = "string";
+            if (e.getValue() instanceof Map<?, ?> m && m.get("type") instanceof String s) {
+                type = s;
+            }
+            sb.append("<").append(type).append(">");
+            first = false;
+        }
+        sb.append("}");
+        return sb.toString();
     }
 
     public WorkflowDef compile(AgentConfig config) {
@@ -71,6 +233,7 @@ public class MultiAgentCompiler {
             case "random" -> compileRotation(config, true);
             case "swarm" -> compileSwarm(config);
             case "manual" -> compileManual(config);
+            case "plan_execute" -> compilePlanExecute(config);
             default -> throw new IllegalArgumentException("Unknown strategy: " + strategy);
         };
     }
@@ -219,6 +382,7 @@ public class MultiAgentCompiler {
         Map<String, Object> finalInputs = new LinkedHashMap<>();
         finalInputs.put("llmProvider", parsed.getProvider());
         finalInputs.put("model", parsed.getModel());
+        finalInputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
         String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
                 + "Based on the work done by the agents above, provide your final response to the user. "
                 + "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit "
@@ -809,6 +973,7 @@ public class MultiAgentCompiler {
         Map<String, Object> finalInputs = new LinkedHashMap<>();
         finalInputs.put("llmProvider", parsed.getProvider());
         finalInputs.put("model", parsed.getModel());
+        finalInputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
         String instructions = parentInstructions.getText();
         String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
                 + "Based on the work done by the agents above, provide your final response to the user. "
@@ -1097,6 +1262,7 @@ public class MultiAgentCompiler {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         finalInputs.put("llmProvider", parsed.getProvider());
         finalInputs.put("model", parsed.getModel());
+        finalInputs.put("maxTokens", config.getMaxTokens() != null ? config.getMaxTokens() : 16384);
         String instructions = instructionsPlan.getText();
         String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n")
                 + "Based on the work done by the agents above, provide your final response to the user. "
@@ -1218,7 +1384,7 @@ public class MultiAgentCompiler {
 
         // DoWhile loop: continue while tool calls present and no transfer
         String loopRef = agent.getName() + "_loop";
-        int maxTurns = 25;
+        int maxTurns = agent.getMaxTurns() > 0 ? agent.getMaxTurns() : 100;
         String hasToolCalls =
                 String.format("($.%s['toolCalls'] != null && $.%s['toolCalls'].length > 0)", llmRef, llmRef);
         String notTransfer = String.format("($.%s.is_transfer != true)", checkTransferRef);
@@ -1249,6 +1415,12 @@ public class MultiAgentCompiler {
                 "finishReason", ref(llmRef + ".output.finishReason"),
                 "is_transfer", ref(checkTransferRef + ".output.is_transfer"),
                 "transfer_to", ref(checkTransferRef + ".output.transfer_to")));
+        // Backfill task.name on system tasks (SET_VARIABLE, DO_WHILE, INLINE)
+        // so Conductor's WorkflowSweeper doesn't trip on "TaskDef name cannot
+        // be null" when the SUB_WORKFLOW executes — the outer compile-pass
+        // doesn't recurse into SubWorkflowParam.workflowDefinition, so each
+        // embedding compiler owns that pass for its own sub-workflows.
+        WorkflowTaskUtils.ensureAllTaskNames(subWf);
         return subWf;
     }
 
@@ -1273,14 +1445,21 @@ public class MultiAgentCompiler {
         innerTask.setTaskReferenceName(innerRef);
         innerTask.setSubWorkflowParam(new SubWorkflowParams());
         innerTask.getSubWorkflowParam().setName(innerWf.getName());
+        WorkflowTaskUtils.ensureAllTaskNames(innerWf);
         innerTask.getSubWorkflowParam().setWorkflowDef(innerWf);
         Map<String, Object> innerInputs = new LinkedHashMap<>();
         innerInputs.put("prompt", "${workflow.input.prompt}");
         innerInputs.put("media", "${workflow.input.media}");
         innerInputs.put("session_id", "${workflow.input.session_id}");
+        innerInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         innerTask.setInputParameters(innerInputs);
 
-        // 2. LLM step with transfer tools to decide whether to transfer to a peer
+        // 2. Coerce inner result to string (may be array/null when last turn was tool calls)
+        String coerceRef = agent.getName() + "_coerce_result";
+        WorkflowTask coerceTask = AgentCompiler.createCoerceTask(ref(innerRef + ".output.result"), coerceRef);
+        String coercedResultRef = AgentCompiler.coercedRef(coerceRef);
+
+        // 3. LLM step with transfer tools to decide whether to transfer to a peer
         ToolCompiler tc = new ToolCompiler();
         List<Map<String, Object>> transferToolSpecs = tc.compileToolSpecs(transferTools);
 
@@ -1291,6 +1470,7 @@ public class MultiAgentCompiler {
         Map<String, Object> llmInputs = new LinkedHashMap<>();
         llmInputs.put("llmProvider", parsed.getProvider());
         llmInputs.put("model", parsed.getModel());
+        llmInputs.put("maxTokens", agent.getMaxTokens() != null ? agent.getMaxTokens() : 16384);
         String transferPrompt = "You have just completed your task. Your result is shown above.\n\n"
                 + "If another agent should handle a different part of the request, call the appropriate "
                 + "transfer tool. Otherwise, do NOT call any tool — just respond with a brief acknowledgment.";
@@ -1299,13 +1479,13 @@ public class MultiAgentCompiler {
                 List.of(
                         Map.of("role", "system", "message", transferPrompt),
                         Map.of("role", "user", "message", "${workflow.input.prompt}"),
-                        Map.of("role", "assistant", "message", ref(innerRef + ".output.result"))));
+                        Map.of("role", "assistant", "message", coercedResultRef)));
         if (!transferToolSpecs.isEmpty()) {
             llmInputs.put("tools", transferToolSpecs);
         }
         transferLlm.setInputParameters(llmInputs);
 
-        // 3. Check-transfer worker
+        // 4. Check-transfer worker
         WorkflowTask checkTransferTask = new WorkflowTask();
         checkTransferTask.setName(agent.getName() + "_check_transfer");
         checkTransferTask.setTaskReferenceName(checkTransferRef);
@@ -1318,12 +1498,15 @@ public class MultiAgentCompiler {
         WorkflowDef subWf = agentCompiler.createWorkflow(agent);
         subWf.setName(agent.getName() + "_swarm_wf");
         subWf.setDescription("Swarm hierarchical agent: " + agent.getName());
-        subWf.setTasks(List.of(innerTask, transferLlm, checkTransferTask));
+        subWf.setTasks(List.of(innerTask, coerceTask, transferLlm, checkTransferTask));
         subWf.setOutputParameters(Map.of(
                 "result", ref(innerRef + ".output.result"),
                 "finishReason", "stop",
                 "is_transfer", ref(checkTransferRef + ".output.is_transfer"),
                 "transfer_to", ref(checkTransferRef + ".output.transfer_to")));
+        // See compileSwarmAgentWorkflow above — backfill task names so the
+        // embedded SUB_WORKFLOW passes Conductor's null-name validation.
+        WorkflowTaskUtils.ensureAllTaskNames(subWf);
         return subWf;
     }
 
@@ -1475,11 +1658,13 @@ public class MultiAgentCompiler {
         subTask.setTaskReferenceName(subRef);
         subTask.setSubWorkflowParam(new SubWorkflowParams());
         subTask.getSubWorkflowParam().setName(strategyWf.getName());
+        WorkflowTaskUtils.ensureAllTaskNames(strategyWf);
         subTask.getSubWorkflowParam().setWorkflowDef(strategyWf);
         Map<String, Object> subInputs = new LinkedHashMap<>();
         subInputs.put("prompt", "${workflow.input.prompt}");
         subInputs.put("media", "${workflow.input.media}");
         subInputs.put("session_id", "${workflow.input.session_id}");
+        subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         subTask.setInputParameters(subInputs);
 
         String contentRef = ref(subRef + ".output.result");
@@ -1598,6 +1783,7 @@ public class MultiAgentCompiler {
         subInputs.put("prompt", "${workflow.variables.conversation}");
         subInputs.put("media", "${workflow.input.media}");
         subInputs.put("session_id", "${workflow.input.session_id}");
+        subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         subInputs.put("context", "${workflow.variables._agent_state}");
         task.setInputParameters(subInputs);
         caseTasks.add(task);
@@ -1656,6 +1842,7 @@ public class MultiAgentCompiler {
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("llmProvider", parsed.getProvider());
         inputs.put("model", parsed.getModel());
+        inputs.put("maxTokens", 4096);
         inputs.put(
                 "messages",
                 List.of(
@@ -1726,6 +1913,7 @@ public class MultiAgentCompiler {
         Map<String, Object> llmInputs = new LinkedHashMap<>();
         llmInputs.put("llmProvider", parsed.getProvider());
         llmInputs.put("model", parsed.getModel());
+        llmInputs.put("maxTokens", 4096);
         llmInputs.put(
                 "messages",
                 List.of(
@@ -1750,6 +1938,7 @@ public class MultiAgentCompiler {
         subTask.setTaskReferenceName(taskRef);
         subTask.setSubWorkflowParam(new SubWorkflowParams());
         subTask.getSubWorkflowParam().setName(routerWf.getName());
+        WorkflowTaskUtils.ensureAllTaskNames(routerWf);
         subTask.getSubWorkflowParam().setWorkflowDef(routerWf);
         subTask.setInputParameters(Map.of("conversation", "${workflow.variables.conversation}"));
 
@@ -1819,5 +2008,997 @@ public class MultiAgentCompiler {
 
     private AgentCompiler.ResolvedInstructions resolveInstructionsPlan(AgentConfig config, String refName) {
         return agentCompiler.resolveInstructions(config, refName);
+    }
+
+    // ── Plan-Execute strategy ─────────────────────────────────────────
+    //
+    // Planner (agentic LLM) → extract JSON fence → compile plan to dynamic
+    // Conductor sub-workflow → execute deterministically → on failure,
+    // run fallback agent (agentic LLM, bounded turns).
+    //
+    // The JSON plan describes a DAG of operations.  Each operation is either
+    // "static" (tool call with known args) or "generated" (LLM produces args).
+    // Static ops compile to SIMPLE tasks.  Generated ops compile to
+    // LLM_CHAT_COMPLETE → INLINE(parse) → SIMPLE(apply) chains running in
+    // parallel within each step.
+
+    private WorkflowDef compilePlanExecute(AgentConfig config) {
+        // Named-slot resolution. PLAN_EXECUTE requires ``planner=``;
+        // ``fallback=`` is optional. The Python SDK rejects the legacy
+        // ``agents=[planner, fallback]`` positional shape at construction
+        // time (see Agent.__init__); we mirror that hard cut here so the
+        // Java SDK and any HTTP caller crafting JSON by hand fail with the
+        // same migration message instead of silently quasi-working.
+        AgentConfig plannerConfig = config.getPlanner();
+        AgentConfig fallbackConfig = config.getFallback();
+        if (plannerConfig == null) {
+            throw new IllegalArgumentException(
+                    "PLAN_EXECUTE strategy requires ``planner=<Agent>`` on the parent agent. "
+                            + "The legacy ``agents=[planner, fallback]`` positional shape is no "
+                            + "longer accepted — set the named slots ``planner=`` (required) and "
+                            + "``fallback=`` (optional) instead.");
+        }
+
+        // Parent-level ``tools`` is the canonical plan-executable set. The
+        // planner is told which tools are available (so it can't hallucinate
+        // names), PAC validates ``op.tool`` names against this set, and PAC
+        // wraps each emitted SIMPLE task with the tool's input guardrails
+        // (if any). Empty/null degrades gracefully — no allowlist check, no
+        // guardrail wrapping; the recommended shape always sets tools.
+        List<ToolConfig> parentTools = config.getTools() != null ? config.getTools() : List.of();
+
+        // Warn when a tool's guardrail uses a non-RAISE on_fail and there's
+        // no fallback agent to recover. In plan mode, RETRY/FIX/HUMAN all
+        // collapse to TERMINATE on the dynamic plan SUB_WORKFLOW; without a
+        // configured fallback, the whole pipeline just fails — the user
+        // probably intended adaptive recovery (which the fallback agent
+        // provides). Log-only — don't block compile, since "fail loud on
+        // guardrail trip" is also a valid choice.
+        if (fallbackConfig == null) {
+            List<String> offenders = new ArrayList<>();
+            for (ToolConfig t : parentTools) {
+                if (t.getGuardrails() == null) continue;
+                for (GuardrailConfig g : t.getGuardrails()) {
+                    String onFail = g.getOnFail();
+                    if (onFail != null && !"raise".equalsIgnoreCase(onFail)) {
+                        offenders.add(t.getName() + ":" + g.getName() + " (on_fail=" + onFail + ")");
+                    }
+                }
+            }
+            if (!offenders.isEmpty()) {
+                throw new IllegalStateException("PLAN_EXECUTE harness '"
+                        + config.getName()
+                        + "' has guardrails with on_fail=retry|fix|human but no fallback "
+                        + "agent. In plan mode these collapse to TERMINATE — the user-intended "
+                        + "retry-with-feedback semantics do not apply. Either configure a "
+                        + "``fallback=<Agent>`` on the harness, or set ``on_fail=raise`` on "
+                        + "these guardrails to acknowledge fail-closed semantics. Offenders: "
+                        + String.join(", ", offenders));
+            }
+        }
+        List<String> knownToolNames = new ArrayList<>();
+        for (ToolConfig t : parentTools) {
+            if (t.getName() != null && !t.getName().isEmpty()) {
+                knownToolNames.add(t.getName());
+            }
+        }
+        // Serialise the full ToolConfig list to Maps so PAC can deserialise
+        // them server-side and reach guardrail metadata at SUB_WORKFLOW
+        // emission time. ``knownToolNames`` is preserved for the existing
+        // allowlist test surface; ``parentTools`` is the new field that
+        // drives guardrail wrapping.
+        List<Map<String, Object>> parentToolsAsMaps = new ArrayList<>();
+        for (ToolConfig t : parentTools) {
+            // /dg #1: reject schemas using JSON-Schema features the runtime
+            // INLINE validator silently ignores ($ref, allOf, anyOf, oneOf,
+            // format, if/then/else, etc.). Without this check users got
+            // permissive runtime validation — the schema appears to declare
+            // constraints but the validator never fires them. Fail at
+            // agent-compile time with the exact offending keyword + path.
+            if (t.getInputSchema() != null) {
+                try {
+                    dev.agentspan.runtime.util.SchemaSubsetValidator.validate(
+                            t.getInputSchema(),
+                            "PLAN_EXECUTE '" + config.getName() + "': tool '" + t.getName() + "' inputSchema");
+                } catch (dev.agentspan.runtime.util.SchemaSubsetValidator.UnsupportedSchemaException usx) {
+                    throw new IllegalStateException(usx.getMessage(), usx);
+                }
+            }
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> m = MAPPER.convertValue(t, Map.class);
+                parentToolsAsMaps.add(m);
+            } catch (Exception e) {
+                // /dg #7: fail-closed on ALL serialization failures, not just
+                // guardrailed ones. Previously a non-guardrailed tool was
+                // silently dropped from parentToolsByName with only a WARN,
+                // which meant ``knownToolNames`` still allowed the tool but
+                // PAC had no schema / inputSchema / guardrail context — a
+                // generate-op output landed in a bare SIMPLE with no
+                // validation. Treat the divergence as a compile error so the
+                // user fixes the ToolConfig (typically a non-Jackson-friendly
+                // value in inputSchema or config) instead of shipping a
+                // half-configured tool. Guardrailed tools get the longer
+                // diagnostic since the failure mode there is more dangerous.
+                int guardrailCount =
+                        t.getGuardrails() != null ? t.getGuardrails().size() : 0;
+                throw new IllegalStateException(
+                        "PLAN_EXECUTE '"
+                                + config.getName()
+                                + "': tool '"
+                                + t.getName()
+                                + "' failed to serialise for PAC ("
+                                + e.getMessage()
+                                + ")."
+                                + (guardrailCount > 0
+                                        ? " The tool has "
+                                                + guardrailCount
+                                                + " guardrail(s) — silently dropping it would compile a"
+                                                + " wrapper-less version of a safety-checked tool."
+                                        : " Silently dropping the tool would leave"
+                                                + " ``knownToolNames`` allowing it while PAC has no schema or"
+                                                + " inputSchema for validation.")
+                                + " Fix the ToolConfig (typically a non-Jackson-friendly value"
+                                + " in inputSchema or config) and recompile.",
+                        e);
+            }
+        }
+
+        WorkflowDef wf = agentCompiler.createWorkflow(config);
+        wf.setDescription("Plan-Execute harness: " + config.getName());
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+        String prefix = toRef(config.getName());
+
+        // ── 1. Context init ──────────────────────────────────────────
+        String ctxResolveRef = prefix + "_ctx_resolve";
+        WorkflowTask ctxResolve = new WorkflowTask();
+        ctxResolve.setType("INLINE");
+        ctxResolve.setTaskReferenceName(ctxResolveRef);
+        ctxResolve.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "ctx", "${workflow.input.context}",
+                "expression", JavaScriptBuilder.nullCoalesceScript()));
+        tasks.add(ctxResolve);
+
+        WorkflowTask ctxInit = new WorkflowTask();
+        ctxInit.setType("SET_VARIABLE");
+        ctxInit.setTaskReferenceName(prefix + "_ctx_init");
+        ctxInit.setInputParameters(Map.of("context", "${" + ctxResolveRef + ".output.result}"));
+        tasks.add(ctxInit);
+
+        // ── 2. Run planner (agentic sub-workflow) ────────────────────
+        // Augment the planner's user prompt with the parent's tool list.
+        // The planner can ONLY emit ``op.tool`` names from this set;
+        // PAC validates the plan against ``knownToolNames`` below. Stating
+        // the constraint explicitly in the prompt prevents hallucinated
+        // tool names (workflow ``a369f52c`` got bitten by Claude emitting
+        // ``str_replace`` from training memory; PAC then compiled a
+        // task that no worker polled for and the workflow hung).
+        // Compose the planner's user prompt: original prompt + auto-generated
+        // tool list + auto-generated plan schema. Both server-generated
+        // blocks share a contract with PAC's validator, so users don't
+        // re-teach them in every harness's instructions string. (Examples
+        // pre-#1 hand-wrote ~50 lines of plan schema in their instructions;
+        // that's now redundant — the server appends a canonical version.)
+        String availableToolsBlock = buildAvailableToolsBlock(parentTools);
+        String planSchemaBlock = buildPlanSchemaBlock();
+
+        // ── 2a. Optional planner context (text + URL fetches) ────────────
+        // When the harness declares ``plannerContext``, emit a per-URL HTTP
+        // fetch + a concatenating INLINE inside the planner-route LIVE
+        // branch so the static-plan path skips the work. The INLINE's
+        // ``output.result`` is referenced as a ``## Reference Context``
+        // block in the planner's user prompt.
+        List<WorkflowTask> contextPreTasks = new ArrayList<>();
+        String contextBuildRef = emitPlannerContextBuilder(config.getPlannerContext(), prefix, contextPreTasks);
+
+        StringBuilder pp = new StringBuilder("${workflow.input.prompt}");
+        if (contextBuildRef != null) {
+            pp.append("\n\n## Reference Context\n${").append(contextBuildRef).append(".output.result}");
+        }
+        if (!availableToolsBlock.isEmpty()) {
+            pp.append("\n\n").append(availableToolsBlock);
+        }
+        pp.append("\n\n").append(planSchemaBlock);
+        String plannerPrompt = pp.toString();
+        String plannerRef = prefix + "_planner";
+        String plannerCoerceRef = prefix + "_planner_coerce";
+        emitPlannerStage(plannerConfig, prefix, plannerRef, plannerCoerceRef, plannerPrompt, contextPreTasks, tasks);
+        String plannerResult = AgentCompiler.coercedRef(plannerCoerceRef);
+
+        // ── 2b. Optional plan_source: deterministic tool call to read plan ──
+        // If planSource is configured, call the specified tool (e.g. contextbook_read)
+        // to retrieve the plan from an external source. This provides a deterministic
+        // fallback: even if the planner's text output fails extraction, the plan can
+        // be read directly from where the explorer wrote it.
+        //
+        // Validate at compile time that ``planSource.tool`` is a real tool registered
+        // somewhere in the harness — a typo is silently swallowed if we wait until
+        // runtime (the ``optional:true`` task simply doesn't run, extraction falls
+        // through to the no_plan branch). Reject the harness here so the misconfig
+        // surfaces at deploy.
+        String planReaderRef = null;
+        if (config.getPlanSource() != null) {
+            Map<String, Object> planSource = config.getPlanSource();
+            String toolName = (String) planSource.get("tool");
+            if (toolName == null || toolName.isBlank()) {
+                throw new IllegalArgumentException("plan_source must include a non-empty 'tool' field");
+            }
+            if (!isToolRegisteredInHarness(config, toolName)) {
+                throw new IllegalArgumentException(
+                        "plan_source.tool '" + toolName + "' is not registered as a harness-level tool on '"
+                                + config.getName() + "'. The plan_reader task is emitted in the harness's task "
+                                + "namespace, so the tool must be declared in tools=[...] on the harness itself "
+                                + "(declaring it on a sub-agent does not work).");
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> toolArgs = (Map<String, Object>) planSource.getOrDefault("args", Map.of());
+
+            planReaderRef = prefix + "_plan_reader";
+            WorkflowTask planReaderTask = new WorkflowTask();
+            planReaderTask.setName(toolName);
+            planReaderTask.setTaskReferenceName(planReaderRef);
+            planReaderTask.setType("SIMPLE");
+
+            Map<String, Object> readerInputs = new LinkedHashMap<>(toolArgs);
+            // Forward all five ambient inputs — same set the dynamic plan's
+            // per-tool tasks receive via injectAmbient. A reader tool that
+            // needs cwd (e.g. filesystem reads of a workspace plan file) was
+            // previously starved of working-dir context and silently failed
+            // through to the no_plan branch. Forced overrides — if planSource
+            // toolArgs accidentally collided on these keys, the ambient values
+            // win.
+            readerInputs.put("session_id", "${workflow.input.session_id}");
+            readerInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            readerInputs.put("cwd", "${workflow.input.cwd}");
+            readerInputs.put("credentials", "${workflow.input.credentials}");
+            readerInputs.put("media", "${workflow.input.media}");
+            planReaderTask.setInputParameters(readerInputs);
+            // ``optional:true`` is intentional: plan_source is a backup for plan
+            // extraction. A reader pointed at a contextbook section that doesn't
+            // exist yet (e.g. the planner didn't write to it on this run) is a
+            // normal "no fallback content available" condition — extract_json
+            // then tries other sources. If the harness's compile-time tool-exists
+            // validation passed but the read still failed, the no_plan SWITCH
+            // path will surface that as a missing-fence failure with the
+            // fallback agent (or TERMINATE if no fallback configured).
+            planReaderTask.setOptional(true);
+            tasks.add(planReaderTask);
+        }
+
+        // ── 3. Extract JSON plan from planner output ─────────────────
+        // Pass BOTH the raw result (Java Map if LLM returned JSON) and the
+        // coerced string (for markdown-with-fence case).  The extract script
+        // tries the raw object first (checking for a `steps` key), then falls
+        // back to regex-extracting a ```json fence from the coerced string.
+        // If planSource is configured, planReaderContent provides a deterministic
+        // fallback source — the script tries it after the planner text fails.
+        String extractRef = prefix + "_extract_json";
+        WorkflowTask extractTask = new WorkflowTask();
+        extractTask.setType("INLINE");
+        extractTask.setTaskReferenceName(extractRef);
+        Map<String, Object> extractInputs = new LinkedHashMap<>();
+        extractInputs.put("evaluatorType", "graaljs");
+        // ``staticPlan`` (Case 0 — highest priority) is the user-supplied plan
+        // passed through ``runtime.run(harness, plan=...)``. When present, it
+        // wins over planner output and the plan_source backup. The planner
+        // LLM still runs (the workflow shape is fixed at compile time) but
+        // its output is discarded by extract_json.
+        extractInputs.put("staticPlan", "${workflow.input.static_plan}");
+        extractInputs.put("rawResult", AgentCompiler.subAgentResultRef(plannerConfig, plannerRef));
+        extractInputs.put("coercedResult", plannerResult);
+        extractInputs.put("planReaderContent", planReaderRef != null ? "${" + planReaderRef + ".output.result}" : "");
+        extractInputs.put("expression", JavaScriptBuilder.extractJsonFenceScript());
+        extractTask.setInputParameters(extractInputs);
+        tasks.add(extractTask);
+
+        // ── 4. SWITCH: if JSON plan found → compile & execute, else → fallback ──
+        // Tighten the predicate beyond presence: the plan must actually parse,
+        // be an object, and have a non-empty ``steps`` array — that is what
+        // PLAN_AND_COMPILE will require. A weaker check sends garbage into
+        // the compiler and then routes the validation error to the fallback
+        // when the simpler "no_plan" branch would have done.
+        String hasJsonRef = prefix + "_has_json";
+        WorkflowTask hasJsonCheck = new WorkflowTask();
+        hasJsonCheck.setType("INLINE");
+        hasJsonCheck.setTaskReferenceName(hasJsonRef);
+        hasJsonCheck.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "json",
+                "${" + extractRef + ".output.result.plan_json}",
+                "expression",
+                "(function(){ if (!$.json || $.json === '{}') return 'no_plan';"
+                        + " try { var p = JSON.parse($.json); if (!p || typeof p !== 'object') return 'no_plan';"
+                        + " if (!Array.isArray(p.steps) || p.steps.length === 0) return 'no_plan';"
+                        + " return 'has_plan'; } catch(e) { return 'no_plan'; } })()"));
+        tasks.add(hasJsonCheck);
+
+        // Build the two branches.
+        // Fallback agents see ``markdown_plan`` (the original planner prose
+        // produced by extract_json) — not ``plannerResult`` (the coerced /
+        // possibly re-serialized form). The original text is what the LLM
+        // wrote and is more useful context when the agentic recovery loop
+        // tries to repair the situation.
+        String fallbackPlanText = "${" + extractRef + ".output.result.markdown_plan}";
+        List<WorkflowTask> hasPlanTasks = buildPlanExecutionBranch(
+                config,
+                plannerConfig,
+                fallbackConfig,
+                prefix,
+                extractRef,
+                fallbackPlanText,
+                knownToolNames,
+                parentToolsAsMaps);
+        List<WorkflowTask> noPlanTasks = buildFallbackOnlyBranch(config, fallbackConfig, prefix, fallbackPlanText);
+
+        WorkflowTask routeSwitch = new WorkflowTask();
+        routeSwitch.setType("SWITCH");
+        routeSwitch.setTaskReferenceName(prefix + "_plan_route");
+        routeSwitch.setEvaluatorType("value-param");
+        routeSwitch.setExpression("switchCaseValue");
+        routeSwitch.setInputParameters(Map.of("switchCaseValue", "${" + hasJsonRef + ".output.result}"));
+        routeSwitch.setDecisionCases(Map.of("has_plan", hasPlanTasks));
+        routeSwitch.setDefaultCase(noPlanTasks);
+        tasks.add(routeSwitch);
+
+        // ── Output selector: read final_result variable ─────────────────
+        // /dg #5: each of the four mutually-exclusive terminal branches
+        // (plan_exec success, exec-failure fallback, compile-failure
+        // fallback, no-plan fallback) writes ``workflow.variables.final_result``
+        // via SET_VARIABLE as its last task. The selector reads from that
+        // single resolved variable instead of pattern-matching unresolved
+        // ``${...}`` template strings across all four branch refs.
+        //
+        // The previous shape needed a ``safe()`` helper to filter out
+        // Conductor-left-behind ``${...}`` literals from dead branches, and
+        // built the ``${`` marker from ``String.fromCharCode(36)`` to keep
+        // the script's source out of Conductor's own templater. All of
+        // that goes away: the variable resolves to exactly one value
+        // (the branch that ran), or null if no branch did.
+        String outputRef = prefix + "_output_select";
+        WorkflowTask outputSelect = new WorkflowTask();
+        outputSelect.setType("INLINE");
+        outputSelect.setTaskReferenceName(outputRef);
+        Map<String, Object> outputInputs = new LinkedHashMap<>();
+        outputInputs.put("evaluatorType", "graaljs");
+        outputInputs.put("r", "${workflow.variables.final_result}");
+        outputInputs.put(
+                "expression",
+                "(function(){ var r = $.r; if (r == null) return '';"
+                        + " return (typeof r === 'object') ? JSON.stringify(r) : String(r); })()");
+        outputSelect.setInputParameters(outputInputs);
+        tasks.add(outputSelect);
+
+        wf.setTasks(tasks);
+        wf.setOutputParameters(
+                Map.of("result", "${" + outputRef + ".output.result}", "context", "${workflow.variables.context}"));
+        agentCompiler.applyTimeout(wf, config);
+        return wf;
+    }
+
+    /**
+     * Build the "has_plan" branch: compile JSON plan to dynamic workflow,
+     * register it, execute as SUB_WORKFLOW, then SWITCH on success/failure.
+     */
+    private List<WorkflowTask> buildPlanExecutionBranch(
+            AgentConfig config,
+            AgentConfig plannerConfig,
+            AgentConfig fallbackConfig,
+            String prefix,
+            String extractRef,
+            String plannerResult,
+            List<String> knownToolNames,
+            List<Map<String, Object>> parentToolsAsMaps) {
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        // ── 5. Compile JSON plan to Conductor WorkflowDef ────────────
+        // PLAN_AND_COMPILE is a server-side Java system task. Its output is a
+        // structured Map: ``{workflowDef: Map|null, error: String|null,
+        // warnings: [...], stats: {...}}``. Validation failures complete the
+        // task with status COMPLETED but error non-null; the SWITCH below
+        // routes on that. Compared with the old GraalJS INLINE compiler this
+        // (a) eliminates the JSON-string round-trip (workflowDef is already a
+        // Map for SubWorkflowTaskMapper), and (b) makes the compilation logic
+        // unit-testable in plain Java.
+        String compileRef = prefix + "_plan_and_compile";
+        WorkflowTask compileTask = new WorkflowTask();
+        compileTask.setType(PlanAndCompileTask.TASK_TYPE);
+        compileTask.setName("plan_and_compile");
+        compileTask.setTaskReferenceName(compileRef);
+        Map<String, Object> compileInputs = new LinkedHashMap<>();
+        compileInputs.put("planJson", "${" + extractRef + ".output.result.plan_json}");
+        compileInputs.put("parentName", config.getName());
+        compileInputs.put("model", config.getModel() != null ? config.getModel() : "openai/gpt-4o-mini");
+        Integer harnessTimeout = config.getTimeoutSeconds();
+        if (harnessTimeout != null && harnessTimeout > 0) {
+            compileInputs.put("harnessTimeoutSeconds", harnessTimeout);
+        }
+        // Tool-name allowlist: PAC rejects plans referencing tools outside
+        // this set ∪ server-side built-ins. Empty list disables the check
+        // (legacy callers without parent tools degrade to old behaviour).
+        if (knownToolNames != null && !knownToolNames.isEmpty()) {
+            compileInputs.put("knownToolNames", knownToolNames);
+        }
+        // Full tool configs (with guardrails). PAC uses these to wrap each
+        // emitted SIMPLE task with the tool's input guardrails — without
+        // this, a plan referencing a guardrailed tool would compile into a
+        // bare SIMPLE that bypasses the safety check entirely.
+        if (parentToolsAsMaps != null && !parentToolsAsMaps.isEmpty()) {
+            compileInputs.put("parentTools", parentToolsAsMaps);
+        }
+        compileTask.setInputParameters(compileInputs);
+        tasks.add(compileTask);
+
+        // ── 5b. Surface compile errors before they reach SUB_WORKFLOW ─
+        // PLAN_AND_COMPILE sets ``output.error`` to a non-null string on
+        // validation failure. Fold ``error set`` and ``workflowDef null``
+        // into a single ``compile_failed`` sentinel so the gate has no
+        // fall-through case. When a fallback agent is configured, route
+        // compile failures into it — compile failure is the canonical case
+        // the agentic fallback exists to recover from. Only TERMINATE when
+        // no fallback is available.
+        String compileStatusRef = prefix + "_compile_status";
+        WorkflowTask compileStatus = new WorkflowTask();
+        compileStatus.setType("INLINE");
+        compileStatus.setTaskReferenceName(compileStatusRef);
+        compileStatus.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "wfDef",
+                "${" + compileRef + ".output.workflowDef}",
+                "err",
+                "${" + compileRef + ".output.error}",
+                "expression",
+                "(function(){ if ($.err || !$.wfDef) return 'compile_failed'; return 'ok'; })()"));
+        tasks.add(compileStatus);
+
+        // Compile-failure branch: fallback agent if configured, else TERMINATE.
+        List<WorkflowTask> compileFailureBranch;
+        if (fallbackConfig != null) {
+            // Reuse the regular fallback infrastructure but with ``compileRef``
+            // as the error source — the PLAN_AND_COMPILE task's output map
+            // contains the error string and any warnings. A distinct prefix
+            // prevents task-name collision with the exec-failure fallback.
+            List<WorkflowTask> base = new ArrayList<>(
+                    buildFallbackBranch(config, fallbackConfig, prefix + "_compile", plannerResult, compileRef));
+            // /dg #5: terminal SET_VARIABLE so the output selector reads
+            // ``workflow.variables.final_result`` instead of pattern-matching
+            // unresolved ``${_compile_fallback.output.result}`` from the
+            // outer scope.
+            WorkflowTask compileFallbackSet = new WorkflowTask();
+            compileFallbackSet.setType("SET_VARIABLE");
+            compileFallbackSet.setTaskReferenceName(prefix + "_compile_fallback_set");
+            compileFallbackSet.setInputParameters(
+                    Map.of("final_result", "${" + prefix + "_compile_fallback.output.result}"));
+            base.add(compileFallbackSet);
+            compileFailureBranch = base;
+        } else {
+            WorkflowTask compileFail = new WorkflowTask();
+            compileFail.setType("TERMINATE");
+            compileFail.setTaskReferenceName(prefix + "_compile_fail");
+            compileFail.setInputParameters(Map.of(
+                    "terminationStatus",
+                    "FAILED",
+                    "terminationReason",
+                    "Plan compilation failed: ${" + compileRef + ".output.error}"));
+            compileFailureBranch = List.of(compileFail);
+        }
+
+        // ── 6. Build the compile-success branch: exec + status-check + fallback gate
+        // These tasks live inside compileGate's ``default`` case so they are
+        // SKIPPED entirely when compile_failed. Previously they were sibling
+        // tasks of compileGate and ran unconditionally — when compile failed,
+        // plan_exec then attempted to execute against a null workflowDef and
+        // failed the whole workflow, even though the compile-fallback branch
+        // had already recovered.
+        String planWfName = planWorkflowName(config.getName());
+        String execRef = prefix + "_plan_exec";
+        WorkflowTask execTask = new WorkflowTask();
+        execTask.setType("SUB_WORKFLOW");
+        execTask.setName(planWfName);
+        execTask.setTaskReferenceName(execRef);
+        SubWorkflowParams subParams = new SubWorkflowParams();
+        subParams.setName(planWfName);
+        subParams.setVersion(1);
+        subParams.setWorkflowDefinition("${" + compileRef + ".output.workflowDef}");
+        execTask.setSubWorkflowParam(subParams);
+        Map<String, Object> execInputs = new LinkedHashMap<>();
+        execInputs.put("prompt", "${workflow.input.prompt}");
+        execInputs.put("session_id", "${workflow.input.session_id}");
+        execInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+        execInputs.put("context", "${workflow.variables.context}");
+        // Forward execution-scoped inputs that compiled tools may need: working
+        // directory (cwd) for filesystem tools, credentials map for tools that
+        // need provider tokens, media for vision/audio tools. Previously these
+        // were silently dropped, forcing examples to hardcode WORK_DIR etc.
+        execInputs.put("cwd", "${workflow.input.cwd}");
+        execInputs.put("credentials", "${workflow.input.credentials}");
+        execInputs.put("media", "${workflow.input.media}");
+        execTask.setInputParameters(execInputs);
+        // optional:true — without this, a non-COMPLETED dynamic plan
+        // (guardrail trip TERMINATEs, plan-step failure, etc.) FAILs the
+        // task, which halts the parent workflow before ``statusCheck`` /
+        // ``statusSwitch`` can route to the fallback. The earlier comment
+        // here said the opposite, but Conductor halts on non-optional task
+        // failures regardless of any downstream SWITCH — there's no way to
+        // "catch" the failure without optional:true. We then read the real
+        // status from ``${execRef.status}`` in statusCheck below and route
+        // to fallback when it isn't COMPLETED.
+        execTask.setOptional(true);
+
+        String statusRef = prefix + "_exec_status";
+        WorkflowTask statusCheck = new WorkflowTask();
+        statusCheck.setType("INLINE");
+        statusCheck.setTaskReferenceName(statusRef);
+        statusCheck.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "taskStatus", "${" + execRef + ".status}",
+                "expression",
+                        "(function(){ "
+                                + "var s = String($.taskStatus || ''); "
+                                + "return (s === 'COMPLETED') ? 'success' : 'failed'; })()"));
+
+        List<WorkflowTask> fallbackTasks = buildFallbackBranch(config, fallbackConfig, prefix, plannerResult, execRef);
+
+        // /dg #5: each terminal arm writes ``workflow.variables.final_result``
+        // via SET_VARIABLE so the output selector reads from one resolved
+        // variable instead of pattern-matching unresolved ``${...}`` template
+        // strings across four mutually-exclusive branches. Append the
+        // ``final_result`` SET_VARIABLE to every branch's last task.
+        WorkflowTask execSuccessSet = new WorkflowTask();
+        execSuccessSet.setType("SET_VARIABLE");
+        execSuccessSet.setTaskReferenceName(prefix + "_exec_success_set");
+        execSuccessSet.setInputParameters(Map.of("final_result", "${" + execRef + ".output.result}"));
+
+        WorkflowTask statusSwitch = new WorkflowTask();
+        statusSwitch.setType("SWITCH");
+        statusSwitch.setTaskReferenceName(prefix + "_exec_route");
+        statusSwitch.setEvaluatorType("value-param");
+        statusSwitch.setExpression("switchCaseValue");
+        statusSwitch.setInputParameters(Map.of("switchCaseValue", "${" + statusRef + ".output.result}"));
+        // Append the exec_fallback's SET_VARIABLE ONLY when the fallback
+        // branch actually produces a result. With no fallback configured,
+        // buildFallbackBranch returns ``[TERMINATE]`` — Conductor halts
+        // there, the SET_VARIABLE would be dead code, and existing tests
+        // assert TERMINATE is the branch's last task. Same gate pattern
+        // as the compile-failure branch below.
+        List<WorkflowTask> failedBranch = new ArrayList<>(fallbackTasks);
+        if (fallbackConfig != null) {
+            WorkflowTask fallbackSet = new WorkflowTask();
+            fallbackSet.setType("SET_VARIABLE");
+            fallbackSet.setTaskReferenceName(prefix + "_fallback_set");
+            fallbackSet.setInputParameters(Map.of("final_result", "${" + prefix + "_fallback.output.result}"));
+            failedBranch.add(fallbackSet);
+        }
+        statusSwitch.setDecisionCases(Map.of("failed", failedBranch));
+        statusSwitch.setDefaultCase(List.of(execSuccessSet));
+
+        List<WorkflowTask> compileSuccessBranch = new ArrayList<>();
+        compileSuccessBranch.add(execTask);
+        compileSuccessBranch.add(statusCheck);
+        compileSuccessBranch.add(statusSwitch);
+
+        WorkflowTask compileGate = new WorkflowTask();
+        compileGate.setType("SWITCH");
+        compileGate.setTaskReferenceName(prefix + "_compile_gate");
+        compileGate.setEvaluatorType("value-param");
+        compileGate.setExpression("switchCaseValue");
+        compileGate.setInputParameters(Map.of("switchCaseValue", "${" + compileStatusRef + ".output.result}"));
+        compileGate.setDecisionCases(Map.of("compile_failed", compileFailureBranch));
+        compileGate.setDefaultCase(compileSuccessBranch);
+        tasks.add(compileGate);
+
+        return tasks;
+    }
+
+    /**
+     * Emit per-URL fetch tasks plus a concatenating INLINE that builds
+     * the {@code ## Reference Context} block injected into the planner's
+     * prompt. Returns the ref of the INLINE so the caller can template
+     * {@code ${ref.output.result}} into the prompt — or {@code null} when
+     * {@code entries} is null/empty (no context configured).
+     *
+     * <p>Per-entry semantics:
+     * <ul>
+     *   <li>{@code text}: inlined verbatim — no fetch.</li>
+     *   <li>{@code url}: emits a {@code PLANNER_CONTEXT_FETCH} system task
+     *       with the supplied headers (credential placeholders escaped
+     *       from {@code ${CRED}} to {@code #{CRED}} server-side; the
+     *       runtime resolver fills the value at request time). The
+     *       custom task adds an in-process TTL cache + {@code If-None-Match}
+     *       conditional-GET on top of Conductor's HTTP task — see
+     *       {@link dev.agentspan.runtime.service.PlannerContextFetchTask}.
+     *       {@code required=false} doesn't fail the workflow on a fetch
+     *       error; instead the INLINE substitutes a {@code [doc unavailable]}
+     *       marker. {@code maxBytes} (default 16384) truncates large
+     *       responses with a {@code [doc truncated]} marker.</li>
+     * </ul>
+     *
+     * <p>/dg #4: when there are ≥2 URL fetches the compiler wraps them in
+     * a {@code FORK_JOIN} so they run in parallel. Single-fetch case
+     * stays flat to keep the workflow graph readable. The
+     * {@code _ctx_build} INLINE always runs after all fetches complete.
+     */
+    private String emitPlannerContextBuilder(List<Map<String, Object>> entries, String prefix, List<WorkflowTask> out) {
+        if (entries == null || entries.isEmpty()) {
+            return null;
+        }
+
+        // Per-entry descriptors handed to the builder INLINE. URL entries
+        // reference the fetch task's response.body via Conductor template;
+        // text entries inline their literal.
+        List<Map<String, Object>> descriptors = new ArrayList<>();
+        // Fetch tasks collected here so >1 can be wrapped in FORK_JOIN.
+        List<WorkflowTask> fetchTasks = new ArrayList<>();
+
+        for (int i = 0; i < entries.size(); i++) {
+            Map<String, Object> e = entries.get(i);
+            if (e == null) continue;
+            Object text = e.get("text");
+            Object url = e.get("url");
+            if (text instanceof String ts && !ts.isEmpty()) {
+                descriptors.add(Map.of("type", "text", "text", ts));
+            } else if (url instanceof String us && !us.isEmpty()) {
+                String fetchRef = prefix + "_ctx_fetch_" + i;
+                WorkflowTask fetch = new WorkflowTask();
+                fetch.setName(dev.agentspan.runtime.service.PlannerContextFetchTask.TASK_TYPE);
+                fetch.setType(dev.agentspan.runtime.service.PlannerContextFetchTask.TASK_TYPE);
+                fetch.setTaskReferenceName(fetchRef);
+
+                Map<String, Object> headers = new LinkedHashMap<>();
+                Object hdrObj = e.get("headers");
+                if (hdrObj instanceof Map<?, ?> hdrMap) {
+                    for (Map.Entry<?, ?> h : hdrMap.entrySet()) {
+                        // /dg #2: escape ONLY ``${CRED_NAME}`` patterns where
+                        // ``CRED_NAME`` is an identifier — preserves literal
+                        // ``${...}`` substrings that don't look like
+                        // credentials. Also reject CR/LF up-front to close
+                        // the response-splitting injection vector.
+                        String name = String.valueOf(h.getKey());
+                        String value = String.valueOf(h.getValue());
+                        if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+                            throw new IllegalArgumentException("plannerContext header '" + name
+                                    + "' contains CR/LF — rejected to prevent HTTP response splitting");
+                        }
+                        headers.put(name, CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("#{$1}"));
+                    }
+                }
+
+                boolean required = !Boolean.FALSE.equals(e.get("required"));
+                int maxBytes = 16384;
+                if (e.get("maxBytes") instanceof Number n) {
+                    maxBytes = n.intValue();
+                }
+                int ttlSeconds = 60;
+                if (e.get("ttlSeconds") instanceof Number n) {
+                    ttlSeconds = n.intValue();
+                }
+
+                Map<String, Object> fetchInputs = new LinkedHashMap<>();
+                fetchInputs.put("url", us);
+                fetchInputs.put("headers", headers);
+                fetchInputs.put("required", required);
+                fetchInputs.put("maxBytes", maxBytes);
+                fetchInputs.put("ttl_seconds", ttlSeconds);
+                // Forward the execution token so credential-aware
+                // resolution at the network layer can substitute #{CRED}.
+                fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+                fetch.setInputParameters(fetchInputs);
+
+                if (!required) {
+                    // /dg #4: optional=true means a doc-host outage on a
+                    // non-required doc doesn't fail the workflow — the
+                    // INLINE substitutes [doc unavailable] marker.
+                    fetch.setOptional(true);
+                }
+                fetchTasks.add(fetch);
+
+                Map<String, Object> desc = new LinkedHashMap<>();
+                desc.put("type", "url");
+                desc.put("url", us);
+                desc.put("required", required);
+                desc.put("maxBytes", maxBytes);
+                // Conductor resolves these templates BEFORE invoking the
+                // INLINE script — so $.entries[i].body is the actual body.
+                desc.put("body", "${" + fetchRef + ".output.response.body}");
+                desc.put("statusCode", "${" + fetchRef + ".output.response.statusCode}");
+                descriptors.add(desc);
+            }
+            // Entries with neither text nor url are silently skipped — the
+            // SDK already validates exactly-one-of at construction time,
+            // so this only fires on hand-rolled wire payloads.
+        }
+
+        if (descriptors.isEmpty()) {
+            return null;
+        }
+
+        // /dg #4: emit fetches in parallel when there are ≥2. Single-fetch
+        // stays flat to keep the graph readable. The build INLINE always
+        // runs after every fetch completes (FORK_JOIN's JOIN gives us
+        // that for free).
+        if (fetchTasks.size() >= 2) {
+            String forkRef = prefix + "_ctx_fork";
+            String joinRef = prefix + "_ctx_join";
+            WorkflowTask fork = new WorkflowTask();
+            fork.setType("FORK_JOIN");
+            fork.setTaskReferenceName(forkRef);
+            List<List<WorkflowTask>> branches = new ArrayList<>();
+            List<String> joinOn = new ArrayList<>();
+            for (WorkflowTask f : fetchTasks) {
+                branches.add(List.of(f));
+                joinOn.add(f.getTaskReferenceName());
+            }
+            fork.setForkTasks(branches);
+            out.add(fork);
+            WorkflowTask join = new WorkflowTask();
+            join.setType("JOIN");
+            join.setTaskReferenceName(joinRef);
+            join.setJoinOn(joinOn);
+            out.add(join);
+        } else if (!fetchTasks.isEmpty()) {
+            out.addAll(fetchTasks);
+        }
+
+        String buildRef = prefix + "_ctx_build";
+        WorkflowTask buildTask = new WorkflowTask();
+        buildTask.setType("INLINE");
+        buildTask.setTaskReferenceName(buildRef);
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        inputs.put("evaluatorType", "graaljs");
+        inputs.put("entries", descriptors);
+        inputs.put("expression", JavaScriptBuilder.plannerContextBuilderScript());
+        buildTask.setInputParameters(inputs);
+        out.add(buildTask);
+        return buildRef;
+    }
+
+    /**
+     * Emit the planner-stage tasks: a static-plan gate INLINE, then a SWITCH
+     * whose default branch runs the planner sub-workflow + the three
+     * follow-on context-handling tasks, and whose ``skip`` branch is a
+     * single no-op INLINE that fires when ``workflow.input.static_plan``
+     * is supplied (dg-review F1 / recommendation #13).
+     *
+     * <p>Appends two top-level tasks ({@code plannerGate} + {@code plannerRoute})
+     * to the supplied {@code tasks} list. Downstream consumers reference
+     * the planner's coerced output via {@link AgentCompiler#coercedRef}
+     * with {@code plannerCoerceRef} — when the SWITCH takes the skip
+     * branch those references resolve to null, which {@code extract_json}
+     * Case 0 doesn't read anyway (it reads {@code workflow.input.static_plan}
+     * directly).
+     *
+     * <p>{@code preLiveBranchTasks} are prepended to the SWITCH's default
+     * (live) branch — used by the planner-context fetch+build pipeline to
+     * resolve URLs on every planner invocation while staying cost-free on
+     * the static-plan path (the skip branch never runs them).
+     */
+    private void emitPlannerStage(
+            AgentConfig plannerConfig,
+            String prefix,
+            String plannerRef,
+            String plannerCoerceRef,
+            String plannerPrompt,
+            List<WorkflowTask> preLiveBranchTasks,
+            List<WorkflowTask> tasks) {
+
+        String plannerGateRef = prefix + "_planner_gate";
+        WorkflowTask plannerGate = new WorkflowTask();
+        plannerGate.setType("INLINE");
+        plannerGate.setTaskReferenceName(plannerGateRef);
+        plannerGate.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "staticPlan",
+                "${workflow.input.static_plan}",
+                "expression",
+                // /dg #3: an object without ``steps`` (e.g. ``{}`` from
+                // ``runtime.run(harness, plan={})``) used to take the skip
+                // branch, then extract_json Case 0 rejected it for the
+                // missing key, and the user saw both "planner skipped" and
+                // "no plan found". Mirror Case 0's accept-criteria here so
+                // skip only fires when the static_plan is genuinely usable.
+                "(function(){ var sp = $.staticPlan; "
+                        + "if (sp == null) return 'run'; "
+                        + "if (typeof sp === 'object') {"
+                        + "  var hasSteps = false;"
+                        + "  try { hasSteps = sp.steps != null || (sp.get && sp.get('steps') != null); } catch(e) {}"
+                        + "  return hasSteps ? 'skip' : 'run';"
+                        + "} "
+                        + "if (typeof sp === 'string' && sp.length > 2 && sp.indexOf('\"steps\"') >= 0) return 'skip'; "
+                        + "return 'run'; })();"));
+        tasks.add(plannerGate);
+
+        // Live branch: planner sub-workflow + ctx_merge + ctx_set + coerce.
+        WorkflowTask plannerTask = agentCompiler.compileSubAgent(
+                plannerConfig, plannerRef, plannerPrompt, "${workflow.input.media}", "${workflow.variables.context}");
+
+        String plannerMergeRef = prefix + "_planner_ctx_merge";
+        WorkflowTask plannerMerge = new WorkflowTask();
+        plannerMerge.setType("INLINE");
+        plannerMerge.setTaskReferenceName(plannerMergeRef);
+        plannerMerge.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "parent",
+                "${workflow.variables.context}",
+                "child",
+                "${" + plannerRef + ".output.context}",
+                "expression",
+                JavaScriptBuilder.flatMergeContextScript()));
+
+        WorkflowTask plannerCtxSet = new WorkflowTask();
+        plannerCtxSet.setType("SET_VARIABLE");
+        plannerCtxSet.setTaskReferenceName(prefix + "_planner_ctx_set");
+        plannerCtxSet.setInputParameters(Map.of("context", "${" + plannerMergeRef + ".output.result}"));
+
+        String plannerResultRaw = AgentCompiler.subAgentResultRef(plannerConfig, plannerRef);
+        WorkflowTask plannerCoerce = AgentCompiler.createCoerceTask(plannerResultRaw, plannerCoerceRef);
+
+        List<WorkflowTask> plannerLiveBranch = new ArrayList<>();
+        if (preLiveBranchTasks != null) {
+            plannerLiveBranch.addAll(preLiveBranchTasks);
+        }
+        plannerLiveBranch.add(plannerTask);
+        plannerLiveBranch.add(plannerMerge);
+        plannerLiveBranch.add(plannerCtxSet);
+        plannerLiveBranch.add(plannerCoerce);
+
+        // Skip branch: a single no-op INLINE so the SWITCH has both arms.
+        WorkflowTask plannerSkipped = new WorkflowTask();
+        plannerSkipped.setType("INLINE");
+        plannerSkipped.setTaskReferenceName(prefix + "_planner_skipped");
+        plannerSkipped.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "expression",
+                "(function(){ return {result: '[planner skipped — static_plan supplied]'}; })();"));
+
+        WorkflowTask plannerRoute = new WorkflowTask();
+        plannerRoute.setType("SWITCH");
+        plannerRoute.setTaskReferenceName(prefix + "_planner_route");
+        plannerRoute.setEvaluatorType("value-param");
+        plannerRoute.setExpression("route");
+        plannerRoute.setInputParameters(Map.of("route", "${" + plannerGateRef + ".output.result}"));
+        plannerRoute.setDecisionCases(Map.of("skip", List.of(plannerSkipped)));
+        plannerRoute.setDefaultCase(plannerLiveBranch);
+        tasks.add(plannerRoute);
+    }
+
+    /**
+     * Build the fallback branch: run the fallback agent with plan + errors.
+     * When fallbackConfig is null, returns a TERMINATE task with FAILED status.
+     */
+    private List<WorkflowTask> buildFallbackBranch(
+            AgentConfig config, AgentConfig fallbackConfig, String prefix, String plannerResult, String execRef) {
+
+        if (fallbackConfig == null) {
+            WorkflowTask terminate = new WorkflowTask();
+            terminate.setType("TERMINATE");
+            terminate.setTaskReferenceName(prefix + "_no_fallback_term");
+            terminate.setInputParameters(Map.of(
+                    "terminationStatus", "FAILED",
+                    "terminationReason", "Plan execution failed and no fallback agent configured"));
+            return List.of(terminate);
+        }
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        // Compose fallback prompt: plan + errors
+        String fbPromptRef = prefix + "_fb_prompt";
+        WorkflowTask fbPrompt = new WorkflowTask();
+        fbPrompt.setType("INLINE");
+        fbPrompt.setTaskReferenceName(fbPromptRef);
+        fbPrompt.setInputParameters(
+                Map.of(
+                        "evaluatorType",
+                        "graaljs",
+                        "plan",
+                        plannerResult,
+                        "execOutput",
+                        "${" + execRef + ".output}",
+                        "originalPrompt",
+                        "${workflow.input.prompt}",
+                        "expression",
+                        "(function(){ "
+                                + "var errors = ''; "
+                                + "try { errors = JSON.stringify($.execOutput || {}, null, 2); } catch(e) { errors = String($.execOutput); } "
+                                + "return $.originalPrompt + '\\n\\nPlan:\\n' + $.plan + '\\n\\nExecution errors:\\n' + errors; })()"));
+        tasks.add(fbPrompt);
+
+        // Apply fallbackMaxTurns if set. Use Lombok's toBuilder so every field
+        // configured on the fallback agent (memory, prompt_inputs, tool_choice,
+        // termination, handoffs, callbacks, etc.) is preserved — the previous
+        // explicit-whitelist rebuild silently dropped anything not enumerated.
+        Integer fbMaxTurns = config.getFallbackMaxTurns();
+        if (fbMaxTurns != null) {
+            fallbackConfig = fallbackConfig.toBuilder().maxTurns(fbMaxTurns).build();
+        }
+
+        String fallbackRef = prefix + "_fallback";
+        WorkflowTask fallbackTask = agentCompiler.compileSubAgent(
+                fallbackConfig,
+                fallbackRef,
+                "${" + fbPromptRef + ".output.result}",
+                "${workflow.input.media}",
+                "${workflow.variables.context}");
+        tasks.add(fallbackTask);
+
+        return tasks;
+    }
+
+    /**
+     * Build the "no_plan" branch: when JSON fence extraction fails,
+     * degrade to running the fallback agent with just the planner output.
+     * When fallbackConfig is null, returns a TERMINATE task with FAILED status.
+     */
+    private List<WorkflowTask> buildFallbackOnlyBranch(
+            AgentConfig config, AgentConfig fallbackConfig, String prefix, String plannerResult) {
+
+        if (fallbackConfig == null) {
+            WorkflowTask terminate = new WorkflowTask();
+            terminate.setType("TERMINATE");
+            terminate.setTaskReferenceName(prefix + "_noplan_term");
+            terminate.setInputParameters(Map.of(
+                    "terminationStatus", "FAILED",
+                    "terminationReason", "No JSON plan found and no fallback agent configured"));
+            return List.of(terminate);
+        }
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        log.warn(
+                "PLAN_EXECUTE '{}': no JSON fence found in planner output — degrading to fallback agent",
+                config.getName());
+
+        // Compose prompt: original + planner output (no errors since plan execution didn't happen)
+        String npPromptRef = prefix + "_np_prompt";
+        WorkflowTask npPrompt = new WorkflowTask();
+        npPrompt.setType("INLINE");
+        npPrompt.setTaskReferenceName(npPromptRef);
+        npPrompt.setInputParameters(Map.of(
+                "evaluatorType",
+                "graaljs",
+                "plan",
+                plannerResult,
+                "originalPrompt",
+                "${workflow.input.prompt}",
+                "expression",
+                "(function(){ " + "return $.originalPrompt + '\\n\\nPlanner output:\\n' + $.plan; })()"));
+        tasks.add(npPrompt);
+
+        // Apply fallbackMaxTurns identically to buildFallbackBranch — without
+        // this, a runaway fallback (e.g. an explorer that loops re-reading
+        // the same files) ran with the agent's own ``maxTurns`` instead of
+        // the user's ``coder.fallback_max_turns`` cap, and we'd burn 50+
+        // turns before either failing validation or hitting the model's own
+        // ceiling. The override mirrors the compile-fail / exec-fail path.
+        Integer fbMaxTurns = config.getFallbackMaxTurns();
+        if (fbMaxTurns != null) {
+            fallbackConfig = fallbackConfig.toBuilder().maxTurns(fbMaxTurns).build();
+        }
+
+        String noPlanFallbackRef = prefix + "_noplan_fallback";
+        WorkflowTask fallbackTask = agentCompiler.compileSubAgent(
+                fallbackConfig,
+                noPlanFallbackRef,
+                "${" + npPromptRef + ".output.result}",
+                "${workflow.input.media}",
+                "${workflow.variables.context}");
+        tasks.add(fallbackTask);
+
+        // /dg #5: terminal SET_VARIABLE so the output selector reads
+        // ``workflow.variables.final_result`` instead of pattern-matching
+        // unresolved ``${_noplan_fallback.output.result}``.
+        WorkflowTask noPlanSet = new WorkflowTask();
+        noPlanSet.setType("SET_VARIABLE");
+        noPlanSet.setTaskReferenceName(prefix + "_noplan_fallback_set");
+        noPlanSet.setInputParameters(Map.of("final_result", "${" + noPlanFallbackRef + ".output.result}"));
+        tasks.add(noPlanSet);
+
+        return tasks;
     }
 }

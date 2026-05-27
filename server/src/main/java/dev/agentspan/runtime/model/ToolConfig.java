@@ -42,6 +42,8 @@ public class ToolConfig {
 
     private Integer timeoutSeconds;
 
+    private Integer maxCalls;
+
     /** Type-specific configuration (e.g., server_url for MCP, url/method/headers for HTTP). */
     private Map<String, Object> config;
 

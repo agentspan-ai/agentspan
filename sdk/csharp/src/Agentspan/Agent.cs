@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Agentspan.Plans;
 
 namespace Agentspan;
 
@@ -10,14 +11,15 @@ namespace Agentspan;
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum Strategy
 {
-    [JsonPropertyName("handoff")]     Handoff,
-    [JsonPropertyName("sequential")]  Sequential,
-    [JsonPropertyName("parallel")]    Parallel,
-    [JsonPropertyName("router")]      Router,
-    [JsonPropertyName("round_robin")] RoundRobin,
-    [JsonPropertyName("random")]      Random,
-    [JsonPropertyName("swarm")]       Swarm,
-    [JsonPropertyName("manual")]      Manual,
+    [JsonPropertyName("handoff")]      Handoff,
+    [JsonPropertyName("sequential")]   Sequential,
+    [JsonPropertyName("parallel")]     Parallel,
+    [JsonPropertyName("router")]       Router,
+    [JsonPropertyName("round_robin")]  RoundRobin,
+    [JsonPropertyName("random")]       Random,
+    [JsonPropertyName("swarm")]        Swarm,
+    [JsonPropertyName("manual")]       Manual,
+    [JsonPropertyName("plan_execute")] PlanExecute,
 }
 
 /// <summary>
@@ -38,7 +40,52 @@ public sealed class Agent
     public double? Temperature { get; set; }
     public int? TimeoutSeconds { get; set; }
     public bool External { get; set; }
-    public bool Planner { get; set; }
+    /// <summary>
+    /// When true, the server augments the system prompt with a
+    /// "plan first, then execute" preamble (Google ADK feature). Unrelated
+    /// to the {@link Planner} PLAN_EXECUTE sub-agent slot below.
+    ///
+    /// Renamed from the legacy {@code Planner: bool} once that JSON key
+    /// became the PAC/PAE planner sub-agent slot.
+    /// </summary>
+    public bool EnablePlanning { get; set; }
+
+    /// <summary>
+    /// {@code Strategy.PlanExecute}: the agent that produces the JSON
+    /// plan. Required when Strategy is PlanExecute. The planner sub-agent
+    /// can itself be a multi-agent (e.g. a SEQUENTIAL of explorer +
+    /// planner). Replaces the legacy positional {@code agents[0]}.
+    /// </summary>
+    public Agent? Planner { get; set; }
+
+    /// <summary>
+    /// {@code Strategy.PlanExecute}: agentic recovery when the deterministic
+    /// plan fails to compile or execute. Optional — if absent, plan failures
+    /// TERMINATE the workflow.
+    /// </summary>
+    public Agent? Fallback { get; set; }
+
+    /// <summary>
+    /// Max LLM turns for the fallback agent in PlanExecute strategy.
+    /// </summary>
+    public int? FallbackMaxTurns { get; set; }
+
+    /// <summary>
+    /// PLAN_EXECUTE planner context: text snippets and/or URLs whose contents
+    /// are appended to the planner's user prompt as a <c>## Reference Context</c>
+    /// block on every planner invocation. URLs are fetched dynamically — no
+    /// compile-time fetch, no cache — so doc edits go live without recompile.
+    ///
+    /// <para>Build entries via <see cref="Context.FromText"/> /
+    /// <see cref="Context.FromUrl"/>. URL entries may carry credentialed
+    /// headers in the <c>${CRED_NAME}</c> shape; the server escapes them
+    /// and the runtime credential resolver fills them in at request time —
+    /// same auth pipeline as HTTP tool headers.</para>
+    ///
+    /// <para>Only meaningful with <c>Strategy.PlanExecute</c>. The server
+    /// compiler skips emission for any other strategy.</para>
+    /// </summary>
+    public List<Context>? PlannerContext { get; set; }
     public bool LocalCodeExecution { get; set; }
     public List<string>? AllowedLanguages { get; set; }
     public List<string>? AllowedCommands { get; set; }
@@ -183,7 +230,28 @@ public sealed class AgentBuilder
     public AgentBuilder WithTemperature(double temp)                { _agent.Temperature = temp; return this; }
     public AgentBuilder WithTimeout(int seconds)                    { _agent.TimeoutSeconds = seconds; return this; }
     public AgentBuilder WithExternal(bool external = true)          { _agent.External = external; return this; }
-    public AgentBuilder WithPlanner(bool planner = true)            { _agent.Planner = planner; return this; }
+    public AgentBuilder WithEnablePlanning(bool enable = true)      { _agent.EnablePlanning = enable; return this; }
+    public AgentBuilder WithPlanner(Agent planner)                   { _agent.Planner = planner; return this; }
+    public AgentBuilder WithFallback(Agent fallback)                 { _agent.Fallback = fallback; return this; }
+    public AgentBuilder WithFallbackMaxTurns(int turns)              { _agent.FallbackMaxTurns = turns; return this; }
+    /// <summary>
+    /// PLAN_EXECUTE planner context — text snippets and URLs appended to the
+    /// planner's user prompt at runtime. See <see cref="Agent.PlannerContext"/>.
+    /// Only valid with <c>Strategy.PlanExecute</c>; throws at serialization
+    /// time on other strategies.
+    /// </summary>
+    public AgentBuilder WithPlannerContext(params Context[] entries)
+    {
+        _agent.PlannerContext = [.. entries];
+        return this;
+    }
+    /// <summary>Shorthand: text-only planner context. Wraps each string in
+    /// <see cref="Context.FromText"/>.</summary>
+    public AgentBuilder WithPlannerContext(params string[] texts)
+    {
+        _agent.PlannerContext = [.. texts.Select(Context.FromText)];
+        return this;
+    }
     public AgentBuilder WithIncludeContents(string mode)            { _agent.IncludeContents = mode; return this; }
     public AgentBuilder WithThinkingBudget(int tokens)              { _agent.ThinkingBudgetTokens = tokens; return this; }
     public AgentBuilder WithRequiredTools(params string[] tools)    { _agent.RequiredTools = [.. tools]; return this; }

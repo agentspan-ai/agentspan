@@ -451,8 +451,8 @@ describe("Stage 8: Analytics & Reporting", () => {
     expect(analyticsAgent.thinkingBudgetTokens).toBe(2048);
   });
 
-  it("analytics agent has planner=true", () => {
-    expect(analyticsAgent.planner).toBe(true);
+  it("analytics agent has enablePlanning=true", () => {
+    expect(analyticsAgent.enablePlanning).toBe(true);
   });
 
   it('analytics agent has required_tools=["index_article"]', () => {

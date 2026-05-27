@@ -1,7 +1,7 @@
 /**
  * 48 - Planner — agent that plans before executing.
  *
- * When `planner: true`, the server enhances the system prompt with planning
+ * When `enablePlanning: true`, the server enhances the system prompt with planning
  * instructions so the agent creates a step-by-step plan before executing
  * tools.
  *
@@ -75,7 +75,7 @@ export const agent = new Agent({
     'You are a research writer. Research topics thoroughly and ' +
     'write structured reports with multiple sections.',
   tools: [searchWeb, writeSection],
-  planner: true,
+  enablePlanning: true,
 });
 
 // -- Run ---------------------------------------------------------------------
