@@ -25,14 +25,12 @@ server_url = "http://localhost:6767/api"
 [env]
 
 [judge]
+# No baseline_run — both agents are scored independently against the task
+# prompt. Neither output is treated as the reference truth.
+#
 # Positional pairing: because each run executes a *different* example file
 # (01_ocg_docs_writer vs 02_gh_docs_writer), the judge automatically falls
 # back to pairing by position — run-A's Nth example vs run-B's Nth example.
-#
-# To add more scenarios, add one file to each group in groups.py in the
-# same order. Pair 1 = position 1 of OCG_AGENT vs position 1 of GH_AGENT,
-# pair 2 = position 2 vs position 2, etc.
-baseline_run = "no_ocg"
 model = "gpt-4o-mini"
 max_output_chars = 4000
 max_tokens = 400

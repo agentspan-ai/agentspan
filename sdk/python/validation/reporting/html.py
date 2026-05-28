@@ -33,6 +33,7 @@ def generate_judge_html_report(
     raw_outputs: dict[str, dict[str, str]] | None = None,
     meta: dict | None = None,
     run_meta: dict[str, dict] | None = None,
+    token_data: dict[str, dict] | None = None,
 ) -> None:
     """Generate multi-run comparison HTML report with side-by-side comparison."""
     env = Environment(
@@ -70,6 +71,7 @@ def generate_judge_html_report(
         raw_outputs=raw_outputs or {},
         meta=meta or {},
         run_meta=run_meta or {},
+        token_data=token_data or {},
         total_examples=total_examples,
         avg_scores=avg_scores,
         completed_counts=completed_counts,

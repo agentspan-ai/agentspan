@@ -244,7 +244,17 @@ def _judge_example(
     prev_judge: dict,
 ) -> dict:
     """Judge one example across all runs. Returns row dict."""
-    prompt = extract_prompt(example_name)
+    # For positional pairs ("pair_N") the synthetic key has no file on disk.
+    # Fall back to the original filename stored in the merged example data.
+    _original = None
+    _stored_prompt = None
+    for rn in run_names:
+        ex = run_examples.get(rn, {}).get(example_name, {})
+        if ex.get("_original_name"):
+            _original = ex["_original_name"]
+        if ex.get("_prompt"):
+            _stored_prompt = ex["_prompt"]
+    prompt = _stored_prompt or extract_prompt(_original or example_name)
     row: dict = {"example": example_name}
 
     prev_entry = prev_judge.get("examples", {}).get(example_name, {})

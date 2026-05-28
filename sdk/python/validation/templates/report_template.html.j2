@@ -51,6 +51,18 @@ button:hover { background: var(--bg3); }
 .run-card.baseline { border-left: 4px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg2)); }
 .baseline-chip { font-size: 0.65rem; background: var(--accent); color: #fff; padding: 0.1rem 0.4rem; border-radius: 8px; margin-left: 0.3rem; }
 
+/* Token comparison table */
+.token-section { margin-bottom: 1.5rem; }
+.token-section h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+.token-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.token-table th { text-align: left; padding: 0.4rem 0.75rem; border-bottom: 2px solid var(--border); color: var(--text2); font-weight: 600; }
+.token-table td { padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border); }
+.token-table tr:last-child td { border-bottom: none; }
+.token-table .token-run { font-weight: 600; }
+.token-table .token-total { font-weight: 700; }
+.token-savings { font-size: 0.8rem; color: var(--pass); font-weight: 600; margin-left: 0.4rem; }
+.token-savings.worse { color: var(--fail); }
+
 /* Score distribution */
 .chart-section { margin-bottom: 2rem; }
 .chart-section h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
@@ -194,6 +206,53 @@ tr.avg-row td { background: var(--bg2); }
     </div>
     {% endfor %}
   </div>
+
+  <!-- Token usage comparison -->
+  {% if token_data %}
+  <div class="token-section">
+    <h2>Token Usage</h2>
+    <table class="token-table">
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Prompt</th>
+          <th>Completion</th>
+          <th>Total</th>
+          {% if runs|length == 2 %}<th>vs baseline</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set baseline_total = token_data.get(baseline, {}).get('total', 0) %}
+        {% for rn in runs %}
+        {% set td = token_data.get(rn, {}) %}
+        <tr>
+          <td class="token-run">{{ rn }}{% if rn == baseline %} <span class="baseline-chip">baseline</span>{% endif %}</td>
+          <td>{{ td.get('prompt', 0) | format_number }}</td>
+          <td>{{ td.get('completion', 0) | format_number }}</td>
+          <td class="token-total">{{ td.get('total', 0) | format_number }}</td>
+          {% if runs|length == 2 %}
+          <td>
+            {% if rn != baseline and baseline_total > 0 %}
+              {% set diff = td.get('total', 0) - baseline_total %}
+              {% set pct = ((diff / baseline_total) * 100) | round(1) %}
+              {% if diff < 0 %}
+                <span class="token-savings">{{ pct }}% ({{ diff | format_number }})</span>
+              {% elif diff > 0 %}
+                <span class="token-savings worse">+{{ pct }}% (+{{ diff | format_number }})</span>
+              {% else %}
+                —
+              {% endif %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 
   <!-- Per-run summary cards -->
   <div class="summary">

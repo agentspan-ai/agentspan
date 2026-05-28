@@ -25,6 +25,26 @@ def _write_outputs(
             if ex_data and ex_data.get("status") == "COMPLETED":
                 raw_outputs[example][rn] = ex_data.get("output_text", "")
 
+    # Collect token data: totals per run + per-example breakdown
+    token_data: dict[str, dict] = {}
+    for rn in run_names:
+        total_prompt = total_completion = total_all = 0
+        per_example: dict[str, dict] = {}
+        for ex_name, ex_data in run_examples.get(rn, {}).items():
+            pt = ex_data.get("tokens_prompt", 0) or 0
+            ct = ex_data.get("tokens_completion", 0) or 0
+            tt = ex_data.get("tokens_total", 0) or (pt + ct)
+            total_prompt += pt
+            total_completion += ct
+            total_all += tt
+            per_example[ex_name] = {"prompt": pt, "completion": ct, "total": tt}
+        token_data[rn] = {
+            "prompt": total_prompt,
+            "completion": total_completion,
+            "total": total_all,
+            "per_example": per_example,
+        }
+
     # Load per-run metadata
     run_meta_data: dict[str, dict] = {}
     for rn, rd in run_dirs.items():
@@ -42,6 +62,7 @@ def _write_outputs(
         run_names=run_names,
         baseline=baseline_name,
         raw_outputs=raw_outputs,
+        token_data=token_data,
         meta=meta,
         run_meta=run_meta_data,
     )

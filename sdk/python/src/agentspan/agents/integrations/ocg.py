@@ -31,8 +31,9 @@ Environment:
     OCG_TENANT_ID   default ``"default"``
 
 The tool responses are projected to a compact, LLM-friendly shape (entities,
-claims, relationships) - the raw OCG body (full base64 blobs, rendered
-narrative answers, citation envelopes) never reaches the LLM context.
+claims, relationships, citations) - the raw OCG body (full base64 blobs,
+rendered narrative answers) is stripped, but the citation envelope is
+preserved so the agent can traverse the graph to resolve fragments.
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ from agentspan.agents import Agent, tool
 
 # --- OCG HTTP client --------------------------------------------------------
 
-_DEFAULT_BASE_URL = "http://localhost:6100/api/v1"
+_DEFAULT_BASE_URL = "https://dev.orkescontextgraph.io/api/v1"
 _DEFAULT_TENANT = "default"
 
 
@@ -64,7 +65,7 @@ def _ocg_headers() -> Dict[str, str]:
     }
     api_key = os.environ.get("OCG_API_KEY")
     if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+        headers["X-Api-Key"] = api_key
     return headers
 
 
@@ -154,6 +155,21 @@ def _project_query(raw: Dict[str, Any]) -> Dict[str, Any]:
         if md.get(opt):
             out[opt] = md.get(opt)
 
+    # Citations — the primary input for graph-level traversal. Each citation
+    # has a source_item_id the agent can pass to ocg_neighborhood to walk up
+    # to the containing resource.
+    citations_raw = (raw.get("output") or {}).get("citations") or []
+    if citations_raw:
+        citations = []
+        for c in citations_raw:
+            citations.append({
+                "container_id": c.get("container_id"),
+                "source_item_id": c.get("source_item_id"),
+                "title": _clip(c.get("title"), 200),
+                "snippet": _clip(c.get("snippet"), 300),
+            })
+        out["citations"] = _cap_array(citations, 10)
+
     blocks = ((raw.get("output") or {}).get("content") or {}).get("blocks") or []
     for block in blocks:
         btype = block.get("type")
@@ -210,8 +226,12 @@ def _project_neighborhood(raw: Dict[str, Any]) -> Dict[str, Any]:
         props = n.get("properties") or {}
         nodes.append({
             "id": n.get("id"),
+            # container_id / node_type — what kind of entity this is.
+            # Used by the agent to decide "self-contained resource vs fragment".
+            "container_id": n.get("container_id") or n.get("node_type"),
+            # external_id is typically the file path or resource locator.
+            "external_id": n.get("external_id") or props.get("external_id") or None,
             "label": n.get("label"),
-            "node_type": n.get("node_type"),
             "depth": n.get("depth"),
             "description": _clip(props.get("description"), 200),
         })
@@ -226,6 +246,9 @@ def _project_neighborhood(raw: Dict[str, Any]) -> Dict[str, Any]:
         "center_id": raw.get("center_id"),
         "depth": raw.get("depth"),
         "nodes": _cap_array(nodes),
+        # links[] includes both inbound and outbound edges.
+        # To find the containing resource: filter where target == center_id
+        # and edge_type implies containment (contains / declares / defines / owns).
         "links": _cap_array(links),
     }
 
@@ -292,22 +315,22 @@ def _project_code_history(raw: Any) -> Any:
 # --- OCG read tools ---------------------------------------------------------
 
 @tool(timeout_seconds=30)
-def ocg_query(query: str, max_results: int = 10, include_citations: bool = True) -> dict:
+def ocg_query(query: str, max_results: int = 10, traversal_level: int = 1) -> dict:
     """Query the Open Context Graph for structured retrieval.
 
-    Returns a projected payload with `confidence`, `result_quality`,
-    `intent` / `conflicts` (when present), and three tables: `entities[]`
-    (id, external_id, name, type, description), `claims[]`, and
-    `relationships[]`. The raw narrative answer and citation envelope are
-    stripped.
+    traversal_level: 0 = citations only, 1 = include graph neighborhood (default),
+    2-3 = multi-hop traversal (expensive, use sparingly).
+
+    Returns citations[] (source_item_id, title, container_id, snippet) and
+    traversal_results[] when traversal_level > 0.
     """
     raw = _ocg_request(
         "POST",
-        "/query",
+        "/agent/query",
         json={
             "query": query,
             "max_results": max_results,
-            "include_citations": include_citations,
+            "traversal_level": traversal_level,
         },
     )
     return _enforce_response_cap(_project_query(raw))
@@ -465,97 +488,146 @@ OCG_TOOLS = [
 
 _OCG_INSTRUCTIONS = """\
 You are the OCG retrieval specialist. The parent agent gives you ONE
-natural-language `request` and expects ONE focused answer. Internally you
-will rephrase if needed, run up to 2 ocg_query attempts with different
-SHAPES, and return the best result you found. The parent NEVER rephrases -
-that is YOUR job.
+natural-language `request` and expects ONE focused answer. OCG is your ONLY
+source of truth — no filesystem, no URLs, no other tools exist for you.
 
-OCG is your ONLY source of truth. No filesystem, no URLs, no other tools
-exist for you. If OCG genuinely cannot answer after 2 well-shaped attempts,
-return `status: no_match` with a clear summary of what you tried.
-
-=== HOW OCG ACTUALLY RANKS (use this to shape queries) ===
+=== HOW OCG RANKS (shape your queries) ===
 The NL parser infers `type_hints` from NOUNS in your query:
-   "X variable"       -> type_hints: [variable]
-   "X function"       -> type_hints: [function]
-   "documentation
-    files about X"    -> type_hints: [file, variable]    <-- powerful
-   "the X struct"     -> type_hints: [struct]
-   "tests for X"      -> type_hints: [test]
+   "X variable"              -> type_hints: [variable]
+   "X function"              -> type_hints: [function]
+   "documentation files about X" -> type_hints: [file, variable]
+   "the X struct"            -> type_hints: [struct]
+   "tests for X"             -> type_hints: [test]
 
-Type_hints act as a hard filter, not a re-rank weight. So picking the right
-noun decides which entity-type bucket the results come from. Literal
-identifiers (e.g. `AGENTSPAN_LOG_LEVEL`) can HURT retrieval if they're not
-indexed as discoverable entity names - they're indexed as claim values, not
-symbols.
+Type_hints are a hard filter, not a re-rank weight. Picking the right noun
+decides which entity-type bucket results come from. Literal identifiers
+(e.g. AGENTSPAN_LOG_LEVEL) can HURT retrieval — they're indexed as claim
+values, not symbol names.
 
-=== QUERY SHAPES (your retry palette) ===
-Pick a different shape each retry. NEVER reuse the same shape twice.
-
-  SHAPE-LITERAL    "where is <LITERAL_IDENTIFIER> defined in <repo>"
-                   Use when the literal is likely a symbol name (CamelCase,
-                   snake_case function/class names).
+=== QUERY SHAPES (retry palette — never reuse the same shape twice) ===
+  SHAPE-LITERAL    "where is <IDENTIFIER> defined in <repo>"
   SHAPE-CATEGORY   "<conceptual category> <topic> in <repo>"
-                   Use when SHAPE-LITERAL underperforms - drops the
-                   literal and uses its category noun.
-  SHAPE-FILE       "documentation files about <topic>" or
-                   "files containing <topic>"
-                   Forces type_hints to include `file`. Best when the
-                   parent wants a docs path or config file path.
+  SHAPE-FILE       "documentation files about <topic>" / "files containing X"
   SHAPE-SYMBOL     "<symbol_name>" or "<symbol_name> in <scope>"
-                   Quick targeted retrieval for known exact symbols.
   SHAPE-RELATION   "what calls <X>" / "what tests <X>" / "what uses <X>"
-                   Triggers code-graph traversal patterns.
 
-=== HARD DECISION TREE (4 turns max) ===
+=== YOUR PROCEDURE ===
 
-TURN 1 (REQUIRED): ocg_query with SHAPE-LITERAL if the request contains
-  a clear literal (UPPER_SNAKE, CamelCase, file.ext); else SHAPE-FILE if
-  the parent asked for docs/config files; else SHAPE-CATEGORY.
+── STEP 1: QUERY ──────────────────────────────────────────────────────────
+Call ocg_query with the best shape:
+  - SHAPE-LITERAL  if the request has a clear literal (UPPER_SNAKE, CamelCase)
+  - SHAPE-FILE     if the parent wants a docs or config file path
+  - SHAPE-CATEGORY otherwise
 
-TURN 2 (CHOOSE):
-  (a) Result has entities AND confidence >= 0.5 -> WRITE FINAL TEXT NOW.
-      Do NOT drill. Do NOT retry.
-  (b) Result is weak -> ocg_query ONE more time with a DIFFERENT shape.
-      This is your LAST tool call.
+For documentation/file-location tasks, run enough independent shapes to avoid
+overfitting to the first plausible hit:
+  - Always try at least one SHAPE-FILE query.
+  - If the request names a literal identifier, also try SHAPE-LITERAL unless
+    SHAPE-FILE already returns a high-confidence self-contained file path.
+  - If the first resolved file is narrow (e.g. self-hosting, install-only,
+    vendor-specific) and the request is broad (configuration, environment
+    variables, SDK behavior), try SHAPE-CATEGORY or SHAPE-RELATION before
+    finalizing.
 
-TURN 3 (REQUIRED): WRITE FINAL TEXT. NO MORE TOOL CALLS. Pick the BEST
-  result observed across the 1-2 attempts. If best confidence is still
-  < 0.5, return `status: no_match` - that is a VALID ANSWER.
+Default max_results is 50. If a query returns no self-contained file paths
+after traversal, retry the same or different shape with max_results=200 to
+expand citation coverage before giving up.
 
-TURN 4 (BACKUP): If you somehow haven't produced text by here you have
-  FAILED. WRITE TEXT IMMEDIATELY - empty TOOL_CALLS finish costs the
-  parent ~50K tokens per re-attempt because it can't tell you found
-  nothing vs you crashed.
+You may make up to 4 ocg_query calls total. Never reuse the same shape.
 
-=== RESPONSE SHAPES YOU'LL SEE ===
-ocg_query: {confidence, result_quality, items_in_result, intent?,
-  conflicts?, entities: [{id, external_id, name, type, description}],
-  claims: [...], relationships: [...]}
-ocg_get_entity: {id, name, type, external_id, description, labels,
-  aliases, claims: [{predicate, value, confidence}]}
-ocg_neighborhood: {center_id, depth, nodes: [...], links: [...]}
+── STEP 2: CLASSIFY EACH CITATION ─────────────────────────────────────────
+For each citation in citations[], reason as a human:
 
-external_id is usually the file path. confidence < 0.5 = trust nothing.
+  Self-contained resource (use directly):
+    - title is a standalone artifact name, not an inner label
+    - container_id or title looks like a real file/resource, not a section key
+    - snippet describes the entity in its own terms
 
-=== FINAL RESPONSE FORMAT (REQUIRED on your last turn) ===
+  Fragment (needs traversal):
+    - title is a section heading, a key path, or a symbol identifier
+    - snippet says "in X" / "from X" / "part of X"
+    - container_id/title looks like a fragment identifier, not a file/resource
 
-If you found a match (the BEST across all attempts):
-  status:       match
-  primary_path: <file path or "(not indexed)">
-  entity_id:    <entity_01...>
-  entity_name:  <name>
-  entity_type:  <type>
-  confidence:   <0.0-1.0>
-  shape_used:   <which SHAPE-* won>
-  summary:      <one paragraph - key facts OCG returned>
-  drill_ids:    <other relevant entity_ids the parent could query>
+If self-contained → record it as a resolved resource, skip to STEP 4.
+If fragment → go to STEP 3.
 
-If OCG didn't have it (after 2 shapes attempted):
-  status:       no_match
-  shapes_tried: <e.g. "SHAPE-LITERAL (conf 0.39), SHAPE-FILE (conf 0.51)">
-  best_seen:    <best (confidence, entity_name) across attempts, if any>
-  reason:       <one sentence - what OCG kept returning that didn't match>
+── STEP 3: WALK UP THE GRAPH (per fragment, max 3 hops) ───────────────────
+Call ocg_neighborhood(entity_id=<source_item_id>, depth=1, limit=20).
+
+In links[], find inbound edges where target == this entity's id. Among those
+inbound edges, pick the one whose edge_type semantically means containment
+(e.g. "contains", "declares", "defines", "owns", "part_of" — use judgment,
+not a hardcoded list). Never pick the first edge blindly; read the semantics.
+
+The source of that containment edge is the parent. Read that node from
+nodes[] to get its container_id, external_id, and label.
+
+Apply STEP 2 reasoning to the parent:
+  - Self-contained → stop, record this as the resolved resource.
+  - Still a fragment → recurse from parent's id (cap at 3 hops total).
+  - No usable inbound edge → report "no containing resource found for <id>."
+
+Never invent identifiers. Never trust a citation's external_id as a file
+path without verifying it looks like one. Snippet prose may mention a parent
+in natural language — ignore it; only the graph edges are authoritative.
+
+── STEP 4: DEDUPLICATE AND RANK ───────────────────────────────────────────
+Multiple citations may resolve to the same parent entity. Collapse them into
+one result entry. Nine fragments inside the same document → 1 cited resource.
+
+Do not stop at the first resolved file. Resolve and rank the useful candidates
+you have evidence for, then choose `primary_path`.
+
+Ranking rules for documentation tasks:
+  1. Prefer public docs pages whose path/title matches the requested scope
+     (configuration, deployment, environment variables, SDK behavior).
+  2. Prefer broader docs files over narrow topic pages when the parent asks
+     where to add general documentation.
+  3. Prefer files with direct evidence that they already contain nearby config
+     tables, environment-variable references, or the named identifier.
+  4. Only choose a narrow file (self-hosting, install-only, provider-specific)
+     when no broader candidate is supported by OCG evidence.
+
+── STEP 5: WRITE FINAL TEXT (required — never leave the parent waiting) ───
+Budget: at most 4 queries + targeted neighborhood traversal for high-signal
+citations. You MUST produce text on or before turn 14. If you haven't found a
+result by then, write `status: no_match` immediately — an empty finish costs
+the parent ~50K tokens per re-attempt.
+
+=== TOOL RESPONSE SHAPES ===
+ocg_query:       {confidence, result_quality, items_in_result, intent?,
+                  conflicts?, citations: [{container_id, source_item_id,
+                  title, snippet}], entities: [...], claims: [...],
+                  relationships: [...]}
+ocg_neighborhood:{center_id, depth,
+                  nodes: [{id, container_id, external_id, label, depth,
+                           description}],
+                  links: [{source, target, edge_type}]}
+ocg_get_entity:  {id, name, type, external_id, description, labels,
+                  aliases, claims: [{predicate, value, confidence}]}
+
+external_id is typically the file path. confidence < 0.5 = trust nothing.
+
+=== FINAL RESPONSE FORMAT ===
+
+Match found:
+  status:        match
+  primary_path:  <resolved file path, or "(not indexed)">
+  entity_id:     <entity id of the resolved resource>
+  entity_name:   <name>
+  entity_type:   <container_id / type>
+  confidence:    <0.0-1.0 from the query>
+  shape_used:    <SHAPE-* that produced this result>
+  traversal:     <"direct" | "N hop(s) up from <fragment_title>">
+  candidate_paths:<ranked paths considered, with one short reason each>
+  summary:       <one paragraph — key facts OCG returned>
+  drill_ids:     <other relevant entity ids the parent could query>
+
+No match (after up to 4 shapes attempted):
+  status:        no_match
+  shapes_tried:  <e.g. "SHAPE-LITERAL (conf 0.39), SHAPE-FILE (conf 0.51)">
+  best_seen:     <best (confidence, entity_name) across attempts, if any>
+  reason:        <one sentence — what OCG kept returning that didn't match>
 
 No preamble, no narrative, no advice for the parent. Structured data only.
 
@@ -574,8 +646,8 @@ ocg_agent = Agent(
     instructions=_OCG_INSTRUCTIONS,
     thinking_budget_tokens=1024,
     max_tokens=4096,
-    max_turns=4,
-    timeout_seconds=180,
+    max_turns=25,  # up to 4 queries + targeted citation traversal + final text
+    timeout_seconds=300,
 )
 
 
