@@ -138,9 +138,13 @@ def shutdown() -> None:
 # ── Deploy & Serve ──────────────────────────────────────────────────────
 
 
+_SCHEDULES_UNSET: Any = object()
+
+
 def deploy(
     *agents: Any,
     packages: Optional[List[str]] = None,
+    schedules: Any = _SCHEDULES_UNSET,
     runtime: Optional[Any] = None,
 ) -> List[DeploymentInfo]:
     """Compile and register agents on the server without executing them.
@@ -150,23 +154,32 @@ def deploy(
     Args:
         *agents: Agent objects to deploy.
         packages: Python packages to scan for Agent instances.
+        schedules: Cron schedules to attach to the (single) deployed agent.
+            Omitted or ``None`` leaves existing schedules untouched; ``[]``
+            purges all schedules for this agent; a non-empty list upserts
+            those and prunes the rest.
         runtime: Optional custom :class:`AgentRuntime`.
 
     Returns:
         List of :class:`DeploymentInfo`, one per deployed agent.
     """
     rt = runtime or _get_default_runtime()
-    return rt.deploy(*agents, packages=packages)
+    if schedules is _SCHEDULES_UNSET:
+        return rt.deploy(*agents, packages=packages)
+    return rt.deploy(*agents, packages=packages, schedules=schedules)
 
 
 async def deploy_async(
     *agents: Any,
     packages: Optional[List[str]] = None,
+    schedules: Any = _SCHEDULES_UNSET,
     runtime: Optional[Any] = None,
 ) -> List[DeploymentInfo]:
     """Async version of :func:`deploy`."""
     rt = runtime or _get_default_runtime()
-    return await rt.deploy_async(*agents, packages=packages)
+    if schedules is _SCHEDULES_UNSET:
+        return await rt.deploy_async(*agents, packages=packages)
+    return await rt.deploy_async(*agents, packages=packages, schedules=schedules)
 
 
 def serve(

@@ -22,6 +22,8 @@ import { TERMINAL_STATUSES } from "./result.js";
 import type { TerminationCondition } from "./termination.js";
 import type { HandoffContext } from "./handoff.js";
 import { detectFramework } from "./frameworks/detect.js";
+import { Schedule, ScheduleClient } from "./schedule.js";
+import type { SchedulerFetcher } from "./schedule.js";
 import { serializeFrameworkAgent } from "./frameworks/serializer.js";
 import { serializeLangGraph } from "./frameworks/langgraph-serializer.js";
 import { serializeLangChain } from "./frameworks/langchain-serializer.js";
@@ -377,8 +379,18 @@ export class AgentRuntime {
   /**
    * Deploy an agent workflow definition.
    * Accepts native Agent instances or framework agent objects.
+   *
+   * @param agent The agent to deploy.
+   * @param opts Optional declarative options:
+   *   - `schedules`: cron schedules to attach. Tri-state:
+   *     `undefined`/`null` leaves existing schedules untouched;
+   *     `[]` purges all schedules for this agent;
+   *     `[...]` upserts those and prunes the rest.
    */
-  async deploy(agent: Agent | object): Promise<DeploymentInfo> {
+  async deploy(
+    agent: Agent | object,
+    opts: { schedules?: Schedule[] | null } = {},
+  ): Promise<DeploymentInfo> {
     const framework = detectFramework(agent);
 
     let payload: Record<string, unknown>;
@@ -390,8 +402,62 @@ export class AgentRuntime {
     }
 
     const response = await this._httpRequest("POST", "/agent/deploy", payload);
-    return response as unknown as DeploymentInfo;
+    const info = response as unknown as DeploymentInfo;
+
+    if (opts.schedules !== undefined) {
+      const agentName = (agent as Agent).name ?? info.agentName;
+      if (!agentName) {
+        throw new Error("deploy(..., {schedules}) requires the agent to have a name");
+      }
+      await this.schedulesClient().reconcile(agentName, opts.schedules);
+    }
+    return info;
   }
+
+  /** Lazily-constructed `ScheduleClient` backed by this runtime's HTTP plumbing. */
+  schedulesClient(): ScheduleClient {
+    if (!this._scheduleClient) {
+      const fetcher: SchedulerFetcher = {
+        request: async (method, path, body) =>
+          this._httpRequestUntyped(method, path, body),
+      };
+      this._scheduleClient = new ScheduleClient(fetcher);
+    }
+    return this._scheduleClient;
+  }
+
+  /** HTTP request returning unknown — used by the scheduler which sometimes receives arrays. */
+  async _httpRequestUntyped(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<unknown> {
+    const url = `${this.config.serverUrl}${path}`;
+    const requestInit: RequestInit = {
+      method,
+      headers: { ...this.authHeaders, "Content-Type": "application/json" },
+    };
+    if (body !== undefined) requestInit.body = JSON.stringify(body);
+    const response = await fetch(url, requestInit);
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      const err = new Error(`HTTP ${response.status}: ${text || response.statusText}`) as Error & {
+        status?: number;
+        body?: string;
+      };
+      err.status = response.status;
+      err.body = text;
+      throw err;
+    }
+    const ct = response.headers.get("content-type") ?? "";
+    if (!ct.includes("application/json")) {
+      const text = await response.text();
+      return text === "" ? null : text;
+    }
+    return response.json();
+  }
+
+  private _scheduleClient?: ScheduleClient;
 
   // ── plan() ────────────────────────────────────────────
 
@@ -1620,7 +1686,7 @@ export class AgentRuntime {
 
 let _singletonRuntime: AgentRuntime | null = null;
 
-function getRuntime(): AgentRuntime {
+export function getRuntime(): AgentRuntime {
   if (!_singletonRuntime) {
     _singletonRuntime = new AgentRuntime();
   }
@@ -1674,8 +1740,11 @@ export function stream(
 /**
  * Deploy an agent using the singleton runtime.
  */
-export function deploy(agent: Agent | object): Promise<DeploymentInfo> {
-  return getRuntime().deploy(agent);
+export function deploy(
+  agent: Agent | object,
+  opts?: { schedules?: Schedule[] | null },
+): Promise<DeploymentInfo> {
+  return getRuntime().deploy(agent, opts ?? {});
 }
 
 /**

@@ -11,6 +11,8 @@ import ai.agentspan.model.AgentHandle;
 import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.AgentStream;
 import ai.agentspan.model.ToolDef;
+import ai.agentspan.schedule.Schedule;
+import ai.agentspan.schedule.Schedules;
 import ai.agentspan.skill.Skill;
 import ai.agentspan.termination.AndTermination;
 import ai.agentspan.termination.MaxMessageTermination;
@@ -49,6 +51,7 @@ public class AgentRuntime implements AutoCloseable {
     private final HttpApi httpApi;
     private final WorkerManager workerManager;
     private final AgentConfigSerializer serializer;
+    private volatile Schedules schedules;
 
     /**
      * Create a runtime using environment variable configuration.
@@ -333,6 +336,40 @@ public class AgentRuntime implements AutoCloseable {
      */
     public CompletableFuture<List<ai.agentspan.model.DeploymentInfo>> deployAsync(Agent... agents) {
         return CompletableFuture.supplyAsync(() -> deploy(agents));
+    }
+
+    /**
+     * Deploy a single agent and reconcile its cron schedules declaratively.
+     *
+     * <p>{@code schedules} semantics:
+     * <ul>
+     *   <li>{@code null} → leave existing schedules untouched.</li>
+     *   <li>empty list → purge all schedules for this agent.</li>
+     *   <li>non-empty list → upsert these and prune any others for this agent.</li>
+     * </ul>
+     *
+     * @param agent the agent to deploy
+     * @param schedules schedules to attach (tri-state semantics above)
+     * @return the {@link ai.agentspan.model.DeploymentInfo}
+     */
+    public ai.agentspan.model.DeploymentInfo deploy(Agent agent, List<Schedule> schedules) {
+        List<ai.agentspan.model.DeploymentInfo> infos = deploy(new Agent[] {agent});
+        if (schedules != null) {
+            schedules().reconcile(agent.getName(), schedules);
+        }
+        return infos.get(0);
+    }
+
+    /** Accessor for the cron-schedule lifecycle API. */
+    public Schedules schedules() {
+        if (schedules == null) {
+            synchronized (this) {
+                if (schedules == null) {
+                    schedules = new Schedules(config, httpApi.getHttpClient());
+                }
+            }
+        }
+        return schedules;
     }
 
     /**

@@ -181,6 +181,15 @@ from agentspan.agents.runtime.discovery import discover_agents
 # MCP discovery utilities
 from agentspan.agents.runtime.mcp_discovery import clear_discovery_cache
 from agentspan.agents.runtime.runtime import VALID_RETRY_POLICIES, AgentRuntime
+from agentspan.agents.schedule import (
+    InvalidCronExpression,
+    Schedule,
+    ScheduleError,
+    ScheduleInfo,
+    ScheduleNameConflict,
+    ScheduleNotFound,
+    schedules,
+)
 from agentspan.agents.semantic_memory import MemoryEntry, MemoryStore, SemanticMemory
 
 # Termination conditions
@@ -301,6 +310,14 @@ __all__ = [
     "StopMessageTermination",
     "MaxMessageTermination",
     "TokenUsageTermination",
+    # Scheduling
+    "Schedule",
+    "ScheduleInfo",
+    "ScheduleError",
+    "ScheduleNameConflict",
+    "ScheduleNotFound",
+    "InvalidCronExpression",
+    "schedules",
     # Memory
     "ConversationMemory",
     "SemanticMemory",

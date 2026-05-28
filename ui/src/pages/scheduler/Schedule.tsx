@@ -738,6 +738,12 @@ export function Schedule() {
                           }
                           paused={scheduleState.paused}
                           setCronPausedState={formHandlers.setCronPausedState}
+                          runCatchupScheduleInstances={
+                            scheduleState.runCatchupScheduleInstances
+                          }
+                          setRunCatchupScheduleInstances={
+                            formHandlers.setRunCatchupScheduleInstances
+                          }
                         />
                       </Grid>
                     </Box>

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Nodes;
+using Agentspan.Scheduling;
 using Conductor.Client;
 using Conductor.Client.Authentication;
 
@@ -21,7 +22,13 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
 {
     private readonly AgentHttpClient _http;
     private readonly Configuration _conductorConfig;
+    private readonly string _serverUrl;
+    private readonly System.Net.Http.HttpClient _schedulerHttp;
+    private Schedules? _schedules;
     private WorkerManager? _workers;
+
+    /// <summary>Cron-schedule lifecycle API.</summary>
+    public Schedules Schedules => _schedules ??= new Schedules(_schedulerHttp, _serverUrl);
 
     public AgentRuntime(AgentRuntimeOptions? options = null)
     {
@@ -32,6 +39,10 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         var authSecret = options?.AuthSecret ?? Environment.GetEnvironmentVariable("AGENTSPAN_AUTH_SECRET");
 
         _http = new AgentHttpClient(serverUrl, authKey, authSecret);
+        _serverUrl = serverUrl;
+        _schedulerHttp = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        if (!string.IsNullOrEmpty(authKey)) _schedulerHttp.DefaultRequestHeaders.Add("X-Auth-Key", authKey);
+        if (!string.IsNullOrEmpty(authSecret)) _schedulerHttp.DefaultRequestHeaders.Add("X-Auth-Secret", authSecret);
 
         // Build conductor-csharp Configuration for worker polling.
         // AuthenticationSettings is left null for OSS Conductor (no token exchange needed).
@@ -64,6 +75,24 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
             results[i] = new DeploymentInfo(RegisteredName: registeredName, AgentName: agents[i].Name);
         }
         return results;
+    }
+
+    /// <summary>
+    /// Deploy a single agent and reconcile its cron schedules declaratively.
+    ///
+    /// <para><c>schedules</c> semantics:
+    /// <list type="bullet">
+    ///   <item><c>null</c> → leave existing schedules untouched.</item>
+    ///   <item>empty → purge all schedules for this agent.</item>
+    ///   <item>non-empty → upsert these and prune any others for this agent.</item>
+    /// </list></para>
+    /// </summary>
+    public async Task<DeploymentInfo> DeployAsync(Agent agent, IEnumerable<Schedule>? schedules)
+    {
+        var info = (await DeployAsync(new[] { agent }))[0];
+        if (schedules is not null)
+            await Schedules.ReconcileAsync(agent.Name, schedules);
+        return info;
     }
 
     /// <summary>
@@ -340,6 +369,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     {
         await StopWorkersAsync();
         _http.Dispose();
+        _schedulerHttp.Dispose();
     }
 
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();

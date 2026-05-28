@@ -69,6 +69,7 @@ nav:
       - Guardrails: concepts/guardrails.md
       - Memory: concepts/memory.md
       - Streaming: concepts/streaming.md
+      - Scheduling: scheduling.md
       - Testing: concepts/testing.md
   - Examples:
       - Support Ticket Triage: examples/support-triage.md

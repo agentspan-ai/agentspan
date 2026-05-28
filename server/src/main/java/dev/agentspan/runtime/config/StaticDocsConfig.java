@@ -47,7 +47,7 @@ public class StaticDocsConfig implements WebMvcConfigurer {
             if ("/docs".equals(uri)) {
                 // Hard-refresh on /docs: serve the main SPA so React Router
                 // picks up the /docs route and renders the embedded docs page.
-                request.getRequestDispatcher("/index.html").forward(request, response);
+                request.getRequestDispatcher("/ui/index.html").forward(request, response);
                 return;
             }
             if ("/docs/".equals(uri)) {

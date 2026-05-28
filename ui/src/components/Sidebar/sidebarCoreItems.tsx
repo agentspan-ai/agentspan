@@ -24,6 +24,7 @@ import {
   TASK_QUEUE_URL,
   AGENT_DEFINITION_URL,
   AGENT_EXECUTION_URL,
+  SCHEDULER_DEFINITION_URL,
   SKILLS_URL,
 } from "utils/constants/route";
 
@@ -51,6 +52,7 @@ const CORE_SIDEBAR_POSITIONS = {
   DEFINITIONS: {
     workflowDefItem: 100,
     skillsItem: 200,
+    schedulesItem: 250,
     credentialsItem: 300,
   },
 } as const;
@@ -145,6 +147,17 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           hotkeys: "",
           hidden: false,
           position: D.skillsItem,
+        },
+        {
+          id: "schedulesItem",
+          title: "Schedules",
+          icon: null,
+          linkTo: SCHEDULER_DEFINITION_URL.BASE,
+          activeRoutes: [SCHEDULER_DEFINITION_URL.NAME, SCHEDULER_DEFINITION_URL.NEW],
+          shortcuts: [],
+          hotkeys: "",
+          hidden: false,
+          position: D.schedulesItem,
         },
         {
           id: "credentialsItem",

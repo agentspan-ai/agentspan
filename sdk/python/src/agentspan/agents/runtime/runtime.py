@@ -258,6 +258,11 @@ class ServerCompiledWorkflow:
         return self._executor.start_workflow(request)
 
 
+_SCHEDULES_UNSET = object()
+"""Sentinel for the ``schedules=`` kwarg on deploy(). ``None`` means purge;
+omitted (``_SCHEDULES_UNSET``) means do not touch existing schedules."""
+
+
 class AgentRuntime:
     """Execution runtime for Conductor agents.
 
@@ -341,6 +346,7 @@ class AgentRuntime:
         self._executor = self._clients.get_workflow_executor()
         self._workflow_client = self._clients.get_workflow_client()
         self._task_client = self._clients.get_task_client()
+        self._schedule_client_instance: Optional[Any] = None
 
         from agentspan.agents.runtime.worker_manager import WorkerManager
 
@@ -2226,6 +2232,7 @@ class AgentRuntime:
         self,
         *agents: Any,
         packages: Optional[List[str]] = None,
+        schedules: Any = _SCHEDULES_UNSET,
     ) -> List[DeploymentInfo]:
         """Compile and register agents on the server without executing them.
 
@@ -2236,6 +2243,11 @@ class AgentRuntime:
         Args:
             *agents: Agent objects to deploy (native or foreign framework).
             packages: Python packages to scan for Agent instances.
+            schedules: Cron schedules to attach to the (single) deployed agent.
+                Omitted or ``None`` leaves existing schedules untouched; ``[]``
+                purges all schedules for this agent; a non-empty list upserts
+                those and prunes the rest. Only valid when exactly one agent
+                is being deployed.
 
         Returns:
             List of :class:`DeploymentInfo`, one per deployed agent.
@@ -2249,6 +2261,12 @@ class AgentRuntime:
         if not all_agents:
             raise ValueError("deploy() requires at least one agent.")
 
+        if schedules is not _SCHEDULES_UNSET and len(all_agents) != 1:
+            raise ValueError(
+                "deploy(..., schedules=...) requires exactly one agent; "
+                f"got {len(all_agents)}"
+            )
+
         results = []
         for agent in all_agents:
             from agentspan.agents.frameworks.serializer import detect_framework
@@ -2260,12 +2278,16 @@ class AgentRuntime:
             results.append(DeploymentInfo(registered_name=registered_name, agent_name=agent_name))
             logger.info("Deployed agent '%s' as '%s'", agent_name, registered_name)
 
+        if schedules is not _SCHEDULES_UNSET:
+            self.schedules_client().reconcile(all_agents[0].name, schedules)
+
         return results
 
     async def deploy_async(
         self,
         *agents: Any,
         packages: Optional[List[str]] = None,
+        schedules: Any = _SCHEDULES_UNSET,
     ) -> List[DeploymentInfo]:
         """Async version of :meth:`deploy`."""
         from agentspan.agents.runtime.discovery import discover_agents
@@ -2276,6 +2298,12 @@ class AgentRuntime:
 
         if not all_agents:
             raise ValueError("deploy() requires at least one agent.")
+
+        if schedules is not _SCHEDULES_UNSET and len(all_agents) != 1:
+            raise ValueError(
+                "deploy_async(..., schedules=...) requires exactly one agent; "
+                f"got {len(all_agents)}"
+            )
 
         results = []
         for agent in all_agents:
@@ -2288,7 +2316,21 @@ class AgentRuntime:
             results.append(DeploymentInfo(registered_name=registered_name, agent_name=agent_name))
             logger.info("Deployed agent '%s' as '%s'", agent_name, registered_name)
 
+        if schedules is not _SCHEDULES_UNSET:
+            self.schedules_client().reconcile(all_agents[0].name, schedules)
+
         return results
+
+    def schedules_client(self) -> Any:
+        """Return a lazily-constructed :class:`ScheduleClient` for this runtime."""
+        if self._schedule_client_instance is None:
+            from agentspan.agents.schedule.client import ScheduleClient
+
+            self._schedule_client_instance = ScheduleClient(
+                self._clients.get_scheduler_client(),
+                self._workflow_client,
+            )
+        return self._schedule_client_instance
 
     def _deploy_via_server(self, agent: Any, *, framework: Optional[str] = None) -> str:
         """Deploy agent via /api/agent/deploy.  Returns registered name."""
