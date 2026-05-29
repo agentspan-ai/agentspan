@@ -11,6 +11,11 @@
 
 [defaults]
 timeout = 300
+# Number of fresh, memory-isolated invocations per agent. Each iteration runs
+# with `claude --bare --no-session-persistence` so no auto-memory / CLAUDE.md /
+# session state leaks across runs. Per-iteration tokens, scores, and outputs
+# are written separately to run_results.json.
+iterations = 5
 
 [judge]
 # No baseline_run — both agents scored independently against the task prompt.
@@ -22,6 +27,22 @@ rate_limit = 0.5
 [runs.with_ocg]
 prompt_file = "validation/prompts/with_ocg.md"
 # OCG_API_KEY must be set in your shell environment before running
+allowed_tools = ["Bash(curl:*)"]
 
 [runs.no_ocg]
 prompt_file = "validation/prompts/no_ocg.md"
+# Traditional grep-baseline: file inspection + git history, no OCG.
+allowed_tools = [
+    "Read",
+    "Glob",
+    "Grep",
+    "Bash(grep:*)",
+    "Bash(rg:*)",
+    "Bash(find:*)",
+    "Bash(cat:*)",
+    "Bash(ls:*)",
+    "Bash(git log:*)",
+    "Bash(git show:*)",
+    "Bash(git blame:*)",
+    "Bash(git diff:*)",
+]

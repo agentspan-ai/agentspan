@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import subprocess
 import sys
 import time
@@ -50,13 +52,65 @@ def _load_config(config_path: Path) -> dict:
     return {"runs": runs, "judge": judge}
 
 
+# ── Prompt env-var expansion ──────────────────────────────────────────────────
+
+# Matches $NAME or ${NAME} where NAME is UPPER_SNAKE_CASE. Restricting to
+# uppercase avoids accidentally rewriting things like "$1" or "$foo" that
+# appear in prose.
+_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}|\$([A-Z_][A-Z0-9_]*)")
+
+
+def _expand_env_vars(text: str) -> str:
+    """Substitute $UPPER_NAME / ${UPPER_NAME} with values from os.environ.
+
+    Claude Code's sandbox blocks env-var expansion in shell commands it spawns,
+    so any prompt that tells the agent to use `$OCG_API_KEY` would fail at
+    runtime. Resolving the value into the prompt before invocation sidesteps
+    that. Raises ValueError listing every missing variable rather than silently
+    leaving the literal `$NAME` in place.
+    """
+    missing: list[str] = []
+
+    def _sub(match: re.Match[str]) -> str:
+        name = match.group(1) or match.group(2)
+        value = os.environ.get(name)
+        if value is None:
+            missing.append(name)
+            return match.group(0)
+        return value
+
+    resolved = _ENV_VAR_PATTERN.sub(_sub, text)
+    if missing:
+        unique = sorted(set(missing))
+        raise ValueError(
+            f"prompt references unset environment variable(s): {', '.join(unique)}"
+        )
+    return resolved
+
+
 # ── Claude CLI invocation ─────────────────────────────────────────────────────
 
-def _run_claude(prompt: str, timeout: int) -> dict:
-    """Invoke `claude --print --output-format json` and return parsed output."""
+def _run_claude(prompt: str, timeout: int, allowed_tools: list[str]) -> dict:
+    """Invoke `claude --print --output-format json` and return parsed output.
+
+    `--bare` and `--no-session-persistence` keep each run memory-isolated:
+    no CLAUDE.md auto-discovery, no ~/.claude/projects/.../memory loading,
+    and no session state written that a sibling iteration could resume.
+
+    `allowed_tools` is a list like ["Bash(curl:*)", "Read", "Grep"] — joined
+    with spaces for the CLI, which accepts space- or comma-separated tools.
+    """
     try:
         proc = subprocess.run(
-            ["claude", "--print", "--output-format", "json", "-p", prompt],
+            [
+                "claude",
+                "--print",
+                "--bare",
+                "--no-session-persistence",
+                "--output-format", "json",
+                "--allowed-tools", " ".join(allowed_tools),
+                "-p", prompt,
+            ],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -112,9 +166,56 @@ def _extract_example(run_name: str, prompt_file: str, prompt: str, claude_output
     }
 
 
+# ── Iteration helpers ─────────────────────────────────────────────────────────
+
+def _iteration_example_name(stem: str, n: int) -> str:
+    """Build the per-iteration example name. 1-indexed so the first run reads
+    as `_iter_1`, matching the convention judge/report consumers will see.
+    """
+    return f"{stem}_iter_{n}"
+
+
+def _per_iteration_summary(examples: list[dict]) -> dict:
+    """Aggregate iteration-level stats for inclusion in run meta.json.
+
+    Returns a dict with:
+      - iterations: total examples seen
+      - completed:  count where status == "COMPLETED"
+      - tokens_total: sum of tokens_total across iterations
+      - duration_s:  sum of per-iteration durations
+      - per_iteration: 1-indexed list of {iter, status, tokens_total, duration_s}
+    """
+    per_iter = [
+        {
+            "iter": i + 1,
+            "status": ex.get("status", "ERROR"),
+            "tokens_total": ex.get("tokens_total", 0),
+            "duration_s": ex.get("duration_s", 0.0),
+        }
+        for i, ex in enumerate(examples)
+    ]
+    return {
+        "iterations": len(examples),
+        "completed": sum(1 for ex in examples if ex.get("status") == "COMPLETED"),
+        "tokens_total": sum(ex.get("tokens_total", 0) for ex in examples),
+        "duration_s": round(sum(ex.get("duration_s", 0.0) for ex in examples), 1),
+        "per_iteration": per_iter,
+    }
+
+
 # ── Output helpers ────────────────────────────────────────────────────────────
 
-def _write_run(parent_dir: Path, run_name: str, example_name: str, example: dict) -> None:
+def _write_run(
+    parent_dir: Path,
+    run_name: str,
+    examples: dict[str, dict],
+    iteration_summary: dict,
+) -> None:
+    """Write run_results.json + meta.json for one agent's N iterations.
+
+    `examples` maps iteration example name -> example dict. `iteration_summary`
+    is the output of `_per_iteration_summary` for the same examples in order.
+    """
     run_dir = parent_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -123,12 +224,14 @@ def _write_run(parent_dir: Path, run_name: str, example_name: str, example: dict
         "model": "claude-code",
         "native": True,
         "group": None,
-        "duration_s": example["duration_s"],
-        "examples_total": 1,
-        "examples_completed": 1 if example["status"] == "COMPLETED" else 0,
+        "duration_s": iteration_summary["duration_s"],
+        "examples_total": iteration_summary["iterations"],
+        "examples_completed": iteration_summary["completed"],
+        "tokens_total": iteration_summary["tokens_total"],
+        "per_iteration": iteration_summary["per_iteration"],
     }
 
-    run_results = {**run_meta, "examples": {example_name: example}}
+    run_results = {**run_meta, "examples": examples}
     (run_dir / "run_results.json").write_text(json.dumps(run_results, indent=2))
     (run_dir / "meta.json").write_text(json.dumps(run_meta, indent=2))
 
@@ -191,29 +294,52 @@ def main() -> None:
             return None
 
         prompt = prompt_path.read_text()
+        try:
+            resolved_prompt = _expand_env_vars(prompt)
+        except ValueError as e:
+            print(f"  [{run_name}] ERROR — {e}", file=sys.stderr)
+            return None
         timeout = int(run_cfg.get("timeout", 300))
+        iterations = int(run_cfg.get("iterations", 1))
+        allowed_tools = run_cfg.get("allowed_tools") or ["Bash(curl:*)"]
 
-        print(f"  [{run_name}] Running claude... (timeout={timeout}s)")
-        t0 = time.monotonic()
-        claude_output = _run_claude(prompt, timeout)
-        elapsed = round(time.monotonic() - t0, 1)
+        # Sequential iterations within an agent; outer pool runs agents in
+        # parallel. Caps subprocess concurrency at len(runs) regardless of N.
+        examples: dict[str, dict] = {}
+        ordered_examples: list[dict] = []
+        for n in range(1, iterations + 1):
+            iter_name = _iteration_example_name(example_name, n)
+            print(f"  [{run_name}] iter {n}/{iterations} — running claude... (timeout={timeout}s)")
+            t0 = time.monotonic()
+            claude_output = _run_claude(resolved_prompt, timeout, allowed_tools)
+            elapsed = round(time.monotonic() - t0, 1)
 
-        example = _extract_example(run_name, prompt_file, prompt, claude_output)
-        status = example["status"]
-        tokens = example["tokens_total"]
-        print(f"  [{run_name}] {status} in {elapsed}s — {tokens:,} tokens total")
+            # Pass the unresolved prompt to _extract_example so secrets don't
+            # land on disk in run_results.json / judge inputs.
+            example = _extract_example(run_name, prompt_file, prompt, claude_output)
+            status = example["status"]
+            tokens = example["tokens_total"]
+            print(
+                f"  [{run_name}] iter {n}/{iterations} — {status} in {elapsed}s "
+                f"— {tokens:,} tokens"
+            )
+            examples[iter_name] = example
+            ordered_examples.append(example)
 
-        _write_run(parent_dir, run_name, example_name, example)
+        summary = _per_iteration_summary(ordered_examples)
+        _write_run(parent_dir, run_name, examples, summary)
 
         return {
             "run": run_name,
             "model": "claude-code",
-            "total": 1,
-            "completed": 1 if status == "COMPLETED" else 0,
+            "total": summary["iterations"],
+            "completed": summary["completed"],
             "failed": 0,
-            "error": 1 if status == "ERROR" else 0,
+            "error": summary["iterations"] - summary["completed"],
             "timeout": 0,
-            "duration_s": elapsed,
+            "duration_s": summary["duration_s"],
+            "tokens_total": summary["tokens_total"],
+            "per_iteration": summary["per_iteration"],
         }
 
     run_summaries = []
