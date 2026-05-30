@@ -221,10 +221,6 @@ describe("Stage 2: Research Team", () => {
     expect(def.func).toBeNull();
   });
 
-  it("analyze_trends has isolated=false", () => {
-    const def = getToolDef(analyzeTrends);
-    expect(def.isolated).toBe(false);
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════

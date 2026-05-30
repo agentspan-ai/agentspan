@@ -20,8 +20,8 @@ MCP Test Server Setup (mcp-testkit):
     # Or start with auth (requires storing the secret as a credential):
     mcp-testkit --transport http --auth <secret>
 
-    # Store credentials via CLI or Agentspan UI:
-    agentspan credentials set MCP_TEST_API_KEY <secret>
+    # Store secrets via CLI or Agentspan UI:
+    agentspan secrets set MCP_TEST_API_KEY <secret>
 
 Requirements:
     - Conductor server with LLM support
@@ -58,7 +58,7 @@ weather = mcp_tool(
     description="Weather and air quality tools via MCP, use it to get current and historical weather information for "
                 "a city",
     headers={"Authorization": "Bearer ${MCP_TEST_API_KEY}"},
-    credentials=["MCP_TEST_API_KEY"],
+    secrets=["MCP_TEST_API_KEY"],
 )
 
 agent = Agent(

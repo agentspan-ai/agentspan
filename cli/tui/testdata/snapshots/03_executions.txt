@@ -6,7 +6,7 @@
 │  > Executions    ││ enter detail  s stream  / search  ← → pages  R refresh                                                                                                                                             │
 │    Server        ││                                                                                                                                                                                                    │
 │    Skills        ││                                                                                                                                                                                                    │
-│    Credentials   ││                                                                                                                                                                                                    │
+│    Secrets       ││                                                                                                                                                                                                    │
 │    Doctor        ││                                                                                                                                                                                                    │
 │    Configure     ││                                                                                                                                                                                                    │
 │                  ││                                                                                                                                                                                                    │

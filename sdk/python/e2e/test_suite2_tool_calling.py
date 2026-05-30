@@ -38,7 +38,7 @@ def free_tool(x: str) -> str:
     return "free:ok"
 
 
-@tool(credentials=[CRED_A])
+@tool(secrets=[CRED_A])
 def paid_tool_a(x: str) -> str:
     """A tool that needs E2E_CRED_A. Returns first 3 chars of credential."""
     cred_val = os.environ.get(CRED_A)
@@ -50,7 +50,7 @@ def paid_tool_a(x: str) -> str:
     return f"paid_a:{cred_val[:3]}"
 
 
-@tool(credentials=[CRED_B])
+@tool(secrets=[CRED_B])
 def paid_tool_b(x: str) -> str:
     """A tool that needs E2E_CRED_B. Returns first 3 chars of credential."""
     cred_val = os.environ.get(CRED_B)
@@ -60,6 +60,21 @@ def paid_tool_b(x: str) -> str:
             f"The server should have injected it via credential resolution."
         )
     return f"paid_b:{cred_val[:3]}"
+
+
+# Used by the output-masking test below — deliberately leaks the FULL credential
+# value into its return. The server's SecretMaskingResponseAdvice must redact
+# the value before /api/agent/executions/{id} responds.
+LEAK_CRED = "E2E_MASK_LEAK_KEY"
+
+
+@tool(secrets=[LEAK_CRED])
+def leaky_tool(x: str) -> str:
+    """Tool that deliberately echoes its full credential value (leak simulation)."""
+    cred_val = os.environ.get(LEAK_CRED)
+    if not cred_val:
+        raise RuntimeError(f"Credential '{LEAK_CRED}' not in environment.")
+    return f"oops the token is {cred_val} and that was a leak"
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
@@ -492,3 +507,83 @@ class TestSuite2ToolCalling:
         finally:
             for owned in reversed(owned_runtimes):
                 owned.shutdown()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Audit gap D — output masking, real Conductor execution.
+# ══════════════════════════════════════════════════════════════════════════
+#
+# SecretMaskingResponseAdvice catches secret values that leak into task
+# outputs. The integration test in server/.../SecretMaskingIntegrationTest
+# uses @MockBean AgentService to stub the execution detail body. This test
+# proves the FULL pipeline works against a real Conductor execution:
+#   - real worker runs a real tool
+#   - tool deliberately returns the credential value in its output
+#   - the value gets stored in Conductor's task data
+#   - GET /api/agent/executions/{id} flows through the masking advice
+#   - the response body has ***NAME*** in place of the value
+#
+# Counterfactual: temporarily comment out @ControllerAdvice on the masker
+# (or break its URI regex) and this test fails.
+
+
+@pytest.mark.timeout(300)
+class TestSuite2OutputMasking:
+    """The masker actually redacts secret values from execution-read responses."""
+
+    LEAK_SECRET_VALUE = "ghp_THIS_IS_A_TEST_TOKEN_SHOULD_BE_MASKED_xyz123"
+
+    def test_leaked_secret_is_masked_in_execution_detail(self, runtime, cli_credentials, model):
+        try:
+            self._run(runtime, cli_credentials, model)
+        finally:
+            cli_credentials.delete(LEAK_CRED)
+            os.environ.pop(LEAK_CRED, None)
+
+    def _run(self, runtime, cli_credentials, model):
+        cli_credentials.set(LEAK_CRED, self.LEAK_SECRET_VALUE)
+
+        agent = Agent(
+            name="e2e_mask_leak",
+            model=model,
+            max_turns=2,
+            instructions=(
+                "Call leaky_tool with the argument 'go' exactly once and report "
+                "its output verbatim. Do not add commentary."
+            ),
+            tools=[leaky_tool],
+        )
+
+        result = runtime.run(agent, "Call leaky_tool.", timeout=TIMEOUT)
+        _assert_run_completed(result, "Masking test", agent)
+
+        # Pull the AgentSpan execution endpoint (the one the masking advice
+        # watches), NOT Conductor's raw /api/workflow endpoint.
+        base = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
+        base_url = base.rstrip("/").replace("/api", "")
+        resp = requests.get(
+            f"{base_url}/api/agent/executions/{result.execution_id}", timeout=15
+        )
+        assert resp.status_code == 200, (
+            f"execution-detail fetch failed: {resp.status_code} {resp.text[:200]}"
+        )
+        body = resp.text
+
+        # The plaintext secret MUST NOT appear in the masked response.
+        assert self.LEAK_SECRET_VALUE not in body, (
+            f"SECURITY VIOLATION: secret value '{self.LEAK_SECRET_VALUE}' "
+            f"appears unmasked in /api/agent/executions/{result.execution_id}. "
+            f"SecretMaskingResponseAdvice did not redact it. Either the advice "
+            f"isn't activating (URI regex drift) or SecretDisclosureService "
+            f"didn't record the disclosure on resolve.\n"
+            f"  body[:400]={body[:400]}"
+        )
+
+        # And the marker for what WAS masked must be present — proves the
+        # advice actually ran, not just that the value happened to be absent.
+        assert f"***{LEAK_CRED}***" in body, (
+            f"Masker placeholder '***{LEAK_CRED}***' missing from response. "
+            f"Suggests the disclosure wasn't recorded for this execution OR "
+            f"the masker fetched a different value than what the tool saw.\n"
+            f"  body[:400]={body[:400]}"
+        )

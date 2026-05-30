@@ -94,29 +94,24 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
                           && !string.Equals(kv.Key, "method",            StringComparison.OrdinalIgnoreCase))
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
-            // Resolve and inject credentials as env vars for the duration of this call
-            var injectedKeys = new List<string>();
+            // Resolve and inject secrets via the centralized helper so the
+            // mutation + invocation + restoration is atomic under a single
+            // process-wide lock. See docs/design/secret-injection-contract.md.
+            // Tier-2 (env-injection) path; tier-1 (explicit-key) lands when the
+            // user-facing API exposes a `secrets` parameter to agent factories.
+            Dictionary<string, string> resolvedSecrets = new();
             if (_credentialNames.Length > 0)
             {
                 var creds = await _http.ResolveCredentialsAsync(
                     toolCtx?.ExecutionToken, _credentialNames, ct);
                 foreach (var (k, v) in creds)
-                {
-                    Environment.SetEnvironmentVariable(k, v);
-                    injectedKeys.Add(k);
-                }
+                    resolvedSecrets[k] = v;
             }
 
-            object? result;
-            try
-            {
-                result = await _handler(handlerInput, toolCtx);
-            }
-            finally
-            {
-                foreach (var k in injectedKeys)
-                    Environment.SetEnvironmentVariable(k, null);
-            }
+            object? result = await SecretInjection.InjectViaEnvAsync<object?>(
+                resolvedSecrets,
+                () => _handler(handlerInput, toolCtx),
+                ct);
 
             // Wrap primitives — Conductor expects outputData as an object
             object outputData = result switch
@@ -170,6 +165,26 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
             {
                 Status                = TaskResult.StatusEnum.FAILEDWITHTERMINALERROR,
                 ReasonForIncompletion = ex.Message,
+            };
+            await _taskClient.UpdateTaskAsync(taskResult);
+        }
+        catch (Exception ex) when (
+            ex is CredentialNotFoundException
+               or CredentialAuthException
+               or CredentialRateLimitException
+               or CredentialServiceException)
+        {
+            // Credential failures are configuration issues — non-retryable.
+            // Marking as terminal so the workflow surfaces the cause immediately
+            // instead of burning retries on a broken config.
+            _logger.LogError(ex, "Credential resolution failed for {TaskName}", _taskName);
+            using var reportCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var taskResult = new TaskResult(
+                workflowInstanceId: task.WorkflowInstanceId,
+                taskId: task.TaskId)
+            {
+                Status                = TaskResult.StatusEnum.FAILEDWITHTERMINALERROR,
+                ReasonForIncompletion = $"Credential resolution failed: {ex.Message}",
             };
             await _taskClient.UpdateTaskAsync(taskResult);
         }

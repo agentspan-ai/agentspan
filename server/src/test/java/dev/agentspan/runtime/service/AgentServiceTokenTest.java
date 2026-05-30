@@ -24,7 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import dev.agentspan.runtime.auth.*;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.ExecutionTokenService;
 
 @ExtendWith(MockitoExtension.class)
 class AgentServiceTokenTest {

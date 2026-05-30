@@ -19,7 +19,7 @@ import DiscordIcon from "components/Sidebar/DiscordIcon";
 import { MenuItemType } from "components/Sidebar/types";
 
 import {
-  CREDENTIALS_URL,
+  SECRETS_URL,
   RUN_AGENT_URL,
   TASK_QUEUE_URL,
   AGENT_DEFINITION_URL,
@@ -150,8 +150,8 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           id: "credentialsItem",
           title: "Credentials",
           icon: null,
-          linkTo: CREDENTIALS_URL,
-          activeRoutes: [CREDENTIALS_URL],
+          linkTo: SECRETS_URL.BASE,
+          activeRoutes: [SECRETS_URL.BASE],
           shortcuts: [],
           hotkeys: "",
           hidden: false,

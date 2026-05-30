@@ -10,7 +10,7 @@
  * How it works:
  *   1. Agent starts -> server mints a short-lived execution token
  *   2. Before each tool call, the SDK fetches declared credentials from
- *      POST /api/credentials/resolve using that token
+ *      POST /api/workers/secrets using that token
  *   3. The tool function runs in a fresh subprocess with credentials
  *      injected as env vars. The parent process's process.env is unchanged.
  *

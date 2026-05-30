@@ -673,87 +673,57 @@ func (c *Client) Login(username, password string) (*LoginResponse, error) {
 	return &result, nil
 }
 
-// ─── Credential management API ────────────────────────────────────────────────
+// ─── Secrets management API ───────────────────────────────────────────────────
 
-// CredentialMeta is the list-view for a stored credential.
-type CredentialMeta struct {
+// SecretMeta is the list-view for a stored secret (from GET /api/secrets/v2).
+type SecretMeta struct {
 	Name      string `json:"name"`
 	Partial   string `json:"partial"`
 	UpdatedAt string `json:"updated_at"`
 }
 
-// CredentialSetRequest is the body for POST /api/credentials.
-type CredentialSetRequest struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-// BindingMeta represents one logical key → store name binding.
-type BindingMeta struct {
-	LogicalKey string `json:"logical_key"`
-	StoreName  string `json:"store_name"`
-}
-
-// BindingSetRequest is the body for PUT /api/credentials/bindings/{key}.
-type BindingSetRequest struct {
-	StoreName string `json:"store_name"`
-}
-
-// ListCredentials returns all stored credential metadata.
-func (c *Client) ListCredentials() ([]CredentialMeta, error) {
-	resp, err := c.doRequest("GET", "/api/credentials", nil)
+// ListSecrets returns all stored secret metadata (uses /api/secrets/v2 for richer payload).
+func (c *Client) ListSecrets() ([]SecretMeta, error) {
+	resp, err := c.doRequest("GET", "/api/secrets/v2", nil)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var result []CredentialMeta
+	var result []SecretMeta
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode credentials: %w", err)
+		return nil, fmt.Errorf("decode secrets: %w", err)
 	}
 	return result, nil
 }
 
-// SetCredential stores a credential value on the server.
-func (c *Client) SetCredential(name, value string) error {
-	resp, err := c.doRequest("POST", "/api/credentials", &CredentialSetRequest{
-		Name:  name,
-		Value: value,
-	})
+// SetSecret stores (upserts) a secret value via PUT /api/secrets/{key}.
+// Body is the raw plaintext value (Conductor parity).
+func (c *Client) SetSecret(name, value string) error {
+	req, err := http.NewRequest("PUT",
+		c.baseURL+"/api/secrets/"+url.PathEscape(name),
+		strings.NewReader(value))
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
-	return nil
-}
-
-// DeleteCredential removes a stored credential by name.
-func (c *Client) DeleteCredential(name string) error {
-	resp, err := c.doRequest("DELETE", "/api/credentials/"+url.PathEscape(name), nil)
-	if err != nil {
-		return err
+	req.Header.Set("Content-Type", "text/plain")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	resp.Body.Close()
-	return nil
-}
-
-// ListBindings returns all logical key → store name bindings.
-func (c *Client) ListBindings() ([]BindingMeta, error) {
-	resp, err := c.doRequest("GET", "/api/credentials/bindings", nil)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
-	var result []BindingMeta
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode bindings: %w", err)
+	if resp.StatusCode >= 400 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 	}
-	return result, nil
+	return nil
 }
 
-// SetBinding sets (or updates) a logical key → store name binding.
-func (c *Client) SetBinding(logicalKey, storeName string) error {
-	resp, err := c.doRequest("PUT", "/api/credentials/bindings/"+url.PathEscape(logicalKey),
-		&BindingSetRequest{StoreName: storeName})
+// DeleteSecret removes a stored secret by name.
+func (c *Client) DeleteSecret(name string) error {
+	resp, err := c.doRequest("DELETE", "/api/secrets/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err
 	}

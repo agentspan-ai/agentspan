@@ -21,8 +21,8 @@ import com.netflix.conductor.core.listener.WorkflowStatusListener;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
 
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.AgentSSEEvent;
+import dev.agentspan.runtime.secrets.ExecutionTokenService;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;

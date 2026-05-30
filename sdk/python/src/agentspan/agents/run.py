@@ -236,7 +236,7 @@ def run(
     session_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
     on_event: Optional[Any] = None,
-    credentials: Optional[List[str]] = None,
+    secrets: Optional[List[str]] = None,
     runtime: Optional[Any] = None,
     **kwargs: Any,
 ) -> AgentResult:
@@ -279,7 +279,7 @@ def run(
         session_id=session_id,
         idempotency_key=idempotency_key,
         on_event=on_event,
-        credentials=credentials,
+        secrets=secrets,
         **kwargs,
     )
 
@@ -387,7 +387,7 @@ async def run_async(
     session_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
     on_event: Optional[Any] = None,
-    credentials: Optional[List[str]] = None,
+    secrets: Optional[List[str]] = None,
     runtime: Optional[Any] = None,
     **kwargs: Any,
 ) -> AgentResult:
@@ -425,7 +425,7 @@ async def run_async(
         session_id=session_id,
         idempotency_key=idempotency_key,
         on_event=on_event,
-        credentials=credentials,
+        secrets=secrets,
         **kwargs,
     )
 

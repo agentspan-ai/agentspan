@@ -1,4 +1,4 @@
-import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig, PrefillToolCall } from "./types.js";
+import type { Strategy, CodeExecutionConfig, CliConfig, PrefillToolCall } from "./types.js";
 import { agentTool } from "./tool.js";
 import { ConfigurationError } from "./errors.js";
 import { ClaudeCode } from "./claude-code.js";
@@ -142,7 +142,7 @@ export interface AgentOptions {
   cliCommands?: boolean;
   /** Shorthand: allowed CLI commands (implies cliCommands=true). */
   cliAllowedCommands?: string[];
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
   /** Stateful execution — each run gets a unique domain UUID for worker isolation. */
   stateful?: boolean;
   /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
@@ -216,7 +216,7 @@ export class Agent {
   readonly gate?: GateCondition;
   readonly codeExecutionConfig?: CodeExecutionConfig;
   readonly cliConfig?: CliConfig;
-  readonly credentials?: (string | CredentialFile)[];
+  readonly credentials?: string[];
   readonly fallbackMaxTurns?: number;
   readonly planSource?: { tool: string; args?: Record<string, unknown> };
   /**

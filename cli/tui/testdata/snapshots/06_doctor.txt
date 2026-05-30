@@ -6,7 +6,7 @@
 │    Executions    ││                                                                                                                                                                                                    │
 │    Server        ││                                                                                                                                                                                                    │
 │    Skills        ││                                                                                                                                                                                                    │
-│    Credentials   ││                                                                                                                                                                                                    │
+│    Secrets       ││                                                                                                                                                                                                    │
 │  > Doctor        ││                                                                                                                                                                                                    │
 │    Configure     ││                                                                                                                                                                                                    │
 │                  ││                                                                                                                                                                                                    │

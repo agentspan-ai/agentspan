@@ -4,10 +4,17 @@
 package ai.agentspan.internal;
 
 import ai.agentspan.AgentConfig;
+import ai.agentspan.Secrets;
+import ai.agentspan.exceptions.CredentialAuthException;
+import ai.agentspan.exceptions.CredentialNotFoundException;
+import ai.agentspan.exceptions.CredentialRateLimitException;
+import ai.agentspan.exceptions.CredentialServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -27,9 +34,12 @@ public class WorkerManager {
 
     private final AgentConfig config;
     private final WorkerHttp workerHttp;
+    private final WorkerCredentialFetcher credentialFetcher;
     private final ConcurrentHashMap<String, Function<Map<String, Object>, Object>> handlers;
     /** Optional worker domain per task name. Tasks without an entry poll the default queue. */
     private final ConcurrentHashMap<String, String> taskDomains;
+    /** Declared credential names per task name. Empty list when no secrets are declared. */
+    private final ConcurrentHashMap<String, List<String>> taskCredentials;
     /**
      * Domain applied by the no-arg {@link #register(String, Function)} overload.
      * AgentRuntime sets this for the lifetime of a single
@@ -46,9 +56,12 @@ public class WorkerManager {
 
     public WorkerManager(AgentConfig config) {
         this.config = config;
-        this.workerHttp = new WorkerHttp(new HttpApi(config));
+        HttpApi httpApi = new HttpApi(config);
+        this.workerHttp = new WorkerHttp(httpApi);
+        this.credentialFetcher = new WorkerCredentialFetcher(httpApi);
         this.handlers = new ConcurrentHashMap<>();
         this.taskDomains = new ConcurrentHashMap<>();
+        this.taskCredentials = new ConcurrentHashMap<>();
         this.workerFutures = new ConcurrentHashMap<>();
     }
 
@@ -73,6 +86,11 @@ public class WorkerManager {
         this.currentDomain = domain;
     }
 
+    /** Read the domain set by the most recent {@link #setCurrentDomain(String)}. */
+    public String getCurrentDomain() {
+        return currentDomain;
+    }
+
     /**
      * Register a task handler function scoped to a worker domain.
      *
@@ -90,12 +108,31 @@ public class WorkerManager {
             String taskName,
             Function<Map<String, Object>, Object> handler,
             String domain) {
+        register(taskName, handler, domain, Collections.emptyList());
+    }
+
+    /**
+     * Register a task handler scoped to a domain AND declaring a list of
+     * credential names that the worker should resolve from the server before
+     * invoking the handler. Resolved values are available to the handler via
+     * {@link ai.agentspan.Secrets#get(String)}.
+     */
+    public void register(
+            String taskName,
+            Function<Map<String, Object>, Object> handler,
+            String domain,
+            List<String> credentials) {
         boolean reRegister = handlers.containsKey(taskName);
         handlers.put(taskName, handler);
         if (domain != null && !domain.isEmpty()) {
             taskDomains.put(taskName, domain);
         } else {
             taskDomains.remove(taskName);
+        }
+        if (credentials != null && !credentials.isEmpty()) {
+            taskCredentials.put(taskName, List.copyOf(credentials));
+        } else {
+            taskCredentials.remove(taskName);
         }
         if (reRegister) {
             logger.debug("Re-registering existing handler for task: {} (domain={})", taskName, domain);
@@ -201,11 +238,38 @@ public class WorkerManager {
             Map<String, Object> inputData) {
 
         Runnable task = () -> {
+            // Resolve declared secrets BEFORE invoking the handler. Credential
+            // failures map to terminal task failures so Conductor doesn't burn
+            // retries on a configuration problem. See
+            // docs/design/secret-injection-contract.md — Java is tier-1-only
+            // (System.getenv is immutable; values reach the handler via the
+            // Secrets thread-local accessor, not via env mutation).
+            Map<String, String> resolvedSecrets = Collections.emptyMap();
+            List<String> declared = taskCredentials.getOrDefault(taskName, Collections.emptyList());
+            if (!declared.isEmpty()) {
+                String execToken = extractExecutionToken(inputData);
+                try {
+                    resolvedSecrets = credentialFetcher.fetch(execToken, declared);
+                } catch (CredentialNotFoundException | CredentialAuthException
+                        | CredentialRateLimitException | CredentialServiceException ce) {
+                    logger.error("Credential resolution failed for task {} ({}): {}",
+                            taskName, taskId, ce.getMessage());
+                    workerHttp.failTaskTerminal(taskId, workflowInstanceId,
+                            "Credential resolution failed: " + ce.getMessage());
+                    return;
+                }
+            }
+
             try {
-                Object result = handler.apply(inputData);
-                Map<String, Object> output = buildOutput(result);
-                workerHttp.completeTask(taskId, workflowInstanceId, output);
-                logger.debug("Completed task {} ({})", taskName, taskId);
+                Secrets.setForCall(resolvedSecrets);
+                try {
+                    Object result = handler.apply(inputData);
+                    Map<String, Object> output = buildOutput(result);
+                    workerHttp.completeTask(taskId, workflowInstanceId, output);
+                    logger.debug("Completed task {} ({})", taskName, taskId);
+                } finally {
+                    Secrets.clearForCall();
+                }
             } catch (Exception e) {
                 logger.error("Task {} ({}) failed: {}", taskName, taskId, e.getMessage(), e);
                 workerHttp.failTask(taskId, workflowInstanceId, e.getMessage());
@@ -236,6 +300,22 @@ public class WorkerManager {
             t.setDaemon(true);
             t.start();
         }
+    }
+
+    /**
+     * Pull the execution token out of {@code inputData["__agentspan_ctx__"]["execution_token"]}.
+     * Server-side property name is snake-case (matches the .NET / TS extraction).
+     * Returns {@code null} if no token is present — caller treats that as
+     * "credential resolution will fail with NotFound".
+     */
+    @SuppressWarnings("unchecked")
+    private static String extractExecutionToken(Map<String, Object> inputData) {
+        if (inputData == null) return null;
+        Object ctx = inputData.get("__agentspan_ctx__");
+        if (!(ctx instanceof Map<?, ?> ctxMap)) return null;
+        Object token = ctxMap.get("execution_token");
+        if (token == null) token = ctxMap.get("executionToken");  // tolerate camelCase
+        return token instanceof String s ? s : null;
     }
 
     @SuppressWarnings("unchecked")

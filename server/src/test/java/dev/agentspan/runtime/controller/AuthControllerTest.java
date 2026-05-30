@@ -17,7 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
 import dev.agentspan.runtime.auth.UserRepository;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.ExecutionTokenService;
 
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {

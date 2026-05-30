@@ -4,16 +4,16 @@
 """Credentials — LangChain agent with credential injection.
 
 Demonstrates:
-    - runtime.run(agent, credentials=["GITHUB_TOKEN"]) for LangChain
-    - Same pattern as LangGraph — credentials resolved from server
+    - runtime.run(agent, secrets=["GITHUB_TOKEN"]) for LangChain
+    - Same pattern as LangGraph — secrets resolved from server
       and injected into os.environ before the agent runs
 
 Setup (one-time):
-    agentspan credentials set GITHUB_TOKEN <your-github-token>
+    agentspan secrets set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - GITHUB_TOKEN stored via `agentspan credentials set`
+    - GITHUB_TOKEN stored via `agentspan secrets set`
     - langchain installed: pip install langchain langchain-openai
 """
 
@@ -57,17 +57,17 @@ if __name__ == "__main__":
         result = runtime.run(
             agent,
             "Check if the GitHub token is set",
-            credentials=["GITHUB_TOKEN"],
+            secrets=["GITHUB_TOKEN"],
         )
         result.print_result()
 
-        print('\nStarting another run passing the credentials')
+        print('\nStarting another run passing the secrets')
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16i_credentials_langchain
+        # agentspan deploy --package examples.16i_secrets_langchain
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)

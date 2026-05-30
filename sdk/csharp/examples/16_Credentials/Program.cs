@@ -52,8 +52,9 @@ internal sealed class GitHubTools
     public async Task<Dictionary<string, object>> ListGithubRepos(
         string username, ToolContext? ctx = null)
     {
-        // In isolated mode the server injects GITHUB_TOKEN into the worker's
-        // process environment before invoking the handler.
+        // The worker resolves GITHUB_TOKEN from the server and injects it into
+        // the process environment for the duration of this handler call
+        // (under a process-wide lock — see secret-injection-contract.md).
         var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN") ?? "";
 
         var request = new HttpRequestMessage(

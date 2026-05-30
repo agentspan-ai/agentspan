@@ -15,7 +15,7 @@ Run:
 
 Requirements:
     - Agentspan server running
-    - GITHUB_TOKEN stored: agentspan credentials set GITHUB_TOKEN <your-github-token>
+    - GITHUB_TOKEN stored: agentspan secrets set GITHUB_TOKEN <your-github-token>
     - gh CLI installed
 """
 
@@ -74,7 +74,7 @@ RULES:
         allow_shell=True,
         timeout=60,
     ),
-    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
+    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
     max_turns=20,
     stop_when=_fetch_done,
     gate=TextGate("NO_OPEN_ISSUES"),
@@ -86,7 +86,7 @@ coder = Agent(
     name="coder",
     model=MODEL,
     max_tokens=60000,
-    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
+    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
 You are a senior developer. Your input contains issue details from the previous stage
 including REPO, BRANCH, ISSUE, AUTHOR, DETAILS, and SUMMARY.
@@ -108,7 +108,7 @@ including REPO, BRANCH, ISSUE, AUTHOR, DETAILS, and SUMMARY.
 qa_tester = Agent(
     name="qa_tester",
     model=MODEL,
-    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
+    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
 You are a QA engineer. Clone the repo, review changes, run tests.
 If bugs found: say HANDOFF_TO_CODER with what to fix.
@@ -154,7 +154,7 @@ git_push_pr = Agent(
     model=MODEL,
     max_tokens=8192,
     max_turns=15,
-    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
+    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
 Create a pull request. Extract REPO, BRANCH, and ISSUE from the previous stage output.
 

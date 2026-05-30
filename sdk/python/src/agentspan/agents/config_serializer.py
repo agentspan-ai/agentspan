@@ -70,12 +70,8 @@ class AgentConfigSerializer:
             }
             # Credentials must still be sent so the server includes them
             # in the execution token for the passthrough worker to resolve.
-            if hasattr(agent, "credentials") and agent.credentials:
-                from agentspan.agents.runtime.credentials.types import CredentialFile
-
-                stub["credentials"] = [
-                    c if isinstance(c, str) else c.env_var for c in agent.credentials
-                ]
+            if hasattr(agent, "secrets") and agent.secrets:
+                stub["secrets"] = [c for c in agent.secrets if isinstance(c, str)]
             return stub
 
         # Strategy is emitted when the agent has any sub-agent declaration:
@@ -290,13 +286,9 @@ class AgentConfigSerializer:
                 "allowShell": cfg.allow_shell,
             }
 
-        # Agent-level credentials
-        if hasattr(agent, "credentials") and agent.credentials:
-            from agentspan.agents.runtime.credentials.types import CredentialFile
-
-            config["credentials"] = [
-                c if isinstance(c, str) else c.env_var for c in agent.credentials
-            ]
+        # Agent-level secrets
+        if hasattr(agent, "secrets") and agent.secrets:
+            config["secrets"] = [c for c in agent.secrets if isinstance(c, str)]
 
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}
@@ -343,11 +335,11 @@ class AgentConfigSerializer:
 
         # Credentials — must be in config so the server includes them in
         # the execution token's declared_names (bounds credential resolution).
-        if td.credentials:
-            cred_names = [c if isinstance(c, str) else c.env_var for c in td.credentials]
+        if td.secrets:
+            cred_names = [c if isinstance(c, str) else c.env_var for c in td.secrets]
             if "config" not in result:
                 result["config"] = {}
-            result["config"]["credentials"] = cred_names
+            result["config"]["secrets"] = cred_names
 
         return result
 

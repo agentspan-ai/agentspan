@@ -3,20 +3,13 @@
 
 """Verify that credential types are exported from the top-level agentspan.agents package."""
 
-import pytest
-
 
 class TestPublicApiExports:
     """Public API surface for credential management."""
 
-    def test_get_credential_importable_from_top_level(self):
-        from agentspan.agents import get_credential
-        assert callable(get_credential)
-
-    def test_credential_file_importable_from_top_level(self):
-        from agentspan.agents import CredentialFile
-        cf = CredentialFile("KUBECONFIG", ".kube/config")
-        assert cf.env_var == "KUBECONFIG"
+    def test_get_secret_importable_from_top_level(self):
+        from agentspan.agents import get_secret
+        assert callable(get_secret)
 
     def test_credential_not_found_error_importable(self):
         from agentspan.agents import CredentialNotFoundError
@@ -38,34 +31,30 @@ class TestPublicApiExports:
         exc = CredentialServiceError(503)
         assert isinstance(exc, Exception)
 
-    def test_tool_accepts_credentials_param_end_to_end(self):
-        """@tool with credentials= is accepted and ToolDef.credentials is set."""
-        from agentspan.agents import tool, CredentialFile
+    def test_tool_accepts_secrets_param_end_to_end(self):
+        """@tool with secrets= is accepted and ToolDef.secrets is set."""
+        from agentspan.agents import tool
 
-        @tool(credentials=["GITHUB_TOKEN", CredentialFile("KUBECONFIG", ".kube/config")])
+        @tool(secrets=["GITHUB_TOKEN"])
         def my_tool(branch: str) -> str:
             """Deploy."""
             return "ok"
 
         td = my_tool._tool_def
-        assert "GITHUB_TOKEN" in td.credentials
-        assert any(
-            hasattr(c, "env_var") and c.env_var == "KUBECONFIG"
-            for c in td.credentials
-        )
+        assert "GITHUB_TOKEN" in td.secrets
 
-    def test_agent_accepts_credentials_param(self):
+    def test_agent_accepts_secrets_param(self):
         from agentspan.agents import Agent
         a = Agent(
             name="test_agent_export",
             model="openai/gpt-4o",
-            credentials=["GITHUB_TOKEN"],
+            secrets=["GITHUB_TOKEN"],
         )
-        assert "GITHUB_TOKEN" in a.credentials
+        assert "GITHUB_TOKEN" in a.secrets
 
     def test_all_credential_names_in_all_exports(self):
         """Every credential name must appear in __all__."""
         import agentspan.agents as module
-        for name in ["get_credential", "CredentialFile", "CredentialNotFoundError",
+        for name in ["get_secret", "CredentialNotFoundError",
                      "CredentialAuthError", "CredentialRateLimitError", "CredentialServiceError"]:
             assert name in module.__all__, f"{name!r} missing from __all__"

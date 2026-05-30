@@ -193,15 +193,6 @@ export interface PromptTemplate {
 }
 
 /**
- * Credential file reference for tool/agent credential injection.
- */
-export interface CredentialFile {
-  envVar: string;
-  relativePath?: string;
-  content?: string;
-}
-
-/**
  * Agent-level code execution configuration.
  */
 export interface CodeExecutionConfig {
@@ -269,8 +260,7 @@ export interface ToolDef {
   approvalRequired?: boolean;
   timeoutSeconds?: number;
   external?: boolean;
-  isolated?: boolean;
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
   guardrails?: unknown[];
   config?: Record<string, unknown>;
   /** Stateful tool — worker registers under execution's domain for isolation. */

@@ -5,7 +5,7 @@ import { TerminalToolError } from "./errors.js";
 import {
   extractExecutionToken,
   resolveCredentials,
-  injectCredentials,
+  injectSecretsForInvocation,
   runWithCredentialContext,
 } from "./credentials.js";
 
@@ -345,7 +345,11 @@ export class WorkerManager {
         // Credential setup
         const execToken = extractExecutionToken(inputData);
 
-        let cleanupCreds: (() => void) | null = null;
+        // Resolve secrets up-front (no env mutation yet). Injection happens
+        // inside runHandler() via injectSecretsForInvocation so the mutate-
+        // invoke-restore sequence is atomic under a process-wide lock.
+        // See docs/design/secret-injection-contract.md.
+        let resolvedSecrets: Record<string, string> = {};
         if (pw.credentials?.length) {
           if (!execToken) {
             throw new NonRetryableException(
@@ -354,13 +358,12 @@ export class WorkerManager {
             );
           }
           try {
-            const resolved = await resolveCredentials(
+            resolvedSecrets = await resolveCredentials(
               serverUrl,
               headers,
               execToken,
               pw.credentials,
             );
-            cleanupCreds = injectCredentials(serverUrl, headers, execToken, resolved);
           } catch (err) {
             throw new NonRetryableException(
               `Credential resolution failed for ${pw.taskName}: ${err instanceof Error ? err.message : String(err)}`,
@@ -372,7 +375,10 @@ export class WorkerManager {
           Omit<TaskResult, "workflowInstanceId" | "taskId">
         > => {
           try {
-            let result = await pw.handler(cleaned);
+            let result = await injectSecretsForInvocation(
+              resolvedSecrets,
+              () => pw.handler(cleaned),
+            );
 
             // State mutation capture
             if (toolContext) {
@@ -394,8 +400,6 @@ export class WorkerManager {
               throw new NonRetryableException(error.message);
             }
             throw error;
-          } finally {
-            cleanupCreds?.();
           }
         };
 

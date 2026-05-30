@@ -6,7 +6,7 @@
 │    Executions    ││ │ r run │ │ n new │ │ E examples │ │ D deploy │ │ d delete │ │ / search │ │ R refresh │                                                                                                            │
 │    Server        ││ ╰───────╯ ╰───────╯ ╰────────────╯ ╰──────────╯ ╰──────────╯ ╰──────────╯ ╰───────────╯                                                                                                            │
 │    Skills        ││                                                                                                                                                                                                    │
-│    Credentials   ││ Registered Agents (0)                                                                                                                                                                              │
+│    Secrets       ││ Registered Agents (0)                                                                                                                                                                              │
 │    Doctor        ││   ⠋  Loading...                                                                                                                                                                                    │
 │    Configure     ││ ╭─────────╮ ╭────────────────╮ ╭────────────────╮                                                                                                                                                  │
 │                  ││ │ ←→ move │ │ enter activate │ │ ↑ back to list │                                                                                                                                                  │

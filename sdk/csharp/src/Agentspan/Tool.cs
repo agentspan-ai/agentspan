@@ -60,8 +60,6 @@ public sealed class ToolAttribute : Attribute
     public bool ApprovalRequired { get; set; }
     /// <summary>Tool runs in an external worker (not registered locally).</summary>
     public bool External { get; set; }
-    /// <summary>Run in isolated subprocess (default true).</summary>
-    public bool Isolated { get; set; } = true;
     /// <summary>Execution timeout in seconds. 0 = no timeout.</summary>
     public int TimeoutSeconds { get; set; }
     /// <summary>Credential names that will be resolved and injected as env vars.</summary>

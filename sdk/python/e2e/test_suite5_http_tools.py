@@ -137,7 +137,7 @@ Report each result.
 """
 
 
-def _make_http_tools(base_url, headers=None, credentials=None):
+def _make_http_tools(base_url, headers=None, secrets=None):
     """Create 3 http_tool instances for the test endpoints."""
     math_add = http_tool(
         name="math_add",
@@ -145,7 +145,7 @@ def _make_http_tools(base_url, headers=None, credentials=None):
         url=f"{base_url}/api/math/add",
         method="GET",
         headers=headers,
-        credentials=credentials,
+        secrets=credentials,
         input_schema={
             "type": "object",
             "properties": {
@@ -161,7 +161,7 @@ def _make_http_tools(base_url, headers=None, credentials=None):
         url=f"{base_url}/api/string/reverse",
         method="POST",
         headers=headers,
-        credentials=credentials,
+        secrets=credentials,
         input_schema={
             "type": "object",
             "properties": {
@@ -176,7 +176,7 @@ def _make_http_tools(base_url, headers=None, credentials=None):
         url=f"{base_url}/api/encoding/base64-encode",
         method="POST",
         headers=headers,
-        credentials=credentials,
+        secrets=credentials,
         input_schema={
             "type": "object",
             "properties": {
@@ -205,7 +205,7 @@ def _make_auth_agent(model, base_url, cred_name):
         name="e2e_http_auth",
         model=model,
         instructions=AGENT_INSTRUCTIONS,
-        tools=_make_http_tools(base_url, headers=headers, credentials=[cred_name]),
+        tools=_make_http_tools(base_url, headers=headers, secrets=[cred_name]),
     )
 
 

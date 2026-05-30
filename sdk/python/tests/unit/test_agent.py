@@ -445,25 +445,25 @@ class TestScatterGather:
 
 
 class TestAgentCredentials:
-    """Agent credentials param and CLI auto-mapping."""
+    """Agent secrets param and CLI auto-mapping."""
 
-    def test_credentials_defaults_to_empty_list(self):
+    def test_secrets_defaults_to_empty_list(self):
         from agentspan.agents.agent import Agent
         a = Agent(name="test_agent", model="openai/gpt-4o")
-        assert a.credentials == []
+        assert a.secrets == []
 
-    def test_explicit_credentials_stored(self):
+    def test_explicit_secrets_stored(self):
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
             model="openai/gpt-4o",
-            credentials=["GITHUB_TOKEN", "OPENAI_API_KEY"],
+            secrets=["GITHUB_TOKEN", "OPENAI_API_KEY"],
         )
-        assert "GITHUB_TOKEN" in a.credentials
-        assert "OPENAI_API_KEY" in a.credentials
+        assert "GITHUB_TOKEN" in a.secrets
+        assert "OPENAI_API_KEY" in a.secrets
 
-    def test_cli_allowed_commands_without_credentials_stays_empty(self):
-        """CLI commands without explicit credentials produce empty credentials list."""
+    def test_cli_allowed_commands_without_secrets_stays_empty(self):
+        """CLI commands without explicit secrets produce empty secrets list."""
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
@@ -471,23 +471,23 @@ class TestAgentCredentials:
             cli_commands=True,
             cli_allowed_commands=["gh", "git"],
         )
-        assert a.credentials == []
+        assert a.secrets == []
 
-    def test_cli_allowed_commands_with_explicit_credentials(self):
-        """Explicit credentials are required — no auto-mapping from CLI commands."""
+    def test_cli_allowed_commands_with_explicit_secrets(self):
+        """Explicit secrets are required — no auto-mapping from CLI commands."""
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
             model="openai/gpt-4o",
             cli_commands=True,
             cli_allowed_commands=["aws"],
-            credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+            secrets=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
         )
-        assert "AWS_ACCESS_KEY_ID" in a.credentials
-        assert "AWS_SECRET_ACCESS_KEY" in a.credentials
+        assert "AWS_ACCESS_KEY_ID" in a.secrets
+        assert "AWS_SECRET_ACCESS_KEY" in a.secrets
 
-    def test_terraform_without_credentials_allowed(self):
-        """terraform in cli_allowed_commands without credentials is allowed (no auto-mapping)."""
+    def test_terraform_without_secrets_allowed(self):
+        """terraform in cli_allowed_commands without secrets is allowed (no auto-mapping)."""
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
@@ -495,10 +495,10 @@ class TestAgentCredentials:
             cli_commands=True,
             cli_allowed_commands=["terraform"],
         )
-        assert a.credentials == []
+        assert a.secrets == []
 
-    def test_terraform_with_explicit_credentials_does_not_raise(self):
-        """terraform is fine when explicit credentials are declared."""
+    def test_terraform_with_explicit_secrets_does_not_raise(self):
+        """terraform is fine when explicit secrets are declared."""
         from agentspan.agents.agent import Agent
         # Should not raise
         a = Agent(
@@ -506,12 +506,12 @@ class TestAgentCredentials:
             model="openai/gpt-4o",
             cli_commands=True,
             cli_allowed_commands=["terraform", "aws"],
-            credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "TF_VAR_db_password"],
+            secrets=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "TF_VAR_db_password"],
         )
-        assert "TF_VAR_db_password" in a.credentials
+        assert "TF_VAR_db_password" in a.secrets
 
     def test_commands_not_in_map_are_ignored_gracefully(self):
-        """CLI commands like mktemp, rm not in map produce no credentials (no error)."""
+        """CLI commands like mktemp, rm not in map produce no secrets (no error)."""
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
@@ -519,22 +519,22 @@ class TestAgentCredentials:
             cli_commands=True,
             cli_allowed_commands=["mktemp", "rm"],
         )
-        # Neither command has credentials — empty list is fine
-        assert a.credentials == []
+        # Neither command has secrets — empty list is fine
+        assert a.secrets == []
 
-    def test_explicit_credentials_override_automapping(self):
-        """When explicit credentials provided, auto-mapping is not applied."""
+    def test_explicit_secrets_override_automapping(self):
+        """When explicit secrets provided, auto-mapping is not applied."""
         from agentspan.agents.agent import Agent
         a = Agent(
             name="test_agent",
             model="openai/gpt-4o",
             cli_commands=True,
             cli_allowed_commands=["gh"],
-            credentials=["MY_CUSTOM_TOKEN"],
+            secrets=["MY_CUSTOM_TOKEN"],
         )
-        # Only explicit credentials, no auto-mapped ones added on top
-        assert a.credentials == ["MY_CUSTOM_TOKEN"]
-        assert "GITHUB_TOKEN" not in a.credentials
+        # Only explicit secrets, no auto-mapped ones added on top
+        assert a.secrets == ["MY_CUSTOM_TOKEN"]
+        assert "GITHUB_TOKEN" not in a.secrets
 
 
 class TestMaskedFields:

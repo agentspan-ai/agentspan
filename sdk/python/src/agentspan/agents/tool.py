@@ -77,8 +77,7 @@ class ToolDef:
     tool_type: str = "worker"
     config: Dict[str, Any] = field(default_factory=dict)
     guardrails: List[Any] = field(default_factory=list)
-    isolated: bool = True
-    credentials: List[Any] = field(default_factory=list)
+    secrets: List[Any] = field(default_factory=list)
     stateful: bool = False
     max_calls: Optional[int] = None
     retry_count: int = 2
@@ -126,8 +125,7 @@ def tool(
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
     guardrails: Optional[List[Any]] = None,
-    isolated: bool = True,
-    credentials: Optional[List[Any]] = None,
+    secrets: Optional[List[Any]] = None,
     stateful: bool = False,
     max_calls: Optional[int] = None,
     retry_count: int = 2,
@@ -144,8 +142,7 @@ def tool(
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
     guardrails: Optional[List[Any]] = None,
-    isolated: bool = True,
-    credentials: Optional[List[Any]] = None,
+    secrets: Optional[List[Any]] = None,
     stateful: bool = False,
     max_calls: Optional[int] = None,
     retry_count: int = 2,
@@ -194,8 +191,7 @@ def tool(
             timeout_seconds=timeout_seconds,
             tool_type="worker",
             guardrails=list(guardrails) if guardrails else [],
-            isolated=isolated,
-            credentials=list(credentials) if credentials else [],
+            secrets=list(secrets) if secrets else [],
             stateful=stateful,
             max_calls=max_calls,
             retry_count=retry_count,
@@ -229,14 +225,14 @@ def http_tool(
     input_schema: Optional[Dict[str, Any]] = None,
     accept: List[str] = ["application/json"],
     content_type: str = "application/json",
-    credentials: Optional[List[str]] = None,
+    secrets: Optional[List[str]] = None,
 ) -> ToolDef:
     """Create a tool backed by an HTTP endpoint (Conductor ``HttpTask``).
 
     No worker process is needed — the Conductor server makes the HTTP call
     directly.
 
-    Headers can reference credentials using ``${NAME}`` syntax. The server
+    Headers can reference secrets using ``${NAME}`` syntax. The server
     resolves these at execution time from the credential store.
 
     Args:
@@ -248,21 +244,21 @@ def http_tool(
         input_schema: JSON Schema for the tool's input parameters.
         accept: Value for the ``Accept`` header (default ``application/json``).
         content_type: Value for the ``Content-Type`` header (default ``application/json``).
-        credentials: Credential names referenced by ``${NAME}`` in headers.
+        secrets: Credential names referenced by ``${NAME}`` in headers.
     """
     import re as _re
 
-    cred_list = list(credentials) if credentials else []
+    cred_list = list(secrets) if secrets else []
 
-    # Validate: any ${NAME} in headers must be in credentials list
+    # Validate: any ${NAME} in headers must be in secrets list
     if headers:
         placeholders = set(_re.findall(r"\$\{(\w+)}", str(headers)))
         if placeholders:
             missing = placeholders - set(cred_list)
             if missing:
                 raise ValueError(
-                    f"Header placeholder(s) {missing} not declared in credentials={cred_list}. "
-                    f"Add them to the credentials list."
+                    f"Header placeholder(s) {missing} not declared in secrets={cred_list}. "
+                    f"Add them to the secrets list."
                 )
 
     return ToolDef(
@@ -277,7 +273,7 @@ def http_tool(
             "accept": accept,
             "contentType": content_type,
         },
-        credentials=cred_list,
+        secrets=cred_list,
     )
 
 
@@ -288,7 +284,7 @@ def api_tool(
     headers: Optional[Dict[str, str]] = None,
     tool_names: Optional[List[str]] = None,
     max_tools: int = 64,
-    credentials: Optional[List[str]] = None,
+    secrets: Optional[List[str]] = None,
 ) -> ToolDef:
     """Create tool(s) from an OpenAPI spec, Swagger spec, Postman collection, or base URL.
 
@@ -303,7 +299,7 @@ def api_tool(
     - **Postman Collection** — JSON with ``info._postman_id`` or ``item[]``
     - **Base URL** — tries ``/openapi.json``, ``/swagger.json``, etc.
 
-    Headers can reference credentials using ``${NAME}`` syntax. The server
+    Headers can reference secrets using ``${NAME}`` syntax. The server
     resolves these at execution time from the credential store.
 
     Args:
@@ -315,30 +311,30 @@ def api_tool(
         tool_names: Optional whitelist — only include these operation IDs.
         max_tools: If operations exceed this, a filter LLM selects the
             most relevant ones based on the user's prompt (default 64).
-        credentials: Credential names referenced by ``${NAME}`` in headers.
+        secrets: Credential names referenced by ``${NAME}`` in headers.
 
     Example::
 
         stripe = api_tool(
             url="https://api.stripe.com/openapi.json",
             headers={"Authorization": "Bearer ${STRIPE_KEY}"},
-            credentials=["STRIPE_KEY"],
+            secrets=["STRIPE_KEY"],
             max_tools=20,
         )
     """
     import re as _re
 
-    cred_list = list(credentials) if credentials else []
+    cred_list = list(secrets) if secrets else []
 
-    # Validate: any ${NAME} in headers must be in credentials list
+    # Validate: any ${NAME} in headers must be in secrets list
     if headers:
         placeholders = set(_re.findall(r"\$\{(\w+)}", str(headers)))
         if placeholders:
             missing = placeholders - set(cred_list)
             if missing:
                 raise ValueError(
-                    f"Header placeholder(s) {missing} not declared in credentials={cred_list}. "
-                    f"Add them to the credentials list."
+                    f"Header placeholder(s) {missing} not declared in secrets={cred_list}. "
+                    f"Add them to the secrets list."
                 )
 
     config: Dict[str, Any] = {"url": url}
@@ -352,7 +348,7 @@ def api_tool(
         description=description or f"API tools from {url}",
         tool_type="api",
         config=config,
-        credentials=cred_list,
+        secrets=cred_list,
     )
 
 
@@ -363,7 +359,7 @@ def mcp_tool(
     headers: Optional[Dict[str, str]] = None,
     tool_names: Optional[List[str]] = None,
     max_tools: int = 64,
-    credentials: Optional[List[str]] = None,
+    secrets: Optional[List[str]] = None,
 ) -> ToolDef:
     """Create tool(s) from an MCP server (Conductor ``ListMcpTools`` + ``CallMcpTool``).
 
@@ -374,7 +370,7 @@ def mcp_tool(
     **No worker process is needed** — the Conductor server handles MCP
     protocol communication directly.
 
-    Headers can reference credentials using ``${NAME}`` syntax. The server
+    Headers can reference secrets using ``${NAME}`` syntax. The server
     resolves these at execution time from the credential store.
 
     Args:
@@ -384,21 +380,21 @@ def mcp_tool(
         headers: Optional HTTP headers. Use ``${NAME}`` for credential placeholders.
         tool_names: Optional whitelist — only include these tool names.
         max_tools: Threshold for runtime LLM filtering (default 64).
-        credentials: Credential names referenced by ``${NAME}`` in headers.
+        secrets: Credential names referenced by ``${NAME}`` in headers.
     """
     import re as _re
 
-    cred_list = list(credentials) if credentials else []
+    cred_list = list(secrets) if secrets else []
 
-    # Validate: any ${NAME} in headers must be in credentials list
+    # Validate: any ${NAME} in headers must be in secrets list
     if headers:
         placeholders = set(_re.findall(r"\$\{(\w+)}", str(headers)))
         if placeholders:
             missing = placeholders - set(cred_list)
             if missing:
                 raise ValueError(
-                    f"Header placeholder(s) {missing} not declared in credentials={cred_list}. "
-                    f"Add them to the credentials list."
+                    f"Header placeholder(s) {missing} not declared in secrets={cred_list}. "
+                    f"Add them to the secrets list."
                 )
 
     config: Dict[str, Any] = {"server_url": server_url}
@@ -412,7 +408,7 @@ def mcp_tool(
         description=description or f"MCP tools from {server_url}",
         tool_type="mcp",
         config=config,
-        credentials=cred_list,
+        secrets=cred_list,
     )
 
 

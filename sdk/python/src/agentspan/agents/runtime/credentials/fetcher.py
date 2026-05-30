@@ -1,10 +1,10 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""WorkerCredentialFetcher — resolves credentials for a Conductor task.
+"""WorkerCredentialFetcher — resolves secrets for a Conductor task.
 
-Credentials are ALWAYS resolved from the server via POST /api/credentials/resolve.
-There is no env var fallback. If the execution token is missing or credentials
+Credentials are ALWAYS resolved from the server via POST /api/workers/secrets.
+There is no env var fallback. If the execution token is missing or secrets
 are not stored on the server, the tool fails with a non-retryable error.
 """
 
@@ -22,11 +22,11 @@ from agentspan.agents.runtime.credentials.types import (
     CredentialServiceError,
 )
 
-logger = logging.getLogger("agentspan.agents.credentials.fetcher")
+logger = logging.getLogger("agentspan.agents.secrets.fetcher")
 
 
 class WorkerCredentialFetcher:
-    """Fetches credentials for a worker task execution.
+    """Fetches secrets for a worker task execution.
 
     Args:
         server_url: Base URL of the agentspan server API (e.g. ``"http://localhost:6767/api"``).
@@ -77,7 +77,7 @@ class WorkerCredentialFetcher:
             raise CredentialNotFoundError(
                 names,
                 "No execution token available. "
-                "Store credentials on the server with: agentspan credentials set --name <NAME>",
+                "Store secrets on the server with: agentspan secrets set --name <NAME>",
             )
 
         return self._fetch_from_server(execution_token, names)
@@ -89,7 +89,7 @@ class WorkerCredentialFetcher:
         execution_token: str,
         names: List[str],
     ) -> Dict[str, str]:
-        url = f"{self._server_url}/credentials/resolve"
+        url = f"{self._server_url}/workers/secrets"
         headers: Dict[str, str] = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
@@ -116,13 +116,13 @@ class WorkerCredentialFetcher:
         if status >= 500:
             raise CredentialServiceError(status, response.text)
 
-        # 200 OK — check for missing credentials
+        # 200 OK — check for missing secrets
         resolved: Dict[str, str] = response.json()
         missing = [n for n in names if n not in resolved]
         if missing:
             logger.error(
                 "Credentials not found on server: %s. "
-                "Store them with: agentspan credentials set --name <NAME>",
+                "Store them with: agentspan secrets set --name <NAME>",
                 missing,
             )
             raise CredentialNotFoundError(missing)

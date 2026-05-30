@@ -24,7 +24,7 @@ Usage:
 
 Requirements:
     - Agentspan server running
-    - GH_TOKEN: agentspan credentials set GH_TOKEN <your-token>
+    - GH_TOKEN: agentspan secrets set GH_TOKEN <your-token>
     - gh CLI installed and authenticated
     - DG skill: git clone https://github.com/v1r3n/dinesh-gilfoyle ~/.claude/skills/dg
     - Full build toolchain (Go, Java 21, Python 3.10+, Node.js, pnpm, uv)
@@ -132,7 +132,7 @@ issue_analyst = Agent(
     stateful=True,
     max_turns=2,
     max_tokens=4096,
-    credentials=[GITHUB_CREDENTIAL],
+    secrets=[GITHUB_CREDENTIAL],
     tools=[fetch_issue_context],
     instructions=(
         f"Call fetch_issue_context with repo='{REPO}', the issue number from the prompt, "
@@ -172,7 +172,7 @@ coder = Agent(
     stateful=True,
     max_turns=50,
     max_tokens=60000,
-    credentials=[GITHUB_CREDENTIAL],
+    secrets=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
         allowed_commands=["git"],
         allow_shell=True,
@@ -260,7 +260,7 @@ test_coder = Agent(
     stateful=True,
     max_turns=15,
     max_tokens=60000,
-    credentials=[GITHUB_CREDENTIAL],
+    secrets=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
         allowed_commands=["git"],
         allow_shell=True,
@@ -319,7 +319,7 @@ fix_coder = Agent(
     stateful=True,
     max_turns=25,
     max_tokens=60000,
-    credentials=[GITHUB_CREDENTIAL],
+    secrets=[GITHUB_CREDENTIAL],
     cli_config=CliConfig(
         allowed_commands=["git"],
         allow_shell=True,
@@ -383,7 +383,7 @@ pr_creator = Agent(
     stateful=True,
     max_turns=2,
     max_tokens=4096,
-    credentials=[GITHUB_CREDENTIAL],
+    secrets=[GITHUB_CREDENTIAL],
     tools=[create_pr],
     instructions=(
         f"Call create_pr with repo='{REPO}', the issue number from the prompt, "
@@ -404,7 +404,7 @@ pr_feedback = Agent(
     stateful=True,
     max_turns=2,
     max_tokens=4096,
-    credentials=[GITHUB_CREDENTIAL],
+    secrets=[GITHUB_CREDENTIAL],
     tools=[fetch_pr_context],
     instructions=(
         f"Call fetch_pr_context with repo='{REPO}' and the PR number from the prompt. "
@@ -424,7 +424,7 @@ pr_updater = Agent(
     stateful=True,
     max_turns=2,
     max_tokens=4096,
-    credentials=[GITHUB_CREDENTIAL],
+    secrets=[GITHUB_CREDENTIAL],
     tools=[update_pr],
     instructions=(
         f"Call update_pr with repo='{REPO}' and the PR number from the prompt. "

@@ -114,7 +114,7 @@ func TestE2ENavNumberShortcuts(t *testing.T) {
 		{"3", ViewExecutions},
 		{"4", ViewServer},
 		{"5", ViewSkills},
-		{"6", ViewCredentials},
+		{"6", ViewSecrets},
 		{"7", ViewDoctor},
 		{"8", ViewConfigure},
 	}
@@ -664,57 +664,41 @@ func TestE2EServerRRefresh(t *testing.T) {
 // ─── 6. Credentials ──────────────────────────────────────────────────────────
 
 func TestE2ECredentialsRendered(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
+	m := enavTo(t, ebaseApp(t), ViewSecrets)
 	out := eout(m)
-	ehas(t, "credentials", out, "Credentials")
-	ehas(t, "bindings", out, "Bindings")
-}
-
-func TestE2ECredentialsTabSwitch(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	if m.credentials.Tab() != views.CredTabCreds {
-		t.Errorf("initial tab=%d, want CredTabCreds", m.credentials.Tab())
-	}
-	m = esend(m, espec(tea.KeyTab))
-	if m.credentials.Tab() != views.CredTabBindings {
-		t.Errorf("tab: tab=%d, want CredTabBindings", m.credentials.Tab())
-	}
-	m = esend(m, espec(tea.KeyTab))
-	if m.credentials.Tab() != views.CredTabCreds {
-		t.Errorf("tab again: tab=%d, want CredTabCreds", m.credentials.Tab())
-	}
+	ehas(t, "secrets", out, "Secrets")
 }
 
 func TestE2ECredentialsButtonBar(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	if m.credentials.BtnCursor() != -1 {
-		t.Errorf("initial btnCursor=%d, want -1", m.credentials.BtnCursor())
+	m := enavTo(t, ebaseApp(t), ViewSecrets)
+	if m.secrets.BtnCursor() != -1 {
+		t.Errorf("initial btnCursor=%d, want -1", m.secrets.BtnCursor())
 	}
 	m = esend(m, espec(tea.KeyDown)) // past empty list
-	if m.credentials.BtnCursor() != 0 {
-		t.Errorf("↓: btnCursor=%d, want 0", m.credentials.BtnCursor())
+	if m.secrets.BtnCursor() != 0 {
+		t.Errorf("↓: btnCursor=%d, want 0", m.secrets.BtnCursor())
 	}
 	m = esend(m, espec(tea.KeyRight))
-	if m.credentials.BtnCursor() != 1 {
-		t.Errorf("→: btnCursor=%d, want 1", m.credentials.BtnCursor())
+	if m.secrets.BtnCursor() != 1 {
+		t.Errorf("→: btnCursor=%d, want 1", m.secrets.BtnCursor())
 	}
 	m = esend(m, espec(tea.KeyLeft))
-	if m.credentials.BtnCursor() != 0 {
-		t.Errorf("←: btnCursor=%d, want 0", m.credentials.BtnCursor())
+	if m.secrets.BtnCursor() != 0 {
+		t.Errorf("←: btnCursor=%d, want 0", m.secrets.BtnCursor())
 	}
 	m = esend(m, espec(tea.KeyUp))
-	if m.credentials.BtnCursor() != -1 {
-		t.Errorf("↑: btnCursor=%d, want -1", m.credentials.BtnCursor())
+	if m.secrets.BtnCursor() != -1 {
+		t.Errorf("↑: btnCursor=%d, want -1", m.secrets.BtnCursor())
 	}
 }
 
 func TestE2ECredentialsAddForm(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
+	m := enavTo(t, ebaseApp(t), ViewSecrets)
 	m = esend(m, "a")
-	if !m.credentials.AddMode() {
+	if !m.secrets.AddMode() {
 		t.Fatal("a: should open add form")
 	}
-	if !m.credentials.FormActive() {
+	if !m.secrets.FormActive() {
 		t.Error("FormActive() should be true after 'a'")
 	}
 	if !m.activeViewWantsAllKeys() {
@@ -723,53 +707,53 @@ func TestE2ECredentialsAddForm(t *testing.T) {
 }
 
 func TestE2ECredentialsAddFormEsc(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
+	m := enavTo(t, ebaseApp(t), ViewSecrets)
 	m = esend(m, "a")
-	if !m.credentials.AddMode() {
+	if !m.secrets.AddMode() {
 		t.Skip("add form not opened")
 	}
 	// huh form esc behavior depends on field state; try up to 5 times
 	for i := 0; i < 5; i++ {
-		if !m.credentials.AddMode() {
+		if !m.secrets.AddMode() {
 			return // closed
 		}
 		m = esend(m, espec(tea.KeyEscape))
 	}
-	if m.credentials.AddMode() {
+	if m.secrets.AddMode() {
 		t.Logf("add form not closed after 5 esc presses — huh behaviour is implementation-dependent")
 		t.Skip("skipping strict assertion on huh form esc")
 	}
 }
 
 func TestE2ECredentialsDeleteConfirm(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
+	m := enavTo(t, ebaseApp(t), ViewSecrets)
 	m = esend(m, "d") // no creds → no confirm
-	if m.credentials.DelConfirm() {
+	if m.secrets.DelConfirm() {
 		t.Error("d with no creds should not confirm")
 	}
-	tmpC := m.credentials
+	tmpC := m.secrets
 	tmpC.InjectCred("OPENAI_API_KEY")
-	m.credentials = tmpC
+	m.secrets = tmpC
 	m = esend(m, "d")
-	if !m.credentials.DelConfirm() {
+	if !m.secrets.DelConfirm() {
 		t.Error("d with cred should confirm")
 	}
 	m = esend(m, "N")
-	if m.credentials.DelConfirm() {
+	if m.secrets.DelConfirm() {
 		t.Error("N should cancel")
 	}
 }
 
 func TestE2ECredentialsRRefresh(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	tmpCS := m.credentials
+	m := enavTo(t, ebaseApp(t), ViewSecrets)
+	tmpCS := m.secrets
 	tmpCS.SetSuccess("done")
-	m.credentials = tmpCS
+	m.secrets = tmpCS
 	m = esend(m, "R")
-	if m.credentials.Success() != "" {
+	if m.secrets.Success() != "" {
 		t.Error("R should clear success")
 	}
-	if !m.credentials.Loading() {
+	if !m.secrets.Loading() {
 		t.Error("R should set loading=true")
 	}
 }
@@ -854,7 +838,7 @@ func TestE2EHelpFromAllViews(t *testing.T) {
 	}{
 		{ViewDashboard, "dashboard"}, {ViewAgents, "agents"},
 		{ViewExecutions, "executions"}, {ViewServer, "server"},
-		{ViewCredentials, "credentials"}, {ViewDoctor, "doctor"},
+		{ViewSecrets, "secrets"}, {ViewDoctor, "doctor"},
 		{ViewSkills, "skills"},
 	}
 	for _, v := range all {
@@ -912,7 +896,7 @@ func TestE2EWindowResizePropagates(t *testing.T) {
 	}
 
 	// Navigate to a new view using the current dimensions (not esz() which is 220×50)
-	r2, _ := m.Update(NavSelectMsg{View: ViewCredentials})
+	r2, _ := m.Update(NavSelectMsg{View: ViewSecrets})
 	m2 := r2.(*AppModel)
 	// Propagate size to the new view
 	r3, _ := m2.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -939,7 +923,7 @@ func TestE2ECrossViewNumberJumpAlwaysFocusesContent(t *testing.T) {
 }
 
 func TestE2ECrossViewEscReturnsSidebar(t *testing.T) {
-	for _, v := range []ViewID{ViewAgents, ViewServer, ViewCredentials} {
+	for _, v := range []ViewID{ViewAgents, ViewServer, ViewSecrets} {
 		t.Run("", func(t *testing.T) {
 			m := enavTo(t, ebaseApp(t), v)
 			efocused(t, "after nav", m, true)

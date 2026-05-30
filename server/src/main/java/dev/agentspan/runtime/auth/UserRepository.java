@@ -31,7 +31,7 @@ public class UserRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
-    public UserRepository(@Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc) {
+    public UserRepository(@Qualifier("secretJdbc") NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 

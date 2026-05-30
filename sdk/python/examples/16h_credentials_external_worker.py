@@ -4,35 +4,35 @@
 """Credentials — External worker credential resolution.
 
 Demonstrates:
-    - @tool(external=True, credentials=["GITHUB_TOKEN"]) declares
-      credentials for an external worker
-    - The external worker uses resolve_credentials() to fetch
+    - @tool(external=True, secrets=["GITHUB_TOKEN"]) declares
+      secrets for an external worker
+    - The external worker uses resolve_secrets() to fetch
       credential values from the server at runtime
     - Works for workers running in separate processes, containers,
       or machines
 
 This example shows two sides:
-    1. Agent definition (declares the external tool with credentials)
-    2. External worker (resolves credentials using the helper)
+    1. Agent definition (declares the external tool with secrets)
+    2. External worker (resolves secrets using the helper)
 
 The external worker typically runs in a separate process. Here we
 simulate both in one file for demonstration.
 
 Setup (one-time):
-    agentspan credentials set GITHUB_TOKEN <your-github-token>
+    agentspan secrets set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - GITHUB_TOKEN stored via `agentspan credentials set`
+    - GITHUB_TOKEN stored via `agentspan secrets set`
 """
 
-from agentspan.agents import Agent, AgentRuntime, tool, resolve_credentials
+from agentspan.agents import Agent, AgentRuntime, tool, resolve_secrets
 from settings import settings
 
 
-# ── Agent side: declare external tool with credentials ──────────
+# ── Agent side: declare external tool with secrets ──────────
 
-@tool(external=True, credentials=["GITHUB_TOKEN"])
+@tool(external=True, secrets=["GITHUB_TOKEN"])
 def github_lookup(username: str) -> dict:
     """Look up a GitHub user's profile. Runs on an external worker."""
     ...  # stub — actual implementation is in the external worker below
@@ -46,11 +46,11 @@ agent = Agent(
 )
 
 
-# ── External worker side: resolve credentials at runtime ────────
+# ── External worker side: resolve secrets at runtime ────────
 # In production, this would run in a separate process.
 
 def run_external_worker():
-    """Simulate an external worker that resolves credentials."""
+    """Simulate an external worker that resolves secrets."""
     from conductor.client.worker.worker_task import worker_task
     from conductor.client.http.models.task import Task
     from conductor.client.http.models.task_result import TaskResult
@@ -61,9 +61,9 @@ def run_external_worker():
     def github_lookup_worker(task: Task) -> TaskResult:
         username = task.input_data.get("username", "")
 
-        # resolve_credentials reads __agentspan_ctx__ from task input
+        # resolve_secrets reads __agentspan_ctx__ from task input
         # and calls the server to get the credential values
-        creds = resolve_credentials(task.input_data, ["GITHUB_TOKEN"])
+        creds = resolve_secrets(task.input_data, ["GITHUB_TOKEN"])
         token = creds.get("GITHUB_TOKEN", "")
 
         headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -104,8 +104,8 @@ if __name__ == "__main__":
     print()
     print("Agent definition:")
     print(f"  tools: {[t._tool_def.name for t in agent.tools]}")
-    print(f"  credentials: {agent.tools[0]._tool_def.credentials}")
+    print(f"  secrets: {agent.tools[0]._tool_def.secrets}")
     print()
     print("External worker pattern:")
-    print("  creds = resolve_credentials(task.input_data, ['GITHUB_TOKEN'])")
+    print("  creds = resolve_secrets(task.input_data, ['GITHUB_TOKEN'])")
     print("  token = creds['GITHUB_TOKEN']")

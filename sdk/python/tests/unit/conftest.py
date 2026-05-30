@@ -12,7 +12,7 @@ def _clear_tool_def_registry():
 
     ``make_tool_worker()`` stores tool definitions in a global dict keyed by
     tool name so they survive spawn-mode multiprocessing.  Without cleanup,
-    a tool named ``my_tool`` registered with ``credentials=["X"]`` in one test
+    a tool named ``my_tool`` registered with ``secrets=["X"]`` in one test
     poisons every subsequent test that reuses the same name.
     """
     from agentspan.agents.runtime._dispatch import _tool_def_registry

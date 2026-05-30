@@ -164,7 +164,7 @@ class TestKitchenSinkStructure:
         from kitchen_sink import research_database
 
         td = get_tool_def(research_database)
-        assert td.credentials is not None
+        assert td.secrets is not None
 
 
 class TestKitchenSinkHelpers:

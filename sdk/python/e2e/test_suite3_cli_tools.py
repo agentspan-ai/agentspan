@@ -50,7 +50,7 @@ def cli_mktemp() -> str:
     return f"mktemp_ok:{result.stdout.strip()}"
 
 
-@tool(credentials=[CRED_NAME])
+@tool(secrets=[CRED_NAME])
 def cli_gh(subcommand: str, args: str = "") -> str:
     """Run a gh CLI command. Requires GITHUB_TOKEN credential.
     Example: subcommand="repo list", args="--limit 3"

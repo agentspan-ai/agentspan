@@ -1072,7 +1072,7 @@ All changes must be validated before merging.
 
 ### Testing Rules
 
-1. **No mocks for integration boundaries.** Tests that verify how components interact (credential resolution, token extraction, subprocess isolation, DB operations) MUST use real implementations, not mocks. Mocks hide bugs at layer boundaries — the exact place bugs live.
+1. **No mocks for integration boundaries.** Tests that verify how components interact (credential resolution, token extraction, secret injection, DB operations) MUST use real implementations, not mocks. Mocks hide bugs at layer boundaries — the exact place bugs live.
 
 2. **E2E tests are mandatory for new features.** Any feature that spans multiple components (SDK → server → DB, or SDK → subprocess → env) MUST have an e2e test in `tests/e2e/` that exercises the real path against a running server.
 

@@ -397,30 +397,37 @@ func TestStream_SendsBearerToken(t *testing.T) {
 	}
 }
 
-// ─── Credentials CRUD ────────────────────────────────────────────────────────
+// ─── Secrets CRUD ────────────────────────────────────────────────────────────
 
-func TestSetCredential_PostsCorrectBody(t *testing.T) {
-	var gotBody map[string]string
-	var gotPath string
+func TestSetSecret_PutsRawBodyAtKeyPath(t *testing.T) {
+	var gotMethod, gotPath, gotCT, gotBody string
 	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
 		gotPath = r.URL.Path
+		gotCT = r.Header.Get("Content-Type")
 		b, _ := io.ReadAll(r.Body)
-		json.Unmarshal(b, &gotBody)
+		gotBody = string(b)
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	if err := c.SetCredential("TOKEN", "secret-val"); err != nil {
-		t.Fatalf("SetCredential: %v", err)
+	if err := c.SetSecret("TOKEN", "secret-val"); err != nil {
+		t.Fatalf("SetSecret: %v", err)
 	}
-	if gotPath != "/api/credentials" {
-		t.Errorf("path = %q, want /api/credentials", gotPath)
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %q, want PUT", gotMethod)
 	}
-	if gotBody["name"] != "TOKEN" || gotBody["value"] != "secret-val" {
-		t.Errorf("body = %v, want name=TOKEN value=secret-val", gotBody)
+	if gotPath != "/api/secrets/TOKEN" {
+		t.Errorf("path = %q, want /api/secrets/TOKEN", gotPath)
+	}
+	if gotCT != "text/plain" {
+		t.Errorf("Content-Type = %q, want text/plain", gotCT)
+	}
+	if gotBody != "secret-val" {
+		t.Errorf("body = %q, want raw secret-val", gotBody)
 	}
 }
 
-func TestDeleteCredential_EscapesName(t *testing.T) {
+func TestDeleteSecret_EscapesName(t *testing.T) {
 	var gotPath string
 	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.RawPath
@@ -430,8 +437,8 @@ func TestDeleteCredential_EscapesName(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	if err := c.DeleteCredential("my/key"); err != nil {
-		t.Fatalf("DeleteCredential: %v", err)
+	if err := c.DeleteSecret("my/key"); err != nil {
+		t.Fatalf("DeleteSecret: %v", err)
 	}
 	if !strings.Contains(gotPath, "my%2Fkey") {
 		t.Errorf("path = %q, want escaped name", gotPath)

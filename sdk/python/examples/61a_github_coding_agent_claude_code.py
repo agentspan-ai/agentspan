@@ -25,7 +25,7 @@ Run:
 
 Requirements:
     - Agentspan server running
-    - GITHUB_TOKEN stored: agentspan credentials set GITHUB_TOKEN <your-github-token>
+    - GITHUB_TOKEN stored: agentspan secrets set GITHUB_TOKEN <your-github-token>
     - gh CLI installed
     - Claude Code SDK installed (pip install claude-code-sdk)
 """
@@ -84,7 +84,7 @@ RULES:
         allow_shell=True,
         timeout=60,
     ),
-    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
+    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
     max_turns=20,
     stop_when=_fetch_done,
     gate=TextGate("NO_OPEN_ISSUES"),
@@ -95,7 +95,7 @@ RULES:
 claude_code_fixer = Agent(
     name="claude_code_fixer",
     model=ClaudeCode("sonnet", permission_mode=ClaudeCode.PermissionMode.ACCEPT_EDITS),
-    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
+    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions=f"""\
 You are a senior developer fixing a GitHub issue.
 
@@ -155,7 +155,7 @@ git_push_pr = Agent(
     model=MODEL,
     max_tokens=8192,
     max_turns=15,
-    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
+    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
 Create a pull request. Extract REPO, BRANCH, and ISSUE from the previous stage output.
 

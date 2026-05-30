@@ -438,7 +438,13 @@ public class AgentRuntime implements AutoCloseable {
         // Register tools for this agent
         for (ToolDef tool : agent.getTools()) {
             if (tool.getFunc() != null && "worker".equals(tool.getToolType())) {
-                workerManager.register(tool.getName(), tool.getFunc());
+                // Pass declared credentials through so the worker can fetch
+                // them from the server before invoking the handler.
+                workerManager.register(
+                        tool.getName(),
+                        tool.getFunc(),
+                        workerManager.getCurrentDomain(),
+                        tool.getCredentials());
             }
             // Recursively prepare workers for agent_tool child agents
             if ("agent_tool".equals(tool.getToolType()) && tool.getAgentRef() != null) {

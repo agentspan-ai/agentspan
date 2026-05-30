@@ -164,7 +164,7 @@ func TestVisualSnapshots(t *testing.T) {
 		{"02_agents_list", ViewAgents},
 		{"03_executions", ViewExecutions},
 		{"04_server", ViewServer},
-		{"05_credentials", ViewCredentials},
+		{"05_secrets", ViewSecrets},
 		{"06_doctor", ViewDoctor},
 		{"07_configure", ViewConfigure},
 		{"08_skills", ViewSkills},
@@ -254,7 +254,7 @@ func TestLayoutSidebar(t *testing.T) {
 	// Every body line (after header, before footer) should have content
 	// from the sidebar at the expected column position
 	navItems := []string{"Dashboard", "Agents", "Executions", "Server",
-		"Credentials", "Doctor", "Configure"}
+		"Secrets", "Doctor", "Configure"}
 
 	plain := strings.Join(lines, "\n")
 	for _, item := range navItems {
@@ -452,7 +452,7 @@ func TestAllViewsNoOverflow(t *testing.T) {
 		{ViewAgents, "agents"},
 		{ViewExecutions, "executions"},
 		{ViewServer, "server"},
-		{ViewCredentials, "credentials"},
+		{ViewSecrets, "secrets"},
 		{ViewDoctor, "doctor"},
 		{ViewConfigure, "configure"},
 		{ViewSkills, "skills"},
@@ -508,7 +508,7 @@ func TestVisualReport(t *testing.T) {
 		{ViewAgents, "Agents"},
 		{ViewExecutions, "Executions"},
 		{ViewServer, "Server"},
-		{ViewCredentials, "Credentials"},
+		{ViewSecrets, "Secrets"},
 		{ViewDoctor, "Doctor"},
 		{ViewConfigure, "Configure"},
 		{ViewSkills, "Skills"},

@@ -134,33 +134,33 @@ class TestCredentialExtraction:
 
 
 class TestToolDefCredentialsSurvival:
-    """Verify credentials from @tool decorator survive into make_tool_worker."""
+    """Verify secrets from @tool decorator survive into make_tool_worker."""
 
-    def test_tool_def_credentials_accessible_via_get_tool_def(self):
+    def test_tool_def_secrets_accessible_via_get_tool_def(self):
         from agentspan.agents.tool import tool, get_tool_def
 
-        @tool(credentials=["MY_SECRET"])
+        @tool(secrets=["MY_SECRET"])
         def my_tool(x: str) -> str:
             return x
 
         td = get_tool_def(my_tool)
-        assert td.credentials == ["MY_SECRET"]
+        assert td.secrets == ["MY_SECRET"]
 
-    def test_make_tool_worker_with_tool_def_has_credentials(self):
-        """When tool_def is passed, make_tool_worker can access credentials."""
-        from agentspan.agents.runtime._dispatch import make_tool_worker, _get_credential_names_from_tool
+    def test_make_tool_worker_with_tool_def_has_secrets(self):
+        """When tool_def is passed, make_tool_worker can access secrets."""
+        from agentspan.agents.runtime._dispatch import make_tool_worker, _get_secret_names_from_tool
         from agentspan.agents.tool import tool, get_tool_def
 
-        @tool(credentials=["GITHUB_TOKEN", "OPENAI_API_KEY"])
+        @tool(secrets=["GITHUB_TOKEN", "OPENAI_API_KEY"])
         def cred_tool(x: str) -> str:
             return x
 
         td = get_tool_def(cred_tool)
         # Both raw func and wrapper have _tool_def (needed for spawn-mode pickling)
-        assert _get_credential_names_from_tool(td.func) == ["GITHUB_TOKEN", "OPENAI_API_KEY"]
-        assert _get_credential_names_from_tool(cred_tool) == ["GITHUB_TOKEN", "OPENAI_API_KEY"]
+        assert _get_secret_names_from_tool(td.func) == ["GITHUB_TOKEN", "OPENAI_API_KEY"]
+        assert _get_secret_names_from_tool(cred_tool) == ["GITHUB_TOKEN", "OPENAI_API_KEY"]
 
-    def test_no_credentials_tool_returns_empty(self):
+    def test_no_secrets_tool_returns_empty(self):
         from agentspan.agents.tool import tool, get_tool_def
 
         @tool
@@ -168,10 +168,10 @@ class TestToolDefCredentialsSurvival:
             return x
 
         td = get_tool_def(simple_tool)
-        assert td.credentials == []
+        assert td.secrets == []
 
-    def test_tool_worker_no_credentials_runs_directly(self):
-        """Tool without credentials runs without subprocess isolation."""
+    def test_tool_worker_no_secrets_runs_directly(self):
+        """Tool without secrets runs without subprocess isolation."""
         from agentspan.agents.runtime._dispatch import make_tool_worker
         from agentspan.agents.tool import tool, get_tool_def
         from conductor.client.http.models.task import Task

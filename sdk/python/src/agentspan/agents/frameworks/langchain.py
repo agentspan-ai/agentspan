@@ -94,7 +94,7 @@ def make_langchain_worker(
     from conductor.client.http.models.task_result import TaskResult
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
-    # Capture credential names in closure — avoids race with _workflow_credentials
+    # Capture credential names in closure — avoids race with _workflow_secrets
     _closure_cred_names = list(credential_names) if credential_names else []
 
     def tool_worker(task: Task) -> TaskResult:
@@ -107,44 +107,46 @@ def make_langchain_worker(
                 session_id,
             )
 
-        # Resolve workflow-level credentials and inject into os.environ
-        _injected_cred_keys = []
+        # Resolve workflow-level secrets via the centralized injection helper.
+        # See docs/design/secret-injection-contract.md — this is the tier-2
+        # (env-injection with lock-around-full-invoke) path. Tier-1 explicit-key
+        # passthrough lands when a user's agent factory accepts a `secrets` kwarg.
+        resolved_secrets = {}
         try:
-            import os as _os
             from agentspan.agents.runtime._dispatch import (
                 _extract_execution_token,
-                _get_credential_fetcher,
-                _workflow_credentials,
-                _workflow_credentials_lock,
+                _get_secret_fetcher,
+                _workflow_secrets,
+                _workflow_secrets_lock,
             )
-            # Use closure credential names first, fall back to workflow registry
             cred_names = list(_closure_cred_names)
             if not cred_names:
                 exec_id = execution_id or ""
-                with _workflow_credentials_lock:
-                    cred_names = list(_workflow_credentials.get(exec_id, []))
+                with _workflow_secrets_lock:
+                    cred_names = list(_workflow_secrets.get(exec_id, []))
             if cred_names:
                 token = _extract_execution_token(task)
                 if token:
-                    fetcher = _get_credential_fetcher()
-                    resolved = fetcher.fetch(token, cred_names)
-                    for k, v in resolved.items():
-                        if isinstance(v, str):
-                            _os.environ[k] = v
-                            _injected_cred_keys.append(k)
+                    fetcher = _get_secret_fetcher()
+                    resolved_secrets = fetcher.fetch(token, cred_names)
                 else:
                     logger.warning(
                         "No execution token in task for LangChain worker — "
-                        "credentials %s will not be injected",
+                        "secrets %s will not be injected",
                         cred_names,
                     )
         except Exception as _cred_err:
-            logger.warning("Failed to resolve credentials for LangChain: %s", _cred_err)
+            logger.warning("Failed to resolve secrets for LangChain: %s", _cred_err)
 
-        try:
+        from agentspan.agents.runtime.secret_injection import inject_via_env
+
+        def _invoke():
             handler = AgentspanCallbackHandler(execution_id, server_url, auth_key, auth_secret)
             result = executor.invoke({"input": prompt}, config={"callbacks": [handler]})
-            output = result.get("output", "") if isinstance(result, dict) else str(result)
+            return result.get("output", "") if isinstance(result, dict) else str(result)
+
+        try:
+            output = inject_via_env(resolved_secrets, _invoke)
             return TaskResult(
                 task_id=task.task_id,
                 workflow_instance_id=execution_id,
@@ -159,10 +161,6 @@ def make_langchain_worker(
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
-        finally:
-            import os as _os
-            for k in _injected_cred_keys:
-                _os.environ.pop(k, None)
 
     return tool_worker
 

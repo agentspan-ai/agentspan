@@ -29,8 +29,8 @@ import org.springframework.stereotype.Component;
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
 import dev.agentspan.runtime.auth.RequestContextHolder;
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.SecretResolutionService;
 
 import okhttp3.OkHttpClient;
 
@@ -39,7 +39,7 @@ import okhttp3.OkHttpClient;
  * API keys from the credential store.
  *
  * <p>Overrides {@link AIModelProvider#getModel(LLMWorkerInput)} to resolve
- * per-user credentials via {@link CredentialResolutionService}. If the user
+ * per-user credentials via {@link SecretResolutionService}. If the user
  * has a credential stored (e.g., {@code OPENAI_API_KEY}), a fresh AIModel
  * is created with that key. Otherwise falls back to the server-wide model
  * configured in application.properties.</p>
@@ -76,13 +76,13 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             Map.entry("perplexity", "PERPLEXITY_BASE_URL"),
             Map.entry("azureopenai", "AZURE_OPENAI_BASE_URL"));
 
-    private final CredentialResolutionService resolutionService;
+    private final SecretResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
 
     public AgentspanAIModelProvider(
             List<ModelConfiguration<? extends AIModel>> modelConfigurations,
             Environment env,
-            CredentialResolutionService resolutionService,
+            SecretResolutionService resolutionService,
             ExecutionTokenService tokenService) {
         super(modelConfigurations, env);
         this.resolutionService = resolutionService;
@@ -223,7 +223,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
      * Resolve base URL: per-agent (from task input) &gt; credential store &gt; null.
      *
      * <p>The credential store is the single source of truth. Env-var-set base URLs are
-     * seeded into the store at startup by {@link CredentialEnvSeeder}, so
+     * seeded into the store at startup by {@link SecretEnvSeeder}, so
      * {@code System.getenv()} is never read directly here.</p>
      */
     @SuppressWarnings("unchecked")
@@ -246,7 +246,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         if (envVarName == null) return null;
 
         // 2. Credential store — covers both env-var-seeded credentials (populated at startup
-        //    by CredentialEnvSeeder) and credentials added manually via the UI.
+        //    by SecretEnvSeeder) and credentials added manually via the UI.
         //    Direct System.getenv() is intentionally not used here: env vars are always
         //    seeded into the credential store at startup, so the store is the single
         //    source of truth and avoids bypassing external credential stores.

@@ -19,9 +19,9 @@ MCP Test Server Setup (mcp-testkit):
     # Or start with auth (requires storing the secret as a credential):
     mcp-testkit --transport http --auth <secret>
 
-    # Store credentials via CLI or Agentspan UI:
-    agentspan credentials set HTTP_TEST_API_KEY <secret>
-    agentspan credentials set MCP_TEST_API_KEY <secret>
+    # Store secrets via CLI or Agentspan UI:
+    agentspan secrets set HTTP_TEST_API_KEY <secret>
+    agentspan secrets set MCP_TEST_API_KEY <secret>
 
 Requirements:
     - Conductor server with LLM support
@@ -49,7 +49,7 @@ reverse_api = http_tool(
     url="http://localhost:3001/api/string/reverse",
     method="POST",
     headers={"Authorization": "Bearer ${HTTP_TEST_API_KEY}"},
-    credentials=["HTTP_TEST_API_KEY"],
+    secrets=["HTTP_TEST_API_KEY"],
     input_schema={
         "type": "object",
         "properties": {
@@ -66,7 +66,7 @@ mcp_test_tools = mcp_tool(
     name="mcp_test_tools",
     description="Deterministic test tools via MCP — math, string, collection, encoding, hash, datetime, validation, and conversion operations.",
     headers={"Authorization": "Bearer ${MCP_TEST_API_KEY}"},
-    credentials=["MCP_TEST_API_KEY"],
+    secrets=["MCP_TEST_API_KEY"],
 )
 
 agent = Agent(

@@ -3,7 +3,7 @@
 Takes a Zendesk ticket number and investigates across Zendesk, JIRA, HubSpot,
 Notion (runbooks), and GitHub to produce a solution with a priority rating.
 
-Required credentials (set via `agentspan credentials set <NAME>`): <your-<name>`):>
+Required secrets (set via `agentspan secrets set <NAME>`): <your-<name>`):>
     ZENDESK_SUBDOMAIN    – e.g. "mycompany"
     ZENDESK_EMAIL        – admin email for API auth
     ZENDESK_API_TOKEN    – Zendesk API token
@@ -95,7 +95,7 @@ ALL_CREDS = ZENDESK_CREDS + JIRA_CREDS + HUBSPOT_CREDS + NOTION_CREDS + GITHUB_C
 # ---------------------------------------------------------------------------
 
 
-@tool(credentials=ZENDESK_CREDS)
+@tool(secrets=ZENDESK_CREDS)
 def get_zendesk_ticket(ticket_id: str) -> dict:
     """Fetch a Zendesk support ticket by its ID.
 
@@ -146,7 +146,7 @@ def get_zendesk_ticket(ticket_id: str) -> dict:
     }
 
 
-@tool(credentials=ZENDESK_CREDS)
+@tool(secrets=ZENDESK_CREDS)
 def search_zendesk_tickets(query: str) -> dict:
     """Search Zendesk for tickets matching a query.
 
@@ -185,7 +185,7 @@ def search_zendesk_tickets(query: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@tool(credentials=JIRA_CREDS)
+@tool(secrets=JIRA_CREDS)
 def search_jira_issues(jql: str) -> dict:
     """Search JIRA issues using JQL (JIRA Query Language).
 
@@ -222,7 +222,7 @@ def search_jira_issues(jql: str) -> dict:
     }
 
 
-@tool(credentials=JIRA_CREDS)
+@tool(secrets=JIRA_CREDS)
 def get_jira_issue(issue_key: str) -> dict:
     """Get full details of a specific JIRA issue by its key (e.g. ENG-1234).
 
@@ -277,7 +277,7 @@ def get_jira_issue(issue_key: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@tool(credentials=HUBSPOT_CREDS)
+@tool(secrets=HUBSPOT_CREDS)
 def search_hubspot_company(company_name: str) -> dict:
     """Search HubSpot for a company by name.
 
@@ -317,7 +317,7 @@ def search_hubspot_company(company_name: str) -> dict:
     }
 
 
-@tool(credentials=HUBSPOT_CREDS)
+@tool(secrets=HUBSPOT_CREDS)
 def get_hubspot_contact(email: str) -> dict:
     """Look up a HubSpot contact by email address.
 
@@ -358,7 +358,7 @@ def get_hubspot_contact(email: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@tool(credentials=NOTION_CREDS)
+@tool(secrets=NOTION_CREDS)
 def search_notion_runbooks(query: str) -> dict:
     """Search Notion runbooks database for articles matching a query.
 
@@ -412,7 +412,7 @@ def search_notion_runbooks(query: str) -> dict:
     return {"count": len(pages), "runbooks": pages}
 
 
-@tool(credentials=NOTION_CREDS)
+@tool(secrets=NOTION_CREDS)
 def get_notion_page_content(page_id: str) -> dict:
     """Retrieve the full content of a Notion page/runbook by its ID."""
     api_key = os.environ.get("NOTION_API_KEY", "")
@@ -455,7 +455,7 @@ def get_notion_page_content(page_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@tool(credentials=GITHUB_CREDS)
+@tool(secrets=GITHUB_CREDS)
 def search_github_issues(query: str, repo: Optional[str] = None) -> dict:
     """Search GitHub issues and pull requests for matching terms.
 
@@ -494,7 +494,7 @@ def search_github_issues(query: str, repo: Optional[str] = None) -> dict:
     }
 
 
-@tool(credentials=GITHUB_CREDS)
+@tool(secrets=GITHUB_CREDS)
 def search_github_code(query: str, repo: Optional[str] = None) -> dict:
     """Search GitHub code across the organization's repositories.
 
@@ -530,7 +530,7 @@ def search_github_code(query: str, repo: Optional[str] = None) -> dict:
     }
 
 
-@tool(credentials=GITHUB_CREDS)
+@tool(secrets=GITHUB_CREDS)
 def get_github_releases(repo: str, limit: int = 5) -> dict:
     """Get recent releases for a GitHub repository.
 
@@ -562,7 +562,7 @@ def get_github_releases(repo: str, limit: int = 5) -> dict:
     }
 
 
-@tool(credentials=GITHUB_CREDS)
+@tool(secrets=GITHUB_CREDS)
 def get_github_pull_request(repo: str, pr_number: int) -> dict:
     """Get details of a specific GitHub pull request.
 
@@ -639,7 +639,7 @@ Return a structured summary covering:
 - The customer's email and organization for cross-referencing
 """,
     tools=[get_zendesk_ticket, search_zendesk_tickets],
-    credentials=ZENDESK_CREDS,
+    secrets=ZENDESK_CREDS,
 )
 
 jira_agent = Agent(
@@ -654,7 +654,7 @@ You are a JIRA specialist. Given a description of a customer issue:
 Summarize what engineering knows about this issue and whether a fix exists.
 """,
     tools=[search_jira_issues, get_jira_issue],
-    credentials=JIRA_CREDS,
+    secrets=JIRA_CREDS,
 )
 
 hubspot_agent = Agent(
@@ -668,7 +668,7 @@ You are a HubSpot CRM specialist. Given a customer name or email:
 Return the customer's plan tier, ARR/contract value, lifecycle stage, and account owner.
 """,
     tools=[search_hubspot_company, get_hubspot_contact],
-    credentials=HUBSPOT_CREDS,
+    secrets=HUBSPOT_CREDS,
 )
 
 runbook_agent = Agent(
@@ -683,7 +683,7 @@ You are a Notion runbook specialist. Given a technical issue description:
 If no runbook exists, say so — this is valuable info (we need to create one).
 """,
     tools=[search_notion_runbooks, get_notion_page_content],
-    credentials=NOTION_CREDS,
+    secrets=NOTION_CREDS,
 )
 
 github_agent = Agent(
@@ -698,7 +698,7 @@ You are a GitHub code specialist. Given a technical issue description:
 Return relevant PRs, issues, code locations, and release versions.
 """,
     tools=[search_github_issues, search_github_code, get_github_releases, get_github_pull_request],
-    credentials=GITHUB_CREDS,
+    secrets=GITHUB_CREDS,
 )
 
 
@@ -735,7 +735,7 @@ ce_support_agent = Agent(
         agent_tool(github_agent, description="Search GitHub for related issues, PRs, code, and releases, check "
                                              "orkes-conductor and conductor-ui repos"),
     ],
-    credentials=ALL_CREDS,
+    secrets=ALL_CREDS,
     output_type=TicketAnalysis,
     guardrails=[pii_guardrail],
     max_turns=15,

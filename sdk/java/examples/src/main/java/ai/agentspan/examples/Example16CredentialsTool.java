@@ -5,7 +5,9 @@ package ai.agentspan.examples;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
+import ai.agentspan.Secrets;
 import ai.agentspan.annotations.Tool;
+import ai.agentspan.exceptions.CredentialNotFoundException;
 import ai.agentspan.internal.ToolRegistry;
 import ai.agentspan.model.AgentResult;
 import ai.agentspan.model.ToolDef;
@@ -23,17 +25,25 @@ import java.util.Map;
  * Example 16 — Credentials on Tools
  *
  * <p>Demonstrates the {@code credentials} field on {@code @Tool}. Declared
- * credential names are resolved by the server before each tool call and
- * injected as environment variables into the worker. This keeps secrets
- * out of the agent config and parent process environment.
+ * credential names are resolved by the server before each tool call. The
+ * worker fetches the value via {@code POST /api/workers/secrets} using the
+ * execution token, then makes it available to the tool body via
+ * {@link ai.agentspan.Secrets#get(String)}.
+ *
+ * <p>Java is tier-1-only — {@code System.getenv()} is immutable at JVM
+ * runtime, so unlike Python/.NET/TypeScript there is no env-injection mode.
+ * Tools MUST read declared credentials via {@code Secrets.get(name)}; reading
+ * via {@code System.getenv} would only see whatever the JVM inherited from
+ * the shell at startup. See {@code docs/design/secret-injection-contract.md} §6.
  *
  * <p>Setup (one-time, via CLI):
  * <pre>
- *   agentspan credentials set --name GITHUB_TOKEN
+ *   agentspan secrets set GITHUB_TOKEN ghp_xxx
  * </pre>
  *
- * <p>Without credentials the tool falls back to unauthenticated GitHub API
- * calls (rate-limited to 60 req/hr but functional for demos).
+ * <p>If the credential isn't set on the server, this tool's task is reported
+ * as terminally failed (non-retryable) by {@code WorkerManager} before the
+ * handler runs.
  */
 public class Example16CredentialsTool {
 
@@ -51,8 +61,10 @@ public class Example16CredentialsTool {
         public Map<String, Object> listGithubRepos(String username, int limit) {
             try {
                 int n = limit > 0 ? Math.min(limit, 10) : 5;
-                // GITHUB_TOKEN is injected as an env var by the server when credentials are set
-                String token = System.getenv("GITHUB_TOKEN");
+                // GITHUB_TOKEN was resolved by the worker before this handler ran
+                // (via POST /api/workers/secrets) and is available through the
+                // Secrets thread-local accessor — no env-var mutation involved.
+                String token = Secrets.getOrNull("GITHUB_TOKEN");
                 HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.github.com/users/" + username
                         + "/repos?per_page=" + n + "&sort=updated"))
@@ -86,7 +98,7 @@ public class Example16CredentialsTool {
         )
         public Map<String, Object> getGithubUser(String username) {
             try {
-                String token = System.getenv("GITHUB_TOKEN");
+                String token = Secrets.getOrNull("GITHUB_TOKEN");
                 HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.github.com/users/" + username))
                     .timeout(Duration.ofSeconds(10))

@@ -5,17 +5,17 @@
 
 Demonstrates:
     - cli_allowed_commands=["gh"] gives the agent a run_command tool
-    - credentials=["GH_TOKEN"] auto-injects the token into the tool env
+    - secrets=["GH_TOKEN"] auto-injects the token into the tool env
     - The agent calls `gh` commands directly — no subprocess boilerplate needed
 
 Setup (one-time, via CLI):
     agentspan login
-    agentspan credentials set GH_TOKEN <your-gh-token>
+    agentspan secrets set GH_TOKEN <your-gh-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
     - `gh` CLI installed (https://cli.github.com)
-    - GH_TOKEN stored via `agentspan credentials set`
+    - GH_TOKEN stored via `agentspan secrets set`
 """
 
 from agentspan.agents import Agent, AgentRuntime
@@ -25,7 +25,7 @@ agent = Agent(
     name="github_cli_agent",
     model=settings.llm_model,
     cli_allowed_commands=["gh"],
-    credentials=["GH_TOKEN"],
+    secrets=["GH_TOKEN"],
     instructions=(
         "You are a GitHub assistant that uses the `gh` CLI tool. "
         "GH_TOKEN is already set in the environment — gh will use it automatically. "
@@ -47,7 +47,7 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16d_credentials_gh_cli
+        # agentspan deploy --package examples.16d_secrets_gh_cli
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)

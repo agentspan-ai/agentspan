@@ -25,7 +25,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.ExecutionTokenService;
 
 /**
  * Auth filter — populates RequestContextHolder on every request.
@@ -40,7 +40,7 @@ import dev.agentspan.runtime.credentials.ExecutionTokenService;
  *
  * <p>Note: Bearer JWT here refers to the login JWT issued by /api/auth/login
  * (username/password → JWT), not the execution token (which is validated separately
- * by ExecutionTokenService in /api/credentials/resolve).</p>
+ * by ExecutionTokenService in POST /api/workers/secrets).</p>
  */
 @Component
 public class AuthFilter extends OncePerRequestFilter {

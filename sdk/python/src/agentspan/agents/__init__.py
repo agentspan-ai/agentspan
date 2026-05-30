@@ -136,20 +136,19 @@ from agentspan.agents.run import (
 from agentspan.agents.runtime.config import AgentConfig
 
 # Credential management
-from agentspan.agents.runtime.credentials.accessor import get_credential
+from agentspan.agents.runtime.credentials.accessor import get_secret
 from agentspan.agents.runtime.credentials.types import (
     CredentialAuthError,
-    CredentialFile,
     CredentialNotFoundError,
     CredentialRateLimitError,
     CredentialServiceError,
 )
 
 
-def resolve_credentials(input_data: dict, names: list) -> dict:
-    """Resolve credentials from Conductor task input data.
+def resolve_secrets(input_data: dict, names: list) -> dict:
+    """Resolve secrets from Conductor task input data.
 
-    For external workers that need to resolve credentials from the
+    For external workers that need to resolve secrets from the
     agentspan credential store. Extracts the execution token from
     ``__agentspan_ctx__`` in the task input and calls the server.
 
@@ -332,9 +331,8 @@ __all__ = [
     # Tracing
     "is_tracing_enabled",
     # Credentials
-    "get_credential",
-    "resolve_credentials",
-    "CredentialFile",
+    "get_secret",
+    "resolve_secrets",
     "CredentialNotFoundError",
     "CredentialAuthError",
     "CredentialRateLimitError",

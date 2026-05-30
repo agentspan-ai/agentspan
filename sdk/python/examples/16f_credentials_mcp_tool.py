@@ -4,7 +4,7 @@
 """Credentials — MCP tool with server-side credential resolution.
 
 Demonstrates:
-    - mcp_tool() with credentials=["MCP_API_KEY"]
+    - mcp_tool() with secrets=["MCP_API_KEY"]
     - ${MCP_API_KEY} in headers resolved server-side before MCP calls
     - MCP server authentication handled transparently
 
@@ -14,8 +14,8 @@ MCP Test Server Setup (mcp-testkit):
     # Start with auth (to demonstrate credential resolution):
     mcp-testkit --transport http --auth <secret>
 
-    # Store credentials via CLI or Agentspan UI:
-    agentspan credentials set MCP_API_KEY <secret>
+    # Store secrets via CLI or Agentspan UI:
+    agentspan secrets set MCP_API_KEY <secret>
 
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -36,7 +36,7 @@ my_mcp_tools = mcp_tool(
     headers={
         "Authorization": "Bearer ${MCP_API_KEY}",
     },
-    credentials=["MCP_API_KEY"],
+    secrets=["MCP_API_KEY"],
 )
 
 agent = Agent(
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16f_credentials_mcp_tool
+        # agentspan deploy --package examples.16f_secrets_mcp_tool
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)

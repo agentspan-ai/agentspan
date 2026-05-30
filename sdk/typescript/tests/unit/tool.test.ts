@@ -135,14 +135,12 @@ describe("tool() options", () => {
       outputSchema: { type: "object", properties: { result: { type: "string" } } },
       approvalRequired: true,
       timeoutSeconds: 60,
-      isolated: false,
       credentials: ["API_KEY"],
       guardrails: [{ name: "test_guard" }],
     });
     const def = getToolDef(t);
     expect(def.approvalRequired).toBe(true);
     expect(def.timeoutSeconds).toBe(60);
-    expect(def.isolated).toBe(false);
     expect(def.credentials).toEqual(["API_KEY"]);
     expect(def.guardrails).toEqual([{ name: "test_guard" }]);
     expect(def.outputSchema).toEqual({

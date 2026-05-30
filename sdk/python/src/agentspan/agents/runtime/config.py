@@ -60,8 +60,8 @@ class AgentConfig:
         daemon_workers: Whether worker processes are daemon (killed on exit).
         auto_start_server: Whether to auto-start the local server process.
         auto_register_integrations: Auto-create LLM integrations on startup.
-        credential_strict_mode: When ``True``, disables env var fallback for
-            credential resolution. Required credentials must come from the
+        secret_strict_mode: When ``True``, disables env var fallback for
+            credential resolution. Required secrets must come from the
             credential service.
         log_level: Logging level for the agentspan logger.
     """
@@ -78,7 +78,7 @@ class AgentConfig:
     daemon_workers: bool = True
     auto_register_integrations: bool = False
     streaming_enabled: bool = True
-    credential_strict_mode: bool = False
+    secret_strict_mode: bool = False
     log_level: str = "INFO"
 
     def __post_init__(self):
@@ -113,7 +113,7 @@ class AgentConfig:
             daemon_workers=_env_bool("AGENTSPAN_DAEMON_WORKERS", True),
             auto_register_integrations=_env_bool("AGENTSPAN_INTEGRATIONS_AUTO_REGISTER", False),
             streaming_enabled=_env_bool("AGENTSPAN_STREAMING_ENABLED", True),
-            credential_strict_mode=_env_bool("AGENTSPAN_CREDENTIAL_STRICT_MODE", False),
+            secret_strict_mode=_env_bool("AGENTSPAN_SECRET_STRICT_MODE", False),
             log_level=log_level,
         )
 

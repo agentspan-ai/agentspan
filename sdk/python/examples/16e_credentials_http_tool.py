@@ -4,7 +4,7 @@
 """Credentials — HTTP tool with server-side credential resolution.
 
 Demonstrates:
-    - http_tool() with credentials=["GITHUB_TOKEN"]
+    - http_tool() with secrets=["GITHUB_TOKEN"]
     - ${GITHUB_TOKEN} in headers resolved server-side (not in Python)
     - No worker process needed — Conductor makes the HTTP call directly
 
@@ -13,11 +13,11 @@ value from the store at execution time. The plaintext value never appears
 in the workflow definition.
 
 Setup (one-time):
-    agentspan credentials set GITHUB_TOKEN <your-github-token>
+    agentspan secrets set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - GITHUB_TOKEN stored via `agentspan credentials set`
+    - GITHUB_TOKEN stored via `agentspan secrets set`
 """
 
 from agentspan.agents import Agent, AgentRuntime
@@ -35,7 +35,7 @@ list_repos = http_tool(
         "Authorization": "Bearer ${GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     },
-    credentials=["GITHUB_TOKEN"],
+    secrets=["GITHUB_TOKEN"],
 )
 
 agent = Agent(
@@ -55,7 +55,7 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16e_credentials_http_tool
+        # agentspan deploy --package examples.16e_secrets_http_tool
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)

@@ -268,29 +268,82 @@ internal sealed class AgentHttpClient : IDisposable
 
     /// <summary>
     /// Resolve credential values from the server using the execution token.
-    /// Returns a dict of name → plaintext value (empty if names is empty or token is null).
+    /// Returns a dict of name → plaintext value.
     /// </summary>
+    /// <remarks>
+    /// Error contract (matches Python <c>WorkerCredentialFetcher</c>):
+    /// <list type="bullet">
+    ///   <item>Empty <paramref name="names"/> → returns empty dict (no HTTP call).</item>
+    ///   <item>Missing or empty <paramref name="executionToken"/> →
+    ///     <see cref="CredentialNotFoundException"/>. Caller must mark the task
+    ///     as terminal-failed; we never silently inject empty values.</item>
+    ///   <item>200 with some names missing from response →
+    ///     <see cref="CredentialNotFoundException"/> on the first missing name.</item>
+    ///   <item>401 → <see cref="CredentialAuthException"/>.</item>
+    ///   <item>429 → <see cref="CredentialRateLimitException"/>.</item>
+    ///   <item>5xx or network failure → <see cref="CredentialServiceException"/>.</item>
+    /// </list>
+    /// Previously this method swallowed all errors and returned an empty dict, which
+    /// (a) hid a URL drift (the path was <c>/credentials/resolve</c> after rename to
+    /// <c>/workers/secrets</c>) and (b) caused tools to silently see no injected
+    /// credentials — sometimes reading stale process-env values, sometimes failing
+    /// with confusing downstream errors. Surfacing the right exception lets
+    /// <c>WorkerManager</c> mark the task terminal-failed and surface the cause.
+    /// </remarks>
     public async Task<Dictionary<string, string>> ResolveCredentialsAsync(
         string? executionToken, IEnumerable<string> names, CancellationToken ct = default)
     {
         var nameList = names.ToList();
-        if (nameList.Count == 0 || string.IsNullOrEmpty(executionToken))
-            return new Dictionary<string, string>();
+        if (nameList.Count == 0) return new Dictionary<string, string>();
 
+        if (string.IsNullOrEmpty(executionToken))
+            throw new CredentialNotFoundException(
+                "<no-token> — execution token missing; secrets cannot be resolved");
+
+        var body = JsonSerializer.Serialize(new { token = executionToken, names = nameList },
+            AgentspanJson.Options);
+        using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+
+        HttpResponseMessage resp;
         try
         {
-            var body = JsonSerializer.Serialize(new { token = executionToken, names = nameList },
-                AgentspanJson.Options);
-            using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
-            using var resp = await _client.PostAsync($"{_baseUrl}/credentials/resolve", content, ct);
+            resp = await _client.PostAsync($"{_baseUrl}/workers/secrets", content, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new CredentialServiceException(
+                $"Credential service unreachable: {ex.Message}");
+        }
 
-            if (!resp.IsSuccessStatusCode) return new Dictionary<string, string>();
+        using (resp)
+        {
+            switch ((int)resp.StatusCode)
+            {
+                case 401:
+                    throw new CredentialAuthException(
+                        $"Execution token rejected by /workers/secrets: " +
+                        await resp.Content.ReadAsStringAsync(ct));
+                case 429:
+                    throw new CredentialRateLimitException();
+                case >= 500:
+                    throw new CredentialServiceException(
+                        $"HTTP {(int)resp.StatusCode} from /workers/secrets: " +
+                        await resp.Content.ReadAsStringAsync(ct));
+            }
+            if (!resp.IsSuccessStatusCode)
+                throw new CredentialServiceException(
+                    $"HTTP {(int)resp.StatusCode} from /workers/secrets: " +
+                    await resp.Content.ReadAsStringAsync(ct));
 
             var result = await resp.Content.ReadFromJsonAsync<Dictionary<string, string>>(
-                cancellationToken: ct);
-            return result ?? new Dictionary<string, string>();
+                cancellationToken: ct) ?? new Dictionary<string, string>();
+
+            var missing = nameList.Where(n => !result.ContainsKey(n)).ToList();
+            if (missing.Count > 0)
+                throw new CredentialNotFoundException(string.Join(", ", missing));
+
+            return result;
         }
-        catch { return new Dictionary<string, string>(); }
     }
 
     // ── Run by name ──────────────────────────────────────────

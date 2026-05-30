@@ -172,7 +172,7 @@ def make_claude_agent_sdk_worker(
     from conductor.client.http.models.task_result import TaskResult
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
-    # Capture credential names in closure — avoids race with _workflow_credentials
+    # Capture credential names in closure — avoids race with _workflow_secrets
     _closure_cred_names = list(credential_names) if credential_names else []
 
     def tool_worker(task: Task) -> TaskResult:
@@ -196,14 +196,17 @@ def make_claude_agent_sdk_worker(
             "last_progress_time": 0.0,
         }
 
-        # Resolve workflow-level credentials and inject into os.environ
-        _injected_cred_keys: List[str] = []
+        # Resolve workflow-level secrets — injection happens inside the
+        # invoke() closure under the shared inject_via_env lock so concurrent
+        # workers can't clobber each other's env. See
+        # docs/design/secret-injection-contract.md.
+        resolved_secrets: Dict[str, str] = {}
         try:
-            _injected_cred_keys = _inject_credentials(
+            resolved_secrets = _resolve_secrets(
                 task, execution_id, credential_names=_closure_cred_names or None,
             )
         except Exception as _cred_err:
-            logger.warning("Failed to resolve credentials for Claude Agent SDK: %s", _cred_err)
+            logger.warning("Failed to resolve secrets for Claude Agent SDK: %s", _cred_err)
 
         # Send initial IN_PROGRESS update so the server knows the worker has started
         _update_task_progress_nonblocking(
@@ -211,24 +214,22 @@ def make_claude_agent_sdk_worker(
         )
         metadata["last_progress_time"] = time.monotonic()
 
-        try:
-            # Build agentspan instrumentation hooks
+        from agentspan.agents.runtime.secret_injection import inject_via_env
+
+        def _invoke():
             agentspan_hooks = _build_agentspan_hooks(
                 task_id, execution_id, server_url, auth_key, auth_secret, metadata
             )
-
-            # Merge user hooks + agentspan hooks, then update options
             merged_options = _merge_hooks(options, agentspan_hooks)
-
-            # Override cwd if provided in task input
             if cwd:
                 if is_dataclass(merged_options) and not isinstance(merged_options, type):
                     merged_options = replace(merged_options, cwd=cwd)
                 else:
                     merged_options.cwd = cwd
+            return asyncio.run(_run_query(prompt, merged_options))
 
-            # Run the async query
-            result_output, token_usage = asyncio.run(_run_query(prompt, merged_options))
+        try:
+            result_output, token_usage = inject_via_env(resolved_secrets, _invoke)
 
             output_data: Dict[str, Any] = {
                 "result": result_output,
@@ -253,8 +254,6 @@ def make_claude_agent_sdk_worker(
                 status=TaskResultStatus.FAILED,
                 reason_for_incompletion=str(exc),
             )
-        finally:
-            _cleanup_credentials(_injected_cred_keys)
 
     return tool_worker
 
@@ -966,50 +965,37 @@ def _complete_workflow_nonblocking(
 # ---------------------------------------------------------------------------
 
 
-def _inject_credentials(
+def _resolve_secrets(
     task: Any, execution_id: str, credential_names: Optional[List[str]] = None,
-) -> List[str]:
-    """Resolve workflow-level credentials and inject into os.environ.
+) -> Dict[str, str]:
+    """Resolve workflow-level secrets for this task.
 
-    Returns list of env var keys that were injected (for cleanup).
+    Returns a name → plaintext dict. The caller is responsible for injecting
+    these via :func:`agentspan.agents.runtime.secret_injection.inject_via_env`
+    so the env mutation + invoke + restore happens atomically under the
+    shared process-wide lock. See ``docs/design/secret-injection-contract.md``.
     """
-    import os as _os
-
     from agentspan.agents.runtime._dispatch import (
         _extract_execution_token,
-        _get_credential_fetcher,
-        _workflow_credentials,
-        _workflow_credentials_lock,
+        _get_secret_fetcher,
+        _workflow_secrets,
+        _workflow_secrets_lock,
     )
 
-    injected_keys: List[str] = []
-    # Use directly-provided credential names first, fall back to workflow registry
     cred_names = list(credential_names) if credential_names else []
     if not cred_names:
         exec_id = execution_id or ""
-        with _workflow_credentials_lock:
-            cred_names = list(_workflow_credentials.get(exec_id, []))
-    if cred_names:
-        token = _extract_execution_token(task)
-        if token:
-            fetcher = _get_credential_fetcher()
-            resolved = fetcher.fetch(token, cred_names)
-            for k, v in resolved.items():
-                if isinstance(v, str):
-                    _os.environ[k] = v
-                    injected_keys.append(k)
-        else:
-            logger.warning(
-                "No execution token in task for Claude Agent SDK worker — "
-                "credentials %s will not be injected",
-                cred_names,
-            )
-    return injected_keys
-
-
-def _cleanup_credentials(injected_keys: List[str]) -> None:
-    """Remove previously injected credential env vars."""
-    import os as _os
-
-    for k in injected_keys:
-        _os.environ.pop(k, None)
+        with _workflow_secrets_lock:
+            cred_names = list(_workflow_secrets.get(exec_id, []))
+    if not cred_names:
+        return {}
+    token = _extract_execution_token(task)
+    if not token:
+        logger.warning(
+            "No execution token in task for Claude Agent SDK worker — "
+            "secrets %s will not be injected",
+            cred_names,
+        )
+        return {}
+    fetcher = _get_secret_fetcher()
+    return fetcher.fetch(token, cred_names)

@@ -1,46 +1,27 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Credential types: CredentialFile value object and exception hierarchy."""
+"""Credential exception hierarchy."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 from agentspan.agents.exceptions import AgentspanError
 
 
-@dataclass(frozen=True)
-class CredentialFile:
-    """A credential that should be written to a file in the subprocess HOME.
-
-    Attributes:
-        env_var: Environment variable name that will point to the file path.
-            Example: ``"KUBECONFIG"``
-        relative_path: Path relative to the subprocess temp HOME directory.
-            Example: ``".kube/config"``
-        content: File content (set by fetcher after resolving the credential value).
-            ``None`` means "not yet resolved".
-    """
-
-    env_var: str
-    relative_path: str
-    content: Optional[str] = None
-
-
 class CredentialNotFoundError(AgentspanError):
-    """One or more required credentials could not be resolved.
+    """One or more required secrets could not be resolved.
 
     Raised when a declared credential is not found in the credential store.
-    There is no env var fallback for declared credentials — store them with
-    ``agentspan credentials set --name <NAME>``.
+    There is no env var fallback for declared secrets — store them with
+    ``agentspan secrets set --name <NAME>``.
     """
 
     def __init__(self, missing_names: List[str], detail: str = "") -> None:
         self.missing_names = list(missing_names)
         names_str = ", ".join(missing_names)
-        msg = f"Required credentials not found: {names_str}"
+        msg = f"Required secrets not found: {names_str}"
         if detail:
             msg += f". {detail}"
         super().__init__(msg)
@@ -49,7 +30,7 @@ class CredentialNotFoundError(AgentspanError):
 class CredentialAuthError(AgentspanError):
     """Execution token is invalid, expired, or revoked.
 
-    Raised on HTTP 401 from ``/api/credentials/resolve``.
+    Raised on HTTP 401 from ``/api/workers/secrets``.
     Do NOT retry and do NOT fall through to env var fallback.
     """
 
@@ -61,7 +42,7 @@ class CredentialAuthError(AgentspanError):
 
 
 class CredentialRateLimitError(AgentspanError):
-    """Rate limit exceeded on ``/api/credentials/resolve`` (HTTP 429).
+    """Rate limit exceeded on ``/api/workers/secrets`` (HTTP 429).
 
     Do NOT fall through to env var fallback.
     """

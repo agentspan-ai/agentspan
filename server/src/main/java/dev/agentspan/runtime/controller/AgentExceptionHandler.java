@@ -12,8 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.SecretResolutionService;
 
 @ControllerAdvice
 public class AgentExceptionHandler {
@@ -26,9 +26,9 @@ public class AgentExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
-    @ExceptionHandler(CredentialResolutionService.CredentialNotFoundException.class)
+    @ExceptionHandler(SecretResolutionService.SecretNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleCredentialNotFound(
-            CredentialResolutionService.CredentialNotFoundException ex) {
+            SecretResolutionService.SecretNotFoundException ex) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", ex.getMessage());
         body.put("status", 404);

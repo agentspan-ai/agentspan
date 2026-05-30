@@ -855,7 +855,7 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
-            // Forward execution token so CredentialAwareHttpTask can resolve #{NAME} headers
+            // Forward execution token so SecretAwareHttpTask can resolve #{NAME} headers
             fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);

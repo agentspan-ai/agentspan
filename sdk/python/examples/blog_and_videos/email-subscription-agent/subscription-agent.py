@@ -17,7 +17,7 @@ logging.getLogger("conductor.client.automator.task_runner").setLevel(logging.ERR
 #
 # To connect Gmail:
 #   1. Go to Google Cloud Console and enable the Gmail API
-#   2. Create OAuth 2.0 credentials (Desktop app) and download as credentials.json
+#   2. Create OAuth 2.0 secrets (Desktop app) and download as secrets.json
 #   3. pip install google-auth-oauthlib google-auth-httplib2 google-api-python-client
 #   4. Run with: USE_GMAIL=true python subscription-agent.py
 #
@@ -101,7 +101,7 @@ SAMPLE_RECEIPTS = [
 if USE_GMAIL:
     import base64
     from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
+    from google.oauth2.secrets import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from googleapiclient.discovery import build
 
@@ -127,11 +127,11 @@ if USE_GMAIL:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
+                flow = InstalledAppFlow.from_client_secrets_file("secrets.json", SCOPES)
                 creds = flow.run_local_server(port=0)
             with open("token.json", "w") as f:
                 f.write(creds.to_json())
-        return build("gmail", "v1", credentials=creds, cache_discovery=False)
+        return build("gmail", "v1", secrets=creds, cache_discovery=False)
 
     @tool
     def search_emails(query: str) -> list:

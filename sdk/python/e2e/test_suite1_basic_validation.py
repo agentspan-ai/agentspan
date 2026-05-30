@@ -257,12 +257,12 @@ def _build_judge_comparison(agent_spec: dict, result: dict) -> str:
             creds = ct.get("config", {}).get("credentials", [])
             actual = f"toolType={ct.get('toolType', '?')}"
             if t.get("credentials"):
-                actual += f", credentials={creds}"
+                actual += f", secrets={creds}"
         else:
             actual = "NOT FOUND"
         expected = f"toolType={t['type']}"
         if t.get("credentials"):
-            expected += f", credentials={t['credentials']}"
+            expected += f", secrets={t['credentials']}"
         lines.append(f"  {name}: EXPECTED({expected}) ACTUAL({actual})")
 
     # Guardrails comparison
@@ -445,7 +445,7 @@ def _make_kitchen_sink_agent(mcp_url: str) -> Agent:
         """A local worker tool."""
         return x
 
-    @tool(credentials=["KS_SECRET"])
+    @tool(secrets=["KS_SECRET"])
     def cred_local_tool(x: str) -> str:
         """Worker tool with credentials."""
         return x
@@ -607,7 +607,7 @@ def greet(name: str) -> str:
     return f"Hello {name}"
 
 
-@tool(credentials=["API_KEY_1"])
+@tool(secrets=["API_KEY_1"])
 def credentialed_tool(query: str) -> str:
     """A tool that needs credentials."""
     import os
@@ -615,7 +615,7 @@ def credentialed_tool(query: str) -> str:
     return os.environ.get("API_KEY_1", "missing")[:3]
 
 
-@tool(credentials=["SECRET_A", "SECRET_B"])
+@tool(secrets=["SECRET_A", "SECRET_B"])
 def multi_cred_tool(data: str) -> str:
     """A tool needing multiple credentials."""
     return data
@@ -754,7 +754,7 @@ class TestSuite1BasicValidation:
         assert "credentialed_tool" in cred_map, (
             f"'credentialed_tool' has no credentials in agentDef.tools[].config.credentials. "
             f"Tools with credentials: {cred_map}. "
-            f"The @tool(credentials=['API_KEY_1']) decorator should serialize "
+            f"The @tool(secrets=['API_KEY_1']) decorator should serialize "
             f"credentials into the tool's config."
         )
         assert cred_map["credentialed_tool"] == ["API_KEY_1"], (
@@ -767,7 +767,7 @@ class TestSuite1BasicValidation:
         assert "multi_cred_tool" in cred_map, (
             f"'multi_cred_tool' has no credentials in agentDef.tools[].config.credentials. "
             f"Tools with credentials: {cred_map}. "
-            f"The @tool(credentials=['SECRET_A', 'SECRET_B']) decorator should "
+            f"The @tool(secrets=['SECRET_A', 'SECRET_B']) decorator should "
             f"serialize both credential names."
         )
         assert set(cred_map["multi_cred_tool"]) == {"SECRET_A", "SECRET_B"}, (
@@ -892,7 +892,7 @@ class TestSuite1BasicValidation:
         assert "cred_local_tool" in cred_map, (
             f"'cred_local_tool' has no credentials in agentDef.tools[].config.credentials. "
             f"Tools with credentials: {cred_map}. "
-            f"Expected ['KS_SECRET'] from @tool(credentials=['KS_SECRET'])."
+            f"Expected ['KS_SECRET'] from @tool(secrets=['KS_SECRET'])."
         )
         assert cred_map["cred_local_tool"] == ["KS_SECRET"], (
             f"'cred_local_tool' credentials are {cred_map['cred_local_tool']}, "

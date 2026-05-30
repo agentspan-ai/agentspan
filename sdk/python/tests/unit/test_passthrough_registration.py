@@ -109,7 +109,7 @@ class TestBuildPassthroughFunc:
             credential_names=None,
         )
 
-    def test_build_passthrough_func_passes_credentials_to_langgraph_worker(self):
+    def test_build_passthrough_func_passes_secrets_to_langgraph_worker(self):
         """Verifies credential_names are forwarded to the worker factory."""
         from agentspan.agents.runtime.runtime import AgentRuntime
         from agentspan.agents.runtime.config import AgentConfig
@@ -128,7 +128,7 @@ class TestBuildPassthroughFunc:
             runtime = AgentRuntime.__new__(AgentRuntime)
             runtime._config = config
             runtime._build_passthrough_func(
-                graph, "langgraph", "test_graph", credentials=["GITHUB_TOKEN"],
+                graph, "langgraph", "test_graph", secrets=["GITHUB_TOKEN"],
             )
 
         mock_worker.assert_called_once_with(
@@ -177,18 +177,18 @@ def _make_fake_task(workflow_instance_id="wf-123", prompt="test prompt"):
 
 
 class TestLangchainWorkerCredentialInjection:
-    """Verify that make_langchain_worker actually injects credentials into os.environ."""
+    """Verify that make_langchain_worker actually injects secrets into os.environ."""
 
     pytestmark = pytest.mark.skipif(
         not __import__("importlib").util.find_spec("langchain_core"),
         reason="langchain_core not installed",
     )
 
-    # _get_credential_fetcher is imported from _dispatch inside the closure,
+    # _get_secret_fetcher is imported from _dispatch inside the closure,
     # so we patch it at the source module.
-    _FETCHER_PATCH = "agentspan.agents.runtime._dispatch._get_credential_fetcher"
+    _FETCHER_PATCH = "agentspan.agents.runtime._dispatch._get_secret_fetcher"
 
-    def test_closure_credentials_injected_into_environ(self):
+    def test_closure_secrets_injected_into_environ(self):
         """When credential_names are passed, the worker resolves and injects them
         into os.environ before calling executor.invoke(), and cleans up after."""
         from agentspan.agents.frameworks.langchain import make_langchain_worker
@@ -225,18 +225,18 @@ class TestLangchainWorkerCredentialInjection:
         # Fetcher was called with the closure credential names
         fake_fetcher.fetch.assert_called_once_with("tok-fake", ["GITHUB_TOKEN"])
 
-    def test_closure_credentials_used_even_when_workflow_registry_empty(self):
-        """The closure path works even if _workflow_credentials has no entry for
+    def test_closure_secrets_used_even_when_workflow_registry_empty(self):
+        """The closure path works even if _workflow_secrets has no entry for
         this execution_id — proving it avoids the race condition."""
         from agentspan.agents.frameworks.langchain import make_langchain_worker
         from agentspan.agents.runtime._dispatch import (
-            _workflow_credentials,
-            _workflow_credentials_lock,
+            _workflow_secrets,
+            _workflow_secrets_lock,
         )
 
-        # Ensure _workflow_credentials has NO entry for this workflow
-        with _workflow_credentials_lock:
-            _workflow_credentials.pop("wf-123", None)
+        # Ensure _workflow_secrets has NO entry for this workflow
+        with _workflow_secrets_lock:
+            _workflow_secrets.pop("wf-123", None)
 
         captured_env = {}
 
@@ -259,23 +259,23 @@ class TestLangchainWorkerCredentialInjection:
         with patch(self._FETCHER_PATCH, return_value=fake_fetcher):
             result = worker_fn(task)
 
-        # Even with empty _workflow_credentials, the closure names were used
+        # Even with empty _workflow_secrets, the closure names were used
         assert captured_env["MY_SECRET"] == "s3cr3t"
         assert "MY_SECRET" not in os.environ
         assert result.status.name == "COMPLETED"
 
-    def test_no_credentials_means_no_fetch(self):
-        """When credential_names is None/empty and _workflow_credentials is empty,
+    def test_no_secrets_means_no_fetch(self):
+        """When credential_names is None/empty and _workflow_secrets is empty,
         no credential fetch is attempted."""
         from agentspan.agents.frameworks.langchain import make_langchain_worker
         from agentspan.agents.runtime._dispatch import (
-            _workflow_credentials,
-            _workflow_credentials_lock,
+            _workflow_secrets,
+            _workflow_secrets_lock,
         )
 
-        # Ensure _workflow_credentials is also empty
-        with _workflow_credentials_lock:
-            _workflow_credentials.pop("wf-123", None)
+        # Ensure _workflow_secrets is also empty
+        with _workflow_secrets_lock:
+            _workflow_secrets.pop("wf-123", None)
 
         executor = MagicMock()
         executor.invoke.return_value = {"output": "no creds needed"}
@@ -290,7 +290,7 @@ class TestLangchainWorkerCredentialInjection:
         with patch(self._FETCHER_PATCH) as mock_get_fetcher:
             result = worker_fn(task)
 
-        # Fetcher factory should never be called — no credentials requested
+        # Fetcher factory should never be called — no secrets requested
         mock_get_fetcher.assert_not_called()
         assert result.status.name == "COMPLETED"
 

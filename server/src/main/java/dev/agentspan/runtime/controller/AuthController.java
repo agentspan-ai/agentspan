@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import dev.agentspan.runtime.auth.User;
 import dev.agentspan.runtime.auth.UserRepository;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.ExecutionTokenService;
 
 /**
  * Auth endpoints for login (username/password → JWT).

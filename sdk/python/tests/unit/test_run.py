@@ -54,16 +54,16 @@ class TestRunFunction:
         assert call_kwargs.kwargs["media"] == ["img.png"]
         assert call_kwargs.kwargs["session_id"] == "s1"
 
-    def test_run_passes_credentials(self):
+    def test_run_passes_secrets(self):
         mock_runtime = MagicMock()
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import run
 
-        run(agent, "Hi", credentials=["OPENAI_API_KEY"], runtime=mock_runtime)
+        run(agent, "Hi", secrets=["OPENAI_API_KEY"], runtime=mock_runtime)
 
         call_kwargs = mock_runtime.run.call_args
-        assert call_kwargs.kwargs["credentials"] == ["OPENAI_API_KEY"]
+        assert call_kwargs.kwargs["secrets"] == ["OPENAI_API_KEY"]
 
 
 class TestStartFunction:
@@ -151,17 +151,17 @@ class TestRunAsyncFunction:
         assert result.output == "Async result"
 
     @pytest.mark.asyncio
-    async def test_run_async_passes_credentials(self):
+    async def test_run_async_passes_secrets(self):
         mock_runtime = MagicMock()
         mock_runtime.run_async = AsyncMock(return_value=MagicMock(output="Async result"))
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import run_async
 
-        await run_async(agent, "Hi", credentials=["OPENAI_API_KEY"], runtime=mock_runtime)
+        await run_async(agent, "Hi", secrets=["OPENAI_API_KEY"], runtime=mock_runtime)
 
         call_kwargs = mock_runtime.run_async.call_args
-        assert call_kwargs.kwargs["credentials"] == ["OPENAI_API_KEY"]
+        assert call_kwargs.kwargs["secrets"] == ["OPENAI_API_KEY"]
 
 
 class TestConfigure:

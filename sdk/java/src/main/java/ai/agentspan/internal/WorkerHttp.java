@@ -92,10 +92,23 @@ public class WorkerHttp {
 
     /** {@code POST /api/tasks} — report task failure. */
     public void failTask(String taskId, String workflowInstanceId, String errorMessage) {
+        failTask(taskId, workflowInstanceId, errorMessage, false);
+    }
+
+    /**
+     * Mark a task as terminally failed (non-retryable). Used for configuration
+     * problems like missing credentials — retrying won't fix them.
+     */
+    public void failTaskTerminal(String taskId, String workflowInstanceId, String errorMessage) {
+        failTask(taskId, workflowInstanceId, errorMessage, true);
+    }
+
+    private void failTask(String taskId, String workflowInstanceId, String errorMessage,
+                          boolean terminal) {
         Map<String, Object> body = new HashMap<>();
         body.put("taskId", taskId);
         if (workflowInstanceId != null) body.put("workflowInstanceId", workflowInstanceId);
-        body.put("status", "FAILED");
+        body.put("status", terminal ? "FAILED_WITH_TERMINAL_ERROR" : "FAILED");
         body.put("reasonForIncompletion", errorMessage);
         try {
             httpApi.post("/api/tasks", body);

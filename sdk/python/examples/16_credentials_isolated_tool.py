@@ -1,29 +1,30 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Credentials — per-user secrets injected into isolated tool subprocesses.
+"""Credentials — per-user secrets injected into the tool worker process.
 
 Demonstrates:
-    - @tool with credentials=["GITHUB_TOKEN"] (default isolated=True)
-    - Credentials injected into a fresh subprocess — parent env never touched
-    - Tool reads credential from os.environ inside the subprocess
-    - Fallback to os.environ when no server credential is set (non-strict mode)
+    - @tool with secrets=["GITHUB_TOKEN"]
+    - Credentials resolved from the server and injected as env vars around the
+      tool invocation (under a process-wide lock — see secret-injection-contract)
+    - Tool reads credential from os.environ
+    - Server-only resolution: no env-var fallback for declared secrets
 
 How it works:
     1. Agent starts → server mints a short-lived execution token
-    2. Before each tool call, the SDK fetches declared credentials from
-       POST /api/credentials/resolve using that token
-    3. The tool function runs in a fresh subprocess with credentials
+    2. Before each tool call, the SDK fetches declared secrets from
+       POST /api/workers/secrets using that token
+    3. The tool function runs in a fresh subprocess with secrets
        injected as env vars. The parent process's os.environ is unchanged.
 
 Setup (one-time, via CLI):
     agentspan login                                     # authenticate
-    agentspan credentials set GITHUB_TOKEN <your-github-token> # enter token when prompted
+    agentspan secrets set GITHUB_TOKEN <your-github-token> # enter token when prompted
 
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - GITHUB_TOKEN stored via `agentspan credentials set` OR set in os.environ
+    - GITHUB_TOKEN stored via `agentspan secrets set` OR set in os.environ
 """
 
 import os
@@ -33,7 +34,7 @@ from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 
-@tool(credentials=["GITHUB_TOKEN"])
+@tool(secrets=["GITHUB_TOKEN"])
 def list_github_repos(username: str) -> dict:
     """List public repositories for a GitHub user.
 
@@ -61,7 +62,7 @@ def list_github_repos(username: str) -> dict:
     }
 
 
-@tool(credentials=["GITHUB_TOKEN"])
+@tool(secrets=["GITHUB_TOKEN"])
 def create_github_issue(repo: str, title: str, body: str) -> dict:
     """Create a GitHub issue. Requires GITHUB_TOKEN with write access.
 
@@ -93,8 +94,8 @@ agent = Agent(
     name="github_agent",
     model=settings.llm_model,
     tools=[list_github_repos, create_github_issue],
-    # Declare credentials at the agent level — SDK auto-fetches for all tools
-    credentials=["GITHUB_TOKEN"],
+    # Declare secrets at the agent level — SDK auto-fetches for all tools
+    secrets=["GITHUB_TOKEN"],
     instructions=(
         "You are a GitHub assistant. You can list repos and create issues. "
         "Always confirm with the user before creating issues."
@@ -114,7 +115,7 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16_credentials_isolated_tool
+        # agentspan deploy --package examples.16_secrets_isolated_tool
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)

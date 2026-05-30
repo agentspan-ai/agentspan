@@ -419,33 +419,33 @@ class AgentRuntime:
                 headers["X-Auth-Secret"] = self._config.auth_secret
         return headers
 
-    def _register_workflow_credentials(
-        self, execution_id: str, credentials: Optional[List[str]]
+    def _register_workflow_secrets(
+        self, execution_id: str, secrets: Optional[List[str]]
     ) -> None:
         """Register request-scoped credential names for extracted framework tools."""
-        if not credentials:
+        if not secrets:
             return
         from agentspan.agents.runtime._dispatch import (
-            _workflow_credentials,
-            _workflow_credentials_lock,
+            _workflow_secrets,
+            _workflow_secrets_lock,
         )
 
-        with _workflow_credentials_lock:
-            _workflow_credentials[execution_id] = list(credentials)
+        with _workflow_secrets_lock:
+            _workflow_secrets[execution_id] = list(secrets)
 
-    def _clear_workflow_credentials(
-        self, execution_id: str, credentials: Optional[List[str]]
+    def _clear_workflow_secrets(
+        self, execution_id: str, secrets: Optional[List[str]]
     ) -> None:
         """Clear request-scoped credential names after execution completion."""
-        if not credentials:
+        if not secrets:
             return
         from agentspan.agents.runtime._dispatch import (
-            _workflow_credentials,
-            _workflow_credentials_lock,
+            _workflow_secrets,
+            _workflow_secrets_lock,
         )
 
-        with _workflow_credentials_lock:
-            _workflow_credentials.pop(execution_id, None)
+        with _workflow_secrets_lock:
+            _workflow_secrets.pop(execution_id, None)
 
     def _resolve_worker_domain(self, execution_id: str, run_id: Optional[str]) -> Optional[str]:
         """Return the domain workers should poll for this execution.
@@ -503,7 +503,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
-        credentials: Optional[List[str]] = None,
+        secrets: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         run_id: Optional[str] = None,
         static_plan: Optional[Dict[str, Any]] = None,
@@ -537,8 +537,8 @@ class AgentRuntime:
             payload["idempotencyKey"] = idempotency_key
         if timeout is not None:
             payload["timeoutSeconds"] = timeout
-        if credentials:
-            payload["credentials"] = credentials
+        if secrets:
+            payload["secrets"] = secrets
         if run_id:
             payload["runId"] = run_id
         if static_plan is not None:
@@ -575,7 +575,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
-        credentials: Optional[List[str]] = None,
+        secrets: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         run_id: Optional[str] = None,
     ) -> str:
@@ -599,8 +599,8 @@ class AgentRuntime:
             payload["idempotencyKey"] = idempotency_key
         if timeout is not None:
             payload["timeoutSeconds"] = timeout
-        if credentials:
-            payload["credentials"] = credentials
+        if secrets:
+            payload["secrets"] = secrets
         if run_id:
             payload["runId"] = run_id
 
@@ -626,7 +626,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
-        credentials: Optional[List[str]] = None,
+        secrets: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Async version of :meth:`_start_framework_via_server`."""
@@ -640,8 +640,8 @@ class AgentRuntime:
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
-        if credentials:
-            payload["credentials"] = credentials
+        if secrets:
+            payload["secrets"] = secrets
 
         data = await self._http.start_agent(payload)
         execution_id = data.get("executionId", "")
@@ -2491,7 +2491,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
-        credentials: Optional[List[str]] = None,
+        secrets: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
@@ -2553,7 +2553,7 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
                 on_event=on_event,
                 timeout=timeout,
-                credentials=credentials,
+                secrets=secrets,
                 context=context,
                 **kwargs,
             )
@@ -2609,7 +2609,7 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=timeout,
-            credentials=credentials,
+            secrets=secrets,
             context=context,
             run_id=run_id,
             static_plan=static_plan,
@@ -2620,7 +2620,7 @@ class AgentRuntime:
         self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
         self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
-        self._register_workflow_credentials(execution_id, credentials)
+        self._register_workflow_secrets(execution_id, secrets)
 
         # Poll until complete
         effective_timeout = timeout or (
@@ -2629,7 +2629,7 @@ class AgentRuntime:
         try:
             status = self._poll_status_until_complete(execution_id, timeout=effective_timeout)
         finally:
-            self._clear_workflow_credentials(execution_id, credentials)
+            self._clear_workflow_secrets(execution_id, secrets)
 
         output = status.output
         raw_status = status.status
@@ -2931,7 +2931,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
-        credentials: Optional[List[str]] = None,
+        secrets: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
@@ -2954,13 +2954,13 @@ class AgentRuntime:
         if workers and workers[0].func is None:
             worker = workers[0]
             worker.func = self._build_passthrough_func(
-                agent_obj, framework, worker.name, credentials=credentials,
+                agent_obj, framework, worker.name, secrets=secrets,
             )
             self._register_passthrough_worker(worker)
         elif "_graph" in raw_config:
             self._register_graph_workers(raw_config, workers)
         else:
-            self._register_framework_workers(workers, credentials=credentials)
+            self._register_framework_workers(workers, secrets=secrets)
 
         correlation_id = str(uuid.uuid4())
         resolved_prompt = self._resolve_prompt(prompt)
@@ -2973,11 +2973,11 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
-            credentials=credentials,
+            secrets=secrets,
             context=context,
         )
-        # Also register in _workflow_credentials for full-extraction tool workers
-        self._register_workflow_credentials(execution_id, credentials)
+        # Also register in _workflow_secrets for full-extraction tool workers
+        self._register_workflow_secrets(execution_id, secrets)
 
         try:
             if on_event is not None:
@@ -3016,7 +3016,7 @@ class AgentRuntime:
                 sub_results=self._extract_sub_results(output),
             )
         finally:
-            self._clear_workflow_credentials(execution_id, credentials)
+            self._clear_workflow_secrets(execution_id, secrets)
 
     def _start_framework(
         self,
@@ -3068,7 +3068,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
-        credentials: Optional[List[str]] = None,
+        secrets: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """POST to /api/agent/start with framework + rawConfig."""
@@ -3084,8 +3084,8 @@ class AgentRuntime:
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
-        if credentials:
-            payload["credentials"] = credentials
+        if secrets:
+            payload["secrets"] = secrets
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -3103,7 +3103,7 @@ class AgentRuntime:
         return execution_id
 
     def _register_framework_workers(
-        self, workers: list, credentials: Optional[List[str]] = None
+        self, workers: list, secrets: Optional[List[str]] = None
     ) -> None:
         """Register extracted callable workers from a foreign framework agent."""
         if not workers:
@@ -3118,7 +3118,7 @@ class AgentRuntime:
                 setattr(w.func, "_agentspan_framework_callable", True)
             except Exception:
                 pass
-            wrapper = make_tool_worker(w.func, w.name, credential_names=credentials)
+            wrapper = make_tool_worker(w.func, w.name, credential_names=secrets)
             worker_task(
                 task_definition_name=w.name,
                 task_def=_default_task_def(w.name),
@@ -3262,7 +3262,7 @@ class AgentRuntime:
                     self._worker_manager.start()
 
     def _build_passthrough_func(
-        self, agent_obj: Any, framework: str, name: str, credentials: Optional[List[str]] = None
+        self, agent_obj: Any, framework: str, name: str, secrets: Optional[List[str]] = None
     ) -> Any:
         """Build the pre-wrapped tool_worker function for a passthrough worker."""
         server_url = self._config.server_url
@@ -3274,14 +3274,14 @@ class AgentRuntime:
 
             return make_langgraph_worker(
                 agent_obj, name, server_url, auth_key, auth_secret,
-                credential_names=credentials,
+                credential_names=secrets,
             )
         elif framework == "langchain":
             from agentspan.agents.frameworks.langchain import make_langchain_worker
 
             return make_langchain_worker(
                 agent_obj, name, server_url, auth_key, auth_secret,
-                credential_names=credentials,
+                credential_names=secrets,
             )
         elif framework == "claude_agent_sdk":
             from agentspan.agents.agent import Agent as AgentClass
@@ -3298,7 +3298,7 @@ class AgentRuntime:
 
             return make_claude_agent_sdk_worker(
                 options, name, server_url, auth_key, auth_secret,
-                credential_names=credentials,
+                credential_names=secrets,
             )
         raise ValueError(f"Unknown passthrough framework: {framework}")
 
@@ -4042,7 +4042,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
-        credentials: Optional[List[str]] = None,
+        secrets: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
@@ -4094,7 +4094,7 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
                 on_event=on_event,
                 timeout=timeout,
-                credentials=credentials,
+                secrets=secrets,
                 context=context,
                 **kwargs,
             )
@@ -4138,7 +4138,7 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=timeout,
-            credentials=credentials,
+            secrets=secrets,
             context=context,
             run_id=run_id,
         )
@@ -4147,7 +4147,7 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
         self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
-        self._register_workflow_credentials(execution_id, credentials)
+        self._register_workflow_secrets(execution_id, secrets)
 
         effective_timeout = timeout or (
             agent.timeout_seconds if agent.timeout_seconds > 0 else None
@@ -4157,7 +4157,7 @@ class AgentRuntime:
                 execution_id, timeout=effective_timeout
             )
         finally:
-            self._clear_workflow_credentials(execution_id, credentials)
+            self._clear_workflow_secrets(execution_id, secrets)
 
         output = status.output
         raw_status = status.status
@@ -4555,7 +4555,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
-        credentials: Optional[List[str]] = None,
+        secrets: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> AgentResult:
@@ -4574,13 +4574,13 @@ class AgentRuntime:
         if workers and workers[0].func is None:
             worker = workers[0]
             worker.func = self._build_passthrough_func(
-                agent_obj, framework, worker.name, credentials=credentials,
+                agent_obj, framework, worker.name, secrets=secrets,
             )
             self._register_passthrough_worker(worker)
         elif "_graph" in raw_config:
             self._register_graph_workers(raw_config, workers)
         else:
-            self._register_framework_workers(workers, credentials=credentials)
+            self._register_framework_workers(workers, secrets=secrets)
 
         correlation_id = str(uuid.uuid4())
         resolved_prompt = self._resolve_prompt(prompt)
@@ -4593,10 +4593,10 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
-            credentials=credentials,
+            secrets=secrets,
             context=context,
         )
-        self._register_workflow_credentials(execution_id, credentials)
+        self._register_workflow_secrets(execution_id, secrets)
 
         try:
             if on_event is not None:
@@ -4653,7 +4653,7 @@ class AgentRuntime:
                 sub_results=self._extract_sub_results(output),
             )
         finally:
-            self._clear_workflow_credentials(execution_id, credentials)
+            self._clear_workflow_secrets(execution_id, secrets)
 
     async def _start_framework_async(
         self,

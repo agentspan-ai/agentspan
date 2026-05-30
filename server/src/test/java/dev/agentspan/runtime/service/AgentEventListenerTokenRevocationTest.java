@@ -18,7 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.netflix.conductor.model.WorkflowModel;
 
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.secrets.ExecutionTokenService;
 
 @ExtendWith(MockitoExtension.class)
 class AgentEventListenerTokenRevocationTest {

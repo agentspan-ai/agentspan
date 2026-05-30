@@ -4,16 +4,16 @@
 """Credentials — CLI tools with explicit credential declarations.
 
 Demonstrates:
-    - Explicit credentials on agents and tools
+    - Explicit secrets on agents and tools
     - cli_allowed_commands defines which CLI tools the agent can use
-    - credentials=[...] declares which secrets the server must inject
+    - secrets=[...] declares which secrets the server must inject
     - Multi-credential tools (aws needs multiple env vars)
 
 Setup (one-time, via CLI):
     agentspan login
-    agentspan credentials set GITHUB_TOKEN <your-github-token>
-    agentspan credentials set AWS_ACCESS_KEY_ID <your-aws-access-key-id>
-    agentspan credentials set AWS_SECRET_ACCESS_KEY <your-aws-secret-access-key>
+    agentspan secrets set GITHUB_TOKEN <your-github-token>
+    agentspan secrets set AWS_ACCESS_KEY_ID <your-aws-access-key-id>
+    agentspan secrets set AWS_SECRET_ACCESS_KEY <your-aws-secret-access-key>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
@@ -28,7 +28,7 @@ from settings import settings
 
 
 # gh tool — requires GITHUB_TOKEN
-@tool(credentials=["GITHUB_TOKEN"])
+@tool(secrets=["GITHUB_TOKEN"])
 def gh_list_prs(repo: str, state: str = "open") -> dict:
     """List pull requests for a GitHub repo using the gh CLI.
 
@@ -49,7 +49,7 @@ def gh_list_prs(repo: str, state: str = "open") -> dict:
     return {"repo": repo, "state": state, "pull_requests": prs}
 
 
-@tool(credentials=["GITHUB_TOKEN"])
+@tool(secrets=["GITHUB_TOKEN"])
 def gh_create_pr(repo: str, title: str, body: str, head: str, base: str = "main") -> dict:
     """Create a pull request via the gh CLI.
 
@@ -68,10 +68,10 @@ def gh_create_pr(repo: str, title: str, body: str, head: str, base: str = "main"
     return {"url": result.stdout.strip()}
 
 
-# aws tool — requires AWS credentials
-@tool(credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"])
+# aws tool — requires AWS secrets
+@tool(secrets=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"])
 def aws_list_s3_buckets() -> dict:
-    """List S3 buckets accessible with the user's AWS credentials."""
+    """List S3 buckets accessible with the user's AWS secrets."""
     result = subprocess.run(
         ["aws", "s3", "ls", "--output", "json"],
         capture_output=True, text=True, timeout=15,
@@ -88,9 +88,9 @@ def aws_list_s3_buckets() -> dict:
     return {"buckets": buckets}
 
 
-@tool(credentials=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"])
+@tool(secrets=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"])
 def aws_get_caller_identity() -> dict:
-    """Return the AWS identity (account, ARN) for the current credentials."""
+    """Return the AWS identity (account, ARN) for the current secrets."""
     result = subprocess.run(
         ["aws", "sts", "get-caller-identity", "--output", "json"],
         capture_output=True, text=True, timeout=10,
@@ -102,13 +102,13 @@ def aws_get_caller_identity() -> dict:
     return json.loads(result.stdout)
 
 
-# Agent with explicit credentials for CLI tools
+# Agent with explicit secrets for CLI tools
 github_aws_agent = Agent(
     name="devops_agent",
     model=settings.llm_model,
     tools=[gh_list_prs, gh_create_pr, aws_list_s3_buckets, aws_get_caller_identity],
     cli_allowed_commands=["gh", "aws"],
-    credentials=["GITHUB_TOKEN", "GH_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"],
+    secrets=["GITHUB_TOKEN", "GH_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"],
     instructions=(
         "You are a DevOps assistant. You can manage GitHub pull requests and "
         "inspect AWS resources. Always confirm destructive actions before proceeding."
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(github_aws_agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16c_credentials_cli_tools
+        # agentspan deploy --package examples.16c_secrets_cli_tools
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(github_aws_agent)

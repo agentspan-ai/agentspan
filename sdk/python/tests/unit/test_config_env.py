@@ -219,33 +219,33 @@ class TestLogLevelConfig:
 
 
 class TestAgentConfigCredentialFields:
-    """credential_strict_mode and api_key fields."""
+    """secret_strict_mode and api_key fields."""
 
-    def test_credential_strict_mode_defaults_false(self):
+    def test_secret_strict_mode_defaults_false(self):
         from agentspan.agents.runtime.config import AgentConfig
         config = AgentConfig()
-        assert config.credential_strict_mode is False
+        assert config.secret_strict_mode is False
 
-    def test_credential_strict_mode_can_be_set(self):
+    def test_secret_strict_mode_can_be_set(self):
         from agentspan.agents.runtime.config import AgentConfig
-        config = AgentConfig(credential_strict_mode=True)
-        assert config.credential_strict_mode is True
+        config = AgentConfig(secret_strict_mode=True)
+        assert config.secret_strict_mode is True
 
-    def test_credential_strict_mode_from_env_true(self):
+    def test_secret_strict_mode_from_env_true(self):
         import os
         from unittest import mock
         from agentspan.agents.runtime.config import AgentConfig
-        with mock.patch.dict(os.environ, {"AGENTSPAN_CREDENTIAL_STRICT_MODE": "true"}):
+        with mock.patch.dict(os.environ, {"AGENTSPAN_SECRET_STRICT_MODE": "true"}):
             config = AgentConfig.from_env()
-        assert config.credential_strict_mode is True
+        assert config.secret_strict_mode is True
 
-    def test_credential_strict_mode_from_env_false(self):
+    def test_secret_strict_mode_from_env_false(self):
         import os
         from unittest import mock
         from agentspan.agents.runtime.config import AgentConfig
-        with mock.patch.dict(os.environ, {"AGENTSPAN_CREDENTIAL_STRICT_MODE": "false"}):
+        with mock.patch.dict(os.environ, {"AGENTSPAN_SECRET_STRICT_MODE": "false"}):
             config = AgentConfig.from_env()
-        assert config.credential_strict_mode is False
+        assert config.secret_strict_mode is False
 
     def test_api_key_field_defaults_none(self):
         from agentspan.agents.runtime.config import AgentConfig

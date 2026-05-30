@@ -166,7 +166,7 @@ def _make_auth_agent(model, server_url, cred_name):
         name="test_mcp_auth",
         description="Authenticated MCP test tools",
         headers={"Authorization": f"Bearer ${{{cred_name}}}"},
-        credentials=[cred_name],
+        secrets=[cred_name],
     )
     return Agent(
         name="e2e_mcp_auth",

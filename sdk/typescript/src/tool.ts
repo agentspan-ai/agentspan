@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { isAbsolute, join } from "node:path";
-import type { ToolDef, ToolType, ToolContext, CredentialFile } from "./types.js";
+import type { ToolDef, ToolType, ToolContext } from "./types.js";
 import { ConfigurationError } from "./errors.js";
 
 // `import.meta.url` survives tsup's CJS build on Node 25 and breaks `require()`.
@@ -85,8 +85,7 @@ export interface ToolOptions {
   approvalRequired?: boolean;
   timeoutSeconds?: number;
   external?: boolean;
-  isolated?: boolean;
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
   guardrails?: unknown[];
   maxCalls?: number;
   retryCount?: number;
@@ -122,7 +121,6 @@ export function tool<TInput = unknown, TOutput = unknown>(
       timeoutSeconds: options.timeoutSeconds,
     }),
     ...(options.external !== undefined && { external: options.external }),
-    ...(options.isolated !== undefined && { isolated: options.isolated }),
     ...(options.credentials !== undefined && {
       credentials: options.credentials,
     }),
@@ -257,9 +255,8 @@ export function getToolDef(obj: unknown): ToolDef {
         timeoutSeconds: raw.timeoutSeconds as number,
       }),
       ...(raw.external !== undefined && { external: raw.external as boolean }),
-      ...(raw.isolated !== undefined && { isolated: raw.isolated as boolean }),
       ...(raw.credentials !== undefined && {
-        credentials: raw.credentials as (string | CredentialFile)[],
+        credentials: raw.credentials as string[],
       }),
       ...(raw.guardrails !== undefined && {
         guardrails: raw.guardrails as unknown[],
@@ -317,7 +314,7 @@ export interface HttpToolOptions {
   inputSchema?: unknown;
   accept?: string[];
   contentType?: string;
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
 }
 
 export function httpTool(opts: HttpToolOptions): ToolDef {
@@ -348,7 +345,7 @@ export interface McpToolOptions {
   headers?: Record<string, string>;
   toolNames?: string[];
   maxTools?: number;
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
 }
 
 export function mcpTool(opts: McpToolOptions): ToolDef {
@@ -379,7 +376,7 @@ export interface ApiToolOptions {
   headers?: Record<string, string>;
   toolNames?: string[];
   maxTools?: number;
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
 }
 
 export function apiTool(opts: ApiToolOptions): ToolDef {
@@ -818,8 +815,7 @@ interface ToolDecoratorOptions {
   approvalRequired?: boolean;
   timeoutSeconds?: number;
   external?: boolean;
-  isolated?: boolean;
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
   guardrails?: unknown[];
   maxCalls?: number;
 }
@@ -886,7 +882,6 @@ export function toolsFrom(instance: object): ToolFunction<unknown, unknown>[] {
       approvalRequired: metadata.approvalRequired,
       timeoutSeconds: metadata.timeoutSeconds,
       external: metadata.external,
-      isolated: metadata.isolated,
       credentials: metadata.credentials,
       guardrails: metadata.guardrails,
       maxCalls: metadata.maxCalls,

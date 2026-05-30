@@ -299,7 +299,7 @@ Detect the project's test runner:
 
 **Security** (if applicable)
 - [ ] No user input passed unsanitized to SQL, shell, or HTML
-- [ ] No secrets or credentials hardcoded
+- [ ] No secrets or secrets hardcoded
 - [ ] Proper authorization checks on new endpoints
 
 **Tests**

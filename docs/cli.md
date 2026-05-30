@@ -45,8 +45,6 @@ Store secrets on the server once. Tools resolve them automatically at runtime �
 agentspan credentials set KEY value      # Store a credential (encrypted at rest)
 agentspan credentials list               # List stored credential keys
 agentspan credentials delete KEY         # Delete a credential
-agentspan credentials bindings           # List logical key → store name bindings
-agentspan credentials bind KEY name      # Bind a logical key to a custom store name
 ```
 
 Credentials are encrypted with AES-256-GCM. Only the key names are shown in `list` — values are never exposed.
