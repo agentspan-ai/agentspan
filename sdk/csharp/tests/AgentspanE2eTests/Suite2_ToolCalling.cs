@@ -174,10 +174,9 @@ public sealed class Suite2_ToolCalling
 
             var host = new S2CredHost();
             var allTools = ToolRegistry.FromInstance(host);
-            var paidA = allTools.First(t => t.Name == "paid_tool_a");
-            paidA.Credentials = [LCRED_A];
-            var paidB = allTools.First(t => t.Name == "paid_tool_b");
-            paidB.Credentials = [LCRED_B];
+            // Declared credentials are set on the [Tool(... Credentials = ...)]
+            // attribute itself; ToolDef.Credentials is init-only, so we can't
+            // mutate it post-construction.
 
             var agent = new Agent("s2_cred_lifecycle")
             {
@@ -347,7 +346,8 @@ internal sealed class S2CredHost
     [Tool("A tool that needs no credentials. Always succeeds.")]
     public string FreeTool(string x) => "free:ok";
 
-    [Tool("Needs E2E_DOTNET_CRED_A. Returns first 3 chars of the credential.")]
+    [Tool("Needs E2E_DOTNET_CRED_A. Returns first 3 chars of the credential.",
+        Credentials = new[] { "E2E_DOTNET_CRED_A" })]
     public string PaidToolA(string x)
     {
         var v = Environment.GetEnvironmentVariable("E2E_DOTNET_CRED_A");
@@ -357,7 +357,8 @@ internal sealed class S2CredHost
         return $"paid_a:{v[..Math.Min(3, v.Length)]}";
     }
 
-    [Tool("Needs E2E_DOTNET_CRED_B. Returns first 3 chars of the credential.")]
+    [Tool("Needs E2E_DOTNET_CRED_B. Returns first 3 chars of the credential.",
+        Credentials = new[] { "E2E_DOTNET_CRED_B" })]
     public string PaidToolB(string x)
     {
         var v = Environment.GetEnvironmentVariable("E2E_DOTNET_CRED_B");

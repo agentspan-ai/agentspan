@@ -68,10 +68,10 @@ class AgentConfigSerializer:
                     }
                 ],
             }
-            # Credentials must still be sent so the server includes them
-            # in the execution token for the passthrough worker to resolve.
+            # Declared credential names — wire-format key is "credentials"
+            # to match AgentConfig#credentials on the server (see note above).
             if hasattr(agent, "secrets") and agent.secrets:
-                stub["secrets"] = [c for c in agent.secrets if isinstance(c, str)]
+                stub["credentials"] = [c for c in agent.secrets if isinstance(c, str)]
             return stub
 
         # Strategy is emitted when the agent has any sub-agent declaration:
@@ -286,9 +286,10 @@ class AgentConfigSerializer:
                 "allowShell": cfg.allow_shell,
             }
 
-        # Agent-level secrets
+        # Agent-level declared credentials — wire key is "credentials" to
+        # match the server's AgentConfig#credentials field.
         if hasattr(agent, "secrets") and agent.secrets:
-            config["secrets"] = [c for c in agent.secrets if isinstance(c, str)]
+            config["credentials"] = [c for c in agent.secrets if isinstance(c, str)]
 
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}
@@ -333,13 +334,18 @@ class AgentConfigSerializer:
         if td.guardrails:
             result["guardrails"] = [self._serialize_guardrail(g) for g in td.guardrails]
 
-        # Credentials — must be in config so the server includes them in
-        # the execution token's declared_names (bounds credential resolution).
+        # Declared credential names — must land in config so the server can
+        # extract them into the execution token's declared_names list (bounds
+        # /api/workers/secrets resolution). The wire-format key is "credentials"
+        # because the server-side compiler (AgentService#collectCredentialsRecursive)
+        # reads `tool.config["credentials"]`. The SDK-facing parameter is named
+        # `secrets=` after the user-facing rename; only the wire key kept the
+        # old name to avoid a cross-language compiler/serializer fan-out.
         if td.secrets:
             cred_names = [c if isinstance(c, str) else c.env_var for c in td.secrets]
             if "config" not in result:
                 result["config"] = {}
-            result["config"]["secrets"] = cred_names
+            result["config"]["credentials"] = cred_names
 
         return result
 
