@@ -33,7 +33,9 @@ from settings import settings
 quick_answer = Agent(
     name="quick_answer_67",
     model=settings.llm_model,
-    instructions=("You give quick, 1-2 sentence answers to simple questions."),
+    instructions=(
+        "You give quick, 1-2 sentence answers to simple questions."
+    ),
 )
 
 # ── Research pipeline (sequential) ──────────────────────────────────
@@ -126,3 +128,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(team)
+

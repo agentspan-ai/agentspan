@@ -149,15 +149,18 @@ def _agent_def(result):
     """Extract metadata.agentDef from a plan() result."""
     wf = result.get("workflowDef")
     assert wf is not None, (
-        f"plan() result missing 'workflowDef'. Top-level keys: {list(result.keys())}"
+        f"plan() result missing 'workflowDef'. "
+        f"Top-level keys: {list(result.keys())}"
     )
     metadata = wf.get("metadata")
     assert metadata is not None, (
-        f"workflowDef missing 'metadata'. workflowDef keys: {list(wf.keys())}"
+        f"workflowDef missing 'metadata'. "
+        f"workflowDef keys: {list(wf.keys())}"
     )
     agent_def = metadata.get("agentDef")
     assert agent_def is not None, (
-        f"workflowDef.metadata missing 'agentDef'. metadata keys: {list(metadata.keys())}"
+        f"workflowDef.metadata missing 'agentDef'. "
+        f"metadata keys: {list(metadata.keys())}"
     )
     return agent_def
 
@@ -206,7 +209,9 @@ def _sub_workflow_names(tasks):
     names = []
     for t in tasks:
         if t.get("type") == "SUB_WORKFLOW":
-            params = t.get("subWorkflowParam", {}) or t.get("subWorkflowParams", {})
+            params = t.get("subWorkflowParam", {}) or t.get(
+                "subWorkflowParams", {}
+            )
             if params.get("name"):
                 names.append(params["name"])
     return names
@@ -257,7 +262,9 @@ class TestSuite9Handoffs:
         """
         child_a = Agent(name="child_a", model=model, instructions="Child A.")
         child_b = Agent(name="child_b", model=model, instructions="Child B.")
-        router_lead = Agent(name="router_lead", model=model, instructions="Route tasks.")
+        router_lead = Agent(
+            name="router_lead", model=model, instructions="Route tasks."
+        )
 
         strategies = [
             ("handoff", Strategy.HANDOFF, {}),
@@ -316,7 +323,11 @@ class TestSuite9Handoffs:
                 name="e2e_s9_router_no_arg",
                 model="openai/gpt-4o-mini",
                 instructions="This should fail.",
-                agents=[Agent(name="dummy", model="openai/gpt-4o-mini", instructions="X.")],
+                agents=[
+                    Agent(
+                        name="dummy", model="openai/gpt-4o-mini", instructions="X."
+                    )
+                ],
                 strategy=Strategy.ROUTER,
             )
 
@@ -368,13 +379,17 @@ class TestSuite9Handoffs:
         # Verify both child agents executed via sub-workflow completion
         sub_refs = [t.get("referenceTaskName", "") for t in sub_wfs]
         completed_refs = [
-            t.get("referenceTaskName", "") for t in sub_wfs if t.get("status") == "COMPLETED"
+            t.get("referenceTaskName", "")
+            for t in sub_wfs
+            if t.get("status") == "COMPLETED"
         ]
         assert any("math" in r.lower() for r in completed_refs), (
-            f"[Sequential] math_agent sub-workflow not COMPLETED. Sub-workflow refs: {sub_refs}"
+            f"[Sequential] math_agent sub-workflow not COMPLETED. "
+            f"Sub-workflow refs: {sub_refs}"
         )
         assert any("text" in r.lower() for r in completed_refs), (
-            f"[Sequential] text_agent sub-workflow not COMPLETED. Sub-workflow refs: {sub_refs}"
+            f"[Sequential] text_agent sub-workflow not COMPLETED. "
+            f"Sub-workflow refs: {sub_refs}"
         )
 
         # ── Context propagation: each sub-agent must receive the original prompt ──
@@ -440,15 +455,17 @@ class TestSuite9Handoffs:
         # Verify both child agents executed via sub-workflow completion
         sub_wfs = _find_sub_workflow_tasks(result.execution_id)
         completed_refs = [
-            t.get("referenceTaskName", "") for t in sub_wfs if t.get("status") == "COMPLETED"
+            t.get("referenceTaskName", "")
+            for t in sub_wfs
+            if t.get("status") == "COMPLETED"
         ]
         assert any("math" in r.lower() for r in completed_refs), (
             f"[Parallel] math_agent sub-workflow not COMPLETED. "
-            f"Sub-workflow refs: {[t.get('referenceTaskName', '') for t in sub_wfs]}"
+            f"Sub-workflow refs: {[t.get('referenceTaskName','') for t in sub_wfs]}"
         )
         assert any("text" in r.lower() for r in completed_refs), (
             f"[Parallel] text_agent sub-workflow not COMPLETED. "
-            f"Sub-workflow refs: {[t.get('referenceTaskName', '') for t in sub_wfs]}"
+            f"Sub-workflow refs: {[t.get('referenceTaskName','') for t in sub_wfs]}"
         )
 
     # ── Handoff execution ─────────────────────────────────────────────
@@ -483,7 +500,9 @@ class TestSuite9Handoffs:
 
         # At least one SUB_WORKFLOW should have completed
         sub_wfs = _find_sub_workflow_tasks(result.execution_id)
-        completed_subs = [t for t in sub_wfs if t.get("status") == "COMPLETED"]
+        completed_subs = [
+            t for t in sub_wfs if t.get("status") == "COMPLETED"
+        ]
         assert len(completed_subs) >= 1, (
             f"[Handoff] Expected at least 1 COMPLETED SUB_WORKFLOW, "
             f"got {len(completed_subs)}. Sub-workflow statuses: "
@@ -601,20 +620,24 @@ class TestSuite9Handoffs:
         # Verify child agents are present
         child_names = [a.name for a in pipeline.agents]
         assert "math_agent" in child_names, (
-            f"[Pipe] math_agent not in pipeline.agents. Children: {child_names}"
+            f"[Pipe] math_agent not in pipeline.agents. "
+            f"Children: {child_names}"
         )
         assert "text_agent" in child_names, (
-            f"[Pipe] text_agent not in pipeline.agents. Children: {child_names}"
+            f"[Pipe] text_agent not in pipeline.agents. "
+            f"Children: {child_names}"
         )
 
         # Compile and verify plan
         result = runtime.plan(pipeline)
         assert "workflowDef" in result, (
-            f"[Pipe] plan() result missing 'workflowDef'. Got keys: {list(result.keys())}"
+            f"[Pipe] plan() result missing 'workflowDef'. "
+            f"Got keys: {list(result.keys())}"
         )
         ad = _agent_def(result)
         assert ad.get("strategy") == "sequential", (
-            f"[Pipe] agentDef.strategy is '{ad.get('strategy')}', expected 'sequential'."
+            f"[Pipe] agentDef.strategy is '{ad.get('strategy')}', "
+            f"expected 'sequential'."
         )
 
         # Run the pipeline
@@ -633,18 +656,21 @@ class TestSuite9Handoffs:
         # Verify SUB_WORKFLOW tasks exist
         sub_wfs = _find_sub_workflow_tasks(run_result.execution_id)
         assert len(sub_wfs) >= 2, (
-            f"[Pipe] Expected at least 2 SUB_WORKFLOW tasks, got {len(sub_wfs)}."
+            f"[Pipe] Expected at least 2 SUB_WORKFLOW tasks, "
+            f"got {len(sub_wfs)}."
         )
 
         # Verify both child agents executed via sub-workflow completion
         completed_refs = [
-            t.get("referenceTaskName", "") for t in sub_wfs if t.get("status") == "COMPLETED"
+            t.get("referenceTaskName", "")
+            for t in sub_wfs
+            if t.get("status") == "COMPLETED"
         ]
         assert any("math" in r.lower() for r in completed_refs), (
             f"[Pipe] math_agent sub-workflow not COMPLETED. "
-            f"Sub-workflow refs: {[t.get('referenceTaskName', '') for t in sub_wfs]}"
+            f"Sub-workflow refs: {[t.get('referenceTaskName','') for t in sub_wfs]}"
         )
         assert any("text" in r.lower() for r in completed_refs), (
             f"[Pipe] text_agent sub-workflow not COMPLETED. "
-            f"Sub-workflow refs: {[t.get('referenceTaskName', '') for t in sub_wfs]}"
+            f"Sub-workflow refs: {[t.get('referenceTaskName','') for t in sub_wfs]}"
         )

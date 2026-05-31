@@ -34,16 +34,9 @@ def get_weather(city: str) -> dict:
 def calculate(expression: str) -> dict:
     """Evaluate a math expression."""
     import math
-
     safe_builtins = {
-        "abs": abs,
-        "round": round,
-        "min": min,
-        "max": max,
-        "sqrt": math.sqrt,
-        "pow": pow,
-        "pi": math.pi,
-        "e": math.e,
+        "abs": abs, "round": round, "min": min, "max": max,
+        "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e,
     }
     try:
         result = eval(expression, {"__builtins__": {}}, safe_builtins)
@@ -69,9 +62,7 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        handle = runtime.start(
-            agent, "send email to developer@orkes.io with current weather details in SF"
-        )
+        handle = runtime.start(agent, "send email to developer@orkes.io with current weather details in SF")
         print(f"Started: {handle.execution_id}\n")
 
         for event in handle.stream():
@@ -114,3 +105,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

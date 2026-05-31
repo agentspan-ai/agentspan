@@ -505,13 +505,13 @@ class TestHandoffCheckAllStrategies:
     @pytest.mark.parametrize(
         "strategy,expect_handoff_check",
         [
-            (Strategy.SWARM, True),  # Always — server generates it
-            (Strategy.HANDOFF, False),  # No — server uses SUB_WORKFLOW
+            (Strategy.SWARM, True),       # Always — server generates it
+            (Strategy.HANDOFF, False),     # No — server uses SUB_WORKFLOW
             (Strategy.SEQUENTIAL, False),  # No — server uses DO_WHILE + SUB_WORKFLOW
-            (Strategy.PARALLEL, False),  # No — server uses FORK_JOIN
-            (Strategy.ROUND_ROBIN, False),  # No — server uses DO_WHILE + SWITCH
-            (Strategy.RANDOM, False),  # No — server uses DO_WHILE + SWITCH
-            (Strategy.MANUAL, False),  # No — server uses WAIT + SUB_WORKFLOW
+            (Strategy.PARALLEL, False),    # No — server uses FORK_JOIN
+            (Strategy.ROUND_ROBIN, False), # No — server uses DO_WHILE + SWITCH
+            (Strategy.RANDOM, False),      # No — server uses DO_WHILE + SWITCH
+            (Strategy.MANUAL, False),      # No — server uses WAIT + SUB_WORKFLOW
         ],
     )
     def test_strategy_handoff_check(self, strategy, expect_handoff_check):
@@ -574,11 +574,9 @@ class TestHandoffCheckRegistrationPath:
         assert swarm.handoffs == []  # no explicit handoffs
 
         rt = self._make_runtime()
-        with (
-            patch.object(rt, "_register_handoff_worker") as mock_handoff,
-            patch.object(rt, "_register_swarm_transfer_workers"),
-            patch.object(rt, "_register_check_transfer_worker"),
-        ):
+        with patch.object(rt, "_register_handoff_worker") as mock_handoff, \
+             patch.object(rt, "_register_swarm_transfer_workers"), \
+             patch.object(rt, "_register_check_transfer_worker"):
             # required_workers=None → fallback mode, register everything
             rt._register_workers(swarm, required_workers=None, domain=None)
 
@@ -599,11 +597,9 @@ class TestHandoffCheckRegistrationPath:
 
         fake_domain = "abc123-uuid-domain"
         rt = self._make_runtime()
-        with (
-            patch.object(rt, "_register_handoff_worker") as mock_handoff,
-            patch.object(rt, "_register_swarm_transfer_workers"),
-            patch.object(rt, "_register_check_transfer_worker"),
-        ):
+        with patch.object(rt, "_register_handoff_worker") as mock_handoff, \
+             patch.object(rt, "_register_swarm_transfer_workers"), \
+             patch.object(rt, "_register_check_transfer_worker"):
             rt._register_workers(swarm, required_workers=None, domain=fake_domain)
 
         mock_handoff.assert_called_once_with(swarm, domain=fake_domain)
@@ -629,11 +625,9 @@ class TestHandoffCheckRegistrationPath:
         assert loop.handoffs == []  # parent has NO handoffs
 
         rt = self._make_runtime()
-        with (
-            patch.object(rt, "_register_handoff_worker") as mock_handoff,
-            patch.object(rt, "_register_swarm_transfer_workers"),
-            patch.object(rt, "_register_check_transfer_worker"),
-        ):
+        with patch.object(rt, "_register_handoff_worker") as mock_handoff, \
+             patch.object(rt, "_register_swarm_transfer_workers"), \
+             patch.object(rt, "_register_check_transfer_worker"):
             rt._register_workers(loop, required_workers=None, domain=None)
 
         # Parent gets registered (SWARM + agents)
@@ -678,21 +672,17 @@ class TestHandoffCheckRegistrationPath:
         # Server says it needs handoff_check
         required_with = {"swarm_parent_handoff_check", "swarm_parent_stop_when"}
         rt = self._make_runtime()
-        with (
-            patch.object(rt, "_register_handoff_worker") as mock_handoff,
-            patch.object(rt, "_register_swarm_transfer_workers"),
-            patch.object(rt, "_register_check_transfer_worker"),
-        ):
+        with patch.object(rt, "_register_handoff_worker") as mock_handoff, \
+             patch.object(rt, "_register_swarm_transfer_workers"), \
+             patch.object(rt, "_register_check_transfer_worker"):
             rt._register_workers(swarm, required_workers=required_with, domain=None)
         mock_handoff.assert_called_once()
 
         # Server says it does NOT need handoff_check
         required_without = {"swarm_parent_stop_when"}
         rt2 = self._make_runtime()
-        with (
-            patch.object(rt2, "_register_handoff_worker") as mock_handoff2,
-            patch.object(rt2, "_register_swarm_transfer_workers"),
-            patch.object(rt2, "_register_check_transfer_worker"),
-        ):
+        with patch.object(rt2, "_register_handoff_worker") as mock_handoff2, \
+             patch.object(rt2, "_register_swarm_transfer_workers"), \
+             patch.object(rt2, "_register_check_transfer_worker"):
             rt2._register_workers(swarm, required_workers=required_without, domain=None)
         mock_handoff2.assert_not_called()

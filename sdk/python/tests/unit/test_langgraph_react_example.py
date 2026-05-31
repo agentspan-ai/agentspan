@@ -6,7 +6,6 @@ Verifies that a graph built with create_react_agent can be:
 2. Serialized to (raw_config, [WorkerInfo])
 3. Invoked via the pre-wrapped worker function with correct output extraction
 """
-
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -38,12 +37,10 @@ def react_graph():
 class TestLangGraphReActDetection:
     def test_detect_framework_returns_langgraph(self, react_graph):
         from agentspan.agents.frameworks.serializer import detect_framework
-
         assert detect_framework(react_graph) == "langgraph"
 
     def test_serialize_returns_single_worker(self, react_graph):
         from agentspan.agents.frameworks.langgraph import serialize_langgraph
-
         raw_config, workers = serialize_langgraph(react_graph)
         assert len(workers) == 1
 
@@ -56,15 +53,10 @@ class TestLangGraphReActDetection:
 
         stream_chunks = [
             ("updates", {"agent": {"messages": [final_ai_msg]}}),
-            (
-                "values",
-                {
-                    "messages": [
-                        HumanMessage(content="What is the capital of France?"),
-                        final_ai_msg,
-                    ]
-                },
-            ),
+            ("values", {"messages": [
+                HumanMessage(content="What is the capital of France?"),
+                final_ai_msg,
+            ]}),
         ]
 
         task = MagicMock()

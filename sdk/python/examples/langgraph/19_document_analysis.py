@@ -74,8 +74,8 @@ def extract_entities(text: str) -> str:
     import re
 
     # Simple heuristic patterns for mock extraction
-    money_pattern = re.findall(r"\$[\d,.]+ (?:billion|million|thousand)?", text)
-    date_pattern = re.findall(r"\b(?:Q[1-4] \d{4}|\w+ \d{1,2},? \d{4})\b", text)
+    money_pattern = re.findall(r'\$[\d,.]+ (?:billion|million|thousand)?', text)
+    date_pattern = re.findall(r'\b(?:Q[1-4] \d{4}|\w+ \d{1,2},? \d{4})\b', text)
 
     if "Jane Smith" in text:
         entities["people"].append("Jane Smith (CEO)")
@@ -164,8 +164,8 @@ graph = create_agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "Please provide a full analysis of the 'quarterly_report' document.",
+        graph,
+        "Please provide a full analysis of the 'quarterly_report' document.",
         )
         print(f"Status: {result.status}")
         result.print_result()

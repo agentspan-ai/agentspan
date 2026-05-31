@@ -56,7 +56,7 @@ weather = mcp_tool(
     server_url="http://localhost:3001/mcp",
     name="weather_mcp",
     description="Weather and air quality tools via MCP, use it to get current and historical weather information for "
-    "a city",
+                "a city",
     headers={"Authorization": "Bearer ${MCP_TEST_API_KEY}"},
     credentials=["MCP_TEST_API_KEY"],
 )
@@ -88,3 +88,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

@@ -195,13 +195,8 @@ report_harness = plan_execute(
 
 # ── Main ─────────────────────────────────────────────────────────
 
-
 def main():
-    topic = (
-        " ".join(sys.argv[1:])
-        if len(sys.argv) > 1
-        else "The impact of AI agents on software development in 2025"
-    )
+    topic = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "The impact of AI agents on software development in 2025"
 
     os.makedirs(WORK_DIR, exist_ok=True)
     print(f"Topic: {topic}")

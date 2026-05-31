@@ -107,7 +107,9 @@ def evaluate_one(raw: str) -> dict:
     if WORD_COUNT_MIN <= n <= WORD_COUNT_MAX:
         passes.append(f"word_count ({n} in [{WORD_COUNT_MIN}..{WORD_COUNT_MAX}])")
     else:
-        fails.append(f"word_count_off (got {n}, expected {WORD_COUNT_MIN}..{WORD_COUNT_MAX})")
+        fails.append(
+            f"word_count_off (got {n}, expected {WORD_COUNT_MIN}..{WORD_COUNT_MAX})"
+        )
 
     # First word.
     first = words[0].rstrip(".,!?;:") if words else ""
@@ -185,9 +187,7 @@ def verify_candidates(input_dir: str, output_path: str) -> str:
     os.makedirs(os.path.dirname(full_out) or WORK_DIR, exist_ok=True)
     with open(full_out, "w") as f:
         json.dump(verdict, f, indent=2)
-    return (
-        f"verified {len(evaluations)} candidates → {full_out} (winner={'YES' if winner else 'NO'})"
-    )
+    return f"verified {len(evaluations)} candidates → {full_out} (winner={'YES' if winner else 'NO'})"
 
 
 # ── Plan builder ─────────────────────────────────────────────────
@@ -224,7 +224,8 @@ def _build_proposer_instructions(
     style = _STYLE_HINTS[candidate_index % len(_STYLE_HINTS)]
     if not prior_failures:
         return (
-            base + f"\n\nIteration {iteration} (first attempt). "
+            base
+            + f"\n\nIteration {iteration} (first attempt). "
             f"You are proposer #{candidate_index}. {style}"
         )
 
@@ -237,7 +238,8 @@ def _build_proposer_instructions(
         lines.append(f"  - {text!r}\n      failed: {', '.join(f['fails'])}")
     history = "\n".join(lines)
     return (
-        base + f"\n\nIteration {iteration}, proposer #{candidate_index}. {style}\n\n"
+        base
+        + f"\n\nIteration {iteration}, proposer #{candidate_index}. {style}\n\n"
         f"Previous attempts (all failed):\n{history}\n\n"
         "Write a DIFFERENT sentence. Use the failure breakdown to fix "
         "specifically what was wrong: if word_count was off, count "
@@ -317,9 +319,7 @@ def run_solve_loop(runtime: AgentRuntime, harness, *, max_iter: int = MAX_ITERAT
 
         for ev in verdict["evaluations"]:
             tag = "✓" if (verdict.get("winner") and ev["candidate"] == verdict["winner"]) else "·"
-            preview = (
-                (ev["candidate"][:80] + "...") if len(ev["candidate"]) > 80 else ev["candidate"]
-            )
+            preview = (ev["candidate"][:80] + "...") if len(ev["candidate"]) > 80 else ev["candidate"]
             print(f"  {tag} {preview!r}")
             if ev["fails"]:
                 print(f"      fails: {ev['fails']}")

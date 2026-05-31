@@ -55,7 +55,8 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16e_secrets_http_tool
+        # agentspan deploy --package examples.16e_credentials_http_tool
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

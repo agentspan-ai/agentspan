@@ -58,7 +58,8 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16k_secrets_google_adk
+        # agentspan deploy --package examples.16k_credentials_google_adk
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

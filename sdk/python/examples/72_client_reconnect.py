@@ -41,7 +41,6 @@ def approve_release(change_id: str) -> dict:
     """Approve a production release change after human review."""
     return {"change_id": change_id, "approved": True}
 
-
 agent = Agent(
     name="client_reconnect_demo",
     model=settings.llm_model,
@@ -75,7 +74,8 @@ def load_json(path: Path) -> dict:
 
 def print_status(prefix: str, status: object) -> None:
     print(
-        f"{prefix} status={status.status} waiting={status.is_waiting} complete={status.is_complete}"
+        f"{prefix} status={status.status} "
+        f"waiting={status.is_waiting} complete={status.is_complete}"
     )
 
 
@@ -99,9 +99,7 @@ def run_once(prompt: str) -> None:
         # python 72_client_reconnect.py resume --approve
 
 
-def start_workflow(
-    prompt: str, workflow_file: Path, client_info_file: Path, timeout_seconds: int
-) -> None:
+def start_workflow(prompt: str, workflow_file: Path, client_info_file: Path, timeout_seconds: int) -> None:
     try:
         os.setsid()
     except OSError:
@@ -129,9 +127,7 @@ def start_workflow(
                 print()
                 print("Workflow is durably paused on the server.")
                 print("Now hard-kill this client from another terminal with:")
-                print(
-                    f"  python {Path(__file__).name} kill-client --client-info-file {client_info_file}"
-                )
+                print(f"  python {Path(__file__).name} kill-client --client-info-file {client_info_file}")
                 print()
                 break
             if status.is_complete:
@@ -278,7 +274,9 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        run_once("Ship change CHG-204: rotate the production API gateway certificates.")
+        run_once(
+            "Ship change CHG-204: rotate the production API gateway certificates."
+        )
     else:
         args = parse_args()
 

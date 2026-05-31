@@ -63,14 +63,12 @@ def skill_dir(tmp_path):
     scripts_dir = tmp_path / "scripts"
     scripts_dir.mkdir()
     echo_script = scripts_dir / "echo_args.py"
-    echo_script.write_text(
-        textwrap.dedent("""\
+    echo_script.write_text(textwrap.dedent("""\
         #!/usr/bin/env python3
         import sys
         args = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "no-args"
         print(f"ECHO_ARGS_RESULT:{args}")
-    """)
-    )
+    """))
     echo_script.chmod(0o755)
 
     return tmp_path
@@ -104,7 +102,10 @@ def _verify_skill_sub_workflow(
     all_tasks = wf.get("tasks", [])
 
     # Find the skill SUB_WORKFLOW task
-    skill_tasks = [t for t in all_tasks if skill_task_name in t.get("taskDefName", "")]
+    skill_tasks = [
+        t for t in all_tasks
+        if skill_task_name in t.get("taskDefName", "")
+    ]
     assert len(skill_tasks) > 0, (
         f"{skill_task_name} sub-workflow never invoked in {execution_id}. "
         f"Task defs: {[t.get('taskDefName') for t in all_tasks]}"
@@ -132,7 +133,9 @@ def _verify_skill_sub_workflow(
     )
 
     # Verify echo_args was invoked and completed with the deterministic marker.
-    echo_tasks = [t for t in sub_tasks if "echo_args" in t.get("taskDefName", "")]
+    echo_tasks = [
+        t for t in sub_tasks if "echo_args" in t.get("taskDefName", "")
+    ]
     assert echo_tasks, (
         f"echo_args was not invoked in sub-workflow {sub_wf_id}. "
         f"Task defs: {[t.get('taskDefName') for t in sub_tasks]}"
@@ -142,7 +145,10 @@ def _verify_skill_sub_workflow(
             f"echo_args status='{t.get('status')}' pollCount={t.get('pollCount', 0)} "
             f"in sub-workflow {sub_wf_id}"
         )
-    any_marker = any(required_tool_marker in str(t.get("outputData", {})) for t in echo_tasks)
+    any_marker = any(
+        required_tool_marker in str(t.get("outputData", {}))
+        for t in echo_tasks
+    )
     assert any_marker, (
         f"echo_args completed but no {required_tool_marker} marker in {sub_wf_id}. "
         f"Outputs: {[t.get('outputData') for t in echo_tasks]}"
@@ -159,15 +165,15 @@ def _verify_script_worker_task(
     """Verify a skill script was executed as a real Conductor worker tool."""
     tasks = workflow.get("tasks", [])
     matching_tasks = [
-        t
-        for t in tasks
+        t for t in tasks
         if task_name in t.get("taskDefName", "")
         or task_name in t.get("referenceTaskName", "")
         or task_name in t.get("taskType", "")
     ]
 
     assert matching_tasks, (
-        f"{task_name} was not invoked. Task defs: {[t.get('taskDefName') for t in tasks]}"
+        f"{task_name} was not invoked. "
+        f"Task defs: {[t.get('taskDefName') for t in tasks]}"
     )
 
     scheduled = [t for t in matching_tasks if t.get("status") == "SCHEDULED"]
@@ -178,19 +184,24 @@ def _verify_script_worker_task(
 
     for task in matching_tasks:
         assert task.get("status") == "COMPLETED", (
-            f"{task_name} status='{task.get('status')}' pollCount={task.get('pollCount', 0)}"
+            f"{task_name} status='{task.get('status')}' "
+            f"pollCount={task.get('pollCount', 0)}"
         )
 
     workflow_task_types = {
         t.get("workflowTask", {}).get("type")
         for t in matching_tasks
-        if isinstance(t.get("workflowTask"), dict) and t.get("workflowTask", {}).get("type")
+        if isinstance(t.get("workflowTask"), dict)
+        and t.get("workflowTask", {}).get("type")
     }
     assert not workflow_task_types or workflow_task_types == {"SIMPLE"}, (
         f"{task_name} did not execute as a SIMPLE worker task: {workflow_task_types}"
     )
 
-    any_marker = any(required_tool_marker in str(t.get("outputData", {})) for t in matching_tasks)
+    any_marker = any(
+        required_tool_marker in str(t.get("outputData", {}))
+        for t in matching_tasks
+    )
     assert any_marker, (
         f"{task_name} completed but no {required_tool_marker} marker was returned. "
         f"Outputs: {[t.get('outputData') for t in matching_tasks]}"
@@ -299,10 +310,8 @@ class TestSuite15Skills:
         assert getattr(nested, "_framework", None) == "skill"
 
         parent = Agent(
-            name="parent_with_skill_tool",
-            model=MODEL,
-            instructions="Use the skill tool.",
-            tools=[at],
+            name="parent_with_skill_tool", model=MODEL,
+            instructions="Use the skill tool.", tools=[at],
         )
         serializer = AgentConfigSerializer()
         config = serializer.serialize(parent)
@@ -465,8 +474,7 @@ class TestSuite15Skills:
             assert expected in wf_str, f"compiled workflow missing {expected}"
 
         tool_specs = [
-            d
-            for d in _all_dicts(result.get("workflowDef", {}))
+            d for d in _all_dicts(result.get("workflowDef", {}))
             if d.get("name") == "test_skill__echo_args"
         ]
         assert tool_specs, "compiled workflow missing echo_args script tool spec"

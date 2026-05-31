@@ -33,7 +33,6 @@ from settings import settings
 # These run as Conductor workers. They receive context about the
 # current agent execution and can return data to influence the flow.
 
-
 def log_before_model(callback_position: str, agent_name: str) -> dict:
     """Called before each LLM invocation.
 
@@ -49,7 +48,8 @@ def log_before_model(callback_position: str, agent_name: str) -> dict:
     return {}
 
 
-def inspect_after_model(callback_position: str, agent_name: str, llm_result: str = "") -> dict:
+def inspect_after_model(callback_position: str, agent_name: str,
+                        llm_result: str = "") -> dict:
     """Called after each LLM invocation.
 
     Args:
@@ -77,7 +77,8 @@ agent = LlmAgent(
     name="monitored_assistant",
     model=settings.llm_model,
     instruction=(
-        "You are a helpful assistant. Answer questions concisely. Keep responses under 200 words."
+        "You are a helpful assistant. Answer questions concisely. "
+        "Keep responses under 200 words."
     ),
     before_model_callback=log_before_model,
     after_model_callback=inspect_after_model,
@@ -87,8 +88,8 @@ agent = LlmAgent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            agent,
-            "Explain the difference between supervised and unsupervised machine learning.",
+        agent,
+        "Explain the difference between supervised and unsupervised machine learning.",
         )
         result.print_result()
 

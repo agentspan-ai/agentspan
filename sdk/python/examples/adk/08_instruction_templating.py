@@ -45,9 +45,7 @@ def get_user_preferences(user_id: str) -> dict:
             "preferred_format": "detailed paragraphs",
         },
     }
-    return users.get(
-        user_id, {"name": "Guest", "expertise": "intermediate", "preferred_format": "concise"}
-    )
+    return users.get(user_id, {"name": "Guest", "expertise": "intermediate", "preferred_format": "concise"})
 
 
 def search_tutorials(topic: str, level: str = "intermediate") -> dict:
@@ -94,8 +92,8 @@ agent = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            agent,
-            "I want to learn Python. What tutorials do you recommend?",
+        agent,
+        "I want to learn Python. What tutorials do you recommend?",
         )
         result.print_result()
 

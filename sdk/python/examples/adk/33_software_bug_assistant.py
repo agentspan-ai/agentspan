@@ -44,8 +44,8 @@ _tickets: dict[str, dict] = {
         "priority": "high",
         "github_issue": 847,
         "description": "TaskStatusListener notifications are only fully wired for "
-        "worker tasks (SIMPLE/custom). Both synchronous and asynchronous "
-        "system tasks miss lifecycle transition callbacks.",
+                       "worker tasks (SIMPLE/custom). Both synchronous and asynchronous "
+                       "system tasks miss lifecycle transition callbacks.",
         "created": "2026-03-10",
     },
     "COND-002": {
@@ -55,8 +55,8 @@ _tickets: dict[str, dict] = {
         "priority": "medium",
         "github_issue": 858,
         "description": "When an event handler uses action: fail_task, there is no way "
-        "to set reasonForIncompletion. Need to support this field so "
-        "failed tasks have meaningful error messages.",
+                       "to set reasonForIncompletion. Need to support this field so "
+                       "failed tasks have meaningful error messages.",
         "created": "2026-03-13",
     },
     "COND-003": {
@@ -66,8 +66,8 @@ _tickets: dict[str, dict] = {
         "priority": "medium",
         "github_issue": 781,
         "description": "The UI /workflowDefs page calls GET /metadata/workflow which "
-        "returns all versions of all workflows. This causes slow page "
-        "loads. Need pagination for the latest-versions endpoint.",
+                       "returns all versions of all workflows. This causes slow page "
+                       "loads. Need pagination for the latest-versions endpoint.",
         "created": "2026-02-18",
     },
 }
@@ -76,7 +76,6 @@ _next_id = 4
 
 
 # ── Function tools ────────────────────────────────────────────────
-
 
 @tool
 def get_current_date() -> dict:
@@ -100,8 +99,7 @@ def search_tickets(query: str) -> dict:
     """
     query_lower = query.lower()
     matches = [
-        t
-        for t in _tickets.values()
+        t for t in _tickets.values()
         if query_lower in t["title"].lower() or query_lower in t["description"].lower()
     ]
     return {"query": query, "count": len(matches), "tickets": matches}
@@ -158,7 +156,6 @@ def update_ticket(ticket_id: str, status: str = "", priority: str = "") -> dict:
 
 # ── Search sub-agent (wrapped as AgentTool) ───────────────────────
 
-
 @tool
 def search_web(query: str) -> dict:
     """Search the web for information about a Conductor bug or workflow issue.
@@ -173,26 +170,26 @@ def search_web(query: str) -> dict:
         "task status listener": {
             "source": "Conductor Docs",
             "answer": "TaskStatusListener is only wired for SIMPLE tasks. System "
-            "tasks like HTTP, INLINE, SUB_WORKFLOW bypass the listener "
-            "because they complete synchronously within the decider loop.",
+                      "tasks like HTTP, INLINE, SUB_WORKFLOW bypass the listener "
+                      "because they complete synchronously within the decider loop.",
         },
         "do_while loop": {
             "source": "GitHub PR #820",
             "answer": "DO_WHILE tasks with 'items' now pass validation without "
-            "loopCondition. Fixed in PR #820 — the validator was "
-            "unconditionally requiring loopCondition for all DO_WHILE tasks.",
+                      "loopCondition. Fixed in PR #820 — the validator was "
+                      "unconditionally requiring loopCondition for all DO_WHILE tasks.",
         },
         "event handler fail": {
             "source": "GitHub Issue #858",
             "answer": "Event handlers with action: fail_task cannot set "
-            "reasonForIncompletion. A proposed fix adds an optional "
-            "'reason' field to the fail_task action configuration.",
+                      "reasonForIncompletion. A proposed fix adds an optional "
+                      "'reason' field to the fail_task action configuration.",
         },
         "workflow def pagination": {
             "source": "GitHub Issue #781",
             "answer": "The /metadata/workflow endpoint returns all versions of all "
-            "workflows causing slow UI loads. A pagination API for "
-            "latest-versions is proposed to fix this.",
+                      "workflows causing slow UI loads. A pagination API for "
+                      "latest-versions is proposed to fix this.",
         },
     }
     query_lower = query.lower()
@@ -217,22 +214,20 @@ search_agent = Agent(
 
 # ── GitHub MCP tools (live access to conductor-oss/conductor) ─────
 
-github_mcp_url = os.environ.get("GITHUB_MCP_URL", "https://api.githubcopilot.com/mcp/")
+github_mcp_url = os.environ.get(
+    "GITHUB_MCP_URL", "https://api.githubcopilot.com/mcp/"
+)
 github_token = os.environ.get("GH_TOKEN", "")
 
 github = mcp_tool(
     server_url=github_mcp_url,
     name="github_mcp",
     description="GitHub tools for accessing the conductor-oss/conductor repository — "
-    "search issues, list open pull requests, and get issue details",
+                "search issues, list open pull requests, and get issue details",
     headers={"Authorization": f"Bearer {github_token}"},
     tool_names=[
-        "search_repositories",
-        "search_issues",
-        "list_issues",
-        "get_issue",
-        "list_pull_requests",
-        "get_pull_request",
+        "search_repositories", "search_issues", "list_issues",
+        "get_issue", "list_pull_requests", "get_pull_request",
     ],
 )
 
@@ -274,11 +269,11 @@ software_assistant = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            software_assistant,
-            "Review the latest open issues and PRs on conductor-oss/conductor. "
-            "Check if any of them relate to our internal tickets. "
-            "Pay attention to the DO_WHILE fix (PR #820) and the scheduler "
-            "persistence PRs. Give me a triage summary.",
+        software_assistant,
+        "Review the latest open issues and PRs on conductor-oss/conductor. "
+        "Check if any of them relate to our internal tickets. "
+        "Pay attention to the DO_WHILE fix (PR #820) and the scheduler "
+        "persistence PRs. Give me a triage summary.",
         )
         result.print_result()
 

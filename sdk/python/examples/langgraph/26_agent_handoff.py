@@ -32,62 +32,54 @@ class State(TypedDict):
 
 def triage(state: State) -> State:
     """Classify the user message and decide which specialist should handle it."""
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "Classify the customer message into exactly one category. "
-                    "Respond with a single word: billing, technical, or general."
-                )
-            ),
-            HumanMessage(content=state["user_message"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "Classify the customer message into exactly one category. "
+                "Respond with a single word: billing, technical, or general."
+            )
+        ),
+        HumanMessage(content=state["user_message"]),
+    ])
     return {"category": response.content.strip().lower()}
 
 
 def billing_agent(state: State) -> State:
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are a billing specialist. Answer the customer's billing question "
-                    "professionally and helpfully. Keep it under 3 sentences."
-                )
-            ),
-            HumanMessage(content=state["user_message"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a billing specialist. Answer the customer's billing question "
+                "professionally and helpfully. Keep it under 3 sentences."
+            )
+        ),
+        HumanMessage(content=state["user_message"]),
+    ])
     return {"response": f"[Billing Agent] {response.content.strip()}"}
 
 
 def technical_agent(state: State) -> State:
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are a technical support specialist. Troubleshoot the issue step by step. "
-                    "Provide clear, actionable guidance in under 4 sentences."
-                )
-            ),
-            HumanMessage(content=state["user_message"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a technical support specialist. Troubleshoot the issue step by step. "
+                "Provide clear, actionable guidance in under 4 sentences."
+            )
+        ),
+        HumanMessage(content=state["user_message"]),
+    ])
     return {"response": f"[Technical Support] {response.content.strip()}"}
 
 
 def general_agent(state: State) -> State:
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are a friendly general customer service agent. "
-                    "Help the customer with their question warmly and concisely."
-                )
-            ),
-            HumanMessage(content=state["user_message"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a friendly general customer service agent. "
+                "Help the customer with their question warmly and concisely."
+            )
+        ),
+        HumanMessage(content=state["user_message"]),
+    ])
     return {"response": f"[General Support] {response.content.strip()}"}
 
 

@@ -83,9 +83,7 @@ def test_evaluate_one_keyword_check_requires_whole_word():
     )
     ev = ex.evaluate_one(s)
     fails = " ".join(ev["fails"])
-    assert "missing_keywords" in fails, (
-        f"substring 'looping' should not satisfy 'loop' — got passes={ev['passes']}"
-    )
+    assert "missing_keywords" in fails, f"substring 'looping' should not satisfy 'loop' — got passes={ev['passes']}"
 
 
 def test_build_plan_initial_has_no_prior_failures_in_instructions():
@@ -174,9 +172,7 @@ def test_verify_candidates_writes_verdict_with_winner_when_one_passes(tmp_path, 
         "and refinement until the orchestrated outcome converges to a stable, predictable, observable system state today."
     )
     (tmp_path / "stage" / "cand_1.txt").write_text(good)
-    (tmp_path / "stage" / "cand_2.txt").write_text(
-        "Agentspan needs more work and is missing required vocabulary entirely in this attempt today now."
-    )
+    (tmp_path / "stage" / "cand_2.txt").write_text("Agentspan needs more work and is missing required vocabulary entirely in this attempt today now.")
 
     fn = getattr(ex.verify_candidates, "__wrapped__", ex.verify_candidates)
     msg = fn("stage", "stage/verdict.json")

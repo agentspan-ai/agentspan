@@ -44,7 +44,8 @@ no_bullet_lists = RegexGuardrail(
     mode="block",
     name="no_lists",
     message=(
-        "Do not use bullet points or numbered lists. Write in flowing prose paragraphs instead."
+        "Do not use bullet points or numbered lists. "
+        "Write in flowing prose paragraphs instead."
     ),
     on_fail=OnFail.RETRY,
     max_retries=3,
@@ -53,7 +54,6 @@ no_bullet_lists = RegexGuardrail(
 
 # ── Custom guardrail: enforce minimum length ────────────────────────
 # Compiles as a Conductor worker task (Python function).
-
 
 @guardrail
 def min_length(content: str) -> GuardrailResult:
@@ -97,7 +97,10 @@ if __name__ == "__main__":
 
         # Verify guardrails
         output = str(result.output)
-        has_bullets = any(line.strip().startswith(("-", "*")) for line in output.splitlines())
+        has_bullets = any(
+            line.strip().startswith(("-", "*"))
+            for line in output.splitlines()
+        )
         word_count = len(output.split())
 
         if has_bullets:
@@ -115,3 +118,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

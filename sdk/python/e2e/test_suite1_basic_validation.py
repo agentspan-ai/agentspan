@@ -41,15 +41,18 @@ def _agent_def(result: dict) -> dict:
     """
     wf = result.get("workflowDef")
     assert wf is not None, (
-        f"plan() result missing 'workflowDef'. Top-level keys: {list(result.keys())}"
+        f"plan() result missing 'workflowDef'. "
+        f"Top-level keys: {list(result.keys())}"
     )
     metadata = wf.get("metadata")
     assert metadata is not None, (
-        f"workflowDef missing 'metadata'. workflowDef keys: {list(wf.keys())}"
+        f"workflowDef missing 'metadata'. "
+        f"workflowDef keys: {list(wf.keys())}"
     )
     agent_def = metadata.get("agentDef")
     assert agent_def is not None, (
-        f"workflowDef.metadata missing 'agentDef'. metadata keys: {list(metadata.keys())}"
+        f"workflowDef.metadata missing 'agentDef'. "
+        f"metadata keys: {list(metadata.keys())}"
     )
     return agent_def
 
@@ -85,7 +88,10 @@ def _guardrail_by_name(agent_def: dict, name: str) -> dict:
         if g["name"] == name:
             return g
     all_names = _guardrail_names(agent_def)
-    pytest.fail(f"Guardrail '{name}' not found in agentDef.guardrails. Available: {all_names}")
+    pytest.fail(
+        f"Guardrail '{name}' not found in agentDef.guardrails. "
+        f"Available: {all_names}"
+    )
 
 
 def _sub_agent_names(agent_def: dict) -> list[str]:
@@ -163,7 +169,8 @@ def _assert_plan_structure(result: dict, expected_name: str) -> dict:
         f"The server may have returned an error: {json.dumps(result)[:500]}"
     )
     assert "requiredWorkers" in result, (
-        f"plan() result missing 'requiredWorkers'. Got keys: {list(result.keys())}"
+        f"plan() result missing 'requiredWorkers'. "
+        f"Got keys: {list(result.keys())}"
     )
     wf = result["workflowDef"]
     assert wf.get("name") == expected_name, (
@@ -178,7 +185,9 @@ def _assert_plan_structure(result: dict, expected_name: str) -> dict:
     return wf
 
 
-def _assert_tool_in_agent_def(ad: dict, tool_name: str, expected_type: str) -> None:
+def _assert_tool_in_agent_def(
+    ad: dict, tool_name: str, expected_type: str
+) -> None:
     """Assert a tool exists in agentDef.tools with the correct toolType."""
     compiled_tools = _tool_names(ad)
     assert tool_name in compiled_tools, (
@@ -272,7 +281,8 @@ def _build_judge_comparison(agent_spec: dict, result: dict) -> str:
         else:
             actual = "NOT FOUND"
         expected = (
-            f"guardrailType={g['guardrailType']}, position={g['position']}, onFail={g['onFail']}"
+            f"guardrailType={g['guardrailType']}, "
+            f"position={g['position']}, onFail={g['onFail']}"
         )
         if g.get("patterns"):
             expected += f", patterns={g['patterns']}"
@@ -292,13 +302,17 @@ def _build_judge_comparison(agent_spec: dict, result: dict) -> str:
 
     # Parent strategy
     lines.append("\n=== PARENT STRATEGY ===")
-    lines.append(f"  EXPECTED({agent_spec['strategy']}) ACTUAL({ad.get('strategy', 'not set')})")
+    lines.append(
+        f"  EXPECTED({agent_spec['strategy']}) "
+        f"ACTUAL({ad.get('strategy', 'not set')})"
+    )
 
     # Task types
     has_sub_wf = "SUB_WORKFLOW" in task_types
     lines.append("\n=== TASK TYPES ===")
     lines.append(
-        f"  SUB_WORKFLOW: EXPECTED(present) ACTUAL({'present' if has_sub_wf else 'NOT FOUND'})"
+        f"  SUB_WORKFLOW: EXPECTED(present) "
+        f"ACTUAL({'present' if has_sub_wf else 'NOT FOUND'})"
     )
 
     return "\n".join(lines)
@@ -319,13 +333,7 @@ KITCHEN_SINK_SPEC_STRUCTURED = {
     "guardrails": [
         {"name": "check_input", "guardrailType": "custom", "position": "input", "onFail": "retry"},
         {"name": "no_pii", "guardrailType": "custom", "position": "output", "onFail": "retry"},
-        {
-            "name": "no_password",
-            "guardrailType": "regex",
-            "position": "output",
-            "onFail": "retry",
-            "patterns": ["password"],
-        },
+        {"name": "no_password", "guardrailType": "regex", "position": "output", "onFail": "retry", "patterns": ["password"]},
     ],
     "agents": [
         {"name": "ks_handoff", "strategy": "handoff"},
@@ -413,7 +421,10 @@ def _judge_compiled_workflow(comparison_text: str) -> dict:
     try:
         verdict = json.loads(raw)
     except json.JSONDecodeError:
-        pytest.fail(f"LLM judge returned unparseable response.\nRaw response: {raw[:500]}")
+        pytest.fail(
+            f"LLM judge returned unparseable response.\n"
+            f"Raw response: {raw[:500]}"
+        )
 
     return {
         "pass": bool(verdict.get("pass", False)),
@@ -692,7 +703,8 @@ class TestSuite1BasicValidation:
         # Custom guardrails by function name
         for name in ["check_input", "no_pii", "no_ssn"]:
             assert name in guard_names, (
-                f"Guardrail '{name}' not in agentDef.guardrails. Found: {guard_names}"
+                f"Guardrail '{name}' not in agentDef.guardrails. "
+                f"Found: {guard_names}"
             )
 
         # Verify positions
@@ -832,7 +844,8 @@ class TestSuite1BasicValidation:
         sub_names = _sub_agent_names(ad)
         for name in ["e2e_analyst", "e2e_writer"]:
             assert name in sub_names, (
-                f"Sub-agent '{name}' not in agentDef.agents. Found: {sub_names}"
+                f"Sub-agent '{name}' not in agentDef.agents. "
+                f"Found: {sub_names}"
             )
 
         # SUB_WORKFLOW tasks reference the correct names
@@ -890,11 +903,13 @@ class TestSuite1BasicValidation:
         guardrails = ad.get("guardrails", [])
         guard_names = _guardrail_names(ad)
         assert len(guardrails) == 3, (
-            f"Expected 3 guardrails, got {len(guardrails)}. Names found: {guard_names}"
+            f"Expected 3 guardrails, got {len(guardrails)}. "
+            f"Names found: {guard_names}"
         )
         for name in ["check_input", "no_pii", "no_password"]:
             assert name in guard_names, (
-                f"Guardrail '{name}' not in agentDef.guardrails. Found: {guard_names}"
+                f"Guardrail '{name}' not in agentDef.guardrails. "
+                f"Found: {guard_names}"
             )
 
         no_pw = _guardrail_by_name(ad, "no_password")
@@ -903,7 +918,8 @@ class TestSuite1BasicValidation:
             f"expected 'regex'."
         )
         assert "password" in no_pw.get("patterns", []), (
-            f"Pattern 'password' not in 'no_password' guardrail. patterns: {no_pw.get('patterns')}"
+            f"Pattern 'password' not in 'no_password' guardrail. "
+            f"patterns: {no_pw.get('patterns')}"
         )
 
         # ── Sub-agents: all 8 strategy teams in agentDef.agents ─────
@@ -920,7 +936,8 @@ class TestSuite1BasicValidation:
         ]
         for name in expected_subs:
             assert name in sub_names, (
-                f"Sub-agent '{name}' not in agentDef.agents. Found: {sub_names}"
+                f"Sub-agent '{name}' not in agentDef.agents. "
+                f"Found: {sub_names}"
             )
 
         # Verify each sub-agent has the correct strategy
@@ -945,7 +962,8 @@ class TestSuite1BasicValidation:
 
         # ── Parent strategy ─────────────────────────────────────────
         assert ad.get("strategy") == "handoff", (
-            f"Parent agentDef.strategy is '{ad.get('strategy')}', expected 'handoff'."
+            f"Parent agentDef.strategy is '{ad.get('strategy')}', "
+            f"expected 'handoff'."
         )
 
         # ── Compiled task types: SUB_WORKFLOW exists ────────────────
@@ -960,7 +978,8 @@ class TestSuite1BasicValidation:
 
         # ── requiredWorkers present ─────────────────────────────────
         assert "requiredWorkers" in result, (
-            f"plan() result missing 'requiredWorkers'. Got keys: {list(result.keys())}"
+            f"plan() result missing 'requiredWorkers'. "
+            f"Got keys: {list(result.keys())}"
         )
 
     def test_llm_judge_validates_compiled_workflow(self, runtime, mcp_url):

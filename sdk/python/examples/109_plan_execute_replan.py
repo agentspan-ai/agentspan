@@ -297,9 +297,7 @@ def run_replan_loop(
     useful for debugging which plans converged and which didn't.
     """
     history = []
-    plan = build_initial_plan(
-        topic, iteration=0, target_words_per_section=initial_words_per_section
-    )
+    plan = build_initial_plan(topic, iteration=0, target_words_per_section=initial_words_per_section)
 
     for iteration in range(max_iterations):
         print(f"\n── iteration {iteration} ─────────────────────────────")
@@ -316,9 +314,7 @@ def run_replan_loop(
 
         decision = decide(wc, target_words, iteration, max_iterations)
         print(f"  status={result.status} words={wc} → {decision['action']}: {decision['reason']}")
-        history.append(
-            {"iteration": iteration, "decision": decision, "execution_id": result.execution_id}
-        )
+        history.append({"iteration": iteration, "decision": decision, "execution_id": result.execution_id})
 
         if decision["action"] == "done":
             return {"final_iteration": iteration, "decision": decision, "history": history}
@@ -333,11 +329,7 @@ def run_replan_loop(
 
     # Defensive: max_iterations exhausted without a done decision. This
     # shouldn't happen because decide() returns done at the boundary.
-    return {
-        "final_iteration": max_iterations - 1,
-        "decision": history[-1]["decision"],
-        "history": history,
-    }
+    return {"final_iteration": max_iterations - 1, "decision": history[-1]["decision"], "history": history}
 
 
 # ── Entry point ──────────────────────────────────────────────────

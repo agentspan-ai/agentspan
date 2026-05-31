@@ -90,12 +90,10 @@ string_agent = Agent(
 # The LLM sees all tools uniformly — it doesn't know which are
 # auto-discovered vs hand-defined.
 
-
 @tool
 def calculate(expression: str) -> dict:
     """Evaluate a math expression."""
     import math
-
     safe_builtins = {"abs": abs, "round": round, "sqrt": math.sqrt, "pow": pow}
     try:
         result = eval(expression, {"__builtins__": {}}, safe_builtins)
@@ -137,12 +135,8 @@ github = api_tool(
     url="https://api.github.com",
     headers={"Authorization": "token ${GITHUB_TOKEN}", "Accept": "application/vnd.github+json"},
     credentials=["GITHUB_TOKEN"],
-    tool_names=[
-        "repos_list_for_user",
-        "repos_create_for_authenticated_user",
-        "issues_list_for_repo",
-        "issues_create",
-    ],
+    tool_names=["repos_list_for_user", "repos_create_for_authenticated_user",
+                "issues_list_for_repo", "issues_create"],
     max_tools=20,
 )
 
@@ -165,9 +159,7 @@ if __name__ == "__main__":
 
         # Example 2: Filtered string tools
         print("\n=== String API (filtered) ===")
-        result = runtime.run(
-            string_agent, "Reverse the string 'hello world' and tell me its length."
-        )
+        result = runtime.run(string_agent, "Reverse the string 'hello world' and tell me its length.")
         result.print_result()
 
         # Example 3: Mixed tools
@@ -183,3 +175,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(math_agent)
+

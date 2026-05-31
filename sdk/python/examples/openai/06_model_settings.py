@@ -55,8 +55,8 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         print("=== Creative Agent (temp=0.9) ===")
         result = runtime.run(
-            creative_agent,
-            "Write a two-sentence story about a robot learning to paint.",
+        creative_agent,
+        "Write a two-sentence story about a robot learning to paint.",
         )
         result.print_result()
 
@@ -69,9 +69,10 @@ if __name__ == "__main__":
         # 2. In a separate long-lived worker process:
         # runtime.serve(creative_agent)
 
+
         print("\n=== Precise Agent (temp=0.1) ===")
         result = runtime.run(
-            precise_agent,
-            "Review this Python code: `data = eval(user_input)`",
+        precise_agent,
+        "Review this Python code: `data = eval(user_input)`",
         )
         result.print_result()

@@ -47,3 +47,4 @@ if __name__ == "__main__":
         #         print("[Waiting...]")
         #     elif event.type == "error":
         #         print(f"[Error: {event.content}]")
+

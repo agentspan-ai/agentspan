@@ -36,7 +36,6 @@ conductor_skill = skill(
 
 # ── Example 1: Run conductor skill standalone ──────────────────────
 
-
 def run_standalone():
     """Use conductor skill to create and manage a workflow."""
     with AgentRuntime() as rt:
@@ -57,7 +56,6 @@ def run_standalone():
 
 # ── Example 2: Load all skills from a directory ────────────────────
 
-
 def run_with_load_skills():
     """Load all skills at once and use them."""
     skills = load_skills(
@@ -77,7 +75,6 @@ def run_with_load_skills():
 
 
 # ── Example 3: Multi-skill team — /dg + conductor ─────────────────
-
 
 def run_multi_skill_team():
     """Combine /dg and conductor skills in a router-based team."""
@@ -122,7 +119,8 @@ def run_multi_skill_team():
         if result.sub_results:
             print(f"\nSub-agent executions:")
             for sub in result.sub_results:
-                print(f"  - {sub.agent_name}: {sub.status} (tokens: {sub.token_usage})")
+                print(f"  - {sub.agent_name}: {sub.status} "
+                      f"(tokens: {sub.token_usage})")
 
         result.print_result()
 

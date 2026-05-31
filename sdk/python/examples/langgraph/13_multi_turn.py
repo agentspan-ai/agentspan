@@ -40,34 +40,34 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         print("=== Alice's session ===")
         r = runtime.run(
-            graph,
-            "I'm applying for a senior backend engineer role at a fintech startup. "
-            "I have 5 years of Python experience.",
-            session_id=SESSION_A,
+        graph,
+        "I'm applying for a senior backend engineer role at a fintech startup. "
+        "I have 5 years of Python experience.",
+        session_id=SESSION_A,
         )
         r.print_result()
 
         print("\n=== Bob's session (separate memory) ===")
         r = runtime.run(
-            graph,
-            "I want to become a product manager. I have a marketing background.",
-            session_id=SESSION_B,
+        graph,
+        "I want to become a product manager. I have a marketing background.",
+        session_id=SESSION_B,
         )
         r.print_result()
 
         print("\n=== Alice's session — follow-up (remembers context) ===")
         r = runtime.run(
-            graph,
-            "What technical topics should I review for my upcoming interviews?",
-            session_id=SESSION_A,
+        graph,
+        "What technical topics should I review for my upcoming interviews?",
+        session_id=SESSION_A,
         )
         r.print_result()
 
         print("\n=== Bob's session — follow-up (remembers context) ===")
         r = runtime.run(
-            graph,
-            "What skills gap should I address first?",
-            session_id=SESSION_B,
+        graph,
+        "What skills gap should I address first?",
+        session_id=SESSION_B,
         )
         r.print_result()
 

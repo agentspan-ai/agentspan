@@ -78,16 +78,18 @@ agent = LlmAgent(
         "thoroughly and write a structured report with multiple sections."
     ),
     tools=[search_web, write_section],
-    planner=BuiltInPlanner(thinking_config=types.ThinkingConfig(thinking_budget=1024)),
+    planner=BuiltInPlanner(
+        thinking_config=types.ThinkingConfig(thinking_budget=1024)
+    ),
 )
 
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            agent,
-            "Write a brief report on the current state of renewable energy "
-            "and climate change solutions.",
+        agent,
+        "Write a brief report on the current state of renewable energy "
+        "and climate change solutions.",
         )
         result.print_result()
 

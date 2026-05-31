@@ -44,17 +44,17 @@ def unreliable_api_call(state: State) -> State:
         raise ConnectionError(f"Simulated transient network error on attempt {attempt}")
 
     # Succeed on this attempt
-    response = llm.invoke(
-        [
-            SystemMessage(content="Answer the question concisely."),
-            HumanMessage(content=state["query"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(content="Answer the question concisely."),
+        HumanMessage(content=state["query"]),
+    ])
     return {"attempts": attempt, "result": response.content.strip()}
 
 
 def format_output(state: State) -> State:
-    return {"result": f"[Succeeded after {state.get('attempts', 1)} attempt(s)]\n{state['result']}"}
+    return {
+        "result": f"[Succeeded after {state.get('attempts', 1)} attempt(s)]\n{state['result']}"
+    }
 
 
 builder = StateGraph(State)

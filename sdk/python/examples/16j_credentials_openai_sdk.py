@@ -59,7 +59,8 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16j_secrets_openai_sdk
+        # agentspan deploy --package examples.16j_credentials_openai_sdk
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

@@ -43,7 +43,9 @@ TIMEOUT = 300  # Code execution needs extra time for worker registration + execu
 def _docker_available() -> bool:
     """Return True if Docker daemon is running and healthy."""
     try:
-        result = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            ["docker", "info"], capture_output=True, text=True, timeout=10
+        )
         return result.returncode == 0
     except Exception:
         return False
@@ -434,7 +436,9 @@ class TestSuite10CodeExecution:
 
         code_exec = ad.get("codeExecution", {})
         allowed = code_exec.get("allowedLanguages", [])
-        assert "python" in allowed, f"[LangRestrict] 'python' not in allowedLanguages: {allowed}"
+        assert "python" in allowed, (
+            f"[LangRestrict] 'python' not in allowedLanguages: {allowed}"
+        )
         assert "bash" not in allowed, (
             f"[LangRestrict] 'bash' should NOT be in allowedLanguages: {allowed}"
         )
@@ -512,7 +516,8 @@ class TestSuite10CodeExecution:
                     stdout = str(result_data.get("stdout", ""))
                     status = str(result_data.get("status", ""))
             assert "done" not in stdout, (
-                f"[Timeout] Sleep code completed despite timeout=3! stdout={stdout[:200]}"
+                f"[Timeout] Sleep code completed despite timeout=3! "
+                f"stdout={stdout[:200]}"
             )
             assert status != "success", (
                 f"[Timeout] Sleep task reported success despite timeout=3! "

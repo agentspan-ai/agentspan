@@ -58,17 +58,15 @@ llm = ChatAnthropic(model="claude-haiku-4-5-20251001", temperature=0)
 
 # Agentspan auto-detects ChatAnthropic and routes LLM calls through
 # the anthropic/ provider on the Conductor server.
-graph = create_react_agent(
-    llm, tools=[get_today, days_between, day_of_week], name="date_calculator_agent"
-)
+graph = create_react_agent(llm, tools=[get_today, days_between, day_of_week], name="date_calculator_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "What day of the week is today? "
-            "How many days until New Year's Day 2026? "
-            "What day of the week will that be?",
+        graph,
+        "What day of the week is today? "
+        "How many days until New Year's Day 2026? "
+        "What day of the week will that be?",
         )
         print(f"Status: {result.status}")
         result.print_result()

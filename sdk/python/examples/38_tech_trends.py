@@ -152,9 +152,7 @@ def fetch_pypi_downloads(package: str) -> dict:
     for the Python ecosystem health.
     """
     url = f"https://pypistats.org/api/packages/{urllib.parse.quote(package)}/recent"
-    req = urllib.request.Request(
-        url, headers={"User-Agent": "Mozilla/5.0 (compatible; research-bot/1.0)"}
-    )
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; research-bot/1.0)"})
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())

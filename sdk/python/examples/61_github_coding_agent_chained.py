@@ -30,7 +30,6 @@ MODEL = "anthropic/claude-sonnet-4-6"
 
 # ── Stage 1: Fetch issues ─────────────────────────────────────────
 
-
 def _fetch_done(context: dict, **kwargs) -> bool:
     """Stop when the agent has produced the structured output with issue details."""
     result = context.get("result", "")
@@ -143,7 +142,6 @@ coding_qa = Agent(
 )
 
 # ── Stage 3: Create PR ────────────────────────────────────────────
-
 
 def _pr_done(context: dict, **kwargs) -> bool:
     """Stop when the agent has output a PR URL."""

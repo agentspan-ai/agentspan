@@ -46,30 +46,26 @@ def generate(state: State) -> State:
             f"Critique:\n{state['critique']}\n\n"
             "Return only the improved paragraph."
         )
-    response = llm.invoke(
-        [
-            SystemMessage(content="You are a skilled writer. Produce clear, engaging prose."),
-            HumanMessage(content=prompt),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(content="You are a skilled writer. Produce clear, engaging prose."),
+        HumanMessage(content=prompt),
+    ])
     return {"draft": response.content.strip(), "iterations": iterations + 1}
 
 
 def reflect(state: State) -> State:
     """Critique the current draft for quality."""
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are a rigorous editor. Critique the paragraph on:\n"
-                    "1. Clarity\n2. Accuracy\n3. Engagement\n4. Conciseness\n\n"
-                    "If the paragraph is already excellent, start your response with 'APPROVE'. "
-                    "Otherwise start with 'REVISE' and list specific improvements."
-                )
-            ),
-            HumanMessage(content=f"Topic: {state['topic']}\n\nParagraph:\n{state['draft']}"),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a rigorous editor. Critique the paragraph on:\n"
+                "1. Clarity\n2. Accuracy\n3. Engagement\n4. Conciseness\n\n"
+                "If the paragraph is already excellent, start your response with 'APPROVE'. "
+                "Otherwise start with 'REVISE' and list specific improvements."
+            )
+        ),
+        HumanMessage(content=f"Topic: {state['topic']}\n\nParagraph:\n{state['draft']}"),
+    ])
     return {"critique": response.content.strip()}
 
 
@@ -105,8 +101,8 @@ graph = builder.compile(name="reflection_agent")
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "the importance of open-source software in modern technology",
+        graph,
+        "the importance of open-source software in modern technology",
         )
         print(f"Status: {result.status}")
         result.print_result()

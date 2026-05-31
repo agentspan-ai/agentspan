@@ -33,12 +33,10 @@ memory.add("Alice's timezone is US/Pacific.")
 
 # ── Tool that uses memory for context ────────────────────────────────
 
-
 @tool
 def get_customer_context(query: str) -> str:
     """Retrieve relevant customer context from memory."""
     return memory.get_context(query)
-
 
 # ── Agent with memory-backed context ─────────────────────────────────
 
@@ -86,3 +84,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

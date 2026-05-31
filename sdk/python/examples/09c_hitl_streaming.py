@@ -53,10 +53,7 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        handle = runtime.start(
-            agent,
-            "The payments service is down. Check it, restart it, and clear its stale cache data.",
-        )
+        handle = runtime.start(agent, "The payments service is down. Check it, restart it, and clear its stale cache data.")
         print(f"Started: {handle.execution_id}\n")
 
         for event in handle.stream():
@@ -99,3 +96,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

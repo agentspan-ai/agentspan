@@ -27,7 +27,7 @@ from agentspan.agents import Agent, AgentRuntime, tool
 
 # ── Zendesk Tools ────────────────────────────────────────────────
 # Credentials are injected into os.environ by the AgentSpan server
-# at execution time. No credentials in code.
+# at execution time. No secrets in code.
 
 ZENDESK_SUBDOMAIN = "orkeshelp"
 

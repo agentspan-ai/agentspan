@@ -87,21 +87,9 @@ def fetch_execution(execution_id: str) -> dict:
 
 # System task types managed by Conductor/AgentSpan — everything else is a tool worker task
 SYSTEM_TASK_TYPES = {
-    "LLM_CHAT_COMPLETE",
-    "SET_VARIABLE",
-    "DO_WHILE",
-    "SWITCH",
-    "FORK",
-    "JOIN",
-    "INLINE",
-    "SUB_WORKFLOW",
-    "HUMAN",
-    "TERMINATE",
-    "WAIT",
-    "EVENT",
-    "JSON_JQ_TRANSFORM",
-    "KAFKA_PUBLISH",
-    "HTTP",
+    "LLM_CHAT_COMPLETE", "SET_VARIABLE", "DO_WHILE", "SWITCH", "FORK", "JOIN",
+    "INLINE", "SUB_WORKFLOW", "HUMAN", "TERMINATE", "WAIT", "EVENT",
+    "JSON_JQ_TRANSFORM", "KAFKA_PUBLISH", "HTTP",
 }
 
 

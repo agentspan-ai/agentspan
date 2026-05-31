@@ -30,7 +30,6 @@ from settings import settings
 
 # ── Tools ─────────────────────────────────────────────────────────────
 
-
 @function_tool
 def get_account_balance(account_id: str) -> str:
     """Look up the balance of a bank account."""
@@ -49,7 +48,6 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> str:
 
 
 # ── Guardrail functions ───────────────────────────────────────────────
-
 
 def check_for_pii(ctx, agent, input_text) -> GuardrailFunctionOutput:
     """Input guardrail: check for sensitive PII in user messages."""

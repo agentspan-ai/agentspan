@@ -13,7 +13,7 @@ Demonstrates:
     - HITL (approve, reject, feedback, UserProxyAgent, human_tool)
     - Memory (conversation + semantic)
     - Code execution (local, docker, jupyter, serverless)
-    - Credentials (declared via credentials=[...], read via env or get_secret())
+    - Credentials (all isolation modes, CredentialFile)
     - Streaming (sync + async), termination, handoffs, callbacks
     - Structured output, prompt templates, agent chaining, gate conditions
     - Extended thinking, planner mode, required_tools, include_contents
@@ -120,7 +120,8 @@ from agentspan.agents import (
     CallbackHandler,
     CliConfig,
     # Credentials
-    get_secret,
+    get_credential,
+    CredentialFile,
     # Execution (top-level convenience + runtime)
     configure,
     run,
@@ -200,12 +201,12 @@ intake_router = Agent(
 # Features: #4 Parallel, #76 scatter_gather, #10 native tool,
 #   #11 http_tool, #12 mcp_tool, #89 api_tool, #18 ToolContext,
 #   #19 tool credentials, #21 external tool, #52 isolated creds,
-#   #53 in-process creds, #55 HTTP header creds, #56 MCP creds
+#   #53 in-process creds, #55 HTTP header creds, #56 MCP creds, CredentialFile
 # ═══════════════════════════════════════════════════════════════════════
 
 
-# -- Native tool with ToolContext injection + credentials --
-@tool(credentials=["RESEARCH_API_KEY"])
+# -- Native tool with ToolContext injection + file-based credentials --
+@tool(credentials=[CredentialFile(env_var="RESEARCH_API_KEY", relative_path=".research/api_key")])
 def research_database(query: str, ctx: ToolContext = None) -> dict:
     """Search internal research database."""
     session = ctx.session_id if ctx else "unknown"
@@ -218,11 +219,11 @@ def research_database(query: str, ctx: ToolContext = None) -> dict:
     }
 
 
-# -- Native tool reading the injected secret via get_secret() accessor --
-@tool(credentials=["ANALYTICS_KEY"])
+# -- Native tool with in-process credential access (isolated=False) --
+@tool(isolated=False, credentials=["ANALYTICS_KEY"])
 def analyze_trends(topic: str) -> dict:
     """Analyze trending topics using analytics API."""
-    key = get_secret("ANALYTICS_KEY")
+    key = get_credential("ANALYTICS_KEY")
     return {"topic": topic, "trend_score": 0.87, "key_present": bool(key)}
 
 
@@ -257,7 +258,6 @@ petstore_api = api_tool(
     name="petstore",
     max_tools=5,
 )
-
 
 # -- External tool (by-reference, no local worker) --
 @tool(external=True)
@@ -435,7 +435,11 @@ def sql_injection_guard(content: str) -> GuardrailResult:
     return GuardrailResult(passed=True)
 
 
-@tool(guardrails=[Guardrail(sql_injection_guard, position=Position.INPUT, on_fail=OnFail.RAISE)])
+@tool(
+    guardrails=[
+        Guardrail(sql_injection_guard, position=Position.INPUT, on_fail=OnFail.RAISE)
+    ]
+)
 def safe_search(query: str) -> dict:
     """Search with SQL injection protection."""
     return {"query": query, "results": ["result1", "result2"]}
@@ -607,7 +611,9 @@ publishing_pipeline = Agent(
     strategy=Strategy.HANDOFF,
     handoffs=[
         OnToolResult(target="external_publisher", tool_name="format_check"),  # #34
-        OnCondition(target="external_publisher", condition=should_handoff_to_publisher),  # #36
+        OnCondition(
+            target="external_publisher", condition=should_handoff_to_publisher
+        ),  # #36
     ],
     termination=(  # #33 composable
         TextMentionTermination("PUBLISHED")
@@ -762,7 +768,9 @@ full_pipeline = Agent(
         analytics_agent,  # Stage 8
     ],
     strategy=Strategy.SEQUENTIAL,
-    termination=(TextMentionTermination("PIPELINE_COMPLETE") | MaxMessageTermination(200)),
+    termination=(
+        TextMentionTermination("PIPELINE_COMPLETE") | MaxMessageTermination(200)
+    ),
 )
 
 

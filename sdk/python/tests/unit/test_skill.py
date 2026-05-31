@@ -315,7 +315,8 @@ class TestCrossSkillResolution:
         skill_dir = tmp_path / "lonely-skill"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text(
-            "---\nname: lonely-skill\ndescription: test\n---\nInvoke the nonexistent-skill skill."
+            "---\nname: lonely-skill\ndescription: test\n---\n"
+            "Invoke the nonexistent-skill skill."
         )
         agent = skill(skill_dir, model="openai/gpt-4o")
         # Unresolved refs are silently skipped
@@ -336,7 +337,9 @@ class TestCrossSkillResolution:
         (child / "SKILL.md").write_text(
             "---\nname: child-skill\n---\n# Child\nUse the grandchild-skill skill.\n"
         )
-        (grandchild / "SKILL.md").write_text("---\nname: grandchild-skill\n---\n# Grandchild\n")
+        (grandchild / "SKILL.md").write_text(
+            "---\nname: grandchild-skill\n---\n# Grandchild\n"
+        )
 
         agent = skill(parent, model="openai/gpt-4o")
         child_ref = agent._framework_config["crossSkillRefs"]["child-skill"]
@@ -369,8 +372,8 @@ def _make_large_skill_dir(tmp_path):
         content = f"## {name}\n\nThis section covers {name.lower()}.\n\n"
         for i in range(100):
             content += (
-                f"### Rule {i + 1} for {name}\n\n"
-                f"When handling {name.lower()} scenario {i + 1}, validate inputs, "
+                f"### Rule {i+1} for {name}\n\n"
+                f"When handling {name.lower()} scenario {i+1}, validate inputs, "
                 f"check permissions, execute operation, verify result.\n\n"
             )
         sections.append(content)
@@ -378,7 +381,9 @@ def _make_large_skill_dir(tmp_path):
     body = preamble + "\n" + "\n".join(sections)
     assert len(body) > 50000, f"Body too short: {len(body)}"
 
-    skill_md = "---\nname: large-skill\ndescription: A large skill.\n---\n" + body
+    skill_md = (
+        "---\nname: large-skill\ndescription: A large skill.\n---\n" + body
+    )
     (skill_dir / "SKILL.md").write_text(skill_md)
     # Add a resource file
     refs_dir = skill_dir / "references"
@@ -538,7 +543,9 @@ class TestSkillParams:
             "---\nname: extra-skill\ndescription: test\n"
             "params:\n  rounds:\n    type: integer\n    default: 3\n---\n# Body"
         )
-        agent = skill(skill_dir, model="openai/gpt-4o", params={"rounds": 5, "verbose": True})
+        agent = skill(
+            skill_dir, model="openai/gpt-4o", params={"rounds": 5, "verbose": True}
+        )
         assert agent._skill_params == {"rounds": 5, "verbose": True}
 
     def test_merged_params_uses_defaults_when_no_override(self, tmp_path):
@@ -590,7 +597,9 @@ class TestFormatSkillParams:
     def test_format_prompt_with_multiple_params(self):
         from agentspan.agents.skill import format_prompt_with_params
 
-        result = format_prompt_with_params("Review this code", {"rounds": 5, "style": "verbose"})
+        result = format_prompt_with_params(
+            "Review this code", {"rounds": 5, "style": "verbose"}
+        )
         assert "rounds: 5" in result
         assert "style: verbose" in result
         assert "[Skill Parameters]" in result

@@ -28,7 +28,6 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # ── Math tools ────────────────────────────────────────────────────────────────
 
-
 @tool
 def square_root(number: float) -> str:
     """Calculate the square root of a non-negative number."""
@@ -40,7 +39,7 @@ def square_root(number: float) -> str:
 @tool
 def power(base: float, exponent: float) -> str:
     """Raise a base number to an exponent (base ** exponent)."""
-    result = base**exponent
+    result = base ** exponent
     return f"{base}^{exponent} = {result}"
 
 
@@ -53,7 +52,6 @@ def factorial(n: int) -> str:
 
 
 # ── String tools ──────────────────────────────────────────────────────────────
-
 
 @tool
 def count_words(text: str) -> str:
@@ -75,7 +73,6 @@ def title_case(text: str) -> str:
 
 
 # ── Date tools ────────────────────────────────────────────────────────────────
-
 
 @tool
 def current_date() -> str:
@@ -113,17 +110,11 @@ def day_of_week(date_str: str) -> str:
 
 all_tools = [
     # Math
-    square_root,
-    power,
-    factorial,
+    square_root, power, factorial,
     # String
-    count_words,
-    reverse_string,
-    title_case,
+    count_words, reverse_string, title_case,
     # Date
-    current_date,
-    days_until,
-    day_of_week,
+    current_date, days_until, day_of_week,
 ]
 
 graph = create_agent(llm, tools=all_tools, name="tool_categories_agent")

@@ -40,23 +40,19 @@ class State(TypedDict):
 
 def agent_pro(state: State) -> State:
     """Argues in favour of the topic."""
-    previous = "\n".join(f"{t['speaker']}: {t['argument']}" for t in state.get("turns", []))
+    previous = "\n".join(
+        f"{t['speaker']}: {t['argument']}" for t in state.get("turns", [])
+    )
     prompt = f"Topic: {state['topic']}"
     if previous:
-        prompt += (
-            f"\n\nDebate so far:\n{previous}\n\nNow make your argument in favour (2-3 sentences)."
-        )
+        prompt += f"\n\nDebate so far:\n{previous}\n\nNow make your argument in favour (2-3 sentences)."
     else:
         prompt += "\n\nMake your opening argument in favour of this topic (2-3 sentences)."
 
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content="You are a persuasive debater arguing IN FAVOUR of the given topic. Be concise and compelling."
-            ),
-            HumanMessage(content=prompt),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(content="You are a persuasive debater arguing IN FAVOUR of the given topic. Be concise and compelling."),
+        HumanMessage(content=prompt),
+    ])
     turns = list(state.get("turns", []))
     turns.append({"speaker": "PRO", "argument": response.content.strip()})
     return {"turns": turns}
@@ -64,17 +60,15 @@ def agent_pro(state: State) -> State:
 
 def agent_con(state: State) -> State:
     """Argues against the topic."""
-    previous = "\n".join(f"{t['speaker']}: {t['argument']}" for t in state.get("turns", []))
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content="You are a persuasive debater arguing AGAINST the given topic. Be concise and direct."
-            ),
-            HumanMessage(
-                content=f"Topic: {state['topic']}\n\nDebate so far:\n{previous}\n\nMake your counter-argument (2-3 sentences)."
-            ),
-        ]
+    previous = "\n".join(
+        f"{t['speaker']}: {t['argument']}" for t in state.get("turns", [])
     )
+    response = llm.invoke([
+        SystemMessage(content="You are a persuasive debater arguing AGAINST the given topic. Be concise and direct."),
+        HumanMessage(
+            content=f"Topic: {state['topic']}\n\nDebate so far:\n{previous}\n\nMake your counter-argument (2-3 sentences)."
+        ),
+    ])
     turns = list(state.get("turns", []))
     turns.append({"speaker": "CON", "argument": response.content.strip()})
     return {"turns": turns, "round": state.get("round", 0) + 1}
@@ -82,20 +76,20 @@ def agent_con(state: State) -> State:
 
 def judge(state: State) -> State:
     """Evaluate the debate and declare a winner with reasoning."""
-    transcript = "\n\n".join(f"{t['speaker']}: {t['argument']}" for t in state.get("turns", []))
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are an impartial debate judge. Review the debate transcript and:\n"
-                    "1. Identify which side made the stronger arguments\n"
-                    "2. Declare the winner (PRO or CON) and explain why in 2-3 sentences\n"
-                    "3. Note any logical fallacies or weak points"
-                )
-            ),
-            HumanMessage(content=f"Debate topic: {state['topic']}\n\nTranscript:\n{transcript}"),
-        ]
+    transcript = "\n\n".join(
+        f"{t['speaker']}: {t['argument']}" for t in state.get("turns", [])
     )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are an impartial debate judge. Review the debate transcript and:\n"
+                "1. Identify which side made the stronger arguments\n"
+                "2. Declare the winner (PRO or CON) and explain why in 2-3 sentences\n"
+                "3. Note any logical fallacies or weak points"
+            )
+        ),
+        HumanMessage(content=f"Debate topic: {state['topic']}\n\nTranscript:\n{transcript}"),
+    ])
     return {"verdict": response.content.strip()}
 
 
@@ -120,8 +114,8 @@ graph = builder.compile(name="debate_agents")
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "Artificial intelligence will create more jobs than it destroys.",
+        graph,
+        "Artificial intelligence will create more jobs than it destroys.",
         )
         print(f"Status: {result.status}")
         result.print_result()

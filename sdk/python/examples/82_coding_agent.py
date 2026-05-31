@@ -41,10 +41,10 @@ from settings import settings
 # ---------------------------------------------------------------------------
 
 SESSION_FILE = Path("/tmp/agentspan_coding_agent.session")
-_DEFAULT_SHELL_TIMEOUT = 30  # seconds per shell command
-_MAX_FILE_BYTES = 200_000  # 200 KB — refuse larger files in read_file
-_MAX_SHELL_OUTPUT = 8_000  # truncate shell output shown to the LLM
-_MAX_SHELL_DISPLAY = 2_000  # truncate shell output shown in the terminal
+_DEFAULT_SHELL_TIMEOUT = 30   # seconds per shell command
+_MAX_FILE_BYTES = 200_000     # 200 KB — refuse larger files in read_file
+_MAX_SHELL_OUTPUT = 8_000     # truncate shell output shown to the LLM
+_MAX_SHELL_DISPLAY = 2_000    # truncate shell output shown in the terminal
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +269,6 @@ def _run_repl(
 # Agent builder
 # ---------------------------------------------------------------------------
 
-
 def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT) -> Agent:
     """Build the coding agent. All tools close over working_dir and shell_timeout."""
 
@@ -357,7 +356,6 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT) -
     def search_in_files(regex: str, path: str = ".", file_glob: str = "**/*") -> str:
         """Search for a regex pattern in file contents. Returns file:line: matching_line entries."""
         import re as _re
-
         base = Path(path) if os.path.isabs(path) else Path(working_dir) / path
         try:
             compiled = _re.compile(regex)
@@ -402,15 +400,8 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT) -
             )
             combined = (proc.stdout + proc.stderr).strip()
             if len(combined) > _MAX_SHELL_OUTPUT:
-                combined = (
-                    combined[:_MAX_SHELL_OUTPUT]
-                    + f"\n... (truncated, {len(combined):,} chars total)"
-                )
-            return (
-                f"[exit {proc.returncode}]\n{combined}"
-                if combined
-                else f"[exit {proc.returncode}] (no output)"
-            )
+                combined = combined[:_MAX_SHELL_OUTPUT] + f"\n... (truncated, {len(combined):,} chars total)"
+            return f"[exit {proc.returncode}]\n{combined}" if combined else f"[exit {proc.returncode}] (no output)"
         except subprocess.TimeoutExpired:
             return f"Error: command timed out after {shell_timeout}s."
         except Exception as exc:
@@ -537,7 +528,10 @@ def main() -> None:
                 print("\nForce exit.")
                 raise SystemExit(1)
             _stop_pending[0] = True
-            print("\n\nCtrl+C received — stopping agent gracefully (Ctrl+C again to force exit)...")
+            print(
+                "\n\nCtrl+C received — stopping agent gracefully "
+                "(Ctrl+C again to force exit)..."
+            )
             handle.stop()
 
         signal.signal(signal.SIGINT, _sigint)

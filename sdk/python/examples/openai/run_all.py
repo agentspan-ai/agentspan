@@ -104,9 +104,8 @@ def _find_tasks_by_type(wf_detail: Dict[str, Any], task_type: str) -> List[Dict]
 
 def _find_tasks_by_name_pattern(wf_detail: Dict[str, Any], pattern: str) -> List[Dict]:
     """Find tasks whose reference name matches a regex pattern."""
-    return [
-        t for t in wf_detail.get("tasks", []) if re.search(pattern, t.get("referenceTaskName", ""))
-    ]
+    return [t for t in wf_detail.get("tasks", [])
+            if re.search(pattern, t.get("referenceTaskName", ""))]
 
 
 def _tool_was_called(wf_detail: Dict[str, Any], tool_name: str) -> bool:
@@ -126,7 +125,6 @@ def _tool_was_called(wf_detail: Dict[str, Any], tool_name: str) -> bool:
 # Example definitions
 # ---------------------------------------------------------------------------
 
-
 def ex01_basic_agent(runtime: AgentRuntime) -> ExampleResult:
     """01 — Basic agent, no tools."""
     r = ExampleResult(name="01_basic_agent")
@@ -136,9 +134,7 @@ def ex01_basic_agent(runtime: AgentRuntime) -> ExampleResult:
         instructions="You are a friendly assistant. Keep your responses concise and helpful.",
         model=settings.llm_model,
     )
-    result = runtime.run(
-        agent, "Say hello and tell me a fun fact about the Python programming language."
-    )
+    result = runtime.run(agent, "Say hello and tell me a fun fact about the Python programming language.")
     r.execution_id = result.execution_id
     r.status = result.status
 
@@ -156,11 +152,8 @@ def ex01_basic_agent(runtime: AgentRuntime) -> ExampleResult:
 
     # Check: no tool calls (basic agent)
     wf = _get_workflow_detail(runtime, result.execution_id)
-    simple_tasks = [
-        t
-        for t in wf.get("tasks", [])
-        if t.get("taskType") == "SIMPLE" and "format_report" not in t.get("referenceTaskName", "")
-    ]
+    simple_tasks = [t for t in wf.get("tasks", [])
+                    if t.get("taskType") == "SIMPLE" and "format_report" not in t.get("referenceTaskName", "")]
     # Should only have LLM task(s), no SIMPLE worker tasks
     worker_tasks = _find_tasks_by_type(wf, "SIMPLE")
     if not worker_tasks:
@@ -191,17 +184,8 @@ def ex02_function_tools(runtime: AgentRuntime) -> ExampleResult:
     def calculate(expression: str) -> str:
         """Evaluate a mathematical expression and return the result."""
         import math
-
-        safe_builtins = {
-            "abs": abs,
-            "round": round,
-            "min": min,
-            "max": max,
-            "sqrt": math.sqrt,
-            "pow": pow,
-            "pi": math.pi,
-            "e": math.e,
-        }
+        safe_builtins = {"abs": abs, "round": round, "min": min, "max": max,
+                         "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e}
         try:
             return str(eval(expression, {"__builtins__": {}}, safe_builtins))
         except Exception as e:
@@ -210,12 +194,8 @@ def ex02_function_tools(runtime: AgentRuntime) -> ExampleResult:
     @function_tool
     def lookup_population(city: str) -> str:
         """Look up the population of a city."""
-        populations = {
-            "new york": "8.3 million",
-            "san francisco": "874,000",
-            "miami": "442,000",
-            "london": "8.8 million",
-        }
+        populations = {"new york": "8.3 million", "san francisco": "874,000",
+                       "miami": "442,000", "london": "8.8 million"}
         return populations.get(city.lower(), "Unknown")
 
     agent = Agent(
@@ -285,9 +265,7 @@ def ex03_structured_output(runtime: AgentRuntime) -> ExampleResult:
         output_type=MovieList,
         model_settings=ModelSettings(temperature=0.3, max_tokens=1000),
     )
-    result = runtime.run(
-        agent, "Recommend 3 sci-fi movies that explore the concept of artificial intelligence."
-    )
+    result = runtime.run(agent, "Recommend 3 sci-fi movies that explore the concept of artificial intelligence.")
     r.execution_id = result.execution_id
     r.status = result.status
 
@@ -347,24 +325,9 @@ def ex04_handoffs(runtime: AgentRuntime) -> ExampleResult:
         products = {"laptop pro": "Laptop Pro X1 — $1,299"}
         return products.get(product_name.lower(), f"Product '{product_name}' not found")
 
-    order_agent = Agent(
-        name="order_specialist",
-        instructions="Handle order inquiries.",
-        model=settings.llm_model,
-        tools=[check_order_status],
-    )
-    refund_agent = Agent(
-        name="refund_specialist",
-        instructions="Handle refund requests. Use process_refund tool.",
-        model=settings.llm_model,
-        tools=[process_refund],
-    )
-    sales_agent = Agent(
-        name="sales_specialist",
-        instructions="Handle product questions.",
-        model=settings.llm_model,
-        tools=[get_product_info],
-    )
+    order_agent = Agent(name="order_specialist", instructions="Handle order inquiries.", model=settings.llm_model, tools=[check_order_status])
+    refund_agent = Agent(name="refund_specialist", instructions="Handle refund requests. Use process_refund tool.", model=settings.llm_model, tools=[process_refund])
+    sales_agent = Agent(name="sales_specialist", instructions="Handle product questions.", model=settings.llm_model, tools=[get_product_info])
 
     triage_agent = Agent(
         name="customer_service_triage",
@@ -373,9 +336,7 @@ def ex04_handoffs(runtime: AgentRuntime) -> ExampleResult:
         handoffs=[order_agent, refund_agent, sales_agent],
     )
 
-    result = runtime.run(
-        triage_agent, "I'd like a refund for order ORD-002, the product arrived damaged."
-    )
+    result = runtime.run(triage_agent, "I'd like a refund for order ORD-002, the product arrived damaged.")
     r.execution_id = result.execution_id
     r.status = result.status
 
@@ -435,15 +396,10 @@ def ex05_guardrails(runtime: AgentRuntime) -> ExampleResult:
     def check_for_pii(ctx, agent, input_text) -> GuardrailFunctionOutput:
         """Input guardrail: check for sensitive PII."""
         import re as _re
-
         if _re.search(r"\b\d{3}-\d{2}-\d{4}\b", input_text):
-            return GuardrailFunctionOutput(
-                output_info={"reason": "SSN detected"}, tripwire_triggered=True
-            )
+            return GuardrailFunctionOutput(output_info={"reason": "SSN detected"}, tripwire_triggered=True)
         if _re.search(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b", input_text):
-            return GuardrailFunctionOutput(
-                output_info={"reason": "CC detected"}, tripwire_triggered=True
-            )
+            return GuardrailFunctionOutput(output_info={"reason": "CC detected"}, tripwire_triggered=True)
         return GuardrailFunctionOutput(output_info={"reason": "No PII"}, tripwire_triggered=False)
 
     def check_output_safety(ctx, agent, output) -> GuardrailFunctionOutput:
@@ -451,9 +407,7 @@ def ex05_guardrails(runtime: AgentRuntime) -> ExampleResult:
         output_text = str(output).lower()
         for phrase in ["internal system", "database password", "api key", "secret token"]:
             if phrase in output_text:
-                return GuardrailFunctionOutput(
-                    output_info={"reason": f"Forbidden: {phrase}"}, tripwire_triggered=True
-                )
+                return GuardrailFunctionOutput(output_info={"reason": f"Forbidden: {phrase}"}, tripwire_triggered=True)
         return GuardrailFunctionOutput(output_info={"reason": "Safe"}, tripwire_triggered=False)
 
     agent = Agent(
@@ -491,13 +445,9 @@ def ex05_guardrails(runtime: AgentRuntime) -> ExampleResult:
         r.checks.append("get_account_balance not called (LLM may have known)")
 
     # Guardrail tasks may be SIMPLE workers or INLINE
-    guardrail_tasks = [
-        t
-        for t in wf.get("tasks", [])
-        if "guardrail" in t.get("referenceTaskName", "").lower()
-        or "check_for_pii" in t.get("referenceTaskName", "")
-        or "check_output" in t.get("referenceTaskName", "")
-    ]
+    guardrail_tasks = [t for t in wf.get("tasks", []) if "guardrail" in t.get("referenceTaskName", "").lower()
+                       or "check_for_pii" in t.get("referenceTaskName", "")
+                       or "check_output" in t.get("referenceTaskName", "")]
     if guardrail_tasks:
         r.checks.append(f"guardrail tasks found ({len(guardrail_tasks)})")
     else:
@@ -524,9 +474,7 @@ def ex06_model_settings(runtime: AgentRuntime) -> ExampleResult:
         model_settings=ModelSettings(temperature=0.1, max_tokens=300),
     )
 
-    result1 = runtime.run(
-        creative_agent, "Write a two-sentence story about a robot learning to paint."
-    )
+    result1 = runtime.run(creative_agent, "Write a two-sentence story about a robot learning to paint.")
     result2 = runtime.run(precise_agent, "Review this Python code: `data = eval(user_input)`")
 
     # Use the second workflow as primary
@@ -554,10 +502,7 @@ def ex06_model_settings(runtime: AgentRuntime) -> ExampleResult:
         r.failures.append("precise agent no output")
 
     # Verify temperature was applied by checking workflow input/LLM config
-    for execution_id, label, expected_temp in [
-        (result1.execution_id, "creative", 0.9),
-        (result2.execution_id, "precise", 0.1),
-    ]:
+    for execution_id, label, expected_temp in [(result1.execution_id, "creative", 0.9), (result2.execution_id, "precise", 0.1)]:
         try:
             wf = _get_workflow_detail(runtime, execution_id)
             llm_tasks = _find_tasks_by_type(wf, "LLM_CHAT_COMPLETE")
@@ -666,52 +611,22 @@ def ex08_agent_as_tool(runtime: AgentRuntime) -> ExampleResult:
     @function_tool
     def extract_keywords(text: str) -> str:
         """Extract key topics and keywords from text."""
-        stop_words = {
-            "the",
-            "a",
-            "an",
-            "is",
-            "are",
-            "was",
-            "in",
-            "on",
-            "to",
-            "for",
-            "of",
-            "and",
-            "or",
-        }
+        stop_words = {"the", "a", "an", "is", "are", "was", "in", "on", "to", "for", "of", "and", "or"}
         words = text.lower().split()
-        keywords = [
-            w.strip(".,!?") for w in words if w.strip(".,!?") not in stop_words and len(w) > 3
-        ]
+        keywords = [w.strip(".,!?") for w in words if w.strip(".,!?") not in stop_words and len(w) > 3]
         unique = list(dict.fromkeys(keywords))[:10]
         return f"Keywords: {', '.join(unique)}"
 
-    sentiment_agent = Agent(
-        name="sentiment_analyzer",
-        instructions="Analyze text sentiment using the tool.",
-        model=settings.llm_model,
-        tools=[analyze_sentiment],
-    )
-    keyword_agent = Agent(
-        name="keyword_extractor",
-        instructions="Extract keywords using the tool.",
-        model=settings.llm_model,
-        tools=[extract_keywords],
-    )
+    sentiment_agent = Agent(name="sentiment_analyzer", instructions="Analyze text sentiment using the tool.", model=settings.llm_model, tools=[analyze_sentiment])
+    keyword_agent = Agent(name="keyword_extractor", instructions="Extract keywords using the tool.", model=settings.llm_model, tools=[extract_keywords])
 
     manager = Agent(
         name="text_analysis_manager",
         instructions="You are a text analysis manager. Use sentiment analyzer and keyword extractor, then synthesize.",
         model=settings.llm_model,
         tools=[
-            sentiment_agent.as_tool(
-                tool_name="sentiment_analyzer", tool_description="Analyze sentiment."
-            ),
-            keyword_agent.as_tool(
-                tool_name="keyword_extractor", tool_description="Extract keywords."
-            ),
+            sentiment_agent.as_tool(tool_name="sentiment_analyzer", tool_description="Analyze sentiment."),
+            keyword_agent.as_tool(tool_name="keyword_extractor", tool_description="Extract keywords."),
         ],
     )
 
@@ -755,9 +670,7 @@ def ex09_dynamic_instructions(runtime: AgentRuntime) -> ExampleResult:
     def get_dynamic_instructions(ctx, agent) -> str:
         hour = datetime.now().hour
         tone = "energetic" if hour < 12 else "focused" if hour < 17 else "calm"
-        return (
-            f"You are a personal assistant. Respond in a {tone} tone. Use tools when appropriate."
-        )
+        return f"You are a personal assistant. Respond in a {tone} tone. Use tools when appropriate."
 
     @function_tool
     def get_todo_list() -> str:
@@ -776,9 +689,7 @@ def ex09_dynamic_instructions(runtime: AgentRuntime) -> ExampleResult:
         tools=[get_todo_list, add_todo],
     )
 
-    result = runtime.run(
-        agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority."
-    )
+    result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
     r.execution_id = result.execution_id
     r.status = result.status
 
@@ -826,20 +737,8 @@ def ex10_multi_model(runtime: AgentRuntime) -> ExampleResult:
         """Generate a code sample."""
         return f"# {topic} in {language}\nimport requests\nresp = requests.post('/auth/login')"
 
-    doc_specialist = Agent(
-        name="doc_specialist",
-        instructions="Search docs and provide answers.",
-        model=settings.secondary_llm_model,
-        tools=[search_docs],
-        model_settings=ModelSettings(temperature=0.2),
-    )
-    code_specialist = Agent(
-        name="code_specialist",
-        instructions="Generate code examples.",
-        model=settings.secondary_llm_model,
-        tools=[generate_code_sample],
-        model_settings=ModelSettings(temperature=0.3),
-    )
+    doc_specialist = Agent(name="doc_specialist", instructions="Search docs and provide answers.", model=settings.secondary_llm_model, tools=[search_docs], model_settings=ModelSettings(temperature=0.2))
+    code_specialist = Agent(name="code_specialist", instructions="Generate code examples.", model=settings.secondary_llm_model, tools=[generate_code_sample], model_settings=ModelSettings(temperature=0.3))
 
     triage = Agent(
         name="triage",
@@ -949,11 +848,7 @@ def main() -> int:
 
     with AgentRuntime() as runtime:
         for example_fn in EXAMPLES:
-            name = (
-                example_fn.__doc__.split("—")[0].strip()
-                if example_fn.__doc__
-                else example_fn.__name__
-            )
+            name = example_fn.__doc__.split("—")[0].strip() if example_fn.__doc__ else example_fn.__name__
             print(f"Running {name} ...", end=" ", flush=True)
             t0 = time.time()
             try:

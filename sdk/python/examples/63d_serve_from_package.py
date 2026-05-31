@@ -34,7 +34,6 @@ from settings import settings
 
 # ── Option 2: Mix explicit agents with package discovery ─────────────
 
-
 @tool
 def health_check() -> str:
     """Perform a basic health check.

@@ -43,7 +43,9 @@ class TestDeploy:
         a1 = Agent(name="a1", model="openai/gpt-4o")
         a2 = Agent(name="a2", model="openai/gpt-4o")
         a3 = Agent(name="a3", model="openai/gpt-4o")
-        with patch.object(rt, "_deploy_via_server", side_effect=["a1_wf", "a2_wf", "a3_wf"]):
+        with patch.object(
+            rt, "_deploy_via_server", side_effect=["a1_wf", "a2_wf", "a3_wf"]
+        ):
             results = rt.deploy(a1, a2, a3)
         assert len(results) == 3
         assert [r.registered_name for r in results] == ["a1_wf", "a2_wf", "a3_wf"]
@@ -68,7 +70,9 @@ class TestDeploy:
             "agentspan.agents.runtime.discovery.discover_agents",
             return_value=[discovered],
         ):
-            with patch.object(rt, "_deploy_via_server", side_effect=["ex_wf", "disc_wf"]):
+            with patch.object(
+                rt, "_deploy_via_server", side_effect=["ex_wf", "disc_wf"]
+            ):
                 results = rt.deploy(explicit, packages=["myapp"])
         assert len(results) == 2
 
@@ -93,7 +97,9 @@ class TestServe:
         rt = _make_runtime()
         agent = Agent(name="bot", model="openai/gpt-4o")
         with patch.object(rt, "_register_workers") as mock_reg:
-            with patch.object(rt, "_collect_worker_names", return_value={"bot_tool"}):
+            with patch.object(
+                rt, "_collect_worker_names", return_value={"bot_tool"}
+            ):
                 with patch.object(rt._worker_manager, "start"):
                     rt.serve(agent, blocking=False)
         mock_reg.assert_called_once_with(agent)
@@ -161,7 +167,9 @@ class TestRunByName:
                             status="COMPLETED",
                             reason=None,
                         )
-                        with patch.object(rt, "_normalize_output", return_value={"result": "ok"}):
+                        with patch.object(
+                            rt, "_normalize_output", return_value={"result": "ok"}
+                        ):
                             try:
                                 rt.run(agent, "hello")
                             except Exception:
@@ -181,7 +189,9 @@ class TestRunByName:
         mock_handle = MagicMock(execution_id="wf-123")
         mock_stream_iter = iter([])
         with patch.object(rt, "_start_by_name", return_value=mock_handle):
-            with patch.object(rt, "_stream_workflow", return_value=mock_stream_iter):
+            with patch.object(
+                rt, "_stream_workflow", return_value=mock_stream_iter
+            ):
                 result = rt.stream("my_workflow", "hello")
         assert result.handle is mock_handle
 

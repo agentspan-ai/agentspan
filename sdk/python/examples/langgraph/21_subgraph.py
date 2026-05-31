@@ -26,7 +26,6 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # ── Subgraph ──────────────────────────────────────────────────────────────────
 
-
 class AnalysisState(TypedDict):
     text: str
     sentiment: str
@@ -35,37 +34,27 @@ class AnalysisState(TypedDict):
 
 
 def analyze_sentiment(state: AnalysisState) -> AnalysisState:
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content="Classify the sentiment of the text. Return ONLY: positive, negative, or neutral."
-            ),
-            HumanMessage(content=state["text"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(content="Classify the sentiment of the text. Return ONLY: positive, negative, or neutral."),
+        HumanMessage(content=state["text"]),
+    ])
     return {"sentiment": response.content.strip().lower()}
 
 
 def extract_keywords(state: AnalysisState) -> AnalysisState:
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content="Extract 3-5 keywords from the text. Return a comma-separated list only."
-            ),
-            HumanMessage(content=state["text"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(content="Extract 3-5 keywords from the text. Return a comma-separated list only."),
+        HumanMessage(content=state["text"]),
+    ])
     keywords = [k.strip() for k in response.content.split(",")]
     return {"keywords": keywords}
 
 
 def summarize_text(state: AnalysisState) -> AnalysisState:
-    response = llm.invoke(
-        [
-            SystemMessage(content="Summarize this text in one sentence."),
-            HumanMessage(content=state["text"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(content="Summarize this text in one sentence."),
+        HumanMessage(content=state["text"]),
+    ])
     return {"summary": response.content.strip()}
 
 
@@ -81,7 +70,6 @@ analysis_subgraph = analysis_builder.compile()
 
 
 # ── Parent graph ──────────────────────────────────────────────────────────────
-
 
 class DocumentState(TypedDict):
     document: str

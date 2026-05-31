@@ -44,24 +44,9 @@ def main():
     def check_supplier_status(sku: str) -> dict:
         """Check supplier availability and lead times."""
         suppliers = {
-            "WIDGET-A": {
-                "supplier": "WidgetCorp",
-                "lead_time_days": 14,
-                "min_order": 1000,
-                "unit_cost": 2.50,
-            },
-            "WIDGET-B": {
-                "supplier": "WidgetCorp",
-                "lead_time_days": 21,
-                "min_order": 500,
-                "unit_cost": 4.75,
-            },
-            "GADGET-X": {
-                "supplier": "GadgetWorks",
-                "lead_time_days": 30,
-                "min_order": 200,
-                "unit_cost": 12.00,
-            },
+            "WIDGET-A": {"supplier": "WidgetCorp", "lead_time_days": 14, "min_order": 1000, "unit_cost": 2.50},
+            "WIDGET-B": {"supplier": "WidgetCorp", "lead_time_days": 21, "min_order": 500, "unit_cost": 4.75},
+            "GADGET-X": {"supplier": "GadgetWorks", "lead_time_days": 30, "min_order": 200, "unit_cost": 12.00},
         }
         return suppliers.get(sku.upper(), {"error": f"No supplier for SKU {sku}"})
 
@@ -83,20 +68,8 @@ def main():
         """Get all pending shipments in the system."""
         return {
             "shipments": [
-                {
-                    "id": "SHP-001",
-                    "sku": "WIDGET-A",
-                    "qty": 2000,
-                    "status": "in_transit",
-                    "eta": "2025-04-18",
-                },
-                {
-                    "id": "SHP-002",
-                    "sku": "GADGET-X",
-                    "qty": 500,
-                    "status": "processing",
-                    "eta": "2025-05-01",
-                },
+                {"id": "SHP-001", "sku": "WIDGET-A", "qty": 2000, "status": "in_transit", "eta": "2025-04-18"},
+                {"id": "SHP-002", "sku": "GADGET-X", "qty": 500, "status": "processing", "eta": "2025-05-01"},
             ],
         }
 
@@ -152,9 +125,9 @@ def main():
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-            coordinator,
-            "Give me a full supply chain status report. Check both warehouses, "
-            "identify any items below reorder points, and recommend restocking actions.",
+        coordinator,
+        "Give me a full supply chain status report. Check both warehouses, "
+        "identify any items below reorder points, and recommend restocking actions.",
         )
         print(f"Status: {result.status}")
         result.print_result()
@@ -167,6 +140,7 @@ def main():
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(coordinator)
+
 
 
 if __name__ == "__main__":

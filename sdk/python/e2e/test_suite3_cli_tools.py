@@ -217,7 +217,9 @@ def _assert_run_completed(result, step_name: str):
 
     output = result.output
     if isinstance(output, dict) and output.get("finishReason") == "TOOL_CALLS":
-        tool_diag = _tool_diagnostics(result.execution_id, {"cli_ls", "cli_mktemp", "cli_gh"})
+        tool_diag = _tool_diagnostics(
+            result.execution_id, {"cli_ls", "cli_mktemp", "cli_gh"}
+        )
         pytest.fail(
             f"[{step_name}] Run stalled at tool-calling stage — tools were "
             f"requested but did not return results.\n"
@@ -242,11 +244,16 @@ class TestSuite3CliTools:
         """Full CLI credential lifecycle — sequential steps with cleanup."""
         real_token = os.environ.get("GITHUB_TOKEN")
         if not real_token:
-            pytest.skip("GITHUB_TOKEN not set in environment — required for Suite 3 CLI tools test")
+            pytest.skip(
+                "GITHUB_TOKEN not set in environment — "
+                "required for Suite 3 CLI tools test"
+            )
 
         # Verify gh CLI is installed
         try:
-            subprocess.run(["gh", "--version"], capture_output=True, text=True, timeout=5)
+            subprocess.run(
+                ["gh", "--version"], capture_output=True, text=True, timeout=5
+            )
         except FileNotFoundError:
             pytest.skip("gh CLI not installed — required for Suite 3 CLI tools test")
 
@@ -271,7 +278,8 @@ class TestSuite3CliTools:
         result = runtime.run(agent, PROMPT_ALL_THREE, timeout=TIMEOUT)
 
         assert result.execution_id, (
-            f"[Step 3: No credential] No execution_id. {_run_diagnostic(result)}"
+            f"[Step 3: No credential] No execution_id. "
+            f"{_run_diagnostic(result)}"
         )
         assert result.status in ("COMPLETED", "FAILED", "TERMINATED"), (
             f"[Step 3: No credential] Expected terminal status, "
@@ -385,7 +393,8 @@ class TestSuite3CliTools:
         result_cd = runtime.run(whitelist_agent, PROMPT_CD, timeout=TIMEOUT)
 
         assert result_cd.execution_id, (
-            f"[Step 6: cd blocked] No execution_id. {_run_diagnostic(result_cd)}"
+            f"[Step 6: cd blocked] No execution_id. "
+            f"{_run_diagnostic(result_cd)}"
         )
         assert result_cd.status in ("COMPLETED", "FAILED", "TERMINATED"), (
             f"[Step 6: cd blocked] Expected terminal status, "

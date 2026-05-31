@@ -70,7 +70,8 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(graph)
         # CLI alternative:
-        # agentspan deploy --package examples.16g_secrets_framework_passthrough
+        # agentspan deploy --package examples.16g_credentials_framework_passthrough
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(graph)
+

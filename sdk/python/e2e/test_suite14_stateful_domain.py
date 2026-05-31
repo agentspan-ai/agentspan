@@ -137,7 +137,10 @@ def _find_scheduled_tasks(tasks):
 
 def _find_worker_tasks(tasks):
     """Find all SIMPLE (worker) tasks — the ones that need domain routing."""
-    return [t for t in tasks if t.get("taskType") == "SIMPLE"]
+    return [
+        t for t in tasks
+        if t.get("taskType") == "SIMPLE"
+    ]
 
 
 def _get_output_text(result):
@@ -202,11 +205,15 @@ class TestSuite14StatefulDomain:
         diag = _run_diagnostic(result)
 
         # 1. Execution completes
-        assert result.status == "COMPLETED", f"Expected COMPLETED, got {result.status}. {diag}"
+        assert result.status == "COMPLETED", (
+            f"Expected COMPLETED, got {result.status}. {diag}"
+        )
 
         # 2. taskToDomain is set (stateful=True means domain assigned)
         ttd = _get_task_to_domain(result.execution_id)
-        assert ttd, f"taskToDomain is empty — stateful agent should have domain mapping. {diag}"
+        assert ttd, (
+            f"taskToDomain is empty — stateful agent should have domain mapping. {diag}"
+        )
 
         # 3. echo_tool task is COMPLETED with matching domain
         all_tasks = _get_all_tasks(result.execution_id)
@@ -243,7 +250,6 @@ class TestSuite14StatefulDomain:
         The stop_when function checks for a marker in the output.
         Validates the stop_when worker task is COMPLETED with the correct domain.
         """
-
         def _should_stop(context, **kwargs):
             result = context.get("result", "")
             return "ECHO:" in result
@@ -254,7 +260,8 @@ class TestSuite14StatefulDomain:
             stateful=True,
             max_turns=5,
             instructions=(
-                "Call echo_tool with message='stop_test'. Then report the tool's response."
+                "Call echo_tool with message='stop_test'. "
+                "Then report the tool's response."
             ),
             tools=[echo_tool],
             stop_when=_should_stop,
@@ -262,13 +269,16 @@ class TestSuite14StatefulDomain:
         result = fresh_runtime.run(agent, "Call echo_tool with stop_test", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.status == "COMPLETED", f"Expected COMPLETED, got {result.status}. {diag}"
+        assert result.status == "COMPLETED", (
+            f"Expected COMPLETED, got {result.status}. {diag}"
+        )
 
         # Verify stop_when task executed
         all_tasks = _get_all_tasks(result.execution_id)
         stop_tasks = _find_tasks_by_type(all_tasks, "stop_when")
         assert stop_tasks, (
-            f"No stop_when task found. Task names: {[t.get('taskDefName') for t in all_tasks]}"
+            f"No stop_when task found. "
+            f"Task names: {[t.get('taskDefName') for t in all_tasks]}"
         )
 
         # At least one stop_when task should be COMPLETED
@@ -333,7 +343,9 @@ class TestSuite14StatefulDomain:
         result = fresh_runtime.run(swarm, "Execute the swarm workflow", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.status == "COMPLETED", f"Expected COMPLETED, got {result.status}. {diag}"
+        assert result.status == "COMPLETED", (
+            f"Expected COMPLETED, got {result.status}. {diag}"
+        )
 
         # Verify domain is set
         ttd = _get_task_to_domain(result.execution_id)
@@ -345,7 +357,8 @@ class TestSuite14StatefulDomain:
         # handoff_check should exist and be COMPLETED
         handoff_tasks = _find_tasks_by_type(all_tasks, "handoff_check")
         assert handoff_tasks, (
-            f"No handoff_check task found. Task names: {[t.get('taskDefName') for t in all_tasks]}"
+            f"No handoff_check task found. "
+            f"Task names: {[t.get('taskDefName') for t in all_tasks]}"
         )
         completed_handoffs = [t for t in handoff_tasks if t["status"] == "COMPLETED"]
         assert completed_handoffs, (
@@ -392,7 +405,9 @@ class TestSuite14StatefulDomain:
         result = fresh_runtime.run(agent, "Call both tools", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.status == "COMPLETED", f"Expected COMPLETED, got {result.status}. {diag}"
+        assert result.status == "COMPLETED", (
+            f"Expected COMPLETED, got {result.status}. {diag}"
+        )
 
         # Verify domain is set
         ttd = _get_task_to_domain(result.execution_id)
@@ -452,7 +467,8 @@ class TestSuite14StatefulDomain:
                 stateful=True,
                 max_turns=3,
                 instructions=(
-                    "Call echo_tool with message='concurrent_test'. Respond with the tool result."
+                    "Call echo_tool with message='concurrent_test'. "
+                    "Respond with the tool result."
                 ),
                 tools=[echo_tool],
             )
@@ -483,7 +499,8 @@ class TestSuite14StatefulDomain:
         domains_1 = set(ttd_1.values())
         domains_2 = set(ttd_2.values())
         assert domains_1.isdisjoint(domains_2), (
-            f"Concurrent runs should have different domains. Run 1: {domains_1}, Run 2: {domains_2}"
+            f"Concurrent runs should have different domains. "
+            f"Run 1: {domains_1}, Run 2: {domains_2}"
         )
 
         # No stuck tasks in either
@@ -508,24 +525,33 @@ class TestSuite14StatefulDomain:
             model=model,
             # stateful=False is the default — explicitly NOT setting it
             max_turns=3,
-            instructions=("Call echo_tool with message='non_stateful'. Respond with the result."),
+            instructions=(
+                "Call echo_tool with message='non_stateful'. "
+                "Respond with the result."
+            ),
             tools=[echo_tool],
         )
         result = fresh_runtime.run(agent, "Call echo_tool", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.status == "COMPLETED", f"Expected COMPLETED, got {result.status}. {diag}"
+        assert result.status == "COMPLETED", (
+            f"Expected COMPLETED, got {result.status}. {diag}"
+        )
 
         # taskToDomain should be empty for non-stateful
         ttd = _get_task_to_domain(result.execution_id)
-        assert not ttd, f"Non-stateful agent should have empty taskToDomain. Got: {ttd}"
+        assert not ttd, (
+            f"Non-stateful agent should have empty taskToDomain. Got: {ttd}"
+        )
 
         # echo_tool tasks should have no domain
         all_tasks = _get_all_tasks(result.execution_id)
         echo_tasks = _find_tasks_by_type(all_tasks, "echo_tool")
         assert echo_tasks, "No echo_tool task found"
         for t in echo_tasks:
-            assert t["status"] == "COMPLETED", f"echo_tool status={t['status']}"
+            assert t["status"] == "COMPLETED", (
+                f"echo_tool status={t['status']}"
+            )
             # Domain should be absent or empty
             task_domain = t.get("domain")
             assert not task_domain, (

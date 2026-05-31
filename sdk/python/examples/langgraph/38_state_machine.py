@@ -44,36 +44,27 @@ class OrderState(TypedDict):
 
 def _log(state: OrderState, status: str, note: str) -> dict:
     history = list(state.get("status_history", []))
-    history.append(
-        {
-            "status": status,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-            "note": note,
-        }
-    )
+    history.append({
+        "status": status,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "note": note,
+    })
     return {"current_status": status, "status_history": history}
 
 
 def validate_order(state: OrderState) -> OrderState:
     items = state.get("items", [])
     if not items or not state.get("customer"):
-        return {
-            **_log(state, "VALIDATION_FAILED", "Missing items or customer"),
-            "tracking_number": "",
-        }
+        return {**_log(state, "VALIDATION_FAILED", "Missing items or customer"), "tracking_number": ""}
     return _log(state, "VALIDATED", f"Order contains {len(items)} item(s)")
 
 
 def payment_processing(state: OrderState) -> OrderState:
     # Simulate payment check via LLM (would be a real payment gateway call)
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content="Simulate a payment approval. Respond with APPROVED or DECLINED."
-            ),
-            HumanMessage(content=f"Customer: {state['customer']}, Items: {state['items']}"),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(content="Simulate a payment approval. Respond with APPROVED or DECLINED."),
+        HumanMessage(content=f"Customer: {state['customer']}, Items: {state['items']}"),
+    ])
     if "DECLINED" in response.content.upper():
         return _log(state, "PAYMENT_FAILED", "Payment declined")
     return _log(state, "PAYMENT_APPROVED", "Payment processed successfully")
@@ -88,11 +79,7 @@ def prepare_shipment(state: OrderState) -> OrderState:
 
 
 def ship_order(state: OrderState) -> OrderState:
-    return _log(
-        state,
-        "SHIPPED",
-        f"Package dispatched to {state.get('shipping_address', 'customer address')}",
-    )
+    return _log(state, "SHIPPED", f"Package dispatched to {state.get('shipping_address', 'customer address')}")
 
 
 def deliver_order(state: OrderState) -> OrderState:
@@ -101,7 +88,8 @@ def deliver_order(state: OrderState) -> OrderState:
 
 def generate_summary(state: OrderState) -> OrderState:
     history_text = "\n".join(
-        f"  [{e['timestamp']}] {e['status']}: {e['note']}" for e in state.get("status_history", [])
+        f"  [{e['timestamp']}] {e['status']}: {e['note']}"
+        for e in state.get("status_history", [])
     )
     summary = (
         f"Order {state['order_id']} — Final Status: {state['current_status']}\n"
@@ -130,12 +118,8 @@ builder.add_node("deliver", deliver_order)
 builder.add_node("summarize", generate_summary)
 
 builder.add_edge(START, "validate")
-builder.add_conditional_edges(
-    "validate", route_after_validation, {"payment": "payment", "done": "summarize"}
-)
-builder.add_conditional_edges(
-    "payment", route_after_payment, {"prepare": "prepare", "done": "summarize"}
-)
+builder.add_conditional_edges("validate", route_after_validation, {"payment": "payment", "done": "summarize"})
+builder.add_conditional_edges("payment", route_after_payment, {"prepare": "prepare", "done": "summarize"})
 builder.add_edge("prepare", "ship")
 builder.add_edge("ship", "deliver")
 builder.add_edge("deliver", "summarize")

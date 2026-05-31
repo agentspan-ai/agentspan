@@ -62,9 +62,7 @@ pipeline = parallel_research >> summarizer
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            pipeline, "Launching an AI-powered healthcare diagnostics tool in the US"
-        )
+        result = runtime.run(pipeline, "Launching an AI-powered healthcare diagnostics tool in the US")
         result.print_result()
 
         # Production pattern:
@@ -75,3 +73,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(pipeline)
+

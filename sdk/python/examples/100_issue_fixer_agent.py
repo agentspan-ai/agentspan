@@ -41,34 +41,14 @@ from agentspan.agents.handoff import OnTextMention
 from agentspan.agents.termination import TextMentionTermination
 
 from _issue_fixer_tools import (
-    set_working_dir,
-    get_working_dir,
-    fetch_issue_context,
-    fetch_pr_context,
-    create_pr,
-    update_pr,
-    read_file,
-    write_file,
-    edit_file,
-    apply_patch,
-    list_directory,
-    file_outline,
-    glob_find,
-    grep_search,
-    search_symbols,
-    find_references,
-    git_diff,
-    git_log,
-    git_blame,
-    lint_and_format,
-    build_check,
-    run_unit_tests,
-    run_e2e_tests,
-    contextbook_write,
-    contextbook_read,
-    contextbook_summary,
-    run_command,
-    web_fetch,
+    set_working_dir, get_working_dir,
+    fetch_issue_context, fetch_pr_context, create_pr, update_pr,
+    read_file, write_file, edit_file, apply_patch, list_directory, file_outline,
+    glob_find, grep_search, search_symbols, find_references,
+    git_diff, git_log, git_blame,
+    lint_and_format, build_check, run_unit_tests, run_e2e_tests,
+    contextbook_write, contextbook_read, contextbook_summary,
+    run_command, web_fetch,
 )
 
 # ── Project-Specific Configuration ────────────────────────────
@@ -89,15 +69,15 @@ DG_SKILL_PATH = "~/.claude/skills/dg"
 # ── Documentation Paths ──────────────────────────────────────
 DOCS_PLAN_DIR = "docs/plan"
 DOCS_DESIGN_DIR = "docs/design"
-QA_EVIDENCE_DIR = "qa-tests"  # QA testing evidence per issue
+QA_EVIDENCE_DIR = "qa-tests"           # QA testing evidence per issue
 
 # ── Server ───────────────────────────────────────────────────
 SERVER_URL = "http://localhost:6767"
 
 # ── Timeouts & Limits ────────────────────────────────────────
 SWARM_MAX_TURNS = 500
-SWARM_TIMEOUT = 14400  # 4 hours
-E2E_TOOL_TIMEOUT = 5400  # 90 min
+SWARM_TIMEOUT = 14400          # 4 hours
+E2E_TOOL_TIMEOUT = 5400        # 90 min
 MAX_REVIEW_CYCLES = 3
 MAX_E2E_RETRIES = 3
 
@@ -172,20 +152,10 @@ tech_lead = Agent(
     max_turns=50,
     max_tokens=60000,
     tools=[
-        read_file,
-        grep_search,
-        glob_find,
-        list_directory,
-        file_outline,
-        search_symbols,
-        find_references,
-        git_log,
-        git_blame,
-        run_command,
-        web_fetch,
-        contextbook_write,
-        contextbook_read,
-        contextbook_summary,
+        read_file, grep_search, glob_find, list_directory,
+        file_outline, search_symbols, find_references,
+        git_log, git_blame, run_command, web_fetch,
+        contextbook_write, contextbook_read, contextbook_summary,
     ],
     instructions=TECH_LEAD_INSTRUCTIONS.format(**_fmt),
 )
@@ -209,25 +179,12 @@ coder = Agent(
         timeout=120,
     ),
     tools=[
-        read_file,
-        write_file,
-        edit_file,
-        apply_patch,
-        grep_search,
-        glob_find,
-        list_directory,
-        file_outline,
-        search_symbols,
-        find_references,
-        git_diff,
-        git_log,
-        run_command,
-        web_fetch,
-        lint_and_format,
-        build_check,
-        run_unit_tests,
-        contextbook_write,
-        contextbook_read,
+        read_file, write_file, edit_file, apply_patch,
+        grep_search, glob_find, list_directory,
+        file_outline, search_symbols, find_references,
+        git_diff, git_log, run_command, web_fetch,
+        lint_and_format, build_check, run_unit_tests,
+        contextbook_write, contextbook_read,
     ],
     instructions=CODER_INSTRUCTIONS.format(**_fmt),
 )
@@ -251,13 +208,8 @@ dg_reviewer = Agent(
     max_tokens=60000,
     tools=[
         agent_tool(dg_skill, description="Run adversarial Dinesh vs Gilfoyle code review"),
-        read_file,
-        grep_search,
-        git_diff,
-        file_outline,
-        contextbook_write,
-        contextbook_read,
-        contextbook_summary,
+        read_file, grep_search, git_diff, file_outline,
+        contextbook_write, contextbook_read, contextbook_summary,
     ],
     instructions=DG_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
@@ -270,19 +222,10 @@ tl_reviewer = Agent(
     max_turns=30,
     max_tokens=60000,
     tools=[
-        read_file,
-        grep_search,
-        glob_find,
-        list_directory,
-        file_outline,
-        search_symbols,
-        find_references,
-        git_diff,
-        git_log,
-        run_command,
-        contextbook_write,
-        contextbook_read,
-        contextbook_summary,
+        read_file, grep_search, glob_find, list_directory,
+        file_outline, search_symbols, find_references,
+        git_diff, git_log, run_command,
+        contextbook_write, contextbook_read, contextbook_summary,
     ],
     instructions=TL_REVIEW_INSTRUCTIONS.format(**_fmt),
 )
@@ -324,13 +267,9 @@ test_coder = Agent(
         timeout=120,
     ),
     tools=[
-        read_file,
-        write_file,
-        grep_search,
-        glob_find,
-        list_directory,
-        run_command,
-        contextbook_read,
+        read_file, write_file,
+        grep_search, glob_find, list_directory,
+        run_command, contextbook_read,
     ],
     instructions=TEST_CODER_INSTRUCTIONS.format(**_fmt),
 )
@@ -342,20 +281,10 @@ qa_lead = Agent(
     max_turns=30,
     max_tokens=60000,
     tools=[
-        read_file,
-        write_file,
-        grep_search,
-        glob_find,
-        list_directory,
-        file_outline,
-        git_diff,
-        run_command,
-        web_fetch,
-        run_unit_tests,
-        run_e2e_tests,
-        contextbook_write,
-        contextbook_read,
-        contextbook_summary,
+        read_file, write_file, grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command, web_fetch,
+        run_unit_tests, run_e2e_tests,
+        contextbook_write, contextbook_read, contextbook_summary,
     ],
     instructions=QA_PLANNER_INSTRUCTIONS.format(**_fmt),
 )
@@ -368,20 +297,10 @@ qa_reviewer = Agent(
     max_turns=40,
     max_tokens=60000,
     tools=[
-        read_file,
-        write_file,
-        grep_search,
-        glob_find,
-        list_directory,
-        file_outline,
-        git_diff,
-        run_command,
-        web_fetch,
-        run_unit_tests,
-        run_e2e_tests,
-        contextbook_write,
-        contextbook_read,
-        contextbook_summary,
+        read_file, write_file, grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command, web_fetch,
+        run_unit_tests, run_e2e_tests,
+        contextbook_write, contextbook_read, contextbook_summary,
     ],
     instructions=QA_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
@@ -407,25 +326,12 @@ fix_coder = Agent(
         timeout=120,
     ),
     tools=[
-        read_file,
-        write_file,
-        edit_file,
-        apply_patch,
-        grep_search,
-        glob_find,
-        list_directory,
-        file_outline,
-        search_symbols,
-        find_references,
-        git_diff,
-        git_log,
-        run_command,
-        web_fetch,
-        lint_and_format,
-        build_check,
-        run_unit_tests,
-        contextbook_write,
-        contextbook_read,
+        read_file, write_file, edit_file, apply_patch,
+        grep_search, glob_find, list_directory,
+        file_outline, search_symbols, find_references,
+        git_diff, git_log, run_command, web_fetch,
+        lint_and_format, build_check, run_unit_tests,
+        contextbook_write, contextbook_read,
     ],
     instructions=CODER_INSTRUCTIONS.format(**_fmt),
 )
@@ -437,20 +343,10 @@ fix_qa = Agent(
     max_turns=30,
     max_tokens=60000,
     tools=[
-        read_file,
-        write_file,
-        grep_search,
-        glob_find,
-        list_directory,
-        file_outline,
-        git_diff,
-        run_command,
-        web_fetch,
-        run_unit_tests,
-        run_e2e_tests,
-        contextbook_write,
-        contextbook_read,
-        contextbook_summary,
+        read_file, write_file, grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command, web_fetch,
+        run_unit_tests, run_e2e_tests,
+        contextbook_write, contextbook_read, contextbook_summary,
     ],
     instructions=QA_REVIEWER_INSTRUCTIONS.format(**_fmt),
 )
@@ -468,18 +364,10 @@ docs_agent = Agent(
     max_turns=40,
     max_tokens=60000,
     tools=[
-        read_file,
-        write_file,
-        edit_file,
-        grep_search,
-        glob_find,
-        list_directory,
-        file_outline,
-        git_diff,
-        run_command,
-        web_fetch,
-        contextbook_read,
-        contextbook_summary,
+        read_file, write_file, edit_file,
+        grep_search, glob_find, list_directory,
+        file_outline, git_diff, run_command, web_fetch,
+        contextbook_read, contextbook_summary,
     ],
     instructions=DOCS_AGENT_INSTRUCTIONS.format(**_fmt),
 )
@@ -549,21 +437,10 @@ pr_updater = Agent(
 # ═══════════════════════════════════════════════════════════════
 
 # New issue → full pipeline
-pipeline = (
-    issue_analyst
-    >> tech_lead
-    >> impl_loop
-    >> test_then_verify
-    >> dg_reviewer
-    >> fix_and_retest
-    >> docs_agent
-    >> pr_creator
-)
+pipeline = issue_analyst >> tech_lead >> impl_loop >> test_then_verify >> dg_reviewer >> fix_and_retest >> docs_agent >> pr_creator
 
 # PR feedback → address comments, re-review, re-test, update PR
-feedback_pipeline = (
-    pr_feedback >> impl_loop >> test_then_verify >> dg_reviewer >> fix_and_retest >> pr_updater
-)
+feedback_pipeline = pr_feedback >> impl_loop >> test_then_verify >> dg_reviewer >> fix_and_retest >> pr_updater
 
 
 def main():
@@ -572,14 +449,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Issue Fixer Agent — autonomous GitHub issue to PR pipeline",
         epilog="Examples:\n"
-        "  python 100_issue_fixer_agent.py 42           # Fix issue #42\n"
-        "  python 100_issue_fixer_agent.py 42 --pr 157  # Address PR #157 feedback\n",
+               "  python 100_issue_fixer_agent.py 42           # Fix issue #42\n"
+               "  python 100_issue_fixer_agent.py 42 --pr 157  # Address PR #157 feedback\n",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("issue_number", type=int, help="GitHub issue number to fix")
-    parser.add_argument(
-        "--pr", type=int, default=None, help="Existing PR number to address feedback on"
-    )
+    parser.add_argument("--pr", type=int, default=None, help="Existing PR number to address feedback on")
     args = parser.parse_args()
 
     issue_number = args.issue_number

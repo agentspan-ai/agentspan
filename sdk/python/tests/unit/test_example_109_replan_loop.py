@@ -73,7 +73,9 @@ def test_build_replan_bakes_deficit_into_instructions():
     initial brief, the loop will oscillate at the same word count
     forever."""
     ex = _load_example()
-    plan = ex.build_replan("any topic", iteration=1, prior_word_count=120, target_word_count=600)
+    plan = ex.build_replan(
+        "any topic", iteration=1, prior_word_count=120, target_word_count=600
+    )
     instr = plan.to_dict()["steps"][1]["operations"][0]["generate"]["instructions"]
     assert "120" in instr, "prior word count must appear in instructions"
     assert "600" in instr, "target word count must appear in instructions"
@@ -85,7 +87,9 @@ def test_build_replan_uses_per_iteration_subdir():
     so iteration N+1 doesn't overwrite N. Otherwise debugging
     convergence is impossible."""
     ex = _load_example()
-    plan = ex.build_replan("any topic", iteration=2, prior_word_count=100, target_word_count=600)
+    plan = ex.build_replan(
+        "any topic", iteration=2, prior_word_count=100, target_word_count=600
+    )
     d = plan.to_dict()
     output_schema = d["steps"][1]["operations"][0]["generate"]["output_schema"]
     assert "iter2/" in output_schema

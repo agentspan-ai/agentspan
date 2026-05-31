@@ -132,9 +132,7 @@ class TestHandoffStrategy:
             events=[
                 MockEvent.handoff("billing"),
                 MockEvent.tool_call("lookup_order", args={"order_id": "123"}),
-                MockEvent.tool_result(
-                    "lookup_order", result={"order_id": "123", "status": "shipped"}
-                ),
+                MockEvent.tool_result("lookup_order", result={"order_id": "123", "status": "shipped"}),
                 MockEvent.tool_call("process_refund", args={"order_id": "123", "amount": 49.99}),
                 MockEvent.tool_result("process_refund", result="Refund of $49.99 processed"),
                 MockEvent.done("Your refund of $49.99 for order #123 has been processed."),
@@ -188,15 +186,13 @@ class TestHandoffStrategy:
         )
 
         # ONLY billing tools used
-        (
-            expect(result)
+        (expect(result)
             .completed()
             .handoff_to("billing")
             .used_tool("lookup_order")
             .did_not_use_tool("search_web")
             .did_not_use_tool("process_refund")
-            .no_errors()
-        )
+            .no_errors())
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -257,9 +253,11 @@ class TestSequentialStrategy:
                 MockEvent.handoff("researcher"),
                 MockEvent.tool_call("search_web", args={"query": "quantum computing"}),
                 MockEvent.tool_result("search_web", result="Quantum computing uses qubits..."),
+
                 # Stage 2: writer
                 MockEvent.handoff("writer"),
                 MockEvent.thinking("Turning research into an article..."),
+
                 # Stage 3: editor
                 MockEvent.handoff("editor"),
                 MockEvent.done("Quantum Computing: A Revolution in Processing Power\n\n..."),
@@ -273,16 +271,13 @@ class TestSequentialStrategy:
         assert_agent_ran(result, "editor")
 
         # They ran in the correct order
-        assert_event_sequence(
-            result,
-            [
-                EventType.HANDOFF,  # researcher
-                EventType.TOOL_CALL,  # researcher uses search_web
-                EventType.HANDOFF,  # writer
-                EventType.HANDOFF,  # editor
-                EventType.DONE,
-            ],
-        )
+        assert_event_sequence(result, [
+            EventType.HANDOFF,   # researcher
+            EventType.TOOL_CALL, # researcher uses search_web
+            EventType.HANDOFF,   # writer
+            EventType.HANDOFF,   # editor
+            EventType.DONE,
+        ])
 
     def test_researcher_uses_tools(self):
         """The researcher should actually search for information."""
@@ -317,9 +312,12 @@ class TestSequentialStrategy:
         )
 
         # Verify handoff order: researcher comes before writer, writer before editor
-        handoff_targets = [ev.target for ev in result.events if ev.type == EventType.HANDOFF]
+        handoff_targets = [
+            ev.target for ev in result.events if ev.type == EventType.HANDOFF
+        ]
         assert handoff_targets == ["researcher", "writer", "editor"], (
-            f"Expected sequential order [researcher, writer, editor], got {handoff_targets}"
+            f"Expected sequential order [researcher, writer, editor], "
+            f"got {handoff_targets}"
         )
 
 
@@ -425,19 +423,19 @@ class TestParallelStrategy:
                 MockEvent.handoff("risk_analyst"),
                 MockEvent.handoff("compliance_checker"),
                 MockEvent.done(
-                    "Market outlook: positive. Risk assessment: moderate. Compliance status: clear."
+                    "Market outlook: positive. "
+                    "Risk assessment: moderate. "
+                    "Compliance status: clear."
                 ),
             ],
         )
 
-        (
-            expect(result)
+        (expect(result)
             .completed()
             .output_contains("Market outlook")
             .output_contains("Risk assessment")
             .output_contains("Compliance status")
-            .no_errors()
-        )
+            .no_errors())
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -604,7 +602,9 @@ class TestRoundRobinStrategy:
         )
 
         # Verify alternating pattern
-        handoff_targets = [ev.target for ev in result.events if ev.type == EventType.HANDOFF]
+        handoff_targets = [
+            ev.target for ev in result.events if ev.type == EventType.HANDOFF
+        ]
         assert handoff_targets == ["optimist", "skeptic", "optimist", "skeptic"], (
             f"Expected alternating pattern, got {handoff_targets}"
         )
@@ -743,16 +743,14 @@ class TestSwarmStrategy:
             auto_execute_tools=False,
         )
 
-        (
-            expect(result)
+        (expect(result)
             .completed()
             .used_tool("transfer_to_tech_support")
             .handoff_to("tech_support")
             .used_tool("search_web")
             .did_not_use_tool("lookup_order")
             .did_not_use_tool("process_refund")
-            .no_errors()
-        )
+            .no_errors())
 
     def test_condition_based_fallback(self):
         """When transfer tool isn't used, OnTextMention condition triggers."""
@@ -808,9 +806,9 @@ code_review_flow = Agent(
     strategy=Strategy.ROUND_ROBIN,
     max_turns=6,
     allowed_transitions={
-        "developer": ["reviewer_cr"],  # developer → reviewer only
+        "developer": ["reviewer_cr"],       # developer → reviewer only
         "reviewer_cr": ["developer", "approver"],  # reviewer → developer or approver
-        "approver": ["developer"],  # approver → developer only (for revisions)
+        "approver": ["developer"],           # approver → developer only (for revisions)
     },
 )
 
@@ -855,7 +853,8 @@ class TestConstrainedTransitions:
         for i in range(len(handoffs) - 1):
             src, dst = handoffs[i], handoffs[i + 1]
             assert dst in allowed[src], (
-                f"Invalid transition: {src} → {dst}. Allowed from {src}: {allowed[src]}"
+                f"Invalid transition: {src} → {dst}. "
+                f"Allowed from {src}: {allowed[src]}"
             )
 
     def test_developer_cannot_skip_to_approver(self):
@@ -928,6 +927,7 @@ class TestNestedStrategies:
                 # Parallel phase
                 MockEvent.handoff("market_analyst"),
                 MockEvent.handoff("risk_analyst"),
+
                 # Sequential phase
                 MockEvent.handoff("summarizer"),
                 MockEvent.done(
@@ -943,18 +943,19 @@ class TestNestedStrategies:
         assert_agent_ran(result, "summarizer")
 
         # Summarizer ran AFTER the analysts
-        assert_event_sequence(
-            result,
-            [
-                EventType.HANDOFF,  # market_analyst
-                EventType.HANDOFF,  # risk_analyst
-                EventType.HANDOFF,  # summarizer (must come after both)
-                EventType.DONE,
-            ],
-        )
+        assert_event_sequence(result, [
+            EventType.HANDOFF,  # market_analyst
+            EventType.HANDOFF,  # risk_analyst
+            EventType.HANDOFF,  # summarizer (must come after both)
+            EventType.DONE,
+        ])
 
         # Output reflects both perspectives
-        (expect(result).completed().output_contains("market").output_contains("risk").no_errors())
+        (expect(result)
+            .completed()
+            .output_contains("market")
+            .output_contains("risk")
+            .no_errors())
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1019,14 +1020,12 @@ class TestGuardrailsInMultiAgent:
             auto_execute_tools=False,
         )
 
-        (
-            expect(result)
+        (expect(result)
             .completed()
             .guardrail_failed("tone_check")
             .guardrail_passed("tone_check")
             .handoff_to("billing")
-            .no_errors()
-        )
+            .no_errors())
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1414,56 +1413,50 @@ class TestEvalRunnerLive:
     def test_handoff_eval(self, runtime):
         """Run eval suite for handoff correctness."""
         eval = CorrectnessEval(runtime)
-        results = eval.run(
-            [
-                EvalCase(
-                    name="billing_route",
-                    agent=support_handoff,
-                    prompt="I need a refund for order #123",
-                    expect_handoff_to="billing",
-                    expect_tools=["lookup_order"],
-                ),
-                EvalCase(
-                    name="tech_route",
-                    agent=support_handoff,
-                    prompt="My app crashes on startup",
-                    expect_handoff_to="technical",
-                    expect_tools_not_used=["lookup_order"],
-                ),
-            ]
-        )
+        results = eval.run([
+            EvalCase(
+                name="billing_route",
+                agent=support_handoff,
+                prompt="I need a refund for order #123",
+                expect_handoff_to="billing",
+                expect_tools=["lookup_order"],
+            ),
+            EvalCase(
+                name="tech_route",
+                agent=support_handoff,
+                prompt="My app crashes on startup",
+                expect_handoff_to="technical",
+                expect_tools_not_used=["lookup_order"],
+            ),
+        ])
         results.print_summary()
         assert results.all_passed
 
     def test_sequential_eval(self, runtime):
         """Run eval for sequential pipeline correctness."""
         eval = CorrectnessEval(runtime)
-        results = eval.run(
-            [
-                EvalCase(
-                    name="full_pipeline",
-                    agent=content_pipeline,
-                    prompt="Write about quantum computing",
-                    validate_orchestration=True,
-                ),
-            ]
-        )
+        results = eval.run([
+            EvalCase(
+                name="full_pipeline",
+                agent=content_pipeline,
+                prompt="Write about quantum computing",
+                validate_orchestration=True,
+            ),
+        ])
         results.print_summary()
         assert results.all_passed
 
     def test_round_robin_eval(self, runtime):
         """Run eval for round-robin alternation correctness."""
         eval = CorrectnessEval(runtime)
-        results = eval.run(
-            [
-                EvalCase(
-                    name="debate_alternates",
-                    agent=debate,
-                    prompt="Should AI be regulated?",
-                    validate_orchestration=True,
-                ),
-            ]
-        )
+        results = eval.run([
+            EvalCase(
+                name="debate_alternates",
+                agent=debate,
+                prompt="Should AI be regulated?",
+                validate_orchestration=True,
+            ),
+        ])
         results.print_summary()
         assert results.all_passed
 
@@ -1492,30 +1485,30 @@ class TestLiveMultiAgent:
         """Live: billing query should route to billing agent."""
         result = runtime.run(support_handoff, "I need a refund for order #123")
 
-        (expect(result).completed().handoff_to("billing").used_tool("lookup_order").no_errors())
+        (expect(result)
+            .completed()
+            .handoff_to("billing")
+            .used_tool("lookup_order")
+            .no_errors())
 
     def test_sequential_pipeline_all_agents(self, runtime):
         """Live: all pipeline stages should execute."""
         result = runtime.run(content_pipeline, "Write about quantum computing")
 
-        (
-            expect(result)
+        (expect(result)
             .completed()
             .agent_ran("researcher")
             .agent_ran("writer")
             .agent_ran("editor")
-            .no_errors()
-        )
+            .no_errors())
 
     def test_parallel_all_analysts(self, runtime):
         """Live: all parallel agents should contribute."""
         result = runtime.run(analysis_team, "Should we invest in Company X?")
 
-        (
-            expect(result)
+        (expect(result)
             .completed()
             .agent_ran("market_analyst")
             .agent_ran("risk_analyst")
             .agent_ran("compliance_checker")
-            .no_errors()
-        )
+            .no_errors())

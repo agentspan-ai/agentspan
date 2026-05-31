@@ -31,9 +31,7 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent, "Say hello and tell me a fun fact about the Python programming language."
-        )
+        result = runtime.run(agent, "Say hello and tell me a fun fact about the Python programming language.")
         result.print_result()
 
         # Production pattern:

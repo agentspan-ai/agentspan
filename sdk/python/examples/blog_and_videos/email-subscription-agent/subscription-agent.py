@@ -74,26 +74,26 @@ SAMPLE_RECEIPTS = [
         "subject": "iCloud+ storage",
         "body": "iCloud+ ($2.99) renewed Apr 1. Storage used: 87%.",
     },
+    {                                                                                      
+        "id": "msg_1001",                                                                  
+        "subject": "Your order has shipped!",                                            
+        "body": "Your Amazon order #112-3456789 has shipped. Estimated delivery: May 10.", 
+    },                                                                                     
+    {                                                                                      
+        "id": "msg_1002",                                                                  
+        "subject": "Maria, someone liked your post",                                       
+        "body": "John Doe liked your photo on Instagram.",                               
+    },                                                                                     
     {
-        "id": "msg_1001",
-        "subject": "Your order has shipped!",
-        "body": "Your Amazon order #112-3456789 has shipped. Estimated delivery: May 10.",
-    },
-    {
-        "id": "msg_1002",
-        "subject": "Maria, someone liked your post",
-        "body": "John Doe liked your photo on Instagram.",
-    },
-    {
-        "id": "msg_1003",
-        "subject": "Your flight is confirmed",
-        "body": "Booking confirmation for AA1234 New York to LA on May 15. Seat 14A.",
-    },
-    {
-        "id": "msg_1004",
-        "subject": "Weekly newsletter: top stories this week",
-        "body": "Here are the top stories from The Hustle this week: AI is changing everything...",
-    },
+        "id": "msg_1003",                                                                  
+        "subject": "Your flight is confirmed",                                           
+        "body": "Booking confirmation for AA1234 New York to LA on May 15. Seat 14A.",     
+    },                                                                                     
+    {                                                                                      
+        "id": "msg_1004",                                                                  
+        "subject": "Weekly newsletter: top stories this week",                           
+        "body": "Here are the top stories from The Hustle this week: AI is changing everything...",                                                                            
+    }
 ]
 
 ## Tools your agent can use. This is where the "build any agent" point lives. Swap these functions for whatever tools your agent needs. Just rewrite the instructions below and you will have a different agent. The agent definition itself doesn't change. The important bit here that makes this into a tool is the @tool decorator above each function.
@@ -155,12 +155,7 @@ if USE_GMAIL:
             "Searchable OR Stripe OR AWS OR Google Cloud",
         ]
         for q in queries:
-            r = (
-                service.users()
-                .messages()
-                .list(userId="me", q=q, maxResults=3, includeSpamTrash=False)
-                .execute()
-            )
+            r = service.users().messages().list(userId="me", q=q, maxResults=3, includeSpamTrash=False).execute()
             for m in r.get("messages", []):
                 if m["id"] not in seen_ids:
                     all_messages.append(m)
@@ -168,12 +163,9 @@ if USE_GMAIL:
         messages = all_messages[:15]
         summaries = []
         for msg in messages:
-            detail = (
-                service.users()
-                .messages()
-                .get(userId="me", id=msg["id"], format="metadata", metadataHeaders=["Subject"])
-                .execute()
-            )
+            detail = service.users().messages().get(
+                userId="me", id=msg["id"], format="metadata", metadataHeaders=["Subject"]
+            ).execute()
             headers = detail.get("payload", {}).get("headers", [])
             subject = next((h["value"] for h in headers if h["name"] == "Subject"), "(no subject)")
             snippet = detail.get("snippet", "")
@@ -185,7 +177,6 @@ if USE_GMAIL:
         """Fetch the full text body of a specific email by ID."""
         import time
         import re
-
         time.sleep(1)
         service = _get_gmail_service()
         msg = service.users().messages().get(userId="me", id=email_id, format="full").execute()
@@ -209,7 +200,6 @@ if USE_GMAIL:
         return text[:500]
 
 else:
-
     @tool
     def search_emails(query: str) -> list:
         """Search the inbox for emails matching a query.
@@ -225,7 +215,6 @@ else:
             if receipt["id"] == email_id:
                 return receipt["body"]
         return ""
-
 
 ## Your agent instructions
 INSTRUCTIONS = """
@@ -290,10 +279,10 @@ if USE_GMAIL:
     tools.append(get_inbox_stats)
 
 agent = Agent(
-    name="subscription_finder",
-    model="anthropic/claude-sonnet-4-6",
-    tools=tools,
-    instructions=INSTRUCTIONS,
+  name="subscription_finder",
+  model="anthropic/claude-sonnet-4-6",
+  tools=tools,
+  instructions=INSTRUCTIONS
 )
 
 
@@ -324,11 +313,7 @@ def handle_events(handle):
                         print(f"  {line.strip()}")
 
         elif event.type == EventType.DONE:
-            result = (
-                event.output.get("result", event.output)
-                if isinstance(event.output, dict)
-                else event.output
-            )
+            result = event.output.get("result", event.output) if isinstance(event.output, dict) else event.output
             result = str(result).strip()
             found_lines = [l.strip() for l in result.splitlines() if l.strip().startswith("FOUND:")]
             summary_lines = [l for l in result.splitlines() if not l.strip().startswith("FOUND:")]

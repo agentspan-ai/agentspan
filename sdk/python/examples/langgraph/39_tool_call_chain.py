@@ -31,7 +31,6 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
 
-
 @tool
 def fetch_company_info(company_name: str) -> str:
     """Look up basic information about a company."""

@@ -138,7 +138,9 @@ class TestRegisterHybridTransferWorkers:
         assert "manager_transfer_to_researcher" in captured_fn
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(captured_fn["manager_transfer_to_researcher"]())
+            result = loop.run_until_complete(
+                captured_fn["manager_transfer_to_researcher"]()
+            )
         finally:
             loop.close()
         assert result == {}
@@ -175,6 +177,4 @@ class TestRegisterHybridTransferWorkers:
                     domain=None,
                 )
 
-        assert mgr in called_with, (
-            "_register_hybrid_transfer_workers was not called for hybrid agent"
-        )
+        assert mgr in called_with, "_register_hybrid_transfer_workers was not called for hybrid agent"

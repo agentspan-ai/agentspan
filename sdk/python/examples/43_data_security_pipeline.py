@@ -29,7 +29,6 @@ from settings import settings
 
 # ── Data tools ───────────────────────────────────────────────────────
 
-
 @tool
 def fetch_user_data(user_id: str) -> dict:
     """Fetch user data from the database.
@@ -60,7 +59,6 @@ def fetch_user_data(user_id: str) -> dict:
 
 
 # ── Redaction tools ──────────────────────────────────────────────────
-
 
 @tool
 def redact_sensitive_fields(data: str) -> dict:
@@ -147,3 +145,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(pipeline)
+

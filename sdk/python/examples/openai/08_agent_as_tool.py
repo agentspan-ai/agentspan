@@ -24,7 +24,6 @@ from settings import settings
 
 # ── Specialist tools ──────────────────────────────────────────────────
 
-
 @function_tool
 def analyze_sentiment(text: str) -> str:
     """Analyze the sentiment of text. Returns positive, negative, or neutral."""
@@ -45,28 +44,8 @@ def analyze_sentiment(text: str) -> str:
 @function_tool
 def extract_keywords(text: str) -> str:
     """Extract key topics and keywords from text."""
-    stop_words = {
-        "the",
-        "a",
-        "an",
-        "is",
-        "are",
-        "was",
-        "were",
-        "in",
-        "on",
-        "at",
-        "to",
-        "for",
-        "of",
-        "and",
-        "or",
-        "but",
-        "with",
-        "this",
-        "that",
-        "i",
-    }
+    stop_words = {"the", "a", "an", "is", "are", "was", "were", "in", "on", "at",
+                  "to", "for", "of", "and", "or", "but", "with", "this", "that", "i"}
     words = text.lower().split()
     keywords = [w.strip(".,!?") for w in words if w.strip(".,!?") not in stop_words and len(w) > 3]
     unique = list(dict.fromkeys(keywords))[:10]
@@ -117,10 +96,10 @@ manager = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            manager,
-            "Analyze this review: 'The new laptop is excellent! The display is amazing "
-            "and the battery life is wonderful. However, the keyboard feels terrible "
-            "and the trackpad is the worst I've used.'",
+        manager,
+        "Analyze this review: 'The new laptop is excellent! The display is amazing "
+        "and the battery life is wonderful. However, the keyboard feels terrible "
+        "and the trackpad is the worst I've used.'",
         )
         result.print_result()
 

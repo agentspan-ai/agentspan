@@ -107,8 +107,8 @@ triage.handoffs = [doc_specialist, code_specialist]
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            triage,
-            "I need a Python code example for authenticating with the API.",
+        triage,
+        "I need a Python code example for authenticating with the API.",
         )
         result.print_result()
 

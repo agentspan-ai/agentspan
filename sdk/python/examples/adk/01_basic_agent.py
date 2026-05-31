@@ -32,7 +32,7 @@ agent = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(agent, "Say hello and tell me a fun fact about machine learning.")
-        print(f"agent completed with status: {result.status}")
+        print(f'agent completed with status: {result.status}')
         result.print_result()
 
         # Production pattern:

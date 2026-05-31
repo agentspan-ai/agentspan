@@ -1,19 +1,18 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Credentials — per-user credentials injected into the tool worker process.
+"""Credentials — per-user secrets injected into isolated tool subprocesses.
 
 Demonstrates:
-    - @tool with credentials=["GITHUB_TOKEN"]
-    - Credentials resolved from the server and injected as env vars around the
-      tool invocation (under a process-wide lock — see secret-injection-contract)
-    - Tool reads credential from os.environ
-    - Server-only resolution: no env-var fallback for declared credentials
+    - @tool with credentials=["GITHUB_TOKEN"] (default isolated=True)
+    - Credentials injected into a fresh subprocess — parent env never touched
+    - Tool reads credential from os.environ inside the subprocess
+    - Fallback to os.environ when no server credential is set (non-strict mode)
 
 How it works:
     1. Agent starts → server mints a short-lived execution token
     2. Before each tool call, the SDK fetches declared credentials from
-       POST /api/workers/credentials using that token
+       POST /api/credentials/resolve using that token
     3. The tool function runs in a fresh subprocess with credentials
        injected as env vars. The parent process's os.environ is unchanged.
 
@@ -46,24 +45,14 @@ def list_github_repos(username: str) -> dict:
         headers.append(f"Authorization: Bearer {token}")
 
     result = subprocess.run(
-        [
-            "curl",
-            "-sf",
-            "-H",
-            headers[0],
-            "-H",
-            headers[-1],
-            f"https://api.github.com/users/{username}/repos?per_page=5&sort=updated",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=10,
+        ["curl", "-sf", "-H", headers[0], "-H", headers[-1],
+         f"https://api.github.com/users/{username}/repos?per_page=5&sort=updated"],
+        capture_output=True, text=True, timeout=10,
     )
     if result.returncode != 0:
         return {"error": result.stderr.strip()}
 
     import json
-
     repos = json.loads(result.stdout)
     return {
         "username": username,
@@ -83,27 +72,15 @@ def create_github_issue(repo: str, title: str, body: str) -> dict:
         return {"error": "GITHUB_TOKEN not available — cannot create issues without auth"}
 
     import json
-
     payload = json.dumps({"title": title, "body": body})
     result = subprocess.run(
-        [
-            "curl",
-            "-sf",
-            "-X",
-            "POST",
-            "-H",
-            "Accept: application/vnd.github+json",
-            "-H",
-            f"Authorization: Bearer {token}",
-            "-H",
-            "Content-Type: application/json",
-            "-d",
-            payload,
-            f"https://api.github.com/repos/{repo}/issues",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=10,
+        ["curl", "-sf", "-X", "POST",
+         "-H", "Accept: application/vnd.github+json",
+         "-H", f"Authorization: Bearer {token}",
+         "-H", "Content-Type: application/json",
+         "-d", payload,
+         f"https://api.github.com/repos/{repo}/issues"],
+        capture_output=True, text=True, timeout=10,
     )
     if result.returncode != 0:
         return {"error": result.stderr.strip()}
@@ -137,7 +114,8 @@ if __name__ == "__main__":
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16_secrets_isolated_tool
+        # agentspan deploy --package examples.16_credentials_isolated_tool
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+

@@ -49,16 +49,15 @@ G1_BLOCK_INPUT = RegexGuardrail(
     on_fail=OnFail.RAISE,
 )
 
-# G3: Agent output regex (block, multi-pattern) — blocks credentials
+# G3: Agent output regex (block, multi-pattern) — blocks secrets
 G3_NO_SECRETS = RegexGuardrail(
     patterns=[r"\bpassword\b", r"\bsecret\b", r"\btoken\b"],
     mode="block",
     name="no_secrets",
-    message="Do not include passwords, credentials, or tokens.",
+    message="Do not include passwords, secrets, or tokens.",
     position=Position.OUTPUT,
     on_fail=OnFail.RETRY,
 )
-
 
 # G4: Tool input function (raise) — blocks SQL injection
 @guardrail(name="no_sql_injection")
@@ -69,7 +68,9 @@ def _sql_check(content: str) -> GuardrailResult:
     return GuardrailResult(passed=True)
 
 
-G4_SQL_GUARD = Guardrail(_sql_check, position=Position.INPUT, on_fail=OnFail.RAISE)
+G4_SQL_GUARD = Guardrail(
+    _sql_check, position=Position.INPUT, on_fail=OnFail.RAISE
+)
 
 # G5: Tool output function (fix) — forces JSON
 G5_FORCE_JSON = Guardrail(
@@ -155,7 +156,8 @@ def _agent_clean(model):
         name="e2e_gr_clean",
         model=model,
         instructions=(
-            "You have one tool: normal_tool. Call it as directed. Report the result verbatim."
+            "You have one tool: normal_tool. Call it as directed. "
+            "Report the result verbatim."
         ),
         tools=[normal_tool],
     )
@@ -188,7 +190,8 @@ def _agent_with_sql_tool(model):
         name="e2e_gr_sql",
         model=model,
         instructions=(
-            "You have safe_query tool. Call it with the query provided. Report the result."
+            "You have safe_query tool. Call it with the query provided. "
+            "Report the result."
         ),
         tools=[safe_query],
     )
@@ -200,7 +203,8 @@ def _agent_with_fix_tool(model):
         name="e2e_gr_fix",
         model=model,
         instructions=(
-            "You have format_output tool. Call it with the text provided. Report the result."
+            "You have format_output tool. Call it with the text provided. "
+            "Report the result."
         ),
         tools=[format_output],
     )
@@ -212,7 +216,10 @@ def _agent_with_email_tool(model):
         name="e2e_gr_email",
         model=model,
         max_turns=3,
-        instructions=("You have redact_tool. Call it with the text provided. Report the result."),
+        instructions=(
+            "You have redact_tool. Call it with the text provided. "
+            "Report the result."
+        ),
         tools=[redact_tool],
     )
 
@@ -222,7 +229,10 @@ def _agent_with_strict_tool(model):
     return Agent(
         name="e2e_gr_strict",
         model=model,
-        instructions=("You have strict_tool. Call it with the text provided. Report the result."),
+        instructions=(
+            "You have strict_tool. Call it with the text provided. "
+            "Report the result."
+        ),
         tools=[strict_tool],
     )
 
@@ -284,19 +294,9 @@ def _find_tool_task_outputs(workflow, tool_name):
     """Return list of (status, output_json_str) for all tasks matching tool_name."""
     results = []
     system_types = {
-        "LLM_CHAT_COMPLETE",
-        "SWITCH",
-        "DO_WHILE",
-        "INLINE",
-        "SET_VARIABLE",
-        "FORK",
-        "FORK_JOIN_DYNAMIC",
-        "JOIN",
-        "SUB_WORKFLOW",
-        "TERMINATE",
-        "WAIT",
-        "EVENT",
-        "DECISION",
+        "LLM_CHAT_COMPLETE", "SWITCH", "DO_WHILE", "INLINE", "SET_VARIABLE",
+        "FORK", "FORK_JOIN_DYNAMIC", "JOIN", "SUB_WORKFLOW", "TERMINATE",
+        "WAIT", "EVENT", "DECISION",
     }
     for task in workflow.get("tasks", []):
         task_type = task.get("taskType", "")
@@ -305,12 +305,10 @@ def _find_tool_task_outputs(workflow, tool_name):
         if task_type in system_types:
             continue
         if tool_name == task_def or tool_name == task_type or tool_name in ref:
-            results.append(
-                (
-                    task.get("status", ""),
-                    str(task.get("outputData", {})),
-                )
-            )
+            results.append((
+                task.get("status", ""),
+                str(task.get("outputData", {})),
+            ))
     return results
 
 
@@ -343,7 +341,8 @@ class TestSuite8Guardrails:
         guard_names = {g["name"] for g in guardrails}
         for expected in ["block_profanity", "no_secrets"]:
             assert expected in guard_names, (
-                f"[Plan] Guardrail '{expected}' not in agentDef.guardrails. Found: {guard_names}"
+                f"[Plan] Guardrail '{expected}' not in agentDef.guardrails. "
+                f"Found: {guard_names}"
             )
 
         # G1: regex block, input, raise
@@ -496,7 +495,9 @@ class TestSuite8Guardrails:
     def test_max_retries_escalation(self, runtime, model):
         """strict_tool always fails → max_retries=1 → escalates to raise."""
         agent = _agent_with_strict_tool(model)
-        result = runtime.run(agent, 'Call strict_tool with text="test"', timeout=TIMEOUT)
+        result = runtime.run(
+            agent, 'Call strict_tool with text="test"', timeout=TIMEOUT
+        )
         diag = _run_diagnostic(result)
         assert result.execution_id, f"[Escalation] No execution_id. {diag}"
         # Should fail — guardrail always rejects, max_retries=1 → raise

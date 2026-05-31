@@ -6,7 +6,7 @@
 Demonstrates:
     - @tool(external=True, credentials=["GITHUB_TOKEN"]) declares
       credentials for an external worker
-    - The external worker uses resolve_secrets() to fetch
+    - The external worker uses resolve_credentials() to fetch
       credential values from the server at runtime
     - Works for workers running in separate processes, containers,
       or machines
@@ -26,12 +26,11 @@ Requirements:
     - GITHUB_TOKEN stored via `agentspan credentials set`
 """
 
-from agentspan.agents import Agent, AgentRuntime, tool, resolve_secrets
+from agentspan.agents import Agent, AgentRuntime, tool, resolve_credentials
 from settings import settings
 
 
 # ── Agent side: declare external tool with credentials ──────────
-
 
 @tool(external=True, credentials=["GITHUB_TOKEN"])
 def github_lookup(username: str) -> dict:
@@ -50,7 +49,6 @@ agent = Agent(
 # ── External worker side: resolve credentials at runtime ────────
 # In production, this would run in a separate process.
 
-
 def run_external_worker():
     """Simulate an external worker that resolves credentials."""
     from conductor.client.worker.worker_task import worker_task
@@ -63,16 +61,15 @@ def run_external_worker():
     def github_lookup_worker(task: Task) -> TaskResult:
         username = task.input_data.get("username", "")
 
-        # resolve_secrets reads __agentspan_ctx__ from task input
+        # resolve_credentials reads __agentspan_ctx__ from task input
         # and calls the server to get the credential values
-        creds = resolve_secrets(task.input_data, ["GITHUB_TOKEN"])
+        creds = resolve_credentials(task.input_data, ["GITHUB_TOKEN"])
         token = creds.get("GITHUB_TOKEN", "")
 
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         resp = requests.get(
             f"https://api.github.com/users/{username}",
-            headers=headers,
-            timeout=10,
+            headers=headers, timeout=10,
         )
 
         if resp.ok:
@@ -110,5 +107,5 @@ if __name__ == "__main__":
     print(f"  credentials: {agent.tools[0]._tool_def.credentials}")
     print()
     print("External worker pattern:")
-    print("  creds = resolve_secrets(task.input_data, ['GITHUB_TOKEN'])")
+    print("  creds = resolve_credentials(task.input_data, ['GITHUB_TOKEN'])")
     print("  token = creds['GITHUB_TOKEN']")

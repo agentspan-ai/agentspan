@@ -45,7 +45,6 @@ import argparse
 
 # ── Pattern B — pure Agentspan, no openai-agents dependency ────────────────
 
-
 def run_pattern_b() -> None:
     """Run using Agentspan's own Agent and function_tool (same result)."""
     from agentspan import Runner, function_tool
@@ -93,7 +92,6 @@ def run_pattern_b() -> None:
 
 # ── Pattern A — keep openai-agents Agent/function_tool, swap only Runner ───
 
-
 def run_pattern_a() -> None:
     """Run with openai-agents Agent but Agentspan's Runner.
 
@@ -109,7 +107,7 @@ def run_pattern_a() -> None:
 
     # ── The ONE line you change ────────────────────────────────────────────
     # from agents import Runner     # ← original openai-agents import
-    from agentspan import Runner  # ← drop-in Agentspan replacement
+    from agentspan import Runner    # ← drop-in Agentspan replacement
 
     @function_tool
     def get_weather(city: str) -> str:

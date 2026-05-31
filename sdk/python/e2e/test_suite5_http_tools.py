@@ -74,7 +74,9 @@ def _start_http_server(port, auth_key=None):
     while time.time() < deadline:
         if proc.poll() is not None:
             stderr = proc.stderr.read().decode() if proc.stderr else ""
-            raise RuntimeError(f"mcp-testkit exited with code {proc.returncode}: {stderr}")
+            raise RuntimeError(
+                f"mcp-testkit exited with code {proc.returncode}: {stderr}"
+            )
         try:
             requests.get(f"http://localhost:{port}/api-docs", timeout=2)
             return proc  # OpenAPI spec responding means server is up
@@ -402,14 +404,18 @@ def _assert_run_completed(result, step_name):
             f"  {diag}"
         )
 
-    assert result.status == "COMPLETED", f"[{step_name}] Run did not complete. {diag}"
+    assert result.status == "COMPLETED", (
+        f"[{step_name}] Run did not complete. {diag}"
+    )
 
 
 def _validate_tool_execution(result, step_name):
     """Validate that the 3 test tools executed successfully via workflow tasks."""
     _assert_run_completed(result, step_name)
 
-    tool_tasks, all_refs = _find_http_tool_tasks(result.execution_id, TEST_TOOL_NAMES)
+    tool_tasks, all_refs = _find_http_tool_tasks(
+        result.execution_id, TEST_TOOL_NAMES
+    )
 
     # Dump HTTP tasks for diagnostics if tools not found
     http_task_dump = _dump_http_tasks(result.execution_id)
@@ -454,7 +460,9 @@ class TestSuite5HttpTools:
                 timeout=5,
             )
         except FileNotFoundError:
-            pytest.skip("mcp-testkit not installed — required for Suite 5 HTTP tools test")
+            pytest.skip(
+                "mcp-testkit not installed — required for Suite 5 HTTP tools test"
+            )
 
         server_proc = None
         try:
@@ -511,7 +519,9 @@ class TestSuite5HttpTools:
             cli_credentials.set(CRED_NAME, HTTP_AUTH_KEY)
 
             # Step j: Discover tools with auth, validate all present
-            discovered_auth = _discover_tools_via_openapi(HTTP_SPEC_URL, auth_key=HTTP_AUTH_KEY)
+            discovered_auth = _discover_tools_via_openapi(
+                HTTP_SPEC_URL, auth_key=HTTP_AUTH_KEY
+            )
             assert len(discovered_auth) == EXPECTED_TOOL_COUNT, (
                 f"[Phase 2: Auth Discovery] Expected {EXPECTED_TOOL_COUNT} tools, "
                 f"discovered {len(discovered_auth)}."
@@ -523,8 +533,12 @@ class TestSuite5HttpTools:
             )
 
             # Step k: Execute and validate
-            result_auth = runtime.run(auth_agent, PROMPT_USE_3_TOOLS, timeout=TIMEOUT)
-            _validate_tool_execution(result_auth, "Phase 2: Authenticated execution")
+            result_auth = runtime.run(
+                auth_agent, PROMPT_USE_3_TOOLS, timeout=TIMEOUT
+            )
+            _validate_tool_execution(
+                result_auth, "Phase 2: Authenticated execution"
+            )
 
         finally:
             if server_proc:
@@ -544,7 +558,9 @@ class TestSuite5HttpTools:
             spec_resp.raise_for_status()
             spec = spec_resp.json()
         except Exception as e:
-            pytest.skip(f"Orkes API spec not reachable at {ORKES_SPEC_URL}: {e}")
+            pytest.skip(
+                f"Orkes API spec not reachable at {ORKES_SPEC_URL}: {e}"
+            )
 
         # ── Algorithmic validation: startWorkflow exists at /api/workflow
         found = False
@@ -552,7 +568,8 @@ class TestSuite5HttpTools:
             for method, op in methods.items():
                 if isinstance(op, dict) and op.get("operationId") == "startWorkflow":
                     assert "/workflow" in path, (
-                        f"[External OpenAPI] startWorkflow found but at unexpected path: {path}"
+                        f"[External OpenAPI] startWorkflow found but at "
+                        f"unexpected path: {path}"
                     )
                     found = True
         assert found, (
@@ -583,7 +600,9 @@ class TestSuite5HttpTools:
             timeout=TIMEOUT,
         )
 
-        assert result.execution_id, f"[External OpenAPI] No execution_id. {_run_diagnostic(result)}"
+        assert result.execution_id, (
+            f"[External OpenAPI] No execution_id. {_run_diagnostic(result)}"
+        )
         # Accept any terminal status — agent may fail without Orkes credentials
         assert result.status in ("COMPLETED", "FAILED", "TERMINATED"), (
             f"[External OpenAPI] Expected terminal status, "

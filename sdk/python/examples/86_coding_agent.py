@@ -236,7 +236,6 @@ def write_coder_plan(content: str) -> str:
 # via ``tools=`` so Agentspan registers their Conductor task definitions.
 # The compiled plan calls them by name as SIMPLE tasks.
 
-
 @tool
 def edit_file(path: str, old_string: str, new_string: str) -> str:
     """Apply an exact string replacement to a file in the demo repo.
@@ -393,15 +392,10 @@ coder = Agent(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-
 def main() -> None:
-    task = (
-        " ".join(sys.argv[1:])
-        if len(sys.argv) > 1
-        else (
-            "Add a greet(name) function to src/math_utils.py that returns "
-            "'Hello, <name>!' and add a test for it in tests/test_math.py"
-        )
+    task = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else (
+        "Add a greet(name) function to src/math_utils.py that returns "
+        "'Hello, <name>!' and add a test for it in tests/test_math.py"
     )
 
     repo = _ensure_demo_repo()

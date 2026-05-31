@@ -68,36 +68,32 @@ def clean_data(state: State) -> State:
 def analyze_data(state: State) -> State:
     """Run statistical analysis on the clean data using the LLM."""
     data_str = "\n".join(str(row) for row in state["clean_data"])
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are a data analyst. Analyze the following dataset records and provide: "
-                    "1) Key statistics (totals, averages, ranges), "
-                    "2) Notable patterns or outliers, "
-                    "3) Business insights. Be concise."
-                )
-            ),
-            HumanMessage(content=f"Dataset: {state['dataset_name']}\n\n{data_str}"),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a data analyst. Analyze the following dataset records and provide: "
+                "1) Key statistics (totals, averages, ranges), "
+                "2) Notable patterns or outliers, "
+                "3) Business insights. Be concise."
+            )
+        ),
+        HumanMessage(content=f"Dataset: {state['dataset_name']}\n\n{data_str}"),
+    ])
     return {"analysis": response.content}
 
 
 def generate_report(state: State) -> State:
     """Generate an executive summary report from the analysis."""
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are a business report writer. "
-                    "Turn the following data analysis into a concise executive summary report "
-                    "with an introduction, key findings, and recommendations."
-                )
-            ),
-            HumanMessage(content=state["analysis"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a business report writer. "
+                "Turn the following data analysis into a concise executive summary report "
+                "with an introduction, key findings, and recommendations."
+            )
+        ),
+        HumanMessage(content=state["analysis"]),
+    ])
     return {"report": response.content}
 
 

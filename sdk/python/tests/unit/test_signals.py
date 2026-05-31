@@ -73,7 +73,6 @@ class TestRuntimeStop:
 
         # Mock requests.post
         import requests as req_lib
-
         with patch.object(req_lib, "post") as mock_post:
             mock_post.return_value = MagicMock(status_code=200)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -89,12 +88,13 @@ class TestRuntimeStop:
         rt._agent_api_headers = MagicMock(return_value={})
 
         import requests as req_lib
-
         with patch.object(req_lib, "post") as mock_post:
             mock_post.return_value = MagicMock(status_code=200)
             mock_post.return_value.raise_for_status = MagicMock()
             rt.stop("wf-1")
-            rt._workflow_client.send_message.assert_called_once_with("wf-1", {"_signal": "stop"})
+            rt._workflow_client.send_message.assert_called_once_with(
+                "wf-1", {"_signal": "stop"}
+            )
 
     def test_stop_wmq_failure_is_swallowed(self):
         """If WMQ send fails, stop still succeeds."""
@@ -107,7 +107,6 @@ class TestRuntimeStop:
         rt._agent_api_headers = MagicMock(return_value={})
 
         import requests as req_lib
-
         with patch.object(req_lib, "post") as mock_post:
             mock_post.return_value = MagicMock(status_code=200)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -128,7 +127,6 @@ class TestRuntimeSignal:
         rt._agent_api_headers = MagicMock(return_value={})
 
         import requests as req_lib
-
         with patch.object(req_lib, "post") as mock_post:
             mock_post.return_value = MagicMock(status_code=200)
             mock_post.return_value.raise_for_status = MagicMock()
@@ -148,7 +146,6 @@ class TestRuntimeSignal:
         rt._agent_api_headers = MagicMock(return_value={})
 
         import requests as req_lib
-
         with patch.object(req_lib, "post") as mock_post:
             mock_post.return_value = MagicMock(status_code=200)
             mock_post.return_value.raise_for_status = MagicMock()

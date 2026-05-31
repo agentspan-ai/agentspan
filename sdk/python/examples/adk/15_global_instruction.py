@@ -71,8 +71,8 @@ def main():
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-            agent,
-            "I'm looking for the Widget Pro. Is it in stock? Also, what are the downtown store hours?",
+        agent,
+        "I'm looking for the Widget Pro. Is it in stock? Also, what are the downtown store hours?",
         )
         print(f"Status: {result.status}")
         result.print_result()
@@ -85,6 +85,7 @@ def main():
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
+
 
 
 if __name__ == "__main__":

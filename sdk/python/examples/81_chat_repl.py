@@ -71,32 +71,27 @@ from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 # ---------------------------------------------------------------------------
 
 _TASK_IMPLEMENTATIONS: dict = {
-    "word_count": (
-        "Count the number of words in the input text.",
-        lambda inp: str(len(inp.split())),
-    ),
-    "char_count": ("Count the number of characters in the input text.", lambda inp: str(len(inp))),
-    "reverse": ("Reverse the input string character by character.", lambda inp: inp[::-1]),
-    "to_upper": ("Convert the input text to UPPER CASE.", lambda inp: inp.upper()),
-    "to_lower": ("Convert the input text to lower case.", lambda inp: inp.lower()),
-    "title_case": ("Convert the input text to Title Case.", lambda inp: inp.title()),
-    "contains": (
-        "Check whether the input text contains a word. "
-        'Pass input as "word|text to search" (pipe-separated).',
-        lambda inp: str(
-            inp.split("|", 1)[1].__contains__(inp.split("|", 1)[0])
-            if "|" in inp
-            else "Error: use 'word|text' format"
-        ),
-    ),
-    "bullet_split": (
-        "Split the input text into a bullet list, one sentence per bullet.",
-        lambda inp: "\n".join(
-            f"• {s.strip()}"
-            for s in inp.replace("!", ".").replace("?", ".").split(".")
-            if s.strip()
-        ),
-    ),
+    "word_count":   ("Count the number of words in the input text.",
+                     lambda inp: str(len(inp.split()))),
+    "char_count":   ("Count the number of characters in the input text.",
+                     lambda inp: str(len(inp))),
+    "reverse":      ("Reverse the input string character by character.",
+                     lambda inp: inp[::-1]),
+    "to_upper":     ("Convert the input text to UPPER CASE.",
+                     lambda inp: inp.upper()),
+    "to_lower":     ("Convert the input text to lower case.",
+                     lambda inp: inp.lower()),
+    "title_case":   ("Convert the input text to Title Case.",
+                     lambda inp: inp.title()),
+    "contains":     ('Check whether the input text contains a word. '
+                     'Pass input as "word|text to search" (pipe-separated).',
+                     lambda inp: str(inp.split("|", 1)[1].__contains__(inp.split("|", 1)[0])
+                                    if "|" in inp else "Error: use 'word|text' format")),
+    "bullet_split": ("Split the input text into a bullet list, one sentence per bullet.",
+                     lambda inp: "\n".join(
+                         f"• {s.strip()}" for s in inp.replace("!", ".").replace("?", ".").split(".")
+                         if s.strip()
+                     )),
 }
 
 SESSION_FILE = Path("/tmp/agentspan_chat_repl.session")
@@ -106,8 +101,8 @@ SESSION_FILE = Path("/tmp/agentspan_chat_repl.session")
 # ---------------------------------------------------------------------------
 
 _ipc_dir = Path(tempfile.mkdtemp(prefix="chat_repl_"))
-_REPLY_FILE = _ipc_dir / "reply.txt"  # agent writes reply here
-_REPLY_READY = _ipc_dir / "reply.ready"  # sentinel: reply is ready to read
+_REPLY_FILE = _ipc_dir / "reply.txt"       # agent writes reply here
+_REPLY_READY = _ipc_dir / "reply.ready"    # sentinel: reply is ready to read
 _REGISTRY_FILE = _ipc_dir / "registry.json"  # active ephemeral tasks
 
 
@@ -126,7 +121,6 @@ def _read_registry() -> dict:
 # ---------------------------------------------------------------------------
 # Agent definition
 # ---------------------------------------------------------------------------
-
 
 def build_agent() -> Agent:
     receive_message = wait_for_message_tool(
@@ -223,14 +217,11 @@ def _wait_for_reply() -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Chat REPL with a long-running agent via WMQ.")
     parser.add_argument(
-        "--resume",
-        action="store_true",
+        "--resume", action="store_true",
         help="Resume a previous session instead of starting a new one.",
     )
     parser.add_argument(
-        "--session-file",
-        type=Path,
-        default=SESSION_FILE,
+        "--session-file", type=Path, default=SESSION_FILE,
         help="Path to the session file storing the execution ID.",
     )
     return parser.parse_args()
@@ -308,23 +299,18 @@ try:
             if user_input.lower().startswith("/tool "):
                 task_name = user_input[6:].strip()
                 if task_name not in _TASK_IMPLEMENTATIONS:
-                    print(
-                        f"Unknown task '{task_name}'. "
-                        f"Available: {', '.join(_TASK_IMPLEMENTATIONS)}\n"
-                    )
+                    print(f"Unknown task '{task_name}'. "
+                          f"Available: {', '.join(_TASK_IMPLEMENTATIONS)}\n")
                     continue
                 desc, _ = _TASK_IMPLEMENTATIONS[task_name]
                 active_tasks[task_name] = desc
                 _write_registry(active_tasks)
                 print(f"  → Registered ephemeral task '{task_name}'.\n")
                 # Notify the agent so it can acknowledge and use it in the next turn.
-                runtime.send_message(
-                    execution_id,
-                    {
-                        "tool_registered": task_name,
-                        "tool_description": desc,
-                    },
-                )
+                runtime.send_message(execution_id, {
+                    "tool_registered": task_name,
+                    "tool_description": desc,
+                })
                 reply = _wait_for_reply()
                 print(f"Agent: {reply}\n")
                 continue

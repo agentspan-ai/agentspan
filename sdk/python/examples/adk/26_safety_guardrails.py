@@ -69,11 +69,13 @@ def sanitize_response(text: str, pii_types: str = "") -> dict:
     sanitized = text
     # Mask common PII patterns
     sanitized = re.sub(
-        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL REDACTED]", sanitized
-    )
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+        "[EMAIL REDACTED]", sanitized)
     sanitized = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE REDACTED]", sanitized)
     sanitized = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[SSN REDACTED]", sanitized)
-    sanitized = re.sub(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b", "[CARD REDACTED]", sanitized)
+    sanitized = re.sub(
+        r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b",
+        "[CARD REDACTED]", sanitized)
 
     return {"sanitized_text": sanitized, "was_modified": sanitized != text}
 
@@ -112,9 +114,9 @@ safe_pipeline = SequentialAgent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            safe_pipeline,
-            "What are the contact details for our support team? "
-            "Include email support@company.com and phone 555-123-4567.",
+        safe_pipeline,
+        "What are the contact details for our support team? "
+        "Include email support@company.com and phone 555-123-4567.",
         )
         result.print_result()
 

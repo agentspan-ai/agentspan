@@ -116,9 +116,7 @@ def print_status(prefix: str, status: object) -> None:
     attempt_state = load_json(DEFAULT_ATTEMPT_FILE, {"attempts": []})
     attempts = attempt_state.get("attempts", [])
     attempt_summary = ",".join(f"{item['attempt']}:{item['status']}" for item in attempts) or "none"
-    print(
-        f"{prefix} status={status.status} complete={status.is_complete} attempts={attempt_summary}"
-    )
+    print(f"{prefix} status={status.status} complete={status.is_complete} attempts={attempt_summary}")
 
 
 def run_once() -> None:

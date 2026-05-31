@@ -99,8 +99,8 @@ graph = create_agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "What are the latest developments in climate change research? Include sources.",
+        graph,
+        "What are the latest developments in climate change research? Include sources.",
         )
         print(f"Status: {result.status}")
         result.print_result()

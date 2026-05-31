@@ -28,7 +28,6 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # ── State definitions ─────────────────────────────────────────────────────────
 
-
 class OverallState(TypedDict):
     topic: str
     documents: List[str]
@@ -44,20 +43,17 @@ class DocumentState(TypedDict):
 
 # ── Nodes ──────────────────────────────────────────────────────────────────────
 
-
 def generate_documents(state: OverallState) -> OverallState:
     """Generate 3 short document snippets about the topic."""
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "Generate 3 short text snippets (each 2-3 sentences) about the given topic. "
-                    "Format as a numbered list:\n1. ...\n2. ...\n3. ..."
-                )
-            ),
-            HumanMessage(content=f"Topic: {state['topic']}"),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "Generate 3 short text snippets (each 2-3 sentences) about the given topic. "
+                "Format as a numbered list:\n1. ...\n2. ...\n3. ..."
+            )
+        ),
+        HumanMessage(content=f"Topic: {state['topic']}"),
+    ])
     lines = [l.strip() for l in response.content.strip().split("\n") if l.strip()]
     docs = [l.lstrip("0123456789. ") for l in lines if l[0].isdigit()][:3]
     return {"documents": docs or [response.content.strip()]}
@@ -73,29 +69,27 @@ def fan_out(state: OverallState):
 
 def summarize_doc(state: DocumentState) -> dict:
     """Summarize a single document."""
-    response = llm.invoke(
-        [
-            SystemMessage(content="Summarize this text in one concise sentence."),
-            HumanMessage(content=f"Topic: {state['topic']}\n\nText: {state['document']}"),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(content="Summarize this text in one concise sentence."),
+        HumanMessage(content=f"Topic: {state['topic']}\n\nText: {state['document']}"),
+    ])
     return {"summaries": [response.content.strip()]}
 
 
 def reduce_summaries(state: OverallState) -> OverallState:
     """Combine all summaries into a final report."""
     bullet_points = "\n".join(f"• {s}" for s in state["summaries"])
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are a report writer. Given the topic and a list of summaries, "
-                    "write a cohesive 2-3 sentence final report."
-                )
-            ),
-            HumanMessage(content=f"Topic: {state['topic']}\n\nSummaries:\n{bullet_points}"),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a report writer. Given the topic and a list of summaries, "
+                "write a cohesive 2-3 sentence final report."
+            )
+        ),
+        HumanMessage(
+            content=f"Topic: {state['topic']}\n\nSummaries:\n{bullet_points}"
+        ),
+    ])
     return {"final_report": response.content.strip()}
 
 

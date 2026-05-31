@@ -65,28 +65,16 @@ class TicketAnalysis(BaseModel):
     ticket_id: str = Field(description="Zendesk ticket ID")
     customer_name: str = Field(description="Customer / company name")
     summary: str = Field(description="One-paragraph summary of the customer issue")
-    priority: str = Field(
-        description="P0 (house on fire) | P1 (critical) | P2 (high) | P3 (medium) | P4 (low)"
-    )
+    priority: str = Field(description="P0 (house on fire) | P1 (critical) | P2 (high) | P3 (medium) | P4 (low)")
     priority_justification: str = Field(description="Why this priority was assigned")
     root_cause: str = Field(description="Most likely root cause based on investigation")
     solution: str = Field(description="Recommended solution with step-by-step instructions")
-    runbook_references: List[str] = Field(
-        default_factory=list, description="Links or titles of relevant Notion runbooks"
-    )
-    related_issues: List[RelatedIssue] = Field(
-        default_factory=list, description="Related issues found across systems"
-    )
-    code_references: List[str] = Field(
-        default_factory=list, description="Relevant files, PRs, or commits in GitHub"
-    )
-    next_steps: List[str] = Field(
-        default_factory=list, description="Actionable next steps for the CE team"
-    )
+    runbook_references: List[str] = Field(default_factory=list, description="Links or titles of relevant Notion runbooks")
+    related_issues: List[RelatedIssue] = Field(default_factory=list, description="Related issues found across systems")
+    code_references: List[str] = Field(default_factory=list, description="Relevant files, PRs, or commits in GitHub")
+    next_steps: List[str] = Field(default_factory=list, description="Actionable next steps for the CE team")
     customer_tier: str = Field(default="unknown", description="Customer tier/plan from HubSpot")
-    escalation_needed: bool = Field(
-        default=False, description="Whether engineering escalation is needed"
-    )
+    escalation_needed: bool = Field(default=False, description="Whether engineering escalation is needed")
 
 
 # ---------------------------------------------------------------------------
@@ -142,11 +130,7 @@ def get_zendesk_ticket(ticket_id: str) -> dict:
         user_resp = requests.get(user_url, auth=auth, headers=headers, timeout=10)
         if user_resp.ok:
             u = user_resp.json()["user"]
-            requester = {
-                "name": u.get("name"),
-                "email": u.get("email"),
-                "organization_id": u.get("organization_id"),
-            }
+            requester = {"name": u.get("name"), "email": u.get("email"), "organization_id": u.get("organization_id")}
 
     return {
         "id": ticket["id"],
@@ -216,20 +200,7 @@ def search_jira_issues(jql: str) -> dict:
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
 
     url = f"{base_url}/rest/api/3/search"
-    payload = {
-        "jql": jql,
-        "maxResults": 15,
-        "fields": [
-            "summary",
-            "status",
-            "assignee",
-            "priority",
-            "labels",
-            "created",
-            "updated",
-            "description",
-        ],
-    }
+    payload = {"jql": jql, "maxResults": 15, "fields": ["summary", "status", "assignee", "priority", "labels", "created", "updated", "description"]}
     resp = requests.post(url, auth=auth, headers=headers, json=payload, timeout=15)
     resp.raise_for_status()
     issues = resp.json().get("issues", [])
@@ -244,9 +215,7 @@ def search_jira_issues(jql: str) -> dict:
                 "assignee": (i["fields"].get("assignee") or {}).get("displayName"),
                 "labels": i["fields"].get("labels", []),
                 "created": i["fields"].get("created"),
-                "description": (i["fields"].get("description") or "")[:1000]
-                if isinstance(i["fields"].get("description"), str)
-                else "",
+                "description": (i["fields"].get("description") or "")[:1000] if isinstance(i["fields"].get("description"), str) else "",
             }
             for i in issues
         ],
@@ -264,9 +233,7 @@ def get_jira_issue(issue_key: str) -> dict:
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
 
     url = f"{base_url}/rest/api/3/issue/{issue_key}"
-    params = {
-        "fields": "summary,status,assignee,priority,labels,description,comment,issuelinks,created,updated,resolution"
-    }
+    params = {"fields": "summary,status,assignee,priority,labels,description,comment,issuelinks,created,updated,resolution"}
     resp = requests.get(url, auth=auth, headers=headers, params=params, timeout=15)
     resp.raise_for_status()
     issue = resp.json()
@@ -277,25 +244,13 @@ def get_jira_issue(issue_key: str) -> dict:
         body = c.get("body", "")
         if isinstance(body, dict):
             body = json.dumps(body)[:1000]
-        comments.append(
-            {
-                "author": c.get("author", {}).get("displayName"),
-                "body": str(body)[:1000],
-                "created": c.get("created"),
-            }
-        )
+        comments.append({"author": c.get("author", {}).get("displayName"), "body": str(body)[:1000], "created": c.get("created")})
 
     links = []
     for link in fields.get("issuelinks", []):
         linked = link.get("outwardIssue") or link.get("inwardIssue")
         if linked:
-            links.append(
-                {
-                    "key": linked["key"],
-                    "summary": linked["fields"].get("summary"),
-                    "type": link.get("type", {}).get("name"),
-                }
-            )
+            links.append({"key": linked["key"], "summary": linked["fields"].get("summary"), "type": link.get("type", {}).get("name")})
 
     desc = fields.get("description", "")
     if isinstance(desc, dict):
@@ -333,28 +288,10 @@ def search_hubspot_company(company_name: str) -> dict:
 
     url = "https://api.hubapi.com/crm/v3/objects/companies/search"
     payload = {
-        "filterGroups": [
-            {
-                "filters": [
-                    {"propertyName": "name", "operator": "CONTAINS_TOKEN", "value": company_name}
-                ]
-            }
-        ],
-        "properties": [
-            "name",
-            "domain",
-            "industry",
-            "numberofemployees",
-            "annualrevenue",
-            "lifecyclestage",
-            "hs_lead_status",
-            "hubspot_owner_id",
-            "notes_last_contacted",
-            "plan_tier",
-            "customer_tier",
-            "contract_value",
-            "subscription_type",
-        ],
+        "filterGroups": [{"filters": [{"propertyName": "name", "operator": "CONTAINS_TOKEN", "value": company_name}]}],
+        "properties": ["name", "domain", "industry", "numberofemployees", "annualrevenue", "lifecyclestage",
+                        "hs_lead_status", "hubspot_owner_id", "notes_last_contacted", "plan_tier",
+                        "customer_tier", "contract_value", "subscription_type"],
         "limit": 5,
     }
     resp = requests.post(url, headers=headers, json=payload, timeout=15)
@@ -371,9 +308,7 @@ def search_hubspot_company(company_name: str) -> dict:
                 "employees": r["properties"].get("numberofemployees"),
                 "annual_revenue": r["properties"].get("annualrevenue"),
                 "lifecycle_stage": r["properties"].get("lifecyclestage"),
-                "plan_tier": r["properties"].get("plan_tier")
-                or r["properties"].get("customer_tier")
-                or r["properties"].get("subscription_type"),
+                "plan_tier": r["properties"].get("plan_tier") or r["properties"].get("customer_tier") or r["properties"].get("subscription_type"),
                 "contract_value": r["properties"].get("contract_value"),
                 "last_contacted": r["properties"].get("notes_last_contacted"),
             }
@@ -404,9 +339,7 @@ def get_hubspot_contact(email: str) -> dict:
 
     associations = {}
     for assoc_type, assoc_data in data.get("associations", {}).items():
-        associations[assoc_type] = [
-            {"id": a["id"], "type": a.get("type")} for a in assoc_data.get("results", [])
-        ]
+        associations[assoc_type] = [{"id": a["id"], "type": a.get("type")} for a in assoc_data.get("results", [])]
 
     return {
         "id": data.get("id"),
@@ -456,11 +389,7 @@ def search_notion_runbooks(query: str) -> dict:
 
     if not resp.ok:
         search_url = "https://api.notion.com/v1/search"
-        search_payload = {
-            "query": query,
-            "filter": {"value": "page", "property": "object"},
-            "page_size": 10,
-        }
+        search_payload = {"query": query, "filter": {"value": "page", "property": "object"}, "page_size": 10}
         resp = requests.post(search_url, headers=headers, json=search_payload, timeout=15)
         resp.raise_for_status()
 
@@ -473,14 +402,12 @@ def search_notion_runbooks(query: str) -> dict:
                 title_parts = prop_val.get("title", [])
                 title = "".join(t.get("plain_text", "") for t in title_parts)
                 break
-        pages.append(
-            {
-                "id": page["id"],
-                "title": title,
-                "url": page.get("url", ""),
-                "last_edited": page.get("last_edited_time"),
-            }
-        )
+        pages.append({
+            "id": page["id"],
+            "title": title,
+            "url": page.get("url", ""),
+            "last_edited": page.get("last_edited_time"),
+        })
 
     return {"count": len(pages), "runbooks": pages}
 
@@ -586,11 +513,7 @@ def search_github_code(query: str, repo: Optional[str] = None) -> dict:
     params = {"q": search_query, "per_page": 10}
     resp = requests.get(url, headers=headers, params=params, timeout=15)
     if resp.status_code == 403:
-        return {
-            "error": "GitHub code search requires a token with 'repo' scope. Got 403 Forbidden.",
-            "total_count": 0,
-            "files": [],
-        }
+        return {"error": "GitHub code search requires a token with 'repo' scope. Got 403 Forbidden.", "total_count": 0, "files": []}
     resp.raise_for_status()
     items = resp.json().get("items", [])
     return {
@@ -660,12 +583,7 @@ def get_github_pull_request(repo: str, pr_number: int) -> dict:
     changed_files = []
     if files_resp.ok:
         changed_files = [
-            {
-                "filename": f["filename"],
-                "status": f["status"],
-                "additions": f["additions"],
-                "deletions": f["deletions"],
-            }
+            {"filename": f["filename"], "status": f["status"], "additions": f["additions"], "deletions": f["deletions"]}
             for f in files_resp.json()
         ]
 
@@ -692,7 +610,7 @@ def get_github_pull_request(repo: str, pr_number: int) -> dict:
 pii_guardrail = RegexGuardrail(
     patterns=[
         r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",  # credit card
-        r"\b\d{3}-\d{2}-\d{4}\b",  # SSN
+        r"\b\d{3}-\d{2}-\d{4}\b",                          # SSN
     ],
     mode="block",
     position="output",
@@ -810,23 +728,12 @@ ce_support_agent = Agent(
     model=settings.llm_model,
     instructions=ORCHESTRATOR_INSTRUCTIONS,
     tools=[
-        agent_tool(
-            zendesk_agent,
-            description="Investigate the Zendesk ticket — fetch details and find related tickets",
-        ),
-        agent_tool(
-            hubspot_agent,
-            description="Look up customer context in HubSpot — plan tier, revenue, importance",
-        ),
-        agent_tool(
-            jira_agent, description="Search JIRA for related engineering issues, bugs, and fixes"
-        ),
+        agent_tool(zendesk_agent, description="Investigate the Zendesk ticket — fetch details and find related tickets"),
+        agent_tool(hubspot_agent, description="Look up customer context in HubSpot — plan tier, revenue, importance"),
+        agent_tool(jira_agent, description="Search JIRA for related engineering issues, bugs, and fixes"),
         agent_tool(runbook_agent, description="Search Notion runbooks for resolution procedures"),
-        agent_tool(
-            github_agent,
-            description="Search GitHub for related issues, PRs, code, and releases, check "
-            "orkes-conductor and conductor-ui repos",
-        ),
+        agent_tool(github_agent, description="Search GitHub for related issues, PRs, code, and releases, check "
+                                             "orkes-conductor and conductor-ui repos"),
     ],
     credentials=ALL_CREDS,
     output_type=TicketAnalysis,
@@ -885,7 +792,6 @@ def _print_analysis(output):
         except Exception:
             # If it doesn't fit the schema, just print raw
             import json
-
             print(json.dumps(output, indent=2, default=str))
             return
     else:
@@ -912,9 +818,7 @@ def _print_analysis(output):
         print("\nRELATED ISSUES:")
         for issue in analysis.related_issues:
             if isinstance(issue, dict):
-                print(
-                    f"  [{issue['source']}] {issue['key']}: {issue['summary']} ({issue['status']})"
-                )
+                print(f"  [{issue['source']}] {issue['key']}: {issue['summary']} ({issue['status']})")
             else:
                 print(f"  [{issue.source}] {issue.key}: {issue.summary} ({issue.status})")
 

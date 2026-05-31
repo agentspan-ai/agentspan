@@ -32,11 +32,7 @@ class State(TypedDict):
 
 def chat(state: State) -> State:
     messages = state.get("messages", [])
-    lc_messages = [
-        SystemMessage(
-            content="You are a helpful assistant. Remember context from earlier in this conversation."
-        )
-    ]
+    lc_messages = [SystemMessage(content="You are a helpful assistant. Remember context from earlier in this conversation.")]
     for m in messages:
         if m.get("role") == "user":
             lc_messages.append(HumanMessage(content=m["content"]))
@@ -63,14 +59,14 @@ if __name__ == "__main__":
             print(f"Alice: {msg}")
             result.print_result()
 
-            # Production pattern:
-            # 1. Deploy once during CI/CD:
-            # runtime.deploy(graph)
-            # CLI alternative:
-            # agentspan deploy --package examples.langgraph.27_persistent_memory
-            #
-            # 2. In a separate long-lived worker process:
-            # runtime.serve(graph)
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.27_persistent_memory
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)
 
             print()
 

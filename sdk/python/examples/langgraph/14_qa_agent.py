@@ -65,19 +65,17 @@ def retrieve_context(state: State) -> State:
 
 def generate_answer(state: State) -> State:
     """Generate an answer grounded in the retrieved context."""
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are a knowledgeable assistant. Answer the question using ONLY "
-                    "the provided context. If the context does not contain enough information, "
-                    "say so clearly. Be concise and accurate.\n\n"
-                    f"Context:\n{state['context']}"
-                )
-            ),
-            HumanMessage(content=state["question"]),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a knowledgeable assistant. Answer the question using ONLY "
+                "the provided context. If the context does not contain enough information, "
+                "say so clearly. Be concise and accurate.\n\n"
+                f"Context:\n{state['context']}"
+            )
+        ),
+        HumanMessage(content=state["question"]),
+    ])
     return {"answer": response.content}
 
 
@@ -94,8 +92,8 @@ graph = builder.compile(name="qa_agent")
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            graph,
-            "What is Python and how many packages does it have?",
+        graph,
+        "What is Python and how many packages does it have?",
         )
         print(f"Status: {result.status}")
         result.print_result()

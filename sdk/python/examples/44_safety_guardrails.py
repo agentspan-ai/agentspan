@@ -30,7 +30,6 @@ from settings import settings
 
 # ── Safety tools ─────────────────────────────────────────────────────
 
-
 @tool
 def check_pii(text: str) -> dict:
     """Check text for personally identifiable information (PII).
@@ -75,11 +74,17 @@ def sanitize_response(text: str, pii_types: str = "") -> dict:
     sanitized = text
     # Mask common PII patterns
     sanitized = re.sub(
-        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL REDACTED]", sanitized
-    )
-    sanitized = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE REDACTED]", sanitized)
-    sanitized = re.sub(r"\b\d{3}-\d{2}-\d{4}\b", "[SSN REDACTED]", sanitized)
-    sanitized = re.sub(r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b", "[CARD REDACTED]", sanitized)
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+        "[EMAIL REDACTED]", sanitized)
+    sanitized = re.sub(
+        r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b",
+        "[PHONE REDACTED]", sanitized)
+    sanitized = re.sub(
+        r"\b\d{3}-\d{2}-\d{4}\b",
+        "[SSN REDACTED]", sanitized)
+    sanitized = re.sub(
+        r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b",
+        "[CARD REDACTED]", sanitized)
 
     return {"sanitized_text": sanitized, "was_modified": sanitized != text}
 
@@ -131,3 +136,4 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(pipeline)
+

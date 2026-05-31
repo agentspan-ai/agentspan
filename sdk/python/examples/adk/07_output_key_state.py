@@ -106,8 +106,8 @@ coordinator = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            coordinator,
-            "Create a report on the sales_q4 dataset with visualization recommendations.",
+        coordinator,
+        "Create a report on the sales_q4 dataset with visualization recommendations.",
         )
         result.print_result()
 

@@ -28,7 +28,8 @@ agent = Agent(
 )
 
 prompt = (
-    "Run: ls /nonexistent_path_that_does_not_exist\nThen tell me the exact stderr you got back."
+    "Run: ls /nonexistent_path_that_does_not_exist\n"
+    "Then tell me the exact stderr you got back."
 )
 
 if __name__ == "__main__":

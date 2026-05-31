@@ -99,6 +99,6 @@ with AgentRuntime() as runtime:
 
     # Wait for the agent to complete gracefully
     result = handle.join(timeout=30)
-    print(f"\nStatus: {result.status}")  # COMPLETED (not TERMINATED)
+    print(f"\nStatus: {result.status}")   # COMPLETED (not TERMINATED)
     print(f"Output: {result.output}")
     print("Done.")

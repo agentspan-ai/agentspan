@@ -2,7 +2,6 @@
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Tests for context passing through runtime methods."""
-
 from unittest.mock import MagicMock, patch
 
 from agentspan.agents import Agent

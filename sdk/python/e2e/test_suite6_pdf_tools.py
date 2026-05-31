@@ -187,7 +187,10 @@ class TestSuite6PdfTools:
         # ── Step 0: Verify agent compiles with correct tool type ──────
         plan = runtime.plan(agent)
         ad = plan["workflowDef"]["metadata"]["agentDef"]
-        pdf_tools = [t for t in ad.get("tools", []) if t.get("toolType") == "generate_pdf"]
+        pdf_tools = [
+            t for t in ad.get("tools", [])
+            if t.get("toolType") == "generate_pdf"
+        ]
         assert len(pdf_tools) == 1, (
             f"[PDF Plan] Expected 1 generate_pdf tool, found {len(pdf_tools)}. "
             f"Tools: {[(t.get('name'), t.get('toolType')) for t in ad.get('tools', [])]}"
@@ -203,7 +206,9 @@ class TestSuite6PdfTools:
 
         diag = _run_diagnostic(result)
         assert result.execution_id, f"[PDF Gen] No execution_id. {diag}"
-        assert result.status == "COMPLETED", f"[PDF Gen] Run did not complete. {diag}"
+        assert result.status == "COMPLETED", (
+            f"[PDF Gen] Run did not complete. {diag}"
+        )
 
         # ── Step 2: Verify GENERATE_PDF task completed ────────────────
         pdf_task = _find_pdf_task(result.execution_id)
@@ -227,8 +232,7 @@ class TestSuite6PdfTools:
         # If not found in task output, check agent text for URL patterns
         if pdf_url is None:
             import re
-
-            url_match = re.search(r"(https?://[^\s\)\"]+\.pdf[^\s\)\"]*)", agent_output)
+            url_match = re.search(r'(https?://[^\s\)\"]+\.pdf[^\s\)\"]*)', agent_output)
             if url_match:
                 pdf_url = url_match.group(1)
 
@@ -253,10 +257,12 @@ class TestSuite6PdfTools:
 
         pdf_resp = requests.get(pdf_url, timeout=30)
         assert pdf_resp.status_code == 200, (
-            f"[PDF Roundtrip] Failed to download PDF from {pdf_url}: {pdf_resp.status_code}"
+            f"[PDF Roundtrip] Failed to download PDF from {pdf_url}: "
+            f"{pdf_resp.status_code}"
         )
         assert len(pdf_resp.content) > 100, (
-            f"[PDF Roundtrip] Downloaded PDF is too small: {len(pdf_resp.content)} bytes"
+            f"[PDF Roundtrip] Downloaded PDF is too small: "
+            f"{len(pdf_resp.content)} bytes"
         )
 
         # Save to temp file for markitdown

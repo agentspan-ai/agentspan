@@ -60,7 +60,6 @@ DISCORD_CHANNELS = {
 
 # ── GitHub Tools ─────────────────────────────────────────────────
 
-
 @tool(credentials=["GITHUB_TOKEN"])
 def get_issue(repo: str, issue_number: int) -> dict:
     """Fetch a GitHub issue by number. repo format: owner/repo"""
@@ -125,7 +124,6 @@ def post_comment(repo: str, issue_number: int, body: str) -> dict:
 
 
 # ── Discord Tools ────────────────────────────────────────────────
-
 
 @tool(credentials=["DISCORD_TOKEN"])
 def post_to_discord(channel_name: str, message: str) -> dict:

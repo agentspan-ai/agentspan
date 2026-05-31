@@ -61,13 +61,13 @@ if __name__ == "__main__":
         )
         result.print_result()
 
-        print("\nStarting another run passing the credentials")
+        print('\nStarting another run passing the credentials')
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
         # runtime.deploy(agent)
         # CLI alternative:
-        # agentspan deploy --package examples.16i_secrets_langchain
+        # agentspan deploy --package examples.16i_credentials_langchain
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)

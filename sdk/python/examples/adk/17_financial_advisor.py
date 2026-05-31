@@ -85,7 +85,7 @@ def main():
             "gains": gains,
             "holding_period": f"{holding_period_months} months",
             "category": category,
-            "tax_rate": f"{rate * 100}%",
+            "tax_rate": f"{rate*100}%",
             "estimated_tax": tax,
         }
 
@@ -130,9 +130,9 @@ def main():
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-            coordinator,
-            "I'm client CLT-001. Review my portfolio and tell me if I should rebalance "
-            "given current market conditions. What would the tax impact be if I sold some AAPL?",
+        coordinator,
+        "I'm client CLT-001. Review my portfolio and tell me if I should rebalance "
+        "given current market conditions. What would the tax impact be if I sold some AAPL?",
         )
         print(f"Status: {result.status}")
         result.print_result()
@@ -145,6 +145,7 @@ def main():
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(coordinator)
+
 
 
 if __name__ == "__main__":

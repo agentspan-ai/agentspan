@@ -42,21 +42,17 @@ class EmailState(TypedDict):
 
 def draft_email(state: EmailState) -> EmailState:
     """Generate an email draft from the request."""
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content="You are a professional email writer. Draft a concise, polite email. "
-                "Include a subject line, greeting, body, and sign-off."
-            ),
-            HumanMessage(content=f"Request: {state['request']}"),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content="You are a professional email writer. Draft a concise, polite email. "
+            "Include a subject line, greeting, body, and sign-off."
+        ),
+        HumanMessage(content=f"Request: {state['request']}"),
+    ])
     return {"draft": response.content.strip()}
 
 
-@human_task(
-    prompt="Review the email draft. Respond with review_verdict (APPROVE or REVISE) and review_feedback."
-)
+@human_task(prompt="Review the email draft. Respond with review_verdict (APPROVE or REVISE) and review_feedback.")
 def review_email(state: EmailState) -> EmailState:
     """Human reviews the email draft and provides verdict + feedback.
 
@@ -81,19 +77,17 @@ def finalize(state: EmailState) -> EmailState:
 
 def revise_email(state: EmailState) -> EmailState:
     """Revise a rejected draft using the human's feedback."""
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content="You are a professional email writer. Revise this email draft "
-                "to address the reviewer's feedback. Keep the same intent but improve quality."
-            ),
-            HumanMessage(
-                content=f"Original request: {state.get('request', '')}\n\n"
-                f"Current draft:\n{state['draft']}\n\n"
-                f"Reviewer feedback: {state.get('review_feedback', 'Needs improvement.')}"
-            ),
-        ]
-    )
+    response = llm.invoke([
+        SystemMessage(
+            content="You are a professional email writer. Revise this email draft "
+            "to address the reviewer's feedback. Keep the same intent but improve quality."
+        ),
+        HumanMessage(
+            content=f"Original request: {state.get('request', '')}\n\n"
+            f"Current draft:\n{state['draft']}\n\n"
+            f"Reviewer feedback: {state.get('review_feedback', 'Needs improvement.')}"
+        ),
+    ])
     return {"final_email": response.content.strip()}
 
 

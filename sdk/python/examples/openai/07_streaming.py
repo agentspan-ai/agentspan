@@ -27,10 +27,11 @@ def search_knowledge_base(query: str) -> str:
     """Search the knowledge base for relevant information."""
     knowledge = {
         "return policy": "Returns accepted within 30 days with receipt. "
-        "Electronics have a 15-day return window.",
-        "shipping": "Free shipping on orders over $50. Standard delivery: 3-5 business days.",
+                         "Electronics have a 15-day return window.",
+        "shipping": "Free shipping on orders over $50. "
+                    "Standard delivery: 3-5 business days.",
         "warranty": "All products come with a 1-year manufacturer warranty. "
-        "Extended warranty available for electronics.",
+                    "Extended warranty available for electronics.",
     }
     query_lower = query.lower()
     for key, value in knowledge.items():

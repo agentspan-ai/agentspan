@@ -2,18 +2,12 @@
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Tests for CLI command execution configuration and tool."""
-
 import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentspan.agents.cli_config import (
-    CliConfig,
-    TerminalToolError,
-    _make_cli_tool,
-    _validate_cli_command,
-)
+from agentspan.agents.cli_config import CliConfig, TerminalToolError, _make_cli_tool, _validate_cli_command
 
 
 class TestCliConfig:
@@ -95,7 +89,9 @@ class TestMakeCliTool:
     def test_shell_allowed_when_enabled(self):
         tool_fn = _make_cli_tool(allowed_commands=[], allow_shell=True)
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="hello\n", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="hello\n", stderr=""
+            )
             result = tool_fn.__wrapped__(command="echo", args=["hello"], shell=True)
             assert result["status"] == "success"
             mock_run.assert_called_once()
@@ -105,7 +101,9 @@ class TestMakeCliTool:
     def test_basic_execution(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="output\n", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="output\n", stderr=""
+            )
             result = tool_fn.__wrapped__(command="echo", args=["hello"])
             assert result == {
                 "status": "success",
@@ -167,7 +165,9 @@ class TestMakeCliTool:
     def test_cwd_override(self):
         tool_fn = _make_cli_tool(allowed_commands=[], working_dir="/default")
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="", stderr=""
+            )
             # With cwd override
             tool_fn.__wrapped__(command="ls", cwd="/override")
             assert mock_run.call_args.kwargs["cwd"] == "/override"
@@ -188,23 +188,23 @@ class TestMakeCliTool:
 
     def test_context_key_saves_stdout_on_success(self):
         from agentspan.agents.tool import ToolContext
-
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="/tmp/abc123\n", stderr="")
-            ctx = ToolContext(execution_id="test", agent_name="test", state={})
-            result = tool_fn.__wrapped__(
-                command="mktemp", args=["-d"], context_key="working_dir", context=ctx
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="/tmp/abc123\n", stderr=""
             )
+            ctx = ToolContext(execution_id="test", agent_name="test", state={})
+            result = tool_fn.__wrapped__(command="mktemp", args=["-d"], context_key="working_dir", context=ctx)
             assert result["status"] == "success"
             assert ctx.state["working_dir"] == "/tmp/abc123"
 
     def test_context_key_not_saved_on_failure(self):
         from agentspan.agents.tool import ToolContext
-
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=1, stdout="partial output", stderr="error")
+            mock_run.return_value = MagicMock(
+                returncode=1, stdout="partial output", stderr="error"
+            )
             ctx = ToolContext(execution_id="test", agent_name="test", state={})
             result = tool_fn.__wrapped__(command="false", context_key="result", context=ctx)
             assert result["status"] == "error"
@@ -213,37 +213,30 @@ class TestMakeCliTool:
     def test_context_key_with_internal_key_name(self):
         """context_key='_agent_state' should work without corrupting internals."""
         from agentspan.agents.tool import ToolContext
-
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="val\n", stderr="")
             ctx = ToolContext(execution_id="test", agent_name="test", state={})
-            result = tool_fn.__wrapped__(
-                command="echo", args=["val"], context_key="_agent_state", context=ctx
-            )
+            result = tool_fn.__wrapped__(command="echo", args=["val"], context_key="_agent_state", context=ctx)
             assert result["status"] == "success"
             assert ctx.state["_agent_state"] == "val"
 
     def test_context_key_falls_back_to_stderr(self):
         """When stdout is empty, context_key should fall back to stderr."""
         from agentspan.agents.tool import ToolContext
-
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="", stderr="Cloning into '/tmp/repo'...\n"
             )
             ctx = ToolContext(execution_id="test", agent_name="test", state={})
-            result = tool_fn.__wrapped__(
-                command="gh", args=["repo", "clone", "org/repo"], context_key="repo", context=ctx
-            )
+            result = tool_fn.__wrapped__(command="gh", args=["repo", "clone", "org/repo"], context_key="repo", context=ctx)
             assert result["status"] == "success"
             assert ctx.state["repo"] == "Cloning into '/tmp/repo'..."
 
     def test_context_key_empty_string_is_noop(self):
         """Empty context_key should not write anything."""
         from agentspan.agents.tool import ToolContext
-
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="val\n", stderr="")

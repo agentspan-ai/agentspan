@@ -41,22 +41,18 @@ dg = skill(
 
 # ── Example 1: Run standalone ──────────────────────────────────────
 
-
 def run_standalone():
     """Run /dg as a standalone agent and show execution details."""
     with AgentRuntime() as rt:
         print("=== /dg Standalone Review ===\n")
 
-        stream = rt.stream(
-            dg,
-            "Review this code:\n\n```python\n"
+        stream = rt.stream(dg, "Review this code:\n\n```python\n"
             "import sqlite3\n"
             "def get_user(name):\n"
             "    conn = sqlite3.connect('users.db')\n"
             "    result = conn.execute(f'SELECT * FROM users WHERE name = \"{name}\"')\n"
             "    return result.fetchone()\n"
-            "```",
-        )
+            "```")
 
         print(f"Execution ID: {stream.execution_id}\n")
 
@@ -69,11 +65,7 @@ def run_standalone():
                 print(f"  [{event.tool_name}] returned: {preview}...")
             elif event.type == EventType.DONE:
                 print(f"\n--- Review Complete ---")
-                out = (
-                    event.output.get("result", "")
-                    if isinstance(event.output, dict)
-                    else str(event.output)
-                )
+                out = event.output.get("result", "") if isinstance(event.output, dict) else str(event.output)
                 print(str(out)[:500])
 
         result = stream.get_result()
@@ -143,7 +135,7 @@ def run_as_tool():
         result = rt.run(
             tech_lead,
             "Please review the authentication module in our latest PR. "
-            "The code adds JWT token validation.",
+            "The code adds JWT token validation."
         )
 
         print(f"Execution ID: {result.execution_id}")

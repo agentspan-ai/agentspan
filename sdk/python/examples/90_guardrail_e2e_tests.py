@@ -140,21 +140,13 @@ class TestRunner:
         failed = ran - passed
 
         print("\n" + "=" * 90)
-        print(
-            f"  RESULTS: {passed}/{ran} passed, {failed} failed, {skipped} skipped ({total} total)"
-        )
+        print(f"  RESULTS: {passed}/{ran} passed, {failed} failed, {skipped} skipped ({total} total)")
         print("=" * 90)
 
         # Matrix table
-        print(
-            "\n  ╔════╤══════════════╤════════╤════════╤════════╤══════════════════════════════════════╗"
-        )
-        print(
-            "  ║ #  │ Position     │ Type   │ OnFail │ Result │ Execution ID                         ║"
-        )
-        print(
-            "  ╠════╪══════════════╪════════╪════════╪════════╪══════════════════════════════════════╣"
-        )
+        print("\n  ╔════╤══════════════╤════════╤════════╤════════╤══════════════════════════════════════╗")
+        print("  ║ #  │ Position     │ Type   │ OnFail │ Result │ Execution ID                         ║")
+        print("  ╠════╪══════════════╪════════╪════════╪════════╪══════════════════════════════════════╣")
 
         positions = ["Agent OUT"] * 9 + ["Tool INPUT"] * 9 + ["Tool OUTPUT"] * 9
         types = (["Regex"] * 3 + ["LLM"] * 3 + ["Custom"] * 3) * 3
@@ -174,13 +166,9 @@ class TestRunner:
             sep = "╟" if (i + 1) % 9 == 0 and i < 26 else "║"
             print(f"  ║ {r.num:2d} │ {pos:12s} │ {typ:6s} │ {onf:6s} │ {mark:6s} │ {wf:36s} ║")
             if (i + 1) % 9 == 0 and i < 26:
-                print(
-                    "  ╟────┼──────────────┼────────┼────────┼────────┼──────────────────────────────────────╢"
-                )
+                print("  ╟────┼──────────────┼────────┼────────┼────────┼──────────────────────────────────────╢")
 
-        print(
-            "  ╚════╧══════════════╧════════╧════════╧════════╧══════════════════════════════════════╝"
-        )
+        print("  ╚════╧══════════════╧════════╧════════╧════════╧══════════════════════════════════════╝")
 
         if failed:
             print("\n  FAILURES:")
@@ -201,54 +189,38 @@ M = settings.llm_model
 
 regex_aout_retry = RegexGuardrail(
     patterns=[r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b"],
-    mode="block",
-    name="regex_aout_retry",
+    mode="block", name="regex_aout_retry",
     message="Do not include credit card numbers. Redact them.",
-    position=Position.OUTPUT,
-    on_fail=OnFail.RETRY,
+    position=Position.OUTPUT, on_fail=OnFail.RETRY,
 )
 regex_aout_raise = RegexGuardrail(
     patterns=[r"\b\d{3}-\d{2}-\d{4}\b"],
-    mode="block",
-    name="regex_aout_raise",
+    mode="block", name="regex_aout_raise",
     message="Response must not contain SSNs.",
-    position=Position.OUTPUT,
-    on_fail=OnFail.RAISE,
+    position=Position.OUTPUT, on_fail=OnFail.RAISE,
 )
 regex_aout_fix = RegexGuardrail(
     patterns=[r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b"],
-    mode="block",
-    name="regex_aout_fix",
+    mode="block", name="regex_aout_fix",
     message="Credit card detected.",
-    position=Position.OUTPUT,
-    on_fail=OnFail.FIX,
+    position=Position.OUTPUT, on_fail=OnFail.FIX,
 )
 
 llm_aout_retry = LLMGuardrail(
-    model=M,
-    name="llm_aout_retry",
-    position=Position.OUTPUT,
-    on_fail=OnFail.RETRY,
+    model=M, name="llm_aout_retry", position=Position.OUTPUT, on_fail=OnFail.RETRY,
     max_tokens=256,
     policy="Reject content that provides specific medication names with dosages or makes definitive medical diagnoses. General health tips are OK.",
 )
 llm_aout_raise = LLMGuardrail(
-    model=M,
-    name="llm_aout_raise",
-    position=Position.OUTPUT,
-    on_fail=OnFail.RAISE,
+    model=M, name="llm_aout_raise", position=Position.OUTPUT, on_fail=OnFail.RAISE,
     max_tokens=256,
     policy="Reject content that provides specific medication names with dosages or makes definitive medical diagnoses. General health tips are OK.",
 )
 llm_aout_fix = LLMGuardrail(
-    model=M,
-    name="llm_aout_fix",
-    position=Position.OUTPUT,
-    on_fail=OnFail.FIX,
+    model=M, name="llm_aout_fix", position=Position.OUTPUT, on_fail=OnFail.FIX,
     max_tokens=256,
     policy="Reject content that provides specific medication names with dosages or makes definitive medical diagnoses. General health tips are OK.",
 )
-
 
 @guardrail
 def custom_aout_block(content: str) -> GuardrailResult:
@@ -257,14 +229,12 @@ def custom_aout_block(content: str) -> GuardrailResult:
         return GuardrailResult(passed=False, message="Contains SECRET42. Remove it.")
     return GuardrailResult(passed=True)
 
-
 @guardrail
 def custom_aout_fix(content: str) -> GuardrailResult:
     """Replace SECRET42 with [REDACTED]."""
     if "SECRET42" in content:
         return GuardrailResult(
-            passed=False,
-            message="Secret redacted.",
+            passed=False, message="Secret redacted.",
             fixed_output=content.replace("SECRET42", "[REDACTED]"),
         )
     return GuardrailResult(passed=True)
@@ -274,54 +244,38 @@ def custom_aout_fix(content: str) -> GuardrailResult:
 
 regex_tin_retry = RegexGuardrail(
     patterns=[r"DROP\s+TABLE", r"DELETE\s+FROM", r";\s*--"],
-    mode="block",
-    name="regex_tin_retry",
+    mode="block", name="regex_tin_retry",
     message="SQL injection detected. Use a safe query.",
-    position=Position.INPUT,
-    on_fail=OnFail.RETRY,
+    position=Position.INPUT, on_fail=OnFail.RETRY,
 )
 regex_tin_raise = RegexGuardrail(
     patterns=[r"DROP\s+TABLE", r"DELETE\s+FROM", r";\s*--"],
-    mode="block",
-    name="regex_tin_raise",
+    mode="block", name="regex_tin_raise",
     message="SQL injection blocked.",
-    position=Position.INPUT,
-    on_fail=OnFail.RAISE,
+    position=Position.INPUT, on_fail=OnFail.RAISE,
 )
 regex_tin_fix = RegexGuardrail(
     patterns=[r"DROP\s+TABLE", r"DELETE\s+FROM", r";\s*--"],
-    mode="block",
-    name="regex_tin_fix",
+    mode="block", name="regex_tin_fix",
     message="SQL injection detected.",
-    position=Position.INPUT,
-    on_fail=OnFail.FIX,
+    position=Position.INPUT, on_fail=OnFail.FIX,
 )
 
 llm_tin_retry = LLMGuardrail(
-    model=M,
-    name="llm_tin_retry",
-    position=Position.INPUT,
-    on_fail=OnFail.RETRY,
+    model=M, name="llm_tin_retry", position=Position.INPUT, on_fail=OnFail.RETRY,
     max_tokens=256,
     policy="Reject if tool arguments contain real SSNs (XXX-XX-XXXX) or credit card numbers.",
 )
 llm_tin_raise = LLMGuardrail(
-    model=M,
-    name="llm_tin_raise",
-    position=Position.INPUT,
-    on_fail=OnFail.RAISE,
+    model=M, name="llm_tin_raise", position=Position.INPUT, on_fail=OnFail.RAISE,
     max_tokens=256,
     policy="Reject if tool arguments contain real SSNs (XXX-XX-XXXX) or credit card numbers.",
 )
 llm_tin_fix = LLMGuardrail(
-    model=M,
-    name="llm_tin_fix",
-    position=Position.INPUT,
-    on_fail=OnFail.FIX,
+    model=M, name="llm_tin_fix", position=Position.INPUT, on_fail=OnFail.FIX,
     max_tokens=256,
     policy="Reject if tool arguments contain real SSNs (XXX-XX-XXXX) or credit card numbers.",
 )
-
 
 @guardrail
 def custom_tin_block(content: str) -> GuardrailResult:
@@ -330,7 +284,6 @@ def custom_tin_block(content: str) -> GuardrailResult:
         return GuardrailResult(passed=False, message="Dangerous input. Use safe parameters.")
     return GuardrailResult(passed=True)
 
-
 @guardrail
 def custom_tin_block_raise(content: str) -> GuardrailResult:
     """Block DANGER in input (raise)."""
@@ -338,14 +291,12 @@ def custom_tin_block_raise(content: str) -> GuardrailResult:
         return GuardrailResult(passed=False, message="Dangerous input blocked.")
     return GuardrailResult(passed=True)
 
-
 @guardrail
 def custom_tin_block_fix(content: str) -> GuardrailResult:
     """Block DANGER in input (fix — but input FIX not supported in worker)."""
     if "DANGER" in content.upper():
         return GuardrailResult(
-            passed=False,
-            message="Dangerous input detected.",
+            passed=False, message="Dangerous input detected.",
             fixed_output=content.upper().replace("DANGER", "SAFE"),
         )
     return GuardrailResult(passed=True)
@@ -355,54 +306,38 @@ def custom_tin_block_fix(content: str) -> GuardrailResult:
 
 regex_tout_retry = RegexGuardrail(
     patterns=[r"INTERNAL_SECRET"],
-    mode="block",
-    name="regex_tout_retry",
-    message="Tool output contains credentials.",
-    position=Position.OUTPUT,
-    on_fail=OnFail.RETRY,
+    mode="block", name="regex_tout_retry",
+    message="Tool output contains secrets.",
+    position=Position.OUTPUT, on_fail=OnFail.RETRY,
 )
 regex_tout_raise = RegexGuardrail(
     patterns=[r"INTERNAL_SECRET"],
-    mode="block",
-    name="regex_tout_raise",
-    message="Tool output contains credentials.",
-    position=Position.OUTPUT,
-    on_fail=OnFail.RAISE,
+    mode="block", name="regex_tout_raise",
+    message="Tool output contains secrets.",
+    position=Position.OUTPUT, on_fail=OnFail.RAISE,
 )
 regex_tout_fix = RegexGuardrail(
     patterns=[r"INTERNAL_SECRET"],
-    mode="block",
-    name="regex_tout_fix",
-    message="Tool output contains credentials.",
-    position=Position.OUTPUT,
-    on_fail=OnFail.FIX,
+    mode="block", name="regex_tout_fix",
+    message="Tool output contains secrets.",
+    position=Position.OUTPUT, on_fail=OnFail.FIX,
 )
 
 llm_tout_retry = LLMGuardrail(
-    model=M,
-    name="llm_tout_retry",
-    position=Position.OUTPUT,
-    on_fail=OnFail.RETRY,
+    model=M, name="llm_tout_retry", position=Position.OUTPUT, on_fail=OnFail.RETRY,
     max_tokens=256,
     policy="Reject tool output containing personal info like SSNs, emails, or phone numbers.",
 )
 llm_tout_raise = LLMGuardrail(
-    model=M,
-    name="llm_tout_raise",
-    position=Position.OUTPUT,
-    on_fail=OnFail.RAISE,
+    model=M, name="llm_tout_raise", position=Position.OUTPUT, on_fail=OnFail.RAISE,
     max_tokens=256,
     policy="Reject tool output containing personal info like SSNs, emails, or phone numbers.",
 )
 llm_tout_fix = LLMGuardrail(
-    model=M,
-    name="llm_tout_fix",
-    position=Position.OUTPUT,
-    on_fail=OnFail.FIX,
+    model=M, name="llm_tout_fix", position=Position.OUTPUT, on_fail=OnFail.FIX,
     max_tokens=256,
     policy="Reject tool output containing personal info like SSNs, emails, or phone numbers.",
 )
-
 
 @guardrail
 def custom_tout_block_retry(content: str) -> GuardrailResult:
@@ -411,7 +346,6 @@ def custom_tout_block_retry(content: str) -> GuardrailResult:
         return GuardrailResult(passed=False, message="Sensitive data, try different query.")
     return GuardrailResult(passed=True)
 
-
 @guardrail
 def custom_tout_block_raise(content: str) -> GuardrailResult:
     """Block SENSITIVE in tool output (raise)."""
@@ -419,14 +353,12 @@ def custom_tout_block_raise(content: str) -> GuardrailResult:
         return GuardrailResult(passed=False, message="Sensitive data in output.")
     return GuardrailResult(passed=True)
 
-
 @guardrail
 def custom_tout_fix(content: str) -> GuardrailResult:
     """Redact SENSITIVE from tool output."""
     if "SENSITIVE" in content:
         return GuardrailResult(
-            passed=False,
-            message="Sensitive data redacted.",
+            passed=False, message="Sensitive data redacted.",
             fixed_output=content.replace("SENSITIVE", "[REDACTED]"),
         )
     return GuardrailResult(passed=True)
@@ -438,18 +370,15 @@ def custom_tout_fix(content: str) -> GuardrailResult:
 
 # ── Shared tools for agent-level guardrails ──────────────────────────
 
-
 @tool
 def get_cc_data(user_id: str) -> dict:
     """Look up payment info."""
     return {"user": user_id, "card": "4532-0150-1234-5678", "name": "Alice"}
 
-
 @tool
 def get_ssn_data(user_id: str) -> dict:
     """Look up identity info."""
     return {"user": user_id, "ssn": "123-45-6789", "name": "Bob"}
-
 
 @tool
 def get_secret_data(query: str) -> dict:
@@ -459,84 +388,56 @@ def get_secret_data(query: str) -> dict:
 
 # ── Tool INPUT tools (one per guardrail combo) ───────────────────────
 
-
 @tool(guardrails=[regex_tin_retry])
 def t_tin_regex_retry(query: str) -> str:
     """DB query (regex input retry)."""
     return f"Results: {query} -> [('Alice', 30)]"
-
 
 @tool(guardrails=[regex_tin_raise])
 def t_tin_regex_raise(query: str) -> str:
     """DB query (regex input raise)."""
     return f"Results: {query} -> [('Alice', 30)]"
 
-
 @tool(guardrails=[regex_tin_fix])
 def t_tin_regex_fix(query: str) -> str:
     """DB query (regex input fix)."""
     return f"Results: {query} -> [('Alice', 30)]"
-
 
 @tool(guardrails=[llm_tin_retry])
 def t_tin_llm_retry(identifier: str) -> str:
     """Look up user (LLM input retry)."""
     return f"User: {identifier} -> Alice Johnson"
 
-
 @tool(guardrails=[llm_tin_raise])
 def t_tin_llm_raise(identifier: str) -> str:
     """Look up user (LLM input raise)."""
     return f"User: {identifier} -> Alice Johnson"
-
 
 @tool(guardrails=[llm_tin_fix])
 def t_tin_llm_fix(identifier: str) -> str:
     """Look up user (LLM input fix)."""
     return f"User: {identifier} -> Alice Johnson"
 
-
-@tool(
-    guardrails=[
-        Guardrail(
-            custom_tin_block, position=Position.INPUT, on_fail=OnFail.RETRY, name="custom_tin_retry"
-        )
-    ]
-)
+@tool(guardrails=[Guardrail(custom_tin_block, position=Position.INPUT,
+                            on_fail=OnFail.RETRY, name="custom_tin_retry")])
 def t_tin_custom_retry(data: str) -> str:
     """Process data (custom input retry)."""
     return f"Processed: {data}"
 
-
-@tool(
-    guardrails=[
-        Guardrail(
-            custom_tin_block_raise,
-            position=Position.INPUT,
-            on_fail=OnFail.RAISE,
-            name="custom_tin_raise",
-        )
-    ]
-)
+@tool(guardrails=[Guardrail(custom_tin_block_raise, position=Position.INPUT,
+                            on_fail=OnFail.RAISE, name="custom_tin_raise")])
 def t_tin_custom_raise(data: str) -> str:
     """Process data (custom input raise)."""
     return f"Processed: {data}"
 
-
-@tool(
-    guardrails=[
-        Guardrail(
-            custom_tin_block_fix, position=Position.INPUT, on_fail=OnFail.FIX, name="custom_tin_fix"
-        )
-    ]
-)
+@tool(guardrails=[Guardrail(custom_tin_block_fix, position=Position.INPUT,
+                            on_fail=OnFail.FIX, name="custom_tin_fix")])
 def t_tin_custom_fix(data: str) -> str:
     """Process data (custom input fix)."""
     return f"Processed: {data}"
 
 
 # ── Tool OUTPUT tools (one per guardrail combo) ──────────────────────
-
 
 @tool(guardrails=[regex_tout_retry])
 def t_tout_regex_retry(query: str) -> str:
@@ -545,14 +446,12 @@ def t_tout_regex_retry(query: str) -> str:
         return f"INTERNAL_SECRET: classified for {query}"
     return f"Public data: {query}"
 
-
 @tool(guardrails=[regex_tout_raise])
 def t_tout_regex_raise(query: str) -> str:
     """Fetch data (regex output raise)."""
     if "secret" in query.lower():
         return f"INTERNAL_SECRET: classified for {query}"
     return f"Public data: {query}"
-
 
 @tool(guardrails=[regex_tout_fix])
 def t_tout_regex_fix(query: str) -> str:
@@ -561,62 +460,35 @@ def t_tout_regex_fix(query: str) -> str:
         return f"INTERNAL_SECRET: classified for {query}"
     return f"Public data: {query}"
 
-
 @tool(guardrails=[llm_tout_retry])
 def t_tout_llm_retry(user_id: str) -> str:
     """Fetch user data (LLM output retry)."""
     return f"User {user_id}: Alice, alice@example.com, SSN 123-45-6789"
-
 
 @tool(guardrails=[llm_tout_raise])
 def t_tout_llm_raise(user_id: str) -> str:
     """Fetch user data (LLM output raise)."""
     return f"User {user_id}: Alice, alice@example.com, SSN 123-45-6789"
 
-
 @tool(guardrails=[llm_tout_fix])
 def t_tout_llm_fix(user_id: str) -> str:
     """Fetch user data (LLM output fix)."""
     return f"User {user_id}: Alice, alice@example.com, SSN 123-45-6789"
 
-
-@tool(
-    guardrails=[
-        Guardrail(
-            custom_tout_block_retry,
-            position=Position.OUTPUT,
-            on_fail=OnFail.RETRY,
-            name="custom_tout_retry",
-        )
-    ]
-)
+@tool(guardrails=[Guardrail(custom_tout_block_retry, position=Position.OUTPUT,
+                            on_fail=OnFail.RETRY, name="custom_tout_retry")])
 def t_tout_custom_retry(query: str) -> str:
     """Fetch data (custom output retry)."""
     return f"SENSITIVE data for: {query}"
 
-
-@tool(
-    guardrails=[
-        Guardrail(
-            custom_tout_block_raise,
-            position=Position.OUTPUT,
-            on_fail=OnFail.RAISE,
-            name="custom_tout_raise",
-        )
-    ]
-)
+@tool(guardrails=[Guardrail(custom_tout_block_raise, position=Position.OUTPUT,
+                            on_fail=OnFail.RAISE, name="custom_tout_raise")])
 def t_tout_custom_raise(query: str) -> str:
     """Fetch data (custom output raise)."""
     return f"SENSITIVE data for: {query}"
 
-
-@tool(
-    guardrails=[
-        Guardrail(
-            custom_tout_fix, position=Position.OUTPUT, on_fail=OnFail.FIX, name="custom_tout_fix"
-        )
-    ]
-)
+@tool(guardrails=[Guardrail(custom_tout_fix, position=Position.OUTPUT,
+                            on_fail=OnFail.FIX, name="custom_tout_fix")])
 def t_tout_custom_fix(query: str) -> str:
     """Fetch data (custom output fix)."""
     return f"SENSITIVE data for: {query}"
@@ -633,67 +505,33 @@ INST_SECRET = "Look up confidential data. Call get_secret_data and include ALL d
 
 # ── #1-3: Agent OUT × Regex ──────────────────────────────────────────
 
-a01 = Agent(
-    name="e2e_01", model=M, tools=[get_cc_data], instructions=INST_CC, guardrails=[regex_aout_retry]
-)
-a02 = Agent(
-    name="e2e_02",
-    model=M,
-    tools=[get_ssn_data],
-    instructions=INST_SSN,
-    guardrails=[regex_aout_raise],
-)
-a03 = Agent(
-    name="e2e_03", model=M, tools=[get_cc_data], instructions=INST_CC, guardrails=[regex_aout_fix]
-)
+a01 = Agent(name="e2e_01", model=M, tools=[get_cc_data], instructions=INST_CC,
+            guardrails=[regex_aout_retry])
+a02 = Agent(name="e2e_02", model=M, tools=[get_ssn_data], instructions=INST_SSN,
+            guardrails=[regex_aout_raise])
+a03 = Agent(name="e2e_03", model=M, tools=[get_cc_data], instructions=INST_CC,
+            guardrails=[regex_aout_fix])
 
 # ── #4-6: Agent OUT × LLM ───────────────────────────────────────────
 
-a04 = Agent(name="e2e_04", model=M, instructions=INST_MED, guardrails=[llm_aout_retry])
-a05 = Agent(name="e2e_05", model=M, instructions=INST_MED, guardrails=[llm_aout_raise])
-a06 = Agent(name="e2e_06", model=M, instructions=INST_MED, guardrails=[llm_aout_fix])
+a04 = Agent(name="e2e_04", model=M, instructions=INST_MED,
+            guardrails=[llm_aout_retry])
+a05 = Agent(name="e2e_05", model=M, instructions=INST_MED,
+            guardrails=[llm_aout_raise])
+a06 = Agent(name="e2e_06", model=M, instructions=INST_MED,
+            guardrails=[llm_aout_fix])
 
 # ── #7-9: Agent OUT × Custom ────────────────────────────────────────
 
-a07 = Agent(
-    name="e2e_07",
-    model=M,
-    tools=[get_secret_data],
-    instructions=INST_SECRET,
-    guardrails=[
-        Guardrail(
-            custom_aout_block,
-            position=Position.OUTPUT,
-            on_fail=OnFail.RETRY,
-            name="custom_aout_retry",
-        )
-    ],
-)
-a08 = Agent(
-    name="e2e_08",
-    model=M,
-    tools=[get_secret_data],
-    instructions=INST_SECRET,
-    guardrails=[
-        Guardrail(
-            custom_aout_block,
-            position=Position.OUTPUT,
-            on_fail=OnFail.RAISE,
-            name="custom_aout_raise",
-        )
-    ],
-)
-a09 = Agent(
-    name="e2e_09",
-    model=M,
-    tools=[get_secret_data],
-    instructions=INST_SECRET,
-    guardrails=[
-        Guardrail(
-            custom_aout_fix, position=Position.OUTPUT, on_fail=OnFail.FIX, name="custom_aout_fix"
-        )
-    ],
-)
+a07 = Agent(name="e2e_07", model=M, tools=[get_secret_data], instructions=INST_SECRET,
+            guardrails=[Guardrail(custom_aout_block, position=Position.OUTPUT,
+                                  on_fail=OnFail.RETRY, name="custom_aout_retry")])
+a08 = Agent(name="e2e_08", model=M, tools=[get_secret_data], instructions=INST_SECRET,
+            guardrails=[Guardrail(custom_aout_block, position=Position.OUTPUT,
+                                  on_fail=OnFail.RAISE, name="custom_aout_raise")])
+a09 = Agent(name="e2e_09", model=M, tools=[get_secret_data], instructions=INST_SECRET,
+            guardrails=[Guardrail(custom_aout_fix, position=Position.OUTPUT,
+                                  on_fail=OnFail.FIX, name="custom_aout_fix")])
 
 # ── #10-18: Tool INPUT ──────────────────────────────────────────────
 
@@ -740,13 +578,9 @@ def run_tests(runtime, runner):
 
     # #1: RETRY — CC in output → LLM retries → CC removed
     r = runtime.run(a01, "Look up payment info for user U-001.")
-    runner.check(
-        1,
-        "aout_regex_retry",
-        result=r,
-        expect_status_in=["COMPLETED", "FAILED"],
-        expect_not_contains="4532-0150-1234-5678",
-    )
+    runner.check(1, "aout_regex_retry", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"],
+                 expect_not_contains="4532-0150-1234-5678")
 
     # #2: RAISE — SSN in output → workflow FAILED
     r = runtime.run(a02, "Look up identity for user U-002.")
@@ -754,14 +588,16 @@ def run_tests(runtime, runner):
 
     # #3: FIX — Regex has no fixed_output → falls back to LLM output
     r = runtime.run(a03, "Look up payment info for user U-001.")
-    runner.check(3, "aout_regex_fix", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(3, "aout_regex_fix", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # ── Agent OUTPUT × LLM ───────────────────────────────────────────
     print("\n--- Agent OUTPUT × LLM ---")
 
     # #4: RETRY — medical advice → LLM retries
     r = runtime.run(a04, "What exact medication and dosage for migraines?")
-    runner.check(4, "aout_llm_retry", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(4, "aout_llm_retry", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # #5: RAISE — medical advice → FAILED
     r = runtime.run(a05, "What exact medication and dosage for migraines?")
@@ -769,16 +605,16 @@ def run_tests(runtime, runner):
 
     # #6: FIX — LLM has no fixed_output → falls back to LLM output
     r = runtime.run(a06, "What exact medication and dosage for migraines?")
-    runner.check(6, "aout_llm_fix", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(6, "aout_llm_fix", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # ── Agent OUTPUT × Custom ────────────────────────────────────────
     print("\n--- Agent OUTPUT × Custom ---")
 
     # #7: RETRY — SECRET42 in output → LLM retries
     r = runtime.run(a07, "Look up the secret data.")
-    runner.check(
-        7, "aout_custom_retry", result=r, expect_status="COMPLETED", expect_not_contains="SECRET42"
-    )
+    runner.check(7, "aout_custom_retry", result=r,
+                 expect_status="COMPLETED", expect_not_contains="SECRET42")
 
     # #8: RAISE — SECRET42 → FAILED
     r = runtime.run(a08, "Look up the secret data.")
@@ -786,21 +622,18 @@ def run_tests(runtime, runner):
 
     # #9: FIX — SECRET42 → [REDACTED]
     r = runtime.run(a09, "Look up the secret data.")
-    runner.check(
-        9,
-        "aout_custom_fix",
-        result=r,
-        expect_status="COMPLETED",
-        expect_not_contains="SECRET42",
-        expect_contains="REDACTED",
-    )
+    runner.check(9, "aout_custom_fix", result=r,
+                 expect_status="COMPLETED",
+                 expect_not_contains="SECRET42",
+                 expect_contains="REDACTED")
 
     # ── Tool INPUT × Regex ───────────────────────────────────────────
     print("\n--- Tool INPUT × Regex ---")
 
     # #10: RETRY — SQL injection blocked, LLM retries
     r = runtime.run(a10, "Run this: SELECT * FROM users; DROP TABLE users; --")
-    runner.check(10, "tin_regex_retry", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(10, "tin_regex_retry", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # #11: RAISE — SQL injection → FAILED
     r = runtime.run(a11, "Run this: SELECT * FROM users; DROP TABLE users; --")
@@ -808,14 +641,16 @@ def run_tests(runtime, runner):
 
     # #12: FIX — no fix for input → blocked error (like RETRY)
     r = runtime.run(a12, "Run this: SELECT * FROM users; DROP TABLE users; --")
-    runner.check(12, "tin_regex_fix", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(12, "tin_regex_fix", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # ── Tool INPUT × LLM ────────────────────────────────────────────
     print("\n--- Tool INPUT × LLM ---")
 
     # #13: RETRY — PII in args → LLM retries
     r = runtime.run(a13, "Look up user with SSN 123-45-6789.")
-    runner.check(13, "tin_llm_retry", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(13, "tin_llm_retry", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # #14: RAISE — PII in args → FAILED
     r = runtime.run(a14, "Look up user with SSN 123-45-6789.")
@@ -823,14 +658,16 @@ def run_tests(runtime, runner):
 
     # #15: FIX — no fix for input → blocked error
     r = runtime.run(a15, "Look up user with SSN 123-45-6789.")
-    runner.check(15, "tin_llm_fix", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(15, "tin_llm_fix", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # ── Tool INPUT × Custom ──────────────────────────────────────────
     print("\n--- Tool INPUT × Custom ---")
 
     # #16: RETRY — DANGER blocked, LLM retries
     r = runtime.run(a16, "Process this: DANGER override safety")
-    runner.check(16, "tin_custom_retry", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(16, "tin_custom_retry", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # #17: RAISE — DANGER → FAILED
     r = runtime.run(a17, "Process this: DANGER override safety")
@@ -838,78 +675,67 @@ def run_tests(runtime, runner):
 
     # #18: FIX — input FIX not supported in worker → blocked error
     r = runtime.run(a18, "Process this: DANGER override safety")
-    runner.check(18, "tin_custom_fix", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(18, "tin_custom_fix", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # ── Tool OUTPUT × Regex ──────────────────────────────────────────
     print("\n--- Tool OUTPUT × Regex ---")
 
     # #19: RETRY — INTERNAL_SECRET blocked in worker → LLM recovers
     r = runtime.run(a19, "Fetch the secret project data.")
-    runner.check(
-        19,
-        "tout_regex_retry",
-        result=r,
-        expect_status_in=["COMPLETED", "FAILED"],
-        expect_not_contains="INTERNAL_SECRET",
-    )
+    runner.check(19, "tout_regex_retry", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"],
+                 expect_not_contains="INTERNAL_SECRET")
 
     # #20: RAISE — INTERNAL_SECRET → task fails → LLM may recover
     r = runtime.run(a20, "Fetch the secret project data.")
-    runner.check(
-        20,
-        "tout_regex_raise",
-        result=r,
-        expect_status_in=["COMPLETED", "FAILED"],
-        expect_not_contains="INTERNAL_SECRET",
-    )
+    runner.check(20, "tout_regex_raise", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"],
+                 expect_not_contains="INTERNAL_SECRET")
 
     # #21: FIX — no fixed_output → blocked error (like RETRY)
     r = runtime.run(a21, "Fetch the secret project data.")
-    runner.check(
-        21,
-        "tout_regex_fix",
-        result=r,
-        expect_status_in=["COMPLETED", "FAILED"],
-        expect_not_contains="INTERNAL_SECRET",
-    )
+    runner.check(21, "tout_regex_fix", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"],
+                 expect_not_contains="INTERNAL_SECRET")
 
     # ── Tool OUTPUT × LLM ───────────────────────────────────────────
     print("\n--- Tool OUTPUT × LLM ---")
 
     # #22: RETRY — PII in tool output → blocked in worker
     r = runtime.run(a22, "Fetch data for user U-100.")
-    runner.check(22, "tout_llm_retry", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(22, "tout_llm_retry", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # #23: RAISE — PII in tool output → task fails
     r = runtime.run(a23, "Fetch data for user U-100.")
-    runner.check(23, "tout_llm_raise", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(23, "tout_llm_raise", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # #24: FIX — no fixed_output → blocked error
     r = runtime.run(a24, "Fetch data for user U-100.")
-    runner.check(24, "tout_llm_fix", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(24, "tout_llm_fix", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # ── Tool OUTPUT × Custom ────────────────────────────────────────
     print("\n--- Tool OUTPUT × Custom ---")
 
     # #25: RETRY — SENSITIVE blocked in worker
     r = runtime.run(a25, "Fetch data for project Alpha.")
-    runner.check(25, "tout_custom_retry", result=r, expect_status_in=["COMPLETED", "FAILED"])
+    runner.check(25, "tout_custom_retry", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"])
 
     # #26: RAISE — SENSITIVE → task fails
     r = runtime.run(a26, "Fetch data for project Alpha.")
-    runner.check(
-        26,
-        "tout_custom_raise",
-        result=r,
-        expect_status_in=["COMPLETED", "FAILED"],
-        expect_not_contains="SENSITIVE",
-    )
+    runner.check(26, "tout_custom_raise", result=r,
+                 expect_status_in=["COMPLETED", "FAILED"],
+                 expect_not_contains="SENSITIVE")
 
     # #27: FIX — SENSITIVE → [REDACTED]
     r = runtime.run(a27, "Fetch data for project Alpha.")
-    runner.check(
-        27, "tout_custom_fix", result=r, expect_status="COMPLETED", expect_not_contains="SENSITIVE"
-    )
+    runner.check(27, "tout_custom_fix", result=r,
+                 expect_status="COMPLETED",
+                 expect_not_contains="SENSITIVE")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
