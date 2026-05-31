@@ -94,22 +94,22 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
                           && !string.Equals(kv.Key, "method",            StringComparison.OrdinalIgnoreCase))
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
-            // Resolve and inject secrets via the centralized helper so the
+            // Resolve and inject credentials via the centralized helper so the
             // mutation + invocation + restoration is atomic under a single
             // process-wide lock. See docs/design/secret-injection-contract.md.
             // Tier-2 (env-injection) path; tier-1 (explicit-key) lands when the
-            // user-facing API exposes a `secrets` parameter to agent factories.
-            Dictionary<string, string> resolvedSecrets = new();
+            // user-facing API exposes a `credentials` parameter to agent factories.
+            Dictionary<string, string> resolvedCredentials = new();
             if (_credentialNames.Length > 0)
             {
                 var creds = await _http.ResolveCredentialsAsync(
                     toolCtx?.ExecutionToken, _credentialNames, ct);
                 foreach (var (k, v) in creds)
-                    resolvedSecrets[k] = v;
+                    resolvedCredentials[k] = v;
             }
 
             object? result = await SecretInjection.InjectViaEnvAsync<object?>(
-                resolvedSecrets,
+                resolvedCredentials,
                 () => _handler(handlerInput, toolCtx),
                 ct);
 

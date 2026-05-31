@@ -104,8 +104,8 @@ class CredentialResolutionServiceTest {
     }
 
     @Test
-    void resolve_dottedPath_baseSecretMissing_returnsNull() {
-        // Base secret doesn't exist at all
+    void resolve_dottedPath_baseCredentialMissing_returnsNull() {
+        // Base credential doesn't exist at all
         assertThat(service.resolve(USER_ID, "DOES_NOT_EXIST.anything")).isNull();
     }
 

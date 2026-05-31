@@ -38,12 +38,12 @@ import dev.agentspan.runtime.AgentRuntime;
 @SpringBootTest(classes = AgentRuntime.class)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class SecretControllerTest {
+class CredentialControllerTest {
 
     @Autowired
     private MockMvc mvc;
 
-    private static final String KEY = "_SECRET_CTRL_TEST_KEY";
+    private static final String KEY = "_CREDENTIAL_CTRL_TEST_KEY";
 
     @BeforeEach
     void cleanUp() throws Exception {
@@ -53,7 +53,7 @@ class SecretControllerTest {
     // ── CRUD ──────────────────────────────────────────────────────────
 
     @Test
-    void putSecret_createsAndReturnsValueOnGet() throws Exception {
+    void putCredential_createsAndReturnsValueOnGet() throws Exception {
         mvc.perform(put("/api/secrets/" + KEY).contentType(MediaType.TEXT_PLAIN).content("plaintext-secret-value"))
                 .andExpect(status().isOk());
 
@@ -64,7 +64,7 @@ class SecretControllerTest {
     }
 
     @Test
-    void putSecret_upserts_overwritingExistingValue() throws Exception {
+    void putCredential_upserts_overwritingExistingValue() throws Exception {
         mvc.perform(put("/api/secrets/" + KEY).contentType(MediaType.TEXT_PLAIN).content("v1"))
                 .andExpect(status().isOk());
         mvc.perform(put("/api/secrets/" + KEY).contentType(MediaType.TEXT_PLAIN).content("v2"))
@@ -76,12 +76,12 @@ class SecretControllerTest {
     }
 
     @Test
-    void getSecret_missing_returns404() throws Exception {
+    void getCredential_missing_returns404() throws Exception {
         mvc.perform(get("/api/secrets/" + KEY)).andExpect(status().isNotFound());
     }
 
     @Test
-    void deleteSecret_returns200_andSecretIsGone() throws Exception {
+    void deleteCredential_returns200_andSecretIsGone() throws Exception {
         mvc.perform(put("/api/secrets/" + KEY).contentType(MediaType.TEXT_PLAIN).content("to-delete"))
                 .andExpect(status().isOk());
 
@@ -91,7 +91,7 @@ class SecretControllerTest {
     }
 
     @Test
-    void putSecret_emptyValue_returns400() throws Exception {
+    void putCredential_emptyValue_returns400() throws Exception {
         mvc.perform(put("/api/secrets/" + KEY).contentType(MediaType.TEXT_PLAIN).content(""))
                 .andExpect(status().isBadRequest());
     }

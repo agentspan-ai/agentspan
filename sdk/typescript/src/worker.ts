@@ -345,11 +345,11 @@ export class WorkerManager {
         // Credential setup
         const execToken = extractExecutionToken(inputData);
 
-        // Resolve secrets up-front (no env mutation yet). Injection happens
+        // Resolve credentials up-front (no env mutation yet). Injection happens
         // inside runHandler() via injectSecretsForInvocation so the mutate-
         // invoke-restore sequence is atomic under a process-wide lock.
         // See docs/design/secret-injection-contract.md.
-        let resolvedSecrets: Record<string, string> = {};
+        let resolvedCredentials: Record<string, string> = {};
         if (pw.credentials?.length) {
           if (!execToken) {
             throw new NonRetryableException(
@@ -358,7 +358,7 @@ export class WorkerManager {
             );
           }
           try {
-            resolvedSecrets = await resolveCredentials(
+            resolvedCredentials = await resolveCredentials(
               serverUrl,
               headers,
               execToken,
@@ -376,7 +376,7 @@ export class WorkerManager {
         > => {
           try {
             let result = await injectSecretsForInvocation(
-              resolvedSecrets,
+              resolvedCredentials,
               () => pw.handler(cleaned),
             );
 

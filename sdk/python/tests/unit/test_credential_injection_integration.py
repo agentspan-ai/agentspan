@@ -59,7 +59,7 @@ def _make_lc_tool_and_graph():
 
 
 # Patch target: the credential fetcher factory in _dispatch (the only external dep)
-_FETCHER_PATCH = "agentspan.agents.runtime._dispatch._get_secret_fetcher"
+_FETCHER_PATCH = "agentspan.agents.runtime._dispatch._get_credential_fetcher"
 
 
 # ---------------------------------------------------------------------------
@@ -122,12 +122,12 @@ class TestFullExtractionPathIntegration:
         # Fetcher was called with the correct token and credential names
         fake_fetcher.fetch.assert_called_once_with("tok-integ-fake", ["GITHUB_TOKEN"])
 
-    def test_extracted_tool_without_secrets_sees_empty_env(self):
+    def test_extracted_tool_without_credentials_sees_empty_env(self):
         """Without credential_names, the tool sees no GITHUB_TOKEN."""
         from agentspan.agents.frameworks.serializer import serialize_agent
         from agentspan.agents.runtime._dispatch import (
-            _workflow_secrets,
-            _workflow_secrets_lock,
+            _workflow_credentials,
+            _workflow_credentials_lock,
             make_tool_worker,
         )
 
@@ -137,9 +137,9 @@ class TestFullExtractionPathIntegration:
         tool_func = workers[0].func
         tool_func._agentspan_framework_callable = True
 
-        # No credential_names, no _workflow_secrets entry
-        with _workflow_secrets_lock:
-            _workflow_secrets.pop("wf-integ-001", None)
+        # No credential_names, no _workflow_credentials entry
+        with _workflow_credentials_lock:
+            _workflow_credentials.pop("wf-integ-001", None)
         worker_fn = make_tool_worker(tool_func, workers[0].name)
 
         # Ensure GITHUB_TOKEN is NOT in env
@@ -179,7 +179,7 @@ class TestFullExtractionPathIntegration:
         assert result.status.name == "FAILED"
         assert "SECRET_KEY" not in os.environ
 
-    def test_register_framework_workers_wires_secrets_to_make_tool_worker(self):
+    def test_register_framework_workers_wires_credentials_to_make_tool_worker(self):
         """_register_framework_workers passes credentials through so the
         resulting Conductor worker has them in its closure.
 

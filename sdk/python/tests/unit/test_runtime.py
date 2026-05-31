@@ -1974,7 +1974,7 @@ class TestStartFrameworkViaServer:
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
 
-    def test_start_framework_via_server_passes_secrets(self, runtime):
+    def test_start_framework_via_server_passes_credentials(self, runtime):
         """Framework start payload includes request-level credentials."""
         mock_post = _mock_requests_post({"executionId": "wf-fw-1"})
         with patch("requests.post", mock_post):
@@ -2016,18 +2016,18 @@ class TestFrameworkCredentials:
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
 
-    def test_run_framework_registers_and_clears_workflow_secrets(self, runtime):
+    def test_run_framework_registers_and_clears_workflow_credentials(self, runtime):
         """Framework run() exposes request credentials to extracted tools for the run lifetime."""
         from agentspan.agents.runtime._dispatch import (
-            _workflow_secrets,
-            _workflow_secrets_lock,
+            _workflow_credentials,
+            _workflow_credentials_lock,
         )
 
         fake_framework_agent = object()
 
         def _status_with_registry_check(execution_id, timeout=None):
-            with _workflow_secrets_lock:
-                assert _workflow_secrets[execution_id] == ["FW_API_KEY"]
+            with _workflow_credentials_lock:
+                assert _workflow_credentials[execution_id] == ["FW_API_KEY"]
             return AgentStatus(
                 execution_id=execution_id,
                 is_complete=True,
@@ -2059,8 +2059,8 @@ class TestFrameworkCredentials:
 
         assert result.execution_id == "wf-framework-1"
         assert mock_start.call_args.kwargs["credentials"] == ["FW_API_KEY"]
-        with _workflow_secrets_lock:
-            assert "wf-framework-1" not in _workflow_secrets
+        with _workflow_credentials_lock:
+            assert "wf-framework-1" not in _workflow_credentials
 
 
 class TestPollStatusUntilComplete:

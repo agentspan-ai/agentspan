@@ -839,7 +839,7 @@ class TestCircuitBreakerReset:
 class TestToolCredentialParams:
     """@tool decorator: credentials param."""
 
-    def test_secrets_defaults_to_empty_list(self):
+    def test_credentials_defaults_to_empty_list(self):
         @tool
         def my_tool(x: str) -> str:
             """A tool."""
@@ -847,7 +847,7 @@ class TestToolCredentialParams:
 
         assert my_tool._tool_def.credentials == []
 
-    def test_secrets_string_list(self):
+    def test_credentials_string_list(self):
         @tool(credentials=["GITHUB_TOKEN", "GH_TOKEN"])
         def my_tool(x: str) -> str:
             """A tool."""

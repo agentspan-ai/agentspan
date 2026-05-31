@@ -142,7 +142,7 @@ class WorkerCredentialsIntegrationTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void resolve_userTokenCannotAccessOtherUserSecret_evenIfDeclared() {
+    void resolve_userTokenCannotAccessOtherUserCredential_evenIfDeclared() {
         // User A's token declares a name that doesn't exist for user A.
         // (User B has it stored, but A's token must NOT reach B's storage.)
         store.delete(USER_A, NAME);
@@ -191,8 +191,8 @@ class WorkerCredentialsIntegrationTest {
     }
 
     @Test
-    void resolve_deletedSecretDuringExecution_becomesUnresolvable() {
-        // Edge case: secret is deleted between mint and resolve. The token is
+    void resolve_deletedCredentialDuringExecution_becomesUnresolvable() {
+        // Edge case: credential is deleted between mint and resolve. The token is
         // still valid (it doesn't lock the value, only declared names), but
         // the response simply omits the unresolvable name.
         String token = tokenService.mint(USER_A, "wf-del", List.of(NAME), 3600);
@@ -215,7 +215,7 @@ class WorkerCredentialsIntegrationTest {
     void resolve_emptyDeclaredNames_rejectsAllRequestedNames() {
         // A token minted with an empty declared_names list (which happens for
         // every agent that doesn't declare credentials — the common case) must
-        // NOT permit resolving arbitrary secret names. The defense-in-depth
+        // NOT permit resolving arbitrary credential names. The defense-in-depth
         // claim of declared-name binding requires this.
         String token = tokenService.mint(USER_A, "wf-empty", List.of(), 3600);
 
@@ -233,7 +233,7 @@ class WorkerCredentialsIntegrationTest {
     @Test
     @SuppressWarnings("unchecked")
     void resolve_emptyDeclaredNames_userBValueAlsoBlocked() {
-        // Stronger: token has empty declared list, asks for User B's secret.
+        // Stronger: token has empty declared list, asks for User B's credential.
         // Even though A's user_id is authoritative (so cross-user leak wouldn't
         // happen anyway), the binding-check should reject the name itself
         // before any user-scoped resolve is attempted.

@@ -221,19 +221,19 @@ class TestLogLevelConfig:
 class TestAgentConfigCredentialFields:
     """secret_strict_mode and api_key fields."""
 
-    def test_secret_strict_mode_defaults_false(self):
+    def test_credential_strict_mode_defaults_false(self):
         from agentspan.agents.runtime.config import AgentConfig
 
         config = AgentConfig()
         assert config.secret_strict_mode is False
 
-    def test_secret_strict_mode_can_be_set(self):
+    def test_credential_strict_mode_can_be_set(self):
         from agentspan.agents.runtime.config import AgentConfig
 
         config = AgentConfig(secret_strict_mode=True)
         assert config.secret_strict_mode is True
 
-    def test_secret_strict_mode_from_env_true(self):
+    def test_credential_strict_mode_from_env_true(self):
         import os
         from unittest import mock
         from agentspan.agents.runtime.config import AgentConfig
@@ -242,7 +242,7 @@ class TestAgentConfigCredentialFields:
             config = AgentConfig.from_env()
         assert config.secret_strict_mode is True
 
-    def test_secret_strict_mode_from_env_false(self):
+    def test_credential_strict_mode_from_env_false(self):
         import os
         from unittest import mock
         from agentspan.agents.runtime.config import AgentConfig

@@ -13,8 +13,8 @@
 // instead of clobbering each other. Strictly serial within one worker process;
 // scale by adding worker processes.
 //
-// Tier 1 (explicit-key passthrough): users pass resolved secrets directly into
-// their framework's model client (e.g. `new OpenAIClient(apiKey: secrets["..."])`).
+// Tier 1 (explicit-key passthrough): users pass resolved credentials directly into
+// their framework's model client (e.g. `new OpenAIClient(apiKey: credentials["..."])`).
 // No lock, fully concurrent. The user-facing API change lands in a future PR.
 
 using System;
@@ -25,7 +25,7 @@ using System.Threading.Tasks;
 namespace Agentspan
 {
     /// <summary>
-    /// Concurrency-safe injection of resolved secrets into the process
+    /// Concurrency-safe injection of resolved credentials into the process
     /// environment for the duration of a single framework invocation.
     /// </summary>
     public static class SecretInjection
@@ -35,25 +35,25 @@ namespace Agentspan
         private static readonly SemaphoreSlim s_envInjectionLock = new(1, 1);
 
         /// <summary>
-        /// Run <paramref name="invoke"/> with <paramref name="secrets"/> injected
+        /// Run <paramref name="invoke"/> with <paramref name="credentials"/> injected
         /// into <c>Environment</c> for the duration of the call. Mutation,
         /// invocation, and restoration happen atomically under a process-wide
         /// lock — concurrent callers serialize.
         /// </summary>
         /// <returns>Whatever <paramref name="invoke"/> returns.</returns>
         public static async Task<T> InjectViaEnvAsync<T>(
-            IReadOnlyDictionary<string, string> secrets,
+            IReadOnlyDictionary<string, string> credentials,
             Func<Task<T>> invoke,
             CancellationToken ct = default)
         {
-            if (secrets == null || secrets.Count == 0)
+            if (credentials == null || credentials.Count == 0)
                 return await invoke().ConfigureAwait(false);
 
             await s_envInjectionLock.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                var previous = new Dictionary<string, string?>(secrets.Count);
-                foreach (var kv in secrets)
+                var previous = new Dictionary<string, string?>(credentials.Count);
+                foreach (var kv in credentials)
                 {
                     previous[kv.Key] = Environment.GetEnvironmentVariable(kv.Key);
                     Environment.SetEnvironmentVariable(kv.Key, kv.Value);

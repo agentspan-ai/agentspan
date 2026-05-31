@@ -240,11 +240,11 @@ let _envInjectionMutex: Promise<void> = Promise.resolve();
  * @returns Whatever `invoke()` resolves with.
  */
 export async function injectSecretsForInvocation<T>(
-  secrets: Record<string, string>,
+  credentials: Record<string, string>,
   invoke: () => Promise<T>,
 ): Promise<T> {
   const clean: Record<string, string> = {};
-  for (const [k, v] of Object.entries(secrets)) {
+  for (const [k, v] of Object.entries(credentials)) {
     if (typeof v === "string") clean[k] = v;
   }
   if (Object.keys(clean).length === 0) {

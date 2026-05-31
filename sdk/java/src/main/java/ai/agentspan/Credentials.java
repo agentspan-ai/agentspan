@@ -96,11 +96,11 @@ public final class Credentials {
      * immediately before invoking a {@code @Tool} method. The handler runs
      * in the same thread, so {@code ThreadLocal} reaches it.
      */
-    public static void setForCall(Map<String, String> secrets) {
-        if (secrets == null || secrets.isEmpty()) {
+    public static void setForCall(Map<String, String> credentials) {
+        if (credentials == null || credentials.isEmpty()) {
             CURRENT.remove();
         } else {
-            CURRENT.set(Map.copyOf(secrets));
+            CURRENT.set(Map.copyOf(credentials));
         }
     }
 

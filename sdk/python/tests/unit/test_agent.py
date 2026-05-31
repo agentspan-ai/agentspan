@@ -447,13 +447,13 @@ class TestScatterGather:
 class TestAgentCredentials:
     """Agent credentials param and CLI auto-mapping."""
 
-    def test_secrets_defaults_to_empty_list(self):
+    def test_credentials_defaults_to_empty_list(self):
         from agentspan.agents.agent import Agent
 
         a = Agent(name="test_agent", model="openai/gpt-4o")
         assert a.credentials == []
 
-    def test_explicit_secrets_stored(self):
+    def test_explicit_credentials_stored(self):
         from agentspan.agents.agent import Agent
 
         a = Agent(
@@ -464,7 +464,7 @@ class TestAgentCredentials:
         assert "GITHUB_TOKEN" in a.credentials
         assert "OPENAI_API_KEY" in a.credentials
 
-    def test_cli_allowed_commands_without_secrets_stays_empty(self):
+    def test_cli_allowed_commands_without_credentials_stays_empty(self):
         """CLI commands without explicit credentials produce empty credentials list."""
         from agentspan.agents.agent import Agent
 
@@ -476,7 +476,7 @@ class TestAgentCredentials:
         )
         assert a.credentials == []
 
-    def test_cli_allowed_commands_with_explicit_secrets(self):
+    def test_cli_allowed_commands_with_explicit_credentials(self):
         """Explicit credentials are required — no auto-mapping from CLI commands."""
         from agentspan.agents.agent import Agent
 
@@ -490,7 +490,7 @@ class TestAgentCredentials:
         assert "AWS_ACCESS_KEY_ID" in a.credentials
         assert "AWS_SECRET_ACCESS_KEY" in a.credentials
 
-    def test_terraform_without_secrets_allowed(self):
+    def test_terraform_without_credentials_allowed(self):
         """terraform in cli_allowed_commands without credentials is allowed (no auto-mapping)."""
         from agentspan.agents.agent import Agent
 
@@ -502,7 +502,7 @@ class TestAgentCredentials:
         )
         assert a.credentials == []
 
-    def test_terraform_with_explicit_secrets_does_not_raise(self):
+    def test_terraform_with_explicit_credentials_does_not_raise(self):
         """terraform is fine when explicit credentials are declared."""
         from agentspan.agents.agent import Agent
 
@@ -529,7 +529,7 @@ class TestAgentCredentials:
         # Neither command has credentials — empty list is fine
         assert a.credentials == []
 
-    def test_explicit_secrets_override_automapping(self):
+    def test_explicit_credentials_override_automapping(self):
         """When explicit credentials provided, auto-mapping is not applied."""
         from agentspan.agents.agent import Agent
 

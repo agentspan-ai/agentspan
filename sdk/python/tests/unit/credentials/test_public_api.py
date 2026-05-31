@@ -7,7 +7,7 @@
 class TestPublicApiExports:
     """Public API surface for credential management."""
 
-    def test_get_secret_importable_from_top_level(self):
+    def test_get_credential_importable_from_top_level(self):
         from agentspan.agents import get_secret
 
         assert callable(get_secret)
@@ -36,7 +36,7 @@ class TestPublicApiExports:
         exc = CredentialServiceError(503)
         assert isinstance(exc, Exception)
 
-    def test_tool_accepts_secrets_param_end_to_end(self):
+    def test_tool_accepts_credentials_param_end_to_end(self):
         """@tool with credentials= is accepted and ToolDef.credentials is set."""
         from agentspan.agents import tool
 
@@ -48,7 +48,7 @@ class TestPublicApiExports:
         td = my_tool._tool_def
         assert "GITHUB_TOKEN" in td.credentials
 
-    def test_agent_accepts_secrets_param(self):
+    def test_agent_accepts_credentials_param(self):
         from agentspan.agents import Agent
 
         a = Agent(

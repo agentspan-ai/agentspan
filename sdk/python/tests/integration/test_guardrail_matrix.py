@@ -159,7 +159,7 @@ def get_ssn_data(user_id: str) -> dict:
     return {"user": user_id, "ssn": "123-45-6789", "name": "Bob"}
 
 @tool
-def get_secret_data(query: str) -> dict:
+def get_credential_data(query: str) -> dict:
     """Look up confidential data."""
     return {"result": f"The access code is SECRET42, query: {query}"}
 
@@ -221,7 +221,7 @@ def tin_custom_fix_tool(data: str) -> str:
 
 # -- Tool OUTPUT tools --
 
-def _secret_tool_factory(guardrail_instance, suffix):
+def _credential_tool_factory(guardrail_instance, suffix):
     @tool(guardrails=[guardrail_instance])
     def _fn(query: str) -> str:
         if "secret" in query.lower():

@@ -54,7 +54,7 @@ class TestRunFunction:
         assert call_kwargs.kwargs["media"] == ["img.png"]
         assert call_kwargs.kwargs["session_id"] == "s1"
 
-    def test_run_passes_secrets(self):
+    def test_run_passes_credentials(self):
         mock_runtime = MagicMock()
         agent = Agent(name="test", model="openai/gpt-4o")
 
@@ -151,7 +151,7 @@ class TestRunAsyncFunction:
         assert result.output == "Async result"
 
     @pytest.mark.asyncio
-    async def test_run_async_passes_secrets(self):
+    async def test_run_async_passes_credentials(self):
         mock_runtime = MagicMock()
         mock_runtime.run_async = AsyncMock(return_value=MagicMock(output="Async result"))
         agent = Agent(name="test", model="openai/gpt-4o")

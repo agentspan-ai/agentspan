@@ -145,7 +145,7 @@ from agentspan.agents.runtime.credentials.types import (
 )
 
 
-def resolve_secrets(input_data: dict, names: list) -> dict:
+def resolve_credentials(input_data: dict, names: list) -> dict:
     """Resolve credentials from Conductor task input data.
 
     For external workers that need to resolve credentials from the
@@ -332,7 +332,7 @@ __all__ = [
     "is_tracing_enabled",
     # Credentials
     "get_secret",
-    "resolve_secrets",
+    "resolve_credentials",
     "CredentialNotFoundError",
     "CredentialAuthError",
     "CredentialRateLimitError",

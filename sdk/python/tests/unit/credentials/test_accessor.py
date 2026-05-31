@@ -40,7 +40,7 @@ class TestGetCredential:
         with pytest.raises(CredentialNotFoundError):
             get_secret("SOME_CRED")
 
-    def test_multiple_secrets_accessible(self):
+    def test_multiple_credentials_accessible(self):
         set_credential_context(
             {
                 "GITHUB_TOKEN": "ghp_test",

@@ -20,11 +20,11 @@ using Xunit;
 
 namespace AgentspanE2eTests;
 
-public class SecretInjectionConcurrentTest
+public class CredentialInjectionConcurrentTest
 {
     private const string KEY = "_AS_TEST_RACE_KEY_DOTNET";
 
-    // ── Fix verification: SecretInjection.InjectViaEnvAsync isolates ──────────
+    // ── Fix verification: CredentialInjection.InjectViaEnvAsync isolates ──────────
 
     [Fact]
     public async Task FixedInjection_IsolatesConcurrentCalls()
@@ -38,7 +38,7 @@ public class SecretInjectionConcurrentTest
         var aCanFinish = new ManualResetEventSlim(false);
 
         Task<string> WorkerA() =>
-            SecretInjection.InjectViaEnvAsync(
+            CredentialInjection.InjectViaEnvAsync(
                 new Dictionary<string, string> { [KEY] = "A" },
                 async () =>
                 {
@@ -52,7 +52,7 @@ public class SecretInjectionConcurrentTest
                 });
 
         Task<string> WorkerB() =>
-            SecretInjection.InjectViaEnvAsync(
+            CredentialInjection.InjectViaEnvAsync(
                 new Dictionary<string, string> { [KEY] = "B" },
                 () =>
                 {
@@ -84,7 +84,7 @@ public class SecretInjectionConcurrentTest
         Environment.SetEnvironmentVariable(KEY, "pre-existing");
         try
         {
-            await SecretInjection.InjectViaEnvAsync(
+            await CredentialInjection.InjectViaEnvAsync(
                 new Dictionary<string, string> { [KEY] = "injected" },
                 () =>
                 {
@@ -104,7 +104,7 @@ public class SecretInjectionConcurrentTest
     public async Task FixedInjection_RestoresOnException()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SecretInjection.InjectViaEnvAsync<int>(
+            CredentialInjection.InjectViaEnvAsync<int>(
                 new Dictionary<string, string> { [KEY] = "should-cleanup" },
                 () => throw new InvalidOperationException("boom")));
 

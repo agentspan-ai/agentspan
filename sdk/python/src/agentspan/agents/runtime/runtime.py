@@ -416,31 +416,31 @@ class AgentRuntime:
                 headers["X-Auth-Secret"] = self._config.auth_secret
         return headers
 
-    def _register_workflow_secrets(
+    def _register_workflow_credentials(
         self, execution_id: str, credentials: Optional[List[str]]
     ) -> None:
         """Register request-scoped credential names for extracted framework tools."""
         if not credentials:
             return
         from agentspan.agents.runtime._dispatch import (
-            _workflow_secrets,
-            _workflow_secrets_lock,
+            _workflow_credentials,
+            _workflow_credentials_lock,
         )
 
-        with _workflow_secrets_lock:
-            _workflow_secrets[execution_id] = list(credentials)
+        with _workflow_credentials_lock:
+            _workflow_credentials[execution_id] = list(credentials)
 
-    def _clear_workflow_secrets(self, execution_id: str, credentials: Optional[List[str]]) -> None:
+    def _clear_workflow_credentials(self, execution_id: str, credentials: Optional[List[str]]) -> None:
         """Clear request-scoped credential names after execution completion."""
         if not credentials:
             return
         from agentspan.agents.runtime._dispatch import (
-            _workflow_secrets,
-            _workflow_secrets_lock,
+            _workflow_credentials,
+            _workflow_credentials_lock,
         )
 
-        with _workflow_secrets_lock:
-            _workflow_secrets.pop(execution_id, None)
+        with _workflow_credentials_lock:
+            _workflow_credentials.pop(execution_id, None)
 
     def _resolve_worker_domain(self, execution_id: str, run_id: Optional[str]) -> Optional[str]:
         """Return the domain workers should poll for this execution.
@@ -2643,7 +2643,7 @@ class AgentRuntime:
         self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
         self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
 
-        self._register_workflow_secrets(execution_id, credentials)
+        self._register_workflow_credentials(execution_id, credentials)
 
         # Poll until complete
         effective_timeout = timeout or (
@@ -2652,7 +2652,7 @@ class AgentRuntime:
         try:
             status = self._poll_status_until_complete(execution_id, timeout=effective_timeout)
         finally:
-            self._clear_workflow_secrets(execution_id, credentials)
+            self._clear_workflow_credentials(execution_id, credentials)
 
         output = status.output
         raw_status = status.status
@@ -3000,8 +3000,8 @@ class AgentRuntime:
             credentials=credentials,
             context=context,
         )
-        # Also register in _workflow_secrets for full-extraction tool workers
-        self._register_workflow_secrets(execution_id, credentials)
+        # Also register in _workflow_credentials for full-extraction tool workers
+        self._register_workflow_credentials(execution_id, credentials)
 
         try:
             if on_event is not None:
@@ -3042,7 +3042,7 @@ class AgentRuntime:
                 sub_results=self._extract_sub_results(output),
             )
         finally:
-            self._clear_workflow_secrets(execution_id, credentials)
+            self._clear_workflow_credentials(execution_id, credentials)
 
     def _start_framework(
         self,
@@ -4189,7 +4189,7 @@ class AgentRuntime:
 
         self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
         self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
-        self._register_workflow_secrets(execution_id, credentials)
+        self._register_workflow_credentials(execution_id, credentials)
 
         effective_timeout = timeout or (
             agent.timeout_seconds if agent.timeout_seconds > 0 else None
@@ -4199,7 +4199,7 @@ class AgentRuntime:
                 execution_id, timeout=effective_timeout
             )
         finally:
-            self._clear_workflow_secrets(execution_id, credentials)
+            self._clear_workflow_credentials(execution_id, credentials)
 
         output = status.output
         raw_status = status.status
@@ -4643,7 +4643,7 @@ class AgentRuntime:
             credentials=credentials,
             context=context,
         )
-        self._register_workflow_secrets(execution_id, credentials)
+        self._register_workflow_credentials(execution_id, credentials)
 
         try:
             if on_event is not None:
@@ -4702,7 +4702,7 @@ class AgentRuntime:
                 sub_results=self._extract_sub_results(output),
             )
         finally:
-            self._clear_workflow_secrets(execution_id, credentials)
+            self._clear_workflow_credentials(execution_id, credentials)
 
     async def _start_framework_async(
         self,

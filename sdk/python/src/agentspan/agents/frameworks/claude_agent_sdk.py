@@ -172,7 +172,7 @@ def make_claude_agent_sdk_worker(
     from conductor.client.http.models.task_result import TaskResult
     from conductor.client.http.models.task_result_status import TaskResultStatus
 
-    # Capture credential names in closure — avoids race with _workflow_secrets
+    # Capture credential names in closure — avoids race with _workflow_credentials
     _closure_cred_names = list(credential_names) if credential_names else []
 
     def tool_worker(task: Task) -> TaskResult:
@@ -202,7 +202,7 @@ def make_claude_agent_sdk_worker(
         # docs/design/secret-injection-contract.md.
         resolved_secrets: Dict[str, str] = {}
         try:
-            resolved_secrets = _resolve_secrets(
+            resolved_secrets = _resolve_credentials(
                 task,
                 execution_id,
                 credential_names=_closure_cred_names or None,
@@ -1057,7 +1057,7 @@ def _complete_workflow_nonblocking(
 # ---------------------------------------------------------------------------
 
 
-def _resolve_secrets(
+def _resolve_credentials(
     task: Any,
     execution_id: str,
     credential_names: Optional[List[str]] = None,
@@ -1071,16 +1071,16 @@ def _resolve_secrets(
     """
     from agentspan.agents.runtime._dispatch import (
         _extract_execution_token,
-        _get_secret_fetcher,
-        _workflow_secrets,
-        _workflow_secrets_lock,
+        _get_credential_fetcher,
+        _workflow_credentials,
+        _workflow_credentials_lock,
     )
 
     cred_names = list(credential_names) if credential_names else []
     if not cred_names:
         exec_id = execution_id or ""
-        with _workflow_secrets_lock:
-            cred_names = list(_workflow_secrets.get(exec_id, []))
+        with _workflow_credentials_lock:
+            cred_names = list(_workflow_credentials.get(exec_id, []))
     if not cred_names:
         return {}
     token = _extract_execution_token(task)
@@ -1091,5 +1091,5 @@ def _resolve_secrets(
             cred_names,
         )
         return {}
-    fetcher = _get_secret_fetcher()
+    fetcher = _get_credential_fetcher()
     return fetcher.fetch(token, cred_names)

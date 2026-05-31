@@ -54,7 +54,7 @@ class ConcurrentPutRaceTest {
     }
 
     @Test
-    void concurrentPut_newSecret_doesNotThrow() throws Exception {
+    void concurrentPut_newCredential_doesNotThrow() throws Exception {
         int N = 50;
         AtomicInteger errors = new AtomicInteger();
         CompletableFuture<?>[] futures = new CompletableFuture<?>[N];
@@ -71,7 +71,7 @@ class ConcurrentPutRaceTest {
         for (var f : futures) f.get();
 
         assertThat(errors.get())
-                .as("Concurrent PUT on a new secret must not throw. "
+                .as("Concurrent PUT on a new credential must not throw. "
                         + "Pre-fix the UPDATE-then-INSERT pattern raced on PK violation.")
                 .isZero();
 
@@ -80,7 +80,7 @@ class ConcurrentPutRaceTest {
     }
 
     @Test
-    void concurrentPut_existingSecret_doesNotThrow() throws Exception {
+    void concurrentPut_existingCredential_doesNotThrow() throws Exception {
         store.set(USER, NAME, "initial-value");
 
         int N = 50;

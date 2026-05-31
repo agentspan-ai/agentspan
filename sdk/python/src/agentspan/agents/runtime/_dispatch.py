@@ -160,7 +160,7 @@ def _coerce_value(value, annotation):
 _credential_fetcher = None
 
 
-def _get_secret_fetcher():
+def _get_credential_fetcher():
     """Return the module-level WorkerCredentialFetcher, creating it on first call.
 
     The fetcher is initialized from AgentConfig.from_env() so it picks up
@@ -201,7 +201,7 @@ def _extract_execution_token(task) -> str | None:
     return None
 
 
-def _get_secret_names_from_tool(tool_func) -> list:
+def _get_credential_names_from_tool(tool_func) -> list:
     """Extract credential names from a @tool-decorated function's ToolDef.
 
     Returns empty list if the function has no _tool_def attribute.
@@ -225,8 +225,8 @@ _tool_type_registry = {}
 
 # Workflow-level credential names: workflow_instance_id -> [credential_names]
 # Fallback for framework-extracted tools that have no tool_def.
-_workflow_secrets = {}
-_workflow_secrets_lock = threading.Lock()
+_workflow_credentials = {}
+_workflow_credentials_lock = threading.Lock()
 
 # MCP server configs: [{"server_url": ..., "headers": ...}]
 _mcp_servers = []
@@ -402,7 +402,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
             #    _register_framework_workers → make_tool_worker(credential_names=...))
             # 2. tool_def from registry or closure (native @tool decorated)
             # 3. _tool_def attribute on tool_func
-            # 4. Workflow-level fallback (_workflow_secrets dict)
+            # 4. Workflow-level fallback (_workflow_credentials dict)
             if _closure_cred_names:
                 credential_names = list(_closure_cred_names)
             else:
@@ -410,19 +410,19 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
                 raw_secrets = (
                     list(getattr(_td, "credentials", []))
                     if _td
-                    else _get_secret_names_from_tool(tool_func)
+                    else _get_credential_names_from_tool(tool_func)
                 )
                 credential_names = [c for c in raw_secrets if isinstance(c, str)]
                 # Fallback: workflow-level credentials (for framework-extracted tools)
                 if not credential_names and task.workflow_instance_id:
-                    with _workflow_secrets_lock:
+                    with _workflow_credentials_lock:
                         credential_names = list(
-                            _workflow_secrets.get(task.workflow_instance_id, [])
+                            _workflow_credentials.get(task.workflow_instance_id, [])
                         )
             resolved_secrets = {}
             if credential_names:
                 token = _extract_execution_token(task)
-                fetcher = _get_secret_fetcher()
+                fetcher = _get_credential_fetcher()
                 try:
                     resolved_secrets = fetcher.fetch(token, credential_names)
                 except Exception as cred_err:
