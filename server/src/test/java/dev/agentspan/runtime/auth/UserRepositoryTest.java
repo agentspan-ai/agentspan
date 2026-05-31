@@ -23,7 +23,7 @@ class UserRepositoryTest {
     private UserRepository userRepository;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     @BeforeEach

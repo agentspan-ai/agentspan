@@ -31,13 +31,13 @@ import dev.agentspan.runtime.model.credentials.ResolveRequest;
 class WorkerSecretsTest {
 
     @Mock
-    private SecretStoreProvider storeProvider;
+    private CredentialStoreProvider storeProvider;
 
     @Mock
-    private SecretResolutionService resolutionService;
+    private CredentialResolutionService resolutionService;
 
     @Mock
-    private SecretDisclosureService disclosureService;
+    private CredentialDisclosureService disclosureService;
 
     private ExecutionTokenService tokenService;
 

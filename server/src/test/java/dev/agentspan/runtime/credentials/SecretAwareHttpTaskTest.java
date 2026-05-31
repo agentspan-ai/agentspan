@@ -18,17 +18,17 @@ import org.springframework.test.context.ActiveProfiles;
 import dev.agentspan.runtime.AgentRuntime;
 
 /**
- * Integration test for SecretAwareHttpTask — real DB, real credential store.
+ * Integration test for CredentialAwareHttpTask — real DB, real credential store.
  */
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class SecretAwareHttpTaskTest {
+class CredentialAwareHttpTaskTest {
 
     @Autowired
-    private SecretStoreProvider storeProvider;
+    private CredentialStoreProvider storeProvider;
 
     @Autowired
-    private SecretAwareHttpTask httpTask;
+    private CredentialAwareHttpTask httpTask;
 
     private static final String USER_ID = "http-task-test-user";
 

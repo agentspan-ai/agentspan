@@ -23,13 +23,13 @@ import dev.agentspan.runtime.AgentRuntime;
 
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class SecretDisclosureServiceTest {
+class CredentialDisclosureServiceTest {
 
     @Autowired
-    private SecretDisclosureService service;
+    private CredentialDisclosureService service;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     private static final String USER = "disclosure-user-001";

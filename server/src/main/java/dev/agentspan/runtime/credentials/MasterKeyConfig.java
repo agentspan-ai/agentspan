@@ -19,7 +19,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Loads or generates the AES-256-GCM master key used by EncryptedDbSecretStoreProvider.
+ * Loads or generates the AES-256-GCM master key used by EncryptedDbCredentialStoreProvider.
  *
  * <p>Key sourcing rules:</p>
  * <ul>

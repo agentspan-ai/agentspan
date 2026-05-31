@@ -4,7 +4,7 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import static dev.agentspan.runtime.credentials.SecretEnvSeeder.ANONYMOUS_USER_ID;
+import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
 import static org.assertj.core.api.Assertions.*;
 
 import java.util.Map;
@@ -21,18 +21,18 @@ import org.springframework.test.context.ActiveProfiles;
 import dev.agentspan.runtime.AgentRuntime;
 
 /**
- * Integration test for SecretEnvSeeder — uses real DB, no mocks.
+ * Integration test for CredentialEnvSeeder — uses real DB, no mocks.
  * The test profile provides AGENTSPAN_MASTER_KEY and a real SQLite DB.
  */
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class SecretEnvSeederTest {
+class CredentialEnvSeederTest {
 
     @Autowired
-    private SecretStoreProvider storeProvider;
+    private CredentialStoreProvider storeProvider;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     @BeforeEach
@@ -59,9 +59,9 @@ class SecretEnvSeederTest {
         // Simulate env with a test key
         Function<String, String> fakeEnv = name -> "_TEST_ANTHROPIC_KEY".equals(name) ? "sk-test-value" : null;
 
-        SecretEnvSeeder seeder = new SecretEnvSeeder(storeProvider, fakeEnv);
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, fakeEnv);
         // Override known vars for this test
-        var field = SecretEnvSeeder.class.getDeclaredField("credentialsStore");
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
         field.setAccessible(true);
         field.set(seeder, "built-in");
 
@@ -70,7 +70,7 @@ class SecretEnvSeederTest {
         Function<String, String> envWithAnthropicKey =
                 name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-test-seeded-value" : null;
 
-        SecretEnvSeeder realSeeder = new SecretEnvSeeder(storeProvider, envWithAnthropicKey);
+        CredentialEnvSeeder realSeeder = new CredentialEnvSeeder(storeProvider, envWithAnthropicKey);
         field.set(realSeeder, "built-in");
 
         // Delete existing credential first so seeder can create it
@@ -92,8 +92,8 @@ class SecretEnvSeederTest {
         Function<String, String> envLookup =
                 name -> "ANTHROPIC_API_KEY".equals(name) ? "new-value-should-not-overwrite" : null;
 
-        SecretEnvSeeder seeder = new SecretEnvSeeder(storeProvider, envLookup);
-        var field = SecretEnvSeeder.class.getDeclaredField("credentialsStore");
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
         field.setAccessible(true);
         field.set(seeder, "built-in");
 
@@ -111,8 +111,8 @@ class SecretEnvSeederTest {
 
         Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "   " : null;
 
-        SecretEnvSeeder seeder = new SecretEnvSeeder(storeProvider, envLookup);
-        var field = SecretEnvSeeder.class.getDeclaredField("credentialsStore");
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
         field.setAccessible(true);
         field.set(seeder, "built-in");
 
@@ -129,8 +129,8 @@ class SecretEnvSeederTest {
 
         Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-should-not-store" : null;
 
-        SecretEnvSeeder seeder = new SecretEnvSeeder(storeProvider, envLookup);
-        var field = SecretEnvSeeder.class.getDeclaredField("credentialsStore");
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
         field.setAccessible(true);
         field.set(seeder, "vault");
 
@@ -157,8 +157,8 @@ class SecretEnvSeederTest {
         Function<String, String> envLookup =
                 name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-fresh-after-rotation" : null;
 
-        SecretEnvSeeder seeder = new SecretEnvSeeder(storeProvider, envLookup);
-        var field = SecretEnvSeeder.class.getDeclaredField("credentialsStore");
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
         field.setAccessible(true);
         field.set(seeder, "built-in");
 
@@ -175,7 +175,7 @@ class SecretEnvSeederTest {
     void seeder_propagates_nonDecryptionExceptions() throws Exception {
         // A non-AEADBadTagException from get() must propagate — e.g. a transient DB failure
         // should NOT silently delete a valid credential.
-        SecretStoreProvider failingStore = new SecretStoreProvider() {
+        CredentialStoreProvider failingStore = new CredentialStoreProvider() {
             @Override
             public String get(String userId, String name) {
                 throw new IllegalStateException("DB connection lost", new RuntimeException("timeout"));
@@ -188,15 +188,15 @@ class SecretEnvSeederTest {
             public void delete(String userId, String name) {}
 
             @Override
-            public java.util.List<dev.agentspan.runtime.model.credentials.SecretMeta> list(String userId) {
+            public java.util.List<dev.agentspan.runtime.model.credentials.CredentialMeta> list(String userId) {
                 return java.util.List.of();
             }
         };
 
         Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-value" : null;
 
-        SecretEnvSeeder seeder = new SecretEnvSeeder(failingStore, envLookup);
-        var field = SecretEnvSeeder.class.getDeclaredField("credentialsStore");
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(failingStore, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
         field.setAccessible(true);
         field.set(seeder, "built-in");
 
@@ -214,8 +214,8 @@ class SecretEnvSeederTest {
             default -> null;
         };
 
-        SecretEnvSeeder seeder = new SecretEnvSeeder(storeProvider, envLookup);
-        var field = SecretEnvSeeder.class.getDeclaredField("credentialsStore");
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
         field.setAccessible(true);
         field.set(seeder, "built-in");
 
@@ -234,8 +234,8 @@ class SecretEnvSeederTest {
             default -> null;
         };
 
-        SecretEnvSeeder seeder = new SecretEnvSeeder(storeProvider, envLookup);
-        var field = SecretEnvSeeder.class.getDeclaredField("credentialsStore");
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
         field.setAccessible(true);
         field.set(seeder, "built-in");
 

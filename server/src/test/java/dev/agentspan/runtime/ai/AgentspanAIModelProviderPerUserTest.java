@@ -23,7 +23,7 @@ import dev.agentspan.runtime.AgentRuntime;
 import dev.agentspan.runtime.auth.RequestContext;
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
-import dev.agentspan.runtime.credentials.SecretStoreProvider;
+import dev.agentspan.runtime.credentials.CredentialStoreProvider;
 
 /**
  * Audit Gap B — per-user resolution of LLM provider API keys.
@@ -45,10 +45,10 @@ class AgentspanAIModelProviderPerUserTest {
     private AgentspanAIModelProvider provider;
 
     @Autowired
-    private SecretStoreProvider store;
+    private CredentialStoreProvider store;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     private static final String USER_A = "ai-test-user-A";
@@ -84,7 +84,7 @@ class AgentspanAIModelProviderPerUserTest {
                         "t",
                         Instant.now().toString()));
 
-        // The SecretEnvSeeder copies the developer/CI shell environment into
+        // The CredentialEnvSeeder copies the developer/CI shell environment into
         // the anonymous user's store at startup, including OPENAI_API_KEY if
         // one is set in the shell. That seeding is the right behavior for
         // local-dev frictionlessness, but it pollutes this test which wants

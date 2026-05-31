@@ -28,7 +28,7 @@ public class ApiKeyRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
-    public ApiKeyRepository(@Qualifier("secretJdbc") NamedParameterJdbcTemplate jdbc) {
+    public ApiKeyRepository(@Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 

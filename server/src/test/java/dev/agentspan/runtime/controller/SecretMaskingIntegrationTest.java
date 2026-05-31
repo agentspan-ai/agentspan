@@ -26,8 +26,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.credentials.SecretDisclosureService;
-import dev.agentspan.runtime.credentials.SecretStoreProvider;
+import dev.agentspan.runtime.credentials.CredentialDisclosureService;
+import dev.agentspan.runtime.credentials.CredentialStoreProvider;
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.service.AgentService;
 
@@ -45,16 +45,16 @@ class SecretMaskingIntegrationTest {
     private MockMvc mvc;
 
     @Autowired
-    private SecretStoreProvider store;
+    private CredentialStoreProvider store;
 
     @Autowired
-    private SecretDisclosureService disclosures;
+    private CredentialDisclosureService disclosures;
 
     @MockBean
     private AgentService agentService;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     private static final String SECRET_NAME = "_MASK_E2E_TOKEN";
@@ -120,7 +120,7 @@ class SecretMaskingIntegrationTest {
     @Test
     void getStatus_redactsSecretValueInOutput() throws Exception {
         // GET /api/agent/{executionId}/status — bare-id route, no "executions" prefix.
-        // The regex in SecretMaskingResponseAdvice originally required an
+        // The regex in CredentialMaskingResponseAdvice originally required an
         // "execution(s)?" path segment and therefore skipped this URL entirely,
         // letting any leaked secret in the status payload through to the client.
         when(agentService.getStatus(eq(EXEC_ID)))

@@ -4,7 +4,7 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import static dev.agentspan.runtime.credentials.SecretEnvSeeder.ANONYMOUS_USER_ID;
+import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
@@ -15,7 +15,7 @@ import org.springframework.test.context.ActiveProfiles;
 import dev.agentspan.runtime.AgentRuntime;
 
 /**
- * Integration test that verifies SecretEnvSeeder can store credentials
+ * Integration test that verifies CredentialEnvSeeder can store credentials
  * against the real database without FK or schema errors.
  *
  * The test profile sets ANTHROPIC_API_KEY via application-test.properties,
@@ -23,10 +23,10 @@ import dev.agentspan.runtime.AgentRuntime;
  */
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class SecretEnvSeederIntegrationTest {
+class CredentialEnvSeederIntegrationTest {
 
     @Autowired
-    private SecretStoreProvider storeProvider;
+    private CredentialStoreProvider storeProvider;
 
     @Test
     void seeder_storesCredential_withoutForeignKeyError() {

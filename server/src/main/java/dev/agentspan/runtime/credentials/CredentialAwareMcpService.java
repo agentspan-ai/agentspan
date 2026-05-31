@@ -41,15 +41,16 @@ import io.modelcontextprotocol.spec.McpSchema;
  */
 @Component
 @Primary
-public class SecretAwareMcpService extends MCPService {
+public class CredentialAwareMcpService extends MCPService {
 
-    private static final Logger log = LoggerFactory.getLogger(SecretAwareMcpService.class);
+    private static final Logger log = LoggerFactory.getLogger(CredentialAwareMcpService.class);
     private static final Pattern PLACEHOLDER = Pattern.compile("#\\{([\\w.]+)}");
 
     private final ExecutionTokenService tokenService;
-    private final SecretResolutionService resolutionService;
+    private final CredentialResolutionService resolutionService;
 
-    public SecretAwareMcpService(ExecutionTokenService tokenService, SecretResolutionService resolutionService) {
+    public CredentialAwareMcpService(
+            ExecutionTokenService tokenService, CredentialResolutionService resolutionService) {
         this.tokenService = tokenService;
         this.resolutionService = resolutionService;
     }

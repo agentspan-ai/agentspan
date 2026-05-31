@@ -16,8 +16,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import dev.agentspan.runtime.auth.RequestContextHolder;
-import dev.agentspan.runtime.credentials.SecretStoreProvider;
-import dev.agentspan.runtime.model.credentials.SecretMeta;
+import dev.agentspan.runtime.credentials.CredentialStoreProvider;
+import dev.agentspan.runtime.model.credentials.CredentialMeta;
 
 import lombok.RequiredArgsConstructor;
 
@@ -54,7 +54,7 @@ public class SecretController {
     static final int MAX_KEY_LENGTH = 65535;
     private static final Pattern KEY_REGEX = Pattern.compile(KEY_PATTERN);
 
-    private final SecretStoreProvider storeProvider;
+    private final CredentialStoreProvider storeProvider;
 
     // ── List ──────────────────────────────────────────────────────────
 
@@ -62,7 +62,7 @@ public class SecretController {
     @PostMapping
     public ResponseEntity<List<String>> listAllNames() {
         List<String> names = storeProvider.list(currentUserId()).stream()
-                .map(SecretMeta::getName)
+                .map(CredentialMeta::getName)
                 .toList();
         return ResponseEntity.ok(names);
     }
@@ -75,7 +75,7 @@ public class SecretController {
     @GetMapping
     public ResponseEntity<Set<String>> listGrantable() {
         Set<String> names = new LinkedHashSet<>(storeProvider.list(currentUserId()).stream()
-                .map(SecretMeta::getName)
+                .map(CredentialMeta::getName)
                 .toList());
         return ResponseEntity.ok(names);
     }
@@ -85,7 +85,7 @@ public class SecretController {
      * Returns name + partial value + timestamps. Used by the CLI and UI.
      */
     @GetMapping("/v2")
-    public ResponseEntity<List<SecretMeta>> listWithMeta() {
+    public ResponseEntity<List<CredentialMeta>> listWithMeta() {
         return ResponseEntity.ok(storeProvider.list(currentUserId()));
     }
 

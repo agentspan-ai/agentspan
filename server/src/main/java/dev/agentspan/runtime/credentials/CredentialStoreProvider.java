@@ -6,16 +6,16 @@ package dev.agentspan.runtime.credentials;
 
 import java.util.List;
 
-import dev.agentspan.runtime.model.credentials.SecretMeta;
+import dev.agentspan.runtime.model.credentials.CredentialMeta;
 
 /**
  * Strategy interface for credential storage backends.
  *
- * <p>OSS ships {@link EncryptedDbSecretStoreProvider}.
+ * <p>OSS ships {@link EncryptedDbCredentialStoreProvider}.
  * Enterprise module implements AWS SM, HashiCorp Vault, Azure KV, GCP SM, etc.
- * All implementations plug into the same {@link SecretResolutionService} pipeline.</p>
+ * All implementations plug into the same {@link CredentialResolutionService} pipeline.</p>
  */
-public interface SecretStoreProvider {
+public interface CredentialStoreProvider {
 
     /**
      * Retrieve the plaintext value for a credential.
@@ -37,5 +37,5 @@ public interface SecretStoreProvider {
      * List credential metadata for a user.
      * Returns name + partial value + timestamps. Never returns plaintext values.
      */
-    List<SecretMeta> list(String userId);
+    List<CredentialMeta> list(String userId);
 }

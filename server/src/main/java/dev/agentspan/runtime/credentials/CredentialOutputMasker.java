@@ -21,12 +21,12 @@ import com.fasterxml.jackson.databind.node.TextNode;
  * Redacts secret values from execution-read response payloads.
  *
  * <p>Given an execution id + user id, looks up which secret names were disclosed
- * to workers for that execution (via {@link SecretDisclosureService}), fetches
+ * to workers for that execution (via {@link CredentialDisclosureService}), fetches
  * each value's current plaintext from the store, and replaces every occurrence
  * of that plaintext with {@code ***NAME***}.</p>
  *
  * <p>The masker is invoked on JSON-serialized payloads from
- * {@link dev.agentspan.runtime.controller.SecretMaskingResponseAdvice}. A naive
+ * {@link dev.agentspan.runtime.controller.CredentialMaskingResponseAdvice}. A naive
  * {@code String.replace} on the JSON string misses secrets whose raw bytes
  * differ from their JSON encoding — e.g. a PEM key whose raw form contains
  * literal {@code 0x0A} bytes but whose JSON form contains the 2-char escape
@@ -47,15 +47,15 @@ import com.fasterxml.jackson.databind.node.TextNode;
  * implies the old value is no longer a live credential.</p>
  */
 @Service
-public class SecretOutputMasker {
+public class CredentialOutputMasker {
 
     private static final int MIN_MASK_LENGTH = 8;
 
-    private final SecretStoreProvider store;
-    private final SecretDisclosureService disclosures;
+    private final CredentialStoreProvider store;
+    private final CredentialDisclosureService disclosures;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public SecretOutputMasker(SecretStoreProvider store, SecretDisclosureService disclosures) {
+    public CredentialOutputMasker(CredentialStoreProvider store, CredentialDisclosureService disclosures) {
         this.store = store;
         this.disclosures = disclosures;
     }

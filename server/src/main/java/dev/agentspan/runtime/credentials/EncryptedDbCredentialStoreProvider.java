@@ -22,7 +22,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import dev.agentspan.runtime.model.credentials.SecretMeta;
+import dev.agentspan.runtime.model.credentials.CredentialMeta;
 
 /**
  * AES-256-GCM encrypted credential store backed by the credential SQLite/Postgres DB.
@@ -33,9 +33,9 @@ import dev.agentspan.runtime.model.credentials.SecretMeta;
  * <p>The master key is the 32-byte key from {@code MasterKeyConfig#credentialMasterKey()}.</p>
  */
 @Component
-public class EncryptedDbSecretStoreProvider implements SecretStoreProvider {
+public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvider {
 
-    private static final Logger log = LoggerFactory.getLogger(EncryptedDbSecretStoreProvider.class);
+    private static final Logger log = LoggerFactory.getLogger(EncryptedDbCredentialStoreProvider.class);
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int IV_LENGTH = 12; // GCM standard nonce
     private static final int TAG_LENGTH = 128; // GCM auth tag bits
@@ -44,8 +44,8 @@ public class EncryptedDbSecretStoreProvider implements SecretStoreProvider {
     private final NamedParameterJdbcTemplate jdbc;
     private final byte[] masterKey;
 
-    public EncryptedDbSecretStoreProvider(
-            @Qualifier("secretJdbc") NamedParameterJdbcTemplate jdbc,
+    public EncryptedDbCredentialStoreProvider(
+            @Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc,
             @Qualifier("credentialMasterKey") byte[] masterKey) {
         this.jdbc = jdbc;
         this.masterKey = masterKey;
@@ -95,7 +95,7 @@ public class EncryptedDbSecretStoreProvider implements SecretStoreProvider {
     }
 
     @Override
-    public List<SecretMeta> list(String userId) {
+    public List<CredentialMeta> list(String userId) {
         // Include encrypted_value in the SELECT so we can decrypt inline — avoids
         // an N+1 query pattern. On SQLite the pool is capped at 1 connection so a
         // nested get() call inside a RowMapper would deadlock; on PostgreSQL the
@@ -113,7 +113,7 @@ public class EncryptedDbSecretStoreProvider implements SecretStoreProvider {
                     } catch (Exception e) {
                         partial = "????...????";
                     }
-                    return SecretMeta.builder()
+                    return CredentialMeta.builder()
                             .name(name)
                             .partial(partial)
                             .createdAt(parseInstant(rs.getString("created_at")))

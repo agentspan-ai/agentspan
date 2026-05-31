@@ -32,9 +32,9 @@ import org.springframework.stereotype.Component;
  * (Vault, AWS SM, etc.) manage their own secrets.</p>
  */
 @Component
-public class SecretEnvSeeder implements ApplicationRunner {
+public class CredentialEnvSeeder implements ApplicationRunner {
 
-    private static final Logger log = LoggerFactory.getLogger(SecretEnvSeeder.class);
+    private static final Logger log = LoggerFactory.getLogger(CredentialEnvSeeder.class);
 
     /**
      * User ID for the anonymous/OSS user — matches {@code AuthFilter.ANONYMOUS}.
@@ -104,7 +104,7 @@ public class SecretEnvSeeder implements ApplicationRunner {
             // Ollama (local inference)
             "OLLAMA_HOST");
 
-    private final SecretStoreProvider storeProvider;
+    private final CredentialStoreProvider storeProvider;
     private final Function<String, String> envLookup;
 
     @Value("${agentspan.secrets.store:built-in}")
@@ -112,12 +112,12 @@ public class SecretEnvSeeder implements ApplicationRunner {
 
     /** Production constructor — reads from the real process environment. */
     @Autowired
-    public SecretEnvSeeder(SecretStoreProvider storeProvider) {
+    public CredentialEnvSeeder(CredentialStoreProvider storeProvider) {
         this(storeProvider, System::getenv);
     }
 
     /** Package-private constructor for testing — accepts a custom env lookup. */
-    SecretEnvSeeder(SecretStoreProvider storeProvider, Function<String, String> envLookup) {
+    CredentialEnvSeeder(CredentialStoreProvider storeProvider, Function<String, String> envLookup) {
         this.storeProvider = storeProvider;
         this.envLookup = envLookup;
     }

@@ -26,23 +26,23 @@ import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
  * {@code ${NAME}} syntax so that Conductor's own {@code ${...}} parameter
  * resolution does not consume them.
  *
- * <p>Resolution uses {@link SecretResolutionService} with the userId from
+ * <p>Resolution uses {@link CredentialResolutionService} with the userId from
  * the execution token in {@code __agentspan_ctx__}. Resolved values exist
  * only in memory during execution — they are never persisted to the task model.</p>
  */
-public class SecretAwareHttpTask extends HttpTask {
+public class CredentialAwareHttpTask extends HttpTask {
 
-    private static final Logger log = LoggerFactory.getLogger(SecretAwareHttpTask.class);
+    private static final Logger log = LoggerFactory.getLogger(CredentialAwareHttpTask.class);
     private static final Pattern PLACEHOLDER = Pattern.compile("#\\{([\\w.]+)}");
 
     private final ExecutionTokenService tokenService;
-    private final SecretResolutionService resolutionService;
+    private final CredentialResolutionService resolutionService;
 
-    public SecretAwareHttpTask(
+    public CredentialAwareHttpTask(
             RestTemplateProvider restTemplateProvider,
             ObjectMapper objectMapper,
             ExecutionTokenService tokenService,
-            SecretResolutionService resolutionService) {
+            CredentialResolutionService resolutionService) {
         super(restTemplateProvider, objectMapper);
         this.tokenService = tokenService;
         this.resolutionService = resolutionService;

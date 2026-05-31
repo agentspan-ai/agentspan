@@ -19,20 +19,20 @@ import org.springframework.test.context.ActiveProfiles;
 import dev.agentspan.runtime.AgentRuntime;
 
 /**
- * Integration test for SecretResolutionService — real DB, real services, no mocks.
+ * Integration test for CredentialResolutionService — real DB, real services, no mocks.
  */
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class SecretResolutionServiceTest {
+class CredentialResolutionServiceTest {
 
     @Autowired
-    private SecretResolutionService service;
+    private CredentialResolutionService service;
 
     @Autowired
-    private SecretStoreProvider storeProvider;
+    private CredentialStoreProvider storeProvider;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     private static final String USER_ID = "resolution-test-user-001";

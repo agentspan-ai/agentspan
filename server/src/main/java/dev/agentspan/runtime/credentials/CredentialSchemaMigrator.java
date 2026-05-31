@@ -30,15 +30,16 @@ import org.springframework.stereotype.Component;
  * existence check + copy + drop in Java.</p>
  */
 @Component
-public class SecretSchemaMigrator {
+public class CredentialSchemaMigrator {
 
-    private static final Logger log = LoggerFactory.getLogger(SecretSchemaMigrator.class);
+    private static final Logger log = LoggerFactory.getLogger(CredentialSchemaMigrator.class);
 
     private final NamedParameterJdbcTemplate jdbc;
     private final boolean isPostgres;
 
-    public SecretSchemaMigrator(
-            @Qualifier("secretJdbc") NamedParameterJdbcTemplate jdbc, @Qualifier("secretDataSource") DataSource ds) {
+    public CredentialSchemaMigrator(
+            @Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc,
+            @Qualifier("credentialDataSource") DataSource ds) {
         this.jdbc = jdbc;
         try (var c = ds.getConnection()) {
             this.isPostgres = c.getMetaData().getURL().startsWith("jdbc:postgresql");

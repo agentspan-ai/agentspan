@@ -12,20 +12,20 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class SecretOutputMaskerTest {
+class CredentialOutputMaskerTest {
 
-    private SecretStoreProvider store;
-    private SecretDisclosureService disclosures;
-    private SecretOutputMasker masker;
+    private CredentialStoreProvider store;
+    private CredentialDisclosureService disclosures;
+    private CredentialOutputMasker masker;
 
     private static final String USER = "u-mask";
     private static final String EXEC = "exec-mask-1";
 
     @BeforeEach
     void setUp() {
-        store = mock(SecretStoreProvider.class);
-        disclosures = mock(SecretDisclosureService.class);
-        masker = new SecretOutputMasker(store, disclosures);
+        store = mock(CredentialStoreProvider.class);
+        disclosures = mock(CredentialDisclosureService.class);
+        masker = new CredentialOutputMasker(store, disclosures);
     }
 
     @Test
@@ -102,7 +102,7 @@ class SecretOutputMaskerTest {
 
     @Test
     void mask_secretWithNewlines_masksWhenEmbeddedInJson() {
-        // The masker is invoked by SecretMaskingResponseAdvice on a JSON-serialized
+        // The masker is invoked by CredentialMaskingResponseAdvice on a JSON-serialized
         // payload. If the secret value contains a newline (PEM key, multi-line
         // token), the raw value contains a 0x0A byte but the JSON payload has the
         // 2-char escape sequence \n. A literal String.replace() on the JSON

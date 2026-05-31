@@ -21,7 +21,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class SecretMeta {
+public class CredentialMeta {
     @JsonProperty("name")
     private String name;
 

@@ -37,14 +37,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * own {@code os.environ} fallback when {@code secret_strict_mode=false}.</p>
  */
 @Service
-public class SecretResolutionService {
+public class CredentialResolutionService {
 
-    private static final Logger log = LoggerFactory.getLogger(SecretResolutionService.class);
+    private static final Logger log = LoggerFactory.getLogger(CredentialResolutionService.class);
 
-    private final SecretStoreProvider storeProvider;
+    private final CredentialStoreProvider storeProvider;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public SecretResolutionService(SecretStoreProvider storeProvider) {
+    public CredentialResolutionService(CredentialStoreProvider storeProvider) {
         this.storeProvider = storeProvider;
     }
 

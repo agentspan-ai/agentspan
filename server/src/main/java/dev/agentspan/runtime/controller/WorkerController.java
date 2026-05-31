@@ -17,9 +17,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
+import dev.agentspan.runtime.credentials.CredentialDisclosureService;
+import dev.agentspan.runtime.credentials.CredentialResolutionService;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
-import dev.agentspan.runtime.credentials.SecretDisclosureService;
-import dev.agentspan.runtime.credentials.SecretResolutionService;
 import dev.agentspan.runtime.model.credentials.ResolveRequest;
 
 import lombok.RequiredArgsConstructor;
@@ -48,9 +48,9 @@ public class WorkerController {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerController.class);
 
-    private final SecretResolutionService resolutionService;
+    private final CredentialResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
-    private final SecretDisclosureService disclosureService;
+    private final CredentialDisclosureService disclosureService;
 
     /** Per-token fixed-window rate limiter (jti+minute → count). */
     private final ConcurrentHashMap<String, RateLimitBucket> rateLimitMap = new ConcurrentHashMap<>();
@@ -120,12 +120,12 @@ public class WorkerController {
             try {
                 String value = resolutionService.resolve(payload.userId(), name);
                 if (value != null) result.put(name, value);
-            } catch (SecretResolutionService.SecretNotFoundException e) {
+            } catch (CredentialResolutionService.SecretNotFoundException e) {
                 log.warn("Secret not found: user={}, name={}", payload.userId(), name);
             }
         }
 
-        // Record the disclosure so SecretOutputMasker can redact these values
+        // Record the disclosure so CredentialOutputMasker can redact these values
         // from execution-read responses later.
         if (!result.isEmpty()) {
             disclosureService.record(payload.executionId(), payload.userId(), List.copyOf(result.keySet()));

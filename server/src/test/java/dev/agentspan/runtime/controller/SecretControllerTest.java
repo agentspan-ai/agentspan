@@ -28,7 +28,7 @@ import dev.agentspan.runtime.AgentRuntime;
  *   PUT    /secrets/{key}        → upsert; raw-string body; max 65535 chars
  *   DELETE /secrets/{key}        → 200 OK (Conductor parity)
  *   GET    /secrets/{key}/exists → boolean
- *   GET    /secrets/v2           → SecretMeta (name, partial, timestamps)
+ *   GET    /secrets/v2           → CredentialMeta (name, partial, timestamps)
  *
  * Key-name validation (all {key} endpoints):
  *   - Non-blank
@@ -172,7 +172,7 @@ class SecretControllerTest {
     // ── /v2 (richer metadata) ──────────────────────────────────────────
 
     @Test
-    void v2List_returnsSecretMeta_withFullShape() throws Exception {
+    void v2List_returnsCredentialMeta_withFullShape() throws Exception {
         mvc.perform(put("/api/secrets/" + KEY)
                         .contentType(MediaType.TEXT_PLAIN)
                         .content("plaintext-with-decent-length"))

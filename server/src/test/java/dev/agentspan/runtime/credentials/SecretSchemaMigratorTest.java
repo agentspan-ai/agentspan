@@ -20,7 +20,7 @@ import org.springframework.test.context.ActiveProfiles;
 import dev.agentspan.runtime.AgentRuntime;
 
 /**
- * Audit Gap A — {@code SecretSchemaMigrator} integration test.
+ * Audit Gap A — {@code CredentialSchemaMigrator} integration test.
  *
  * <p>Catches: data-loss bug if the legacy-to-new migration ever breaks (typo
  * column name, wrong ON CONFLICT clause, the legacy table not actually
@@ -33,13 +33,13 @@ import dev.agentspan.runtime.AgentRuntime;
  */
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class SecretSchemaMigratorTest {
+class CredentialSchemaMigratorTest {
 
     @Autowired
-    private SecretSchemaMigrator migrator;
+    private CredentialSchemaMigrator migrator;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     private static final String USER = "schema-migrator-user-001";

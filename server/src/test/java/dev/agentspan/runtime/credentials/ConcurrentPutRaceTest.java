@@ -38,7 +38,7 @@ import dev.agentspan.runtime.AgentRuntime;
 class ConcurrentPutRaceTest {
 
     @Autowired
-    private SecretStoreProvider store;
+    private CredentialStoreProvider store;
 
     private static final String USER = "race-test-user";
     private static final String NAME = "_RACE_TEST_KEY";

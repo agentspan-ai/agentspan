@@ -16,10 +16,10 @@ import dev.agentspan.runtime.AgentRuntime;
 
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class SecretDataSourceConfigTest {
+class CredentialDataSourceConfigTest {
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate credentialJdbc;
 
     @Test

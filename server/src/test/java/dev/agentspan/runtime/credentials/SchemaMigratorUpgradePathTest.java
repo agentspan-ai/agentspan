@@ -26,7 +26,7 @@ import dev.agentspan.runtime.AgentRuntime;
 /**
  * Audit gap E — schema-migration upgrade path, full pipeline.
  *
- * <p>Task A proved {@code SecretSchemaMigrator.migrate()} copies bytes
+ * <p>Task A proved {@code CredentialSchemaMigrator.migrate()} copies bytes
  * correctly. This test proves those bytes are <em>actually readable</em> via
  * the public {@code GET /api/secrets/{name}} endpoint after migration —
  * which is what self-hosters care about post-upgrade.</p>
@@ -50,13 +50,13 @@ class SchemaMigratorUpgradePathTest {
     private MockMvc mvc;
 
     @Autowired
-    private SecretSchemaMigrator migrator;
+    private CredentialSchemaMigrator migrator;
 
     @Autowired
-    private SecretStoreProvider store;
+    private CredentialStoreProvider store;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     private static final String ANON = "00000000-0000-0000-0000-000000000000";

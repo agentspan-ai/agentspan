@@ -26,7 +26,7 @@ class ApiKeyRepositoryTest {
     private UserRepository userRepository;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     private User testUser;

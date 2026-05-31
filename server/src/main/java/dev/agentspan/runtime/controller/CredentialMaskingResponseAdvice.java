@@ -22,7 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
-import dev.agentspan.runtime.credentials.SecretOutputMasker;
+import dev.agentspan.runtime.credentials.CredentialOutputMasker;
 
 /**
  * Redacts disclosed secret values from execution-read response bodies.
@@ -36,7 +36,7 @@ import dev.agentspan.runtime.credentials.SecretOutputMasker;
  *   <li>Extract {@code executionId} from the request URI.</li>
  *   <li>Get {@code userId} from the request-scoped {@link RequestContextHolder}.</li>
  *   <li>Serialize the response body to JSON.</li>
- *   <li>Run {@link SecretOutputMasker#mask} over the JSON string — it looks up
+ *   <li>Run {@link CredentialOutputMasker#mask} over the JSON string — it looks up
  *       the secrets disclosed during this execution and replaces literal
  *       occurrences of their plaintext with {@code ***NAME***}.</li>
  *   <li>Parse the masked JSON back to a {@link JsonNode} so Spring serializes it
@@ -48,9 +48,9 @@ import dev.agentspan.runtime.credentials.SecretOutputMasker;
  * depth — it should never block a response from going out.</p>
  */
 @ControllerAdvice
-public class SecretMaskingResponseAdvice implements ResponseBodyAdvice<Object> {
+public class CredentialMaskingResponseAdvice implements ResponseBodyAdvice<Object> {
 
-    private static final Logger log = LoggerFactory.getLogger(SecretMaskingResponseAdvice.class);
+    private static final Logger log = LoggerFactory.getLogger(CredentialMaskingResponseAdvice.class);
 
     /**
      * Matches the execution-read endpoints that may surface task output/data:
@@ -63,10 +63,10 @@ public class SecretMaskingResponseAdvice implements ResponseBodyAdvice<Object> {
     private static final Pattern EXEC_URI = Pattern.compile(
             "^/api/agent/(?:" + "execution(?:s)?/([^/]+?)(?:/(?:full|tasks))?" + "|([^/]+?)/status" + ")/?$");
 
-    private final SecretOutputMasker masker;
+    private final CredentialOutputMasker masker;
     private final ObjectMapper mapper;
 
-    public SecretMaskingResponseAdvice(SecretOutputMasker masker, ObjectMapper mapper) {
+    public CredentialMaskingResponseAdvice(CredentialOutputMasker masker, ObjectMapper mapper) {
         this.masker = masker;
         this.mapper = mapper;
     }

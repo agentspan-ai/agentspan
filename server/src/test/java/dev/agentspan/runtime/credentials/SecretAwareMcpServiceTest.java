@@ -18,18 +18,18 @@ import org.springframework.test.context.ActiveProfiles;
 import dev.agentspan.runtime.AgentRuntime;
 
 /**
- * Integration test for SecretAwareMcpService — real DB, real credential store.
- * Mirrors SecretAwareHttpTaskTest for consistency.
+ * Integration test for CredentialAwareMcpService — real DB, real credential store.
+ * Mirrors CredentialAwareHttpTaskTest for consistency.
  */
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class SecretAwareMcpServiceTest {
+class CredentialAwareMcpServiceTest {
 
     @Autowired
-    private SecretStoreProvider storeProvider;
+    private CredentialStoreProvider storeProvider;
 
     @Autowired
-    private SecretAwareMcpService mcpService;
+    private CredentialAwareMcpService mcpService;
 
     private static final String USER_ID = "mcp-service-test-user";
 

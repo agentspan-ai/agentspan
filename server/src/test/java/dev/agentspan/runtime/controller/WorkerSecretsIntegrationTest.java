@@ -22,8 +22,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import dev.agentspan.runtime.AgentRuntime;
+import dev.agentspan.runtime.credentials.CredentialStoreProvider;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
-import dev.agentspan.runtime.credentials.SecretStoreProvider;
 import dev.agentspan.runtime.model.credentials.ResolveRequest;
 
 /**
@@ -32,7 +32,7 @@ import dev.agentspan.runtime.model.credentials.ResolveRequest;
  * <p>{@code WorkerSecretsTest} uses Mockito to stub the resolution service —
  * good for controller wiring but blind to the user-scoping behavior of the
  * real store. This test wires the real Spring beans (real
- * {@code SecretResolutionService}, real {@code EncryptedDbSecretStoreProvider},
+ * {@code CredentialResolutionService}, real {@code EncryptedDbCredentialStoreProvider},
  * real {@code ExecutionTokenService}) and exercises the integration boundary.</p>
  *
  * <p><strong>Gap C:</strong> two users, same secret name, different values.
@@ -53,16 +53,16 @@ class WorkerSecretsIntegrationTest {
     private WorkerController controller;
 
     @Autowired
-    private SecretStoreProvider store;
+    private CredentialStoreProvider store;
 
     @Autowired
     private ExecutionTokenService tokenService;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
-    // Use a non-seeded name so the SecretEnvSeeder doesn't accidentally
+    // Use a non-seeded name so the CredentialEnvSeeder doesn't accidentally
     // populate it for the anonymous user (and pollute the test).
     private static final String NAME = "_E2E_TENANT_TEST_KEY";
 

@@ -18,17 +18,17 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.model.credentials.SecretMeta;
+import dev.agentspan.runtime.model.credentials.CredentialMeta;
 
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class EncryptedDbSecretStoreProviderTest {
+class EncryptedDbCredentialStoreProviderTest {
 
     @Autowired
-    private SecretStoreProvider storeProvider;
+    private CredentialStoreProvider storeProvider;
 
     @Autowired
-    @Qualifier("secretJdbc")
+    @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
     private static final String USER_ID = "store-test-user-001";
@@ -61,9 +61,9 @@ class EncryptedDbSecretStoreProviderTest {
     void list_returnsPartialValues_notPlaintext() {
         storeProvider.set(USER_ID, "OPENAI_KEY", "sk-abcdefghijklmnop");
 
-        List<SecretMeta> list = storeProvider.list(USER_ID);
+        List<CredentialMeta> list = storeProvider.list(USER_ID);
 
-        SecretMeta meta = list.stream()
+        CredentialMeta meta = list.stream()
                 .filter(m -> m.getName().equals("OPENAI_KEY"))
                 .findFirst()
                 .orElseThrow();

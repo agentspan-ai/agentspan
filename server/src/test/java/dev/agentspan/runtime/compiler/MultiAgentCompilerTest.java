@@ -1128,7 +1128,7 @@ class MultiAgentCompilerTest {
         //   1) emit an HTTP fetch task in the live branch BEFORE ctx_build
         //   2) escape ${CRED} → #{CRED} in headers (matches ToolCompiler's
         //      pipeline so credential resolution is single-source)
-        //   3) forward __agentspan_ctx__ for SecretAwareHttpTask
+        //   3) forward __agentspan_ctx__ for CredentialAwareHttpTask
         AgentConfig planner = simpleSubAgent("planner", "Write a plan");
         AgentConfig harness = AgentConfig.builder()
                 .name("pae_with_url_ctx")

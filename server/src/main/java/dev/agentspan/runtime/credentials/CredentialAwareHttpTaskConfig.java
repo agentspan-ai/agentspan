@@ -12,22 +12,22 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
 
 /**
- * Registers {@link SecretAwareHttpTask} as the primary HTTP system task,
+ * Registers {@link CredentialAwareHttpTask} as the primary HTTP system task,
  * overriding Conductor's default HttpTask.
  *
  * <p>This follows the same pattern as {@code AgentHumanTaskConfig} which
  * overrides the default HUMAN task.</p>
  */
 @Configuration
-public class SecretAwareHttpTaskConfig {
+public class CredentialAwareHttpTaskConfig {
 
     @Bean("HTTP")
     @Primary
-    public SecretAwareHttpTask credentialAwareHttpTask(
+    public CredentialAwareHttpTask credentialAwareHttpTask(
             RestTemplateProvider restTemplateProvider,
             ObjectMapper objectMapper,
             ExecutionTokenService tokenService,
-            SecretResolutionService resolutionService) {
-        return new SecretAwareHttpTask(restTemplateProvider, objectMapper, tokenService, resolutionService);
+            CredentialResolutionService resolutionService) {
+        return new CredentialAwareHttpTask(restTemplateProvider, objectMapper, tokenService, resolutionService);
     }
 }

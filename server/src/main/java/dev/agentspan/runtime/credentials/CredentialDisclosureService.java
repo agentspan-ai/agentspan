@@ -24,22 +24,22 @@ import org.springframework.stereotype.Service;
  *
  * <p>{@link dev.agentspan.runtime.controller.WorkerController} writes a row to
  * {@code secret_disclosures} every time a worker successfully resolves a name
- * via {@code POST /api/workers/secrets}. {@link SecretOutputMasker} reads
+ * via {@code POST /api/workers/secrets}. {@link CredentialOutputMasker} reads
  * these rows on the execution-read path to know which secret values to redact
  * from response payloads.</p>
  *
  * <p>Idempotent — duplicate inserts (same execution_id + name) are ignored.</p>
  */
 @Service
-public class SecretDisclosureService {
+public class CredentialDisclosureService {
 
-    private static final Logger log = LoggerFactory.getLogger(SecretDisclosureService.class);
+    private static final Logger log = LoggerFactory.getLogger(CredentialDisclosureService.class);
 
     private final NamedParameterJdbcTemplate jdbc;
     private final int retentionDays;
 
-    public SecretDisclosureService(
-            @Qualifier("secretJdbc") NamedParameterJdbcTemplate jdbc,
+    public CredentialDisclosureService(
+            @Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc,
             @Value("${agentspan.secrets.disclosure-retention-days:30}") int retentionDays) {
         this.jdbc = jdbc;
         this.retentionDays = retentionDays;

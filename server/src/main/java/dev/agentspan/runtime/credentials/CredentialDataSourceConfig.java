@@ -50,9 +50,9 @@ import com.zaxxer.hikari.HikariDataSource;
  * <p>PostgreSQL: uses {@code org.postgresql.Driver} with a larger pool (default 8).</p>
  */
 @Configuration
-public class SecretDataSourceConfig {
+public class CredentialDataSourceConfig {
 
-    private static final Logger log = LoggerFactory.getLogger(SecretDataSourceConfig.class);
+    private static final Logger log = LoggerFactory.getLogger(CredentialDataSourceConfig.class);
 
     private static final int POSTGRES_POOL_SIZE = 8;
     private static final int SQLITE_POOL_SIZE = 8;
@@ -71,7 +71,7 @@ public class SecretDataSourceConfig {
         return datasourceUrl != null && datasourceUrl.startsWith("jdbc:postgresql");
     }
 
-    @Bean("secretDataSource")
+    @Bean("credentialDataSource")
     @Primary
     public DataSource secretDataSource() {
         boolean postgres = isPostgres();
@@ -107,15 +107,15 @@ public class SecretDataSourceConfig {
         return new HikariDataSource(config);
     }
 
-    @Bean("secretJdbc")
+    @Bean("credentialJdbc")
     public NamedParameterJdbcTemplate credentialJdbc(
-            @org.springframework.beans.factory.annotation.Qualifier("secretDataSource") DataSource dataSource) {
+            @org.springframework.beans.factory.annotation.Qualifier("credentialDataSource") DataSource dataSource) {
         return new NamedParameterJdbcTemplate(dataSource);
     }
 
     @Bean
     public DataSourceInitializer credentialSchemaInitializer(
-            @org.springframework.beans.factory.annotation.Qualifier("secretDataSource") DataSource dataSource) {
+            @org.springframework.beans.factory.annotation.Qualifier("credentialDataSource") DataSource dataSource) {
         // Use a database-specific DDL file so that column types are correct:
         //   SQLite  → schema-secrets.sql          (BLOB for binary data)
         //   Postgres → schema-secrets-postgres.sql (BYTEA for binary data)

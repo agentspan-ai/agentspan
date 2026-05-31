@@ -290,7 +290,7 @@ public class AgentService {
 
         // Pre-generate the workflow id so the execution token can be minted
         // against the same id Conductor will use. Without this the token's
-        // executionId is null, and SecretDisclosureService.record() crashes
+        // executionId is null, and CredentialDisclosureService.record() crashes
         // with NPE when it tries Map.of(..., null, ...) on the not-null
         // execution_id column. Passing this id to setWorkflowId on the start
         // input below makes Conductor adopt it instead of generating one.
