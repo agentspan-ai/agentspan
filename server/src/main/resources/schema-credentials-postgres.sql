@@ -41,12 +41,5 @@ CREATE TABLE IF NOT EXISTS credentials_store (
 
 -- Tags not supported — secret_tags table is omitted.
 
-CREATE TABLE IF NOT EXISTS credential_disclosures (
-    execution_id TEXT NOT NULL,
-    user_id      TEXT NOT NULL,
-    name         TEXT NOT NULL,
-    disclosed_at TEXT NOT NULL,
-    PRIMARY KEY (execution_id, name)
-);
-
-CREATE INDEX IF NOT EXISTS idx_credential_disclosures_user ON credential_disclosures(user_id, execution_id);
+-- credential_disclosures (per-execution disclosure tracking for output masking)
+-- is an enterprise feature and not included in the OSS schema.

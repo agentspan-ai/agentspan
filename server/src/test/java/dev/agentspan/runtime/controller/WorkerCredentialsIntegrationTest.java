@@ -108,7 +108,6 @@ class WorkerCredentialsIntegrationTest {
         store.delete(USER_A, NAME);
         store.delete(USER_B, NAME);
         jdbc.update("DELETE FROM users WHERE id IN (:a, :b)", Map.of("a", USER_A, "b", USER_B));
-        jdbc.update("DELETE FROM credential_disclosures WHERE user_id IN (:a, :b)", Map.of("a", USER_A, "b", USER_B));
     }
 
     // ── Gap C: cross-user isolation ─────────────────────────────────────

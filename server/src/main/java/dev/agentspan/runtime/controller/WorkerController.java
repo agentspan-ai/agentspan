@@ -17,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
-import dev.agentspan.runtime.credentials.CredentialDisclosureService;
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.credentials.ResolveRequest;
@@ -50,7 +49,6 @@ public class WorkerController {
 
     private final CredentialResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
-    private final CredentialDisclosureService disclosureService;
 
     /** Per-token fixed-window rate limiter (jti+minute → count). */
     private final ConcurrentHashMap<String, RateLimitBucket> rateLimitMap = new ConcurrentHashMap<>();
@@ -123,12 +121,6 @@ public class WorkerController {
             } catch (CredentialResolutionService.CredentialNotFoundException e) {
                 log.warn("Secret not found: user={}, name={}", payload.userId(), name);
             }
-        }
-
-        // Record the disclosure so CredentialOutputMasker can redact these values
-        // from execution-read responses later.
-        if (!result.isEmpty()) {
-            disclosureService.record(payload.executionId(), payload.userId(), List.copyOf(result.keySet()));
         }
 
         log.info(

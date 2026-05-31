@@ -9,7 +9,6 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import java.util.List;
 import java.util.Map;
 
 import org.hamcrest.Matchers;
@@ -17,24 +16,25 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.credentials.CredentialDisclosureService;
 import dev.agentspan.runtime.credentials.CredentialStoreProvider;
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.service.AgentService;
 
 /**
- * End-to-end masking through the real HTTP pipeline. {@link AgentService} is mocked
- * so we can produce a deterministic response body containing the secret value;
- * everything else (the advice, the store, the disclosure DAO) is the real Spring bean.
+ * Verifies that {@link CredentialMaskingResponseAdvice} activates on the right
+ * URI patterns and leaves the payload unchanged in OSS (no-op masker — disclosure
+ * tracking is an enterprise feature).
+ *
+ * <p>Masking-correctness tests (redaction, tree-walk, JSON-escape handling) live
+ * in the enterprise module where the real {@link dev.agentspan.runtime.credentials.CredentialOutputMasker}
+ * implementation is provided.</p>
  */
 @SpringBootTest(classes = AgentRuntime.class)
 @AutoConfigureMockMvc
@@ -47,103 +47,61 @@ class CredentialMaskingIntegrationTest {
     @Autowired
     private CredentialStoreProvider store;
 
-    @Autowired
-    private CredentialDisclosureService disclosures;
-
     @MockBean
     private AgentService agentService;
 
-    @Autowired
-    @Qualifier("credentialJdbc")
-    private NamedParameterJdbcTemplate jdbc;
-
-    private static final String SECRET_NAME = "_MASK_E2E_TOKEN";
-    private static final String SECRET_VALUE = "ghp_thisisasecretthatshouldbemasked";
+    private static final String CRED_NAME = "_MASK_E2E_TOKEN";
+    private static final String CRED_VALUE = "ghp_thisisasecretthatshouldbemasked";
     private static final String EXEC_ID = "exec-mask-e2e-001";
-
-    // Anonymous user id used by AuthFilter when agentspan.auth.enabled=false (test profile).
     private static final String userId = "00000000-0000-0000-0000-000000000000";
 
     @BeforeEach
     void setUp() {
-        store.set(userId, SECRET_NAME, SECRET_VALUE);
-        disclosures.record(EXEC_ID, userId, List.of(SECRET_NAME));
+        store.set(userId, CRED_NAME, CRED_VALUE);
     }
 
     @AfterEach
     void cleanUp() {
-        store.delete(userId, SECRET_NAME);
-        jdbc.update("DELETE FROM credential_disclosures WHERE user_id = :u", Map.of("u", userId));
+        store.delete(userId, CRED_NAME);
     }
 
+    // ── Advice URI coverage ─────────────────────────────────────────────
+
     @Test
-    void getExecutionDetail_redactsSecretValueInOutput() throws Exception {
-        // Build a detail response that "accidentally" contains the secret value
-        // in the tool output map (e.g. an error message leaked the token).
+    void executionDetail_adviceActivates_passesThrough() throws Exception {
+        // In OSS the masker is a no-op: value passes through unchanged.
+        // This test confirms the advice activates on /api/agent/executions/{id}
+        // without throwing and without blocking the response.
         AgentExecutionDetail detail = AgentExecutionDetail.builder()
                 .executionId(EXEC_ID)
                 .agentName("test-agent")
                 .status("COMPLETED")
-                .output(Map.of("result", "gh CLI failed: authentication error for token " + SECRET_VALUE + " expired"))
+                .output(Map.of("result", "token is " + CRED_VALUE))
                 .build();
         when(agentService.getExecutionDetail(eq(EXEC_ID))).thenReturn(detail);
 
         mvc.perform(get("/api/agent/executions/" + EXEC_ID))
                 .andExpect(status().isOk())
-                // Plaintext secret must not appear anywhere in the response.
-                .andExpect(content().string(Matchers.not(Matchers.containsString(SECRET_VALUE))))
-                // The masker should have replaced it with the named-placeholder token.
-                .andExpect(content().string(Matchers.containsString("***" + SECRET_NAME + "***")));
+                // OSS no-op: value is still present (masking is enterprise)
+                .andExpect(content().string(Matchers.containsString(CRED_VALUE)));
     }
 
     @Test
-    void getExecutionDetail_noDisclosure_passesValueThrough() throws Exception {
-        // A different execution id that has no disclosure record — even if the
-        // body contains a string matching our stored secret, the advice should
-        // not redact it because nothing was disclosed for THIS execution.
-        String otherExec = "exec-no-disclosure-002";
-        AgentExecutionDetail detail = AgentExecutionDetail.builder()
-                .executionId(otherExec)
-                .agentName("test-agent")
-                .status("COMPLETED")
-                .output(Map.of("result", "incidentally contains " + SECRET_VALUE))
-                .build();
-        when(agentService.getExecutionDetail(eq(otherExec))).thenReturn(detail);
-
-        mvc.perform(get("/api/agent/executions/" + otherExec))
-                .andExpect(status().isOk())
-                .andExpect(content().string(Matchers.containsString(SECRET_VALUE)));
-    }
-
-    // ── Bug #5: status endpoint must also be masked ─────────────────────
-
-    @Test
-    void getStatus_redactsSecretValueInOutput() throws Exception {
-        // GET /api/agent/{executionId}/status — bare-id route, no "executions" prefix.
-        // The regex in CredentialMaskingResponseAdvice originally required an
-        // "execution(s)?" path segment and therefore skipped this URL entirely,
-        // letting any leaked secret in the status payload through to the client.
+    void statusEndpoint_adviceActivates_passesThrough() throws Exception {
         when(agentService.getStatus(eq(EXEC_ID)))
-                .thenReturn(Map.of(
-                        "executionId",
-                        EXEC_ID,
-                        "status",
-                        "FAILED",
-                        "reasonForIncompletion",
-                        "tool error: HTTP 401 from upstream while using token " + SECRET_VALUE));
+                .thenReturn(Map.of("executionId", EXEC_ID, "status", "COMPLETED", "note", "token=" + CRED_VALUE));
 
         mvc.perform(get("/api/agent/" + EXEC_ID + "/status"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(Matchers.not(Matchers.containsString(SECRET_VALUE))))
-                .andExpect(content().string(Matchers.containsString("***" + SECRET_NAME + "***")));
+                .andExpect(content().string(Matchers.containsString(CRED_VALUE)));
     }
 
     @Test
-    void getSecret_endpointBodyNotMasked() throws Exception {
-        // Sanity: /api/secrets/{key} returns plaintext (Conductor parity).
-        // The advice must not activate here even though disclosures exist for this user.
-        mvc.perform(get("/api/secrets/" + SECRET_NAME))
+    void getCredential_endpointNotIntercepted() throws Exception {
+        // /api/secrets/{key} is the CRUD endpoint — the advice must NOT
+        // intercept it regardless of what credentials are in the store.
+        mvc.perform(get("/api/secrets/" + CRED_NAME))
                 .andExpect(status().isOk())
-                .andExpect(content().string(SECRET_VALUE));
+                .andExpect(content().string(CRED_VALUE));
     }
 }

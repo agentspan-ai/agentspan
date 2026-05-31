@@ -53,15 +53,18 @@ public class CredentialMaskingResponseAdvice implements ResponseBodyAdvice<Objec
     private static final Logger log = LoggerFactory.getLogger(CredentialMaskingResponseAdvice.class);
 
     /**
-     * Matches the execution-read endpoints that may surface task output/data:
+     * Matches execution-read endpoints that may surface task output/data:
      * <ul>
      *   <li>{@code /api/agent/executions/{id}} (+ {@code /full}, {@code /tasks})</li>
      *   <li>{@code /api/agent/execution/{id}}</li>
-     *   <li>{@code /api/agent/{id}/status} — bare-id status route (AgentController#getAgentStatus)</li>
+     *   <li>{@code /api/agent/{id}/status}</li>
+     *   <li>{@code /api/workflow/{id}} — raw Conductor workflow read (includeTasks=true)</li>
      * </ul>
      */
-    private static final Pattern EXEC_URI = Pattern.compile(
-            "^/api/agent/(?:" + "execution(?:s)?/([^/]+?)(?:/(?:full|tasks))?" + "|([^/]+?)/status" + ")/?$");
+    private static final Pattern EXEC_URI = Pattern.compile("^(?:"
+            + "/api/agent/(?:execution(?:s)?/([^/]+?)(?:/(?:full|tasks))?|([^/]+?)/status)"
+            + "|/api/workflow/([^/?]+)"
+            + ")/?$");
 
     private final CredentialOutputMasker masker;
     private final ObjectMapper mapper;
@@ -95,8 +98,10 @@ public class CredentialMaskingResponseAdvice implements ResponseBodyAdvice<Objec
         String path = request.getURI().getPath();
         Matcher m = EXEC_URI.matcher(path);
         if (!m.matches()) return body; // not an execution-read endpoint
-        // Group 1 = id from /executions/{id} / /execution/{id}; group 2 = id from /{id}/status.
-        String executionId = m.group(1) != null ? m.group(1) : m.group(2);
+        // group 1: /agent/executions/{id} or /agent/execution/{id}
+        // group 2: /agent/{id}/status
+        // group 3: /workflow/{id}
+        String executionId = m.group(1) != null ? m.group(1) : m.group(2) != null ? m.group(2) : m.group(3);
         // exclude reserved sub-paths that happen to match the regex
         if (executionId.equals("prune") || executionId.equals("search")) return body;
 

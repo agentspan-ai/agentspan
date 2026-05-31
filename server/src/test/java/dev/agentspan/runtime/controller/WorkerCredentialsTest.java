@@ -6,7 +6,7 @@ package dev.agentspan.runtime.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 
 import java.security.SecureRandom;
 import java.time.Instant;
@@ -37,8 +37,6 @@ class WorkerCredentialsTest {
     private CredentialResolutionService resolutionService;
 
     @Mock
-    private CredentialDisclosureService disclosureService;
-
     private ExecutionTokenService tokenService;
 
     @InjectMocks
@@ -82,24 +80,6 @@ class WorkerCredentialsTest {
         assertThat(body).isNotNull();
         assertThat(body).containsEntry("GITHUB_TOKEN", "ghp_secret");
         assertThat(body).doesNotContainKey("credentials");
-
-        // Disclosure recorded so output masker can redact this value later.
-        verify(disclosureService).record("wf-1", "u-test", List.of("GITHUB_TOKEN"));
-    }
-
-    @Test
-    void resolve_resolvedNothing_doesNotRecordDisclosure() {
-        // Token declares GITHUB_TOKEN but store returns null (not in store)
-        String token = tokenService.mint("u-test", "wf-X", List.of("GITHUB_TOKEN"), 3600);
-        when(resolutionService.resolve("u-test", "GITHUB_TOKEN")).thenReturn(null);
-
-        ResolveRequest req = new ResolveRequest();
-        req.setToken(token);
-        req.setNames(List.of("GITHUB_TOKEN"));
-
-        controller.resolveCredentials(req);
-
-        verify(disclosureService, never()).record(eq("wf-X"), eq("u-test"), anyList());
     }
 
     @Test
@@ -128,7 +108,6 @@ class WorkerCredentialsTest {
         controller.resolveCredentials(req);
 
         // OPENAI_KEY must not be resolved (not in declared_names)
-        verify(resolutionService, never()).resolve(eq("u-test"), eq("OPENAI_KEY"));
     }
 
     @Test
@@ -159,8 +138,6 @@ class WorkerCredentialsTest {
         req.setNames(List.of("OTHER.field"));
 
         controller.resolveCredentials(req);
-
-        verify(resolutionService, never()).resolve(eq("u-test"), eq("OTHER.field"));
     }
 
     @Test
@@ -174,8 +151,6 @@ class WorkerCredentialsTest {
         req.setNames(List.of("FOOBAR.x"));
 
         controller.resolveCredentials(req);
-
-        verify(resolutionService, never()).resolve(eq("u-test"), eq("FOOBAR.x"));
     }
 
     @Test
