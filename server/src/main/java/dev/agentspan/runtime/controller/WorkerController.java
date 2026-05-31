@@ -17,10 +17,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
-import dev.agentspan.runtime.model.secrets.ResolveRequest;
-import dev.agentspan.runtime.secrets.ExecutionTokenService;
-import dev.agentspan.runtime.secrets.SecretDisclosureService;
-import dev.agentspan.runtime.secrets.SecretResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.credentials.SecretDisclosureService;
+import dev.agentspan.runtime.credentials.SecretResolutionService;
+import dev.agentspan.runtime.model.credentials.ResolveRequest;
 
 import lombok.RequiredArgsConstructor;
 

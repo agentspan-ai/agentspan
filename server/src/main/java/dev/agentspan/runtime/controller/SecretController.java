@@ -16,8 +16,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import dev.agentspan.runtime.auth.RequestContextHolder;
-import dev.agentspan.runtime.model.secrets.SecretMeta;
-import dev.agentspan.runtime.secrets.SecretStoreProvider;
+import dev.agentspan.runtime.credentials.SecretStoreProvider;
+import dev.agentspan.runtime.model.credentials.SecretMeta;
 
 import lombok.RequiredArgsConstructor;
 

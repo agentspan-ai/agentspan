@@ -29,8 +29,8 @@ import org.springframework.stereotype.Component;
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
 import dev.agentspan.runtime.auth.RequestContextHolder;
-import dev.agentspan.runtime.secrets.ExecutionTokenService;
-import dev.agentspan.runtime.secrets.SecretResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.credentials.SecretResolutionService;
 
 import okhttp3.OkHttpClient;
 

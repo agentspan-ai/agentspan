@@ -12,8 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
-import dev.agentspan.runtime.secrets.ExecutionTokenService;
-import dev.agentspan.runtime.secrets.SecretResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.credentials.SecretResolutionService;
 
 @ControllerAdvice
 public class AgentExceptionHandler {

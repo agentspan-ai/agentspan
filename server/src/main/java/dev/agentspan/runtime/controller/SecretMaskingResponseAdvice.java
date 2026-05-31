@@ -22,7 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
-import dev.agentspan.runtime.secrets.SecretOutputMasker;
+import dev.agentspan.runtime.credentials.SecretOutputMasker;
 
 /**
  * Redacts disclosed secret values from execution-read response bodies.

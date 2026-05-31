@@ -23,7 +23,7 @@ import dev.agentspan.runtime.AgentRuntime;
 import dev.agentspan.runtime.auth.RequestContext;
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
-import dev.agentspan.runtime.secrets.SecretStoreProvider;
+import dev.agentspan.runtime.credentials.SecretStoreProvider;
 
 /**
  * Audit Gap B — per-user resolution of LLM provider API keys.

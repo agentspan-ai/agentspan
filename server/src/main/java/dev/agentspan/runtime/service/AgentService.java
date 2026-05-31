@@ -44,9 +44,9 @@ import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
 import dev.agentspan.runtime.compiler.AgentCompiler;
 import dev.agentspan.runtime.compiler.MultiAgentCompiler;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
-import dev.agentspan.runtime.secrets.ExecutionTokenService;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ProviderValidator;
 

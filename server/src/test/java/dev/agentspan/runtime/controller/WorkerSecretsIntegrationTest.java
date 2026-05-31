@@ -22,9 +22,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.model.secrets.ResolveRequest;
-import dev.agentspan.runtime.secrets.ExecutionTokenService;
-import dev.agentspan.runtime.secrets.SecretStoreProvider;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.credentials.SecretStoreProvider;
+import dev.agentspan.runtime.model.credentials.ResolveRequest;
 
 /**
  * Audit gaps C + F — full-stack {@code POST /api/workers/secrets} integration.

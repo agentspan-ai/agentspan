@@ -25,7 +25,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.agentspan.runtime.secrets.ExecutionTokenService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 /**
  * Auth filter — populates RequestContextHolder on every request.

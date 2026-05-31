@@ -24,8 +24,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import dev.agentspan.runtime.auth.*;
-import dev.agentspan.runtime.model.secrets.ResolveRequest;
-import dev.agentspan.runtime.secrets.*;
+import dev.agentspan.runtime.credentials.*;
+import dev.agentspan.runtime.model.credentials.ResolveRequest;
 
 @ExtendWith(MockitoExtension.class)
 class WorkerSecretsTest {
