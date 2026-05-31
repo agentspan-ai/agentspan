@@ -39,7 +39,20 @@ from agentspan.agents.handoff import OnTextMention
 # Tools
 # ---------------------------------------------------------------------------
 
-SHELL_ALLOWLIST = {"ls", "mkdir", "mktemp", "cat", "find", "tree", "wc", "head", "tail", "diff", "git", "pwd"}
+SHELL_ALLOWLIST = {
+    "ls",
+    "mkdir",
+    "mktemp",
+    "cat",
+    "find",
+    "tree",
+    "wc",
+    "head",
+    "tail",
+    "diff",
+    "git",
+    "pwd",
+}
 SHELL_METACHAR = re.compile(r"[;&|`$()]")
 
 
@@ -299,7 +312,7 @@ Detect the project's test runner:
 
 **Security** (if applicable)
 - [ ] No user input passed unsanitized to SQL, shell, or HTML
-- [ ] No secrets or secrets hardcoded
+- [ ] No credentials or credentials hardcoded
 - [ ] Proper authorization checks on new endpoints
 
 **Tests**

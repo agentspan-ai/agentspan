@@ -165,25 +165,15 @@ class TestSuite13Callbacks:
         )
 
         # Verify taskName format
-        before_tool_entries = [
-            cb for cb in callbacks if cb["position"] == "before_tool"
-        ]
-        assert any(
-            cb["taskName"] == "e2e_s13_tool_cb_before_tool"
-            for cb in before_tool_entries
-        ), (
+        before_tool_entries = [cb for cb in callbacks if cb["position"] == "before_tool"]
+        assert any(cb["taskName"] == "e2e_s13_tool_cb_before_tool" for cb in before_tool_entries), (
             f"[tool_callbacks_compile] Expected taskName "
             f"'e2e_s13_tool_cb_before_tool' in before_tool entries: "
             f"{before_tool_entries}"
         )
 
-        after_tool_entries = [
-            cb for cb in callbacks if cb["position"] == "after_tool"
-        ]
-        assert any(
-            cb["taskName"] == "e2e_s13_tool_cb_after_tool"
-            for cb in after_tool_entries
-        ), (
+        after_tool_entries = [cb for cb in callbacks if cb["position"] == "after_tool"]
+        assert any(cb["taskName"] == "e2e_s13_tool_cb_after_tool" for cb in after_tool_entries), (
             f"[tool_callbacks_compile] Expected taskName "
             f"'e2e_s13_tool_cb_after_tool' in after_tool entries: "
             f"{after_tool_entries}"
@@ -226,24 +216,18 @@ class TestSuite13Callbacks:
         )
 
         # Verify taskName format
-        before_model_entries = [
-            cb for cb in callbacks if cb["position"] == "before_model"
-        ]
+        before_model_entries = [cb for cb in callbacks if cb["position"] == "before_model"]
         assert any(
-            cb["taskName"] == "e2e_s13_model_cb_before_model"
-            for cb in before_model_entries
+            cb["taskName"] == "e2e_s13_model_cb_before_model" for cb in before_model_entries
         ), (
             f"[model_callbacks_compile] Expected taskName "
             f"'e2e_s13_model_cb_before_model' in before_model entries: "
             f"{before_model_entries}"
         )
 
-        after_model_entries = [
-            cb for cb in callbacks if cb["position"] == "after_model"
-        ]
+        after_model_entries = [cb for cb in callbacks if cb["position"] == "after_model"]
         assert any(
-            cb["taskName"] == "e2e_s13_model_cb_after_model"
-            for cb in after_model_entries
+            cb["taskName"] == "e2e_s13_model_cb_after_model" for cb in after_model_entries
         ), (
             f"[model_callbacks_compile] Expected taskName "
             f"'e2e_s13_model_cb_after_model' in after_model entries: "
@@ -273,9 +257,7 @@ class TestSuite13Callbacks:
         result = runtime.run(agent, "Say hello using the echo tool.", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.execution_id, (
-            f"[before_tool_callback] No execution_id. {diag}"
-        )
+        assert result.execution_id, f"[before_tool_callback] No execution_id. {diag}"
         assert result.status in ("COMPLETED", "TERMINATED"), (
             f"[before_tool_callback] Expected COMPLETED or TERMINATED, "
             f"got '{result.status}'. {diag}"
@@ -284,8 +266,7 @@ class TestSuite13Callbacks:
         wf = _get_workflow(result.execution_id)
         all_tasks = wf.get("tasks", [])
         before_tool_tasks = [
-            t for t in all_tasks
-            if "before_tool" in t.get("referenceTaskName", "")
+            t for t in all_tasks if "before_tool" in t.get("referenceTaskName", "")
         ]
 
         assert len(before_tool_tasks) > 0, (
@@ -294,10 +275,7 @@ class TestSuite13Callbacks:
             f"{[t.get('referenceTaskName', '?') for t in all_tasks]}. {diag}"
         )
 
-        completed = [
-            t for t in before_tool_tasks
-            if t.get("status") == "COMPLETED"
-        ]
+        completed = [t for t in before_tool_tasks if t.get("status") == "COMPLETED"]
         assert len(completed) > 0, (
             f"[before_tool_callback] before_tool task(s) exist but none "
             f"reached COMPLETED. Statuses: "
@@ -327,20 +305,14 @@ class TestSuite13Callbacks:
         result = runtime.run(agent, "Say world using the echo tool.", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.execution_id, (
-            f"[after_tool_callback] No execution_id. {diag}"
-        )
+        assert result.execution_id, f"[after_tool_callback] No execution_id. {diag}"
         assert result.status in ("COMPLETED", "TERMINATED"), (
-            f"[after_tool_callback] Expected COMPLETED or TERMINATED, "
-            f"got '{result.status}'. {diag}"
+            f"[after_tool_callback] Expected COMPLETED or TERMINATED, got '{result.status}'. {diag}"
         )
 
         wf = _get_workflow(result.execution_id)
         all_tasks = wf.get("tasks", [])
-        after_tool_tasks = [
-            t for t in all_tasks
-            if "after_tool" in t.get("referenceTaskName", "")
-        ]
+        after_tool_tasks = [t for t in all_tasks if "after_tool" in t.get("referenceTaskName", "")]
 
         assert len(after_tool_tasks) > 0, (
             f"[after_tool_callback] No task with 'after_tool' in "
@@ -348,10 +320,7 @@ class TestSuite13Callbacks:
             f"{[t.get('referenceTaskName', '?') for t in all_tasks]}. {diag}"
         )
 
-        completed = [
-            t for t in after_tool_tasks
-            if t.get("status") == "COMPLETED"
-        ]
+        completed = [t for t in after_tool_tasks if t.get("status") == "COMPLETED"]
         assert len(completed) > 0, (
             f"[after_tool_callback] after_tool task(s) exist but none "
             f"reached COMPLETED. Statuses: "
@@ -381,9 +350,7 @@ class TestSuite13Callbacks:
         result = runtime.run(agent, "Use the echo tool with 'test'.", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.execution_id, (
-            f"[all_callbacks] No execution_id. {diag}"
-        )
+        assert result.execution_id, f"[all_callbacks] No execution_id. {diag}"
         assert result.status == "COMPLETED", (
             f"[all_callbacks] Expected COMPLETED, got '{result.status}'. "
             f"All 6 callbacks should not interfere with normal execution. "
@@ -396,9 +363,9 @@ class TestSuite13Callbacks:
         wf = _get_workflow(result.execution_id)
         all_tasks = wf.get("tasks", [])
         tool_tasks = [
-            t for t in all_tasks
-            if "echo_tool" in t.get("taskType", "")
-            or "echo_tool" in t.get("taskDefName", "")
+            t
+            for t in all_tasks
+            if "echo_tool" in t.get("taskType", "") or "echo_tool" in t.get("taskDefName", "")
         ]
 
         assert len(tool_tasks) > 0, (
@@ -407,10 +374,7 @@ class TestSuite13Callbacks:
             f"{[(t.get('referenceTaskName', '?'), t.get('taskType', '?')) for t in all_tasks]}. {diag}"
         )
 
-        completed_tools = [
-            t for t in tool_tasks
-            if t.get("status") == "COMPLETED"
-        ]
+        completed_tools = [t for t in tool_tasks if t.get("status") == "COMPLETED"]
         assert len(completed_tools) > 0, (
             f"[all_callbacks] echo_tool task(s) exist but none reached "
             f"COMPLETED. Callbacks may have interfered with tool execution. "

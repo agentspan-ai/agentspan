@@ -29,6 +29,7 @@ from settings import settings
 
 # ── Guardrail ────────────────────────────────────────────────────────────
 
+
 @guardrail
 def compliance_check(content: str) -> GuardrailResult:
     """Flag any response that mentions specific financial terms for review."""
@@ -43,6 +44,7 @@ def compliance_check(content: str) -> GuardrailResult:
 
 
 # ── Tool ─────────────────────────────────────────────────────────────────
+
 
 @tool
 def get_market_data(ticker: str) -> dict:
@@ -126,4 +128,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

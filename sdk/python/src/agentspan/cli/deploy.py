@@ -52,6 +52,7 @@ def main():
                 pass
         else:
             from agentspan.cli.discover import discover_from_path
+
             agents = discover_from_path(args.path)
     except Exception as e:
         sys.stdout = real_stdout
@@ -70,19 +71,23 @@ def main():
                 if not infos:
                     raise RuntimeError(f"deploy() returned no results for agent '{agent.name}'")
                 info = infos[0]
-                results.append({
-                    "agent_name": info.agent_name,
-                    "registered_name": info.registered_name,
-                    "success": True,
-                    "error": None,
-                })
+                results.append(
+                    {
+                        "agent_name": info.agent_name,
+                        "registered_name": info.registered_name,
+                        "success": True,
+                        "error": None,
+                    }
+                )
             except Exception as e:
-                results.append({
-                    "agent_name": agent.name,
-                    "registered_name": None,
-                    "success": False,
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "agent_name": agent.name,
+                        "registered_name": None,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
                 print(f"Deploy failed for {agent.name}: {e}", file=sys.stderr)
     finally:
         sys.stdout = real_stdout

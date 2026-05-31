@@ -16,7 +16,7 @@ Run:
 
 Requirements:
     - Agentspan server running
-    - OPENAI_API_KEY stored: agentspan secrets set OPENAI_API_KEY <your-openai-api-key>
+    - OPENAI_API_KEY stored: agentspan credentials set OPENAI_API_KEY <your-openai-api-key>
 """
 
 import os
@@ -41,12 +41,21 @@ model_exploration = Agent(
     name="model_exploration",
     model=MODEL,
     agents=[
-        Agent(name="linear_modeler", model=MODEL,
-              instructions="Propose a linear modeling approach (Ridge/Lasso/ElasticNet)."),
-        Agent(name="tree_modeler", model=MODEL,
-              instructions="Propose a tree-based approach (XGBoost/LightGBM)."),
-        Agent(name="nn_modeler", model=MODEL,
-              instructions="Propose a neural network approach (MLP/TabNet)."),
+        Agent(
+            name="linear_modeler",
+            model=MODEL,
+            instructions="Propose a linear modeling approach (Ridge/Lasso/ElasticNet).",
+        ),
+        Agent(
+            name="tree_modeler",
+            model=MODEL,
+            instructions="Propose a tree-based approach (XGBoost/LightGBM).",
+        ),
+        Agent(
+            name="nn_modeler",
+            model=MODEL,
+            instructions="Propose a neural network approach (MLP/TabNet).",
+        ),
     ],
     strategy="parallel",
 )
@@ -65,14 +74,20 @@ evaluator = Agent(
 # ── Phase 4: Iterative Refinement ─────────────────────────────────
 
 refinement = (
-    Agent(name="optimizer_r1", model=MODEL,
-          instructions="Suggest hyperparameter values with rationale.")
-    >> Agent(name="validator_r1", model=MODEL,
-             instructions="Review suggestions. Provide actionable feedback.")
-    >> Agent(name="optimizer_r2", model=MODEL,
-             instructions="Refine based on feedback.")
-    >> Agent(name="validator_r2", model=MODEL,
-             instructions="Final recommendation: ready for deployment?")
+    Agent(
+        name="optimizer_r1",
+        model=MODEL,
+        instructions="Suggest hyperparameter values with rationale.",
+    )
+    >> Agent(
+        name="validator_r1",
+        model=MODEL,
+        instructions="Review suggestions. Provide actionable feedback.",
+    )
+    >> Agent(name="optimizer_r2", model=MODEL, instructions="Refine based on feedback.")
+    >> Agent(
+        name="validator_r2", model=MODEL, instructions="Final recommendation: ready for deployment?"
+    )
 )
 
 # ── Phase 5: Report ──────────────────────────────────────────────
@@ -92,7 +107,9 @@ ml_pipeline = data_analyst >> model_exploration >> evaluator >> refinement >> re
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        result = rt.run(ml_pipeline, "Build a model for California housing prices...", timeout=120000)
+        result = rt.run(
+            ml_pipeline, "Build a model for California housing prices...", timeout=120000
+        )
         result.print_result()
 
         # Production pattern:

@@ -37,6 +37,7 @@ TIMEOUT = 120
 
 # ── Expected tools (from mcp-testkit source) ─────────────────────────────
 
+
 def _expected_tools_from_source():
     """Dynamically compute expected tool names from mcp-testkit source."""
     from mcp_test_server.tools import ALL_GROUPS
@@ -77,9 +78,7 @@ def _start_mcp_server(port, auth_key=None):
     while time.time() < deadline:
         if proc.poll() is not None:
             stderr = proc.stderr.read().decode() if proc.stderr else ""
-            raise RuntimeError(
-                f"mcp-testkit exited with code {proc.returncode}: {stderr}"
-            )
+            raise RuntimeError(f"mcp-testkit exited with code {proc.returncode}: {stderr}")
         try:
             requests.post(MCP_BASE_URL, json={}, timeout=2)
             return proc  # Any response means server is up
@@ -117,9 +116,7 @@ def _discover_tools_via_mcp(server_url, auth_key=None):
         if auth_key:
             headers["Authorization"] = f"Bearer {auth_key}"
 
-        async with streamablehttp_client(
-            server_url, headers=headers
-        ) as (read, write, _):
+        async with streamablehttp_client(server_url, headers=headers) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.list_tools()
@@ -166,7 +163,7 @@ def _make_auth_agent(model, server_url, cred_name):
         name="test_mcp_auth",
         description="Authenticated MCP test tools",
         headers={"Authorization": f"Bearer ${{{cred_name}}}"},
-        secrets=[cred_name],
+        credentials=[cred_name],
     )
     return Agent(
         name="e2e_mcp_auth",
@@ -318,18 +315,14 @@ def _assert_run_completed(result, step_name):
             f"  {diag}"
         )
 
-    assert result.status == "COMPLETED", (
-        f"[{step_name}] Run did not complete. {diag}"
-    )
+    assert result.status == "COMPLETED", f"[{step_name}] Run did not complete. {diag}"
 
 
 def _validate_tool_execution(result, step_name):
     """Validate that the 3 test tools executed successfully via workflow tasks."""
     _assert_run_completed(result, step_name)
 
-    tool_tasks, all_refs = _find_mcp_tool_tasks(
-        result.execution_id, TEST_TOOL_NAMES
-    )
+    tool_tasks, all_refs = _find_mcp_tool_tasks(result.execution_id, TEST_TOOL_NAMES)
 
     # Dump CALL_MCP_TOOL tasks for diagnostics if tools not found
     mcp_task_dump = _dump_mcp_tasks(result.execution_id)
@@ -375,9 +368,7 @@ class TestSuite4McpTools:
                 timeout=5,
             )
         except FileNotFoundError:
-            pytest.skip(
-                "mcp-testkit not installed — required for Suite 4 MCP tools test"
-            )
+            pytest.skip("mcp-testkit not installed — required for Suite 4 MCP tools test")
 
         server_proc = None
         try:
@@ -431,9 +422,7 @@ class TestSuite4McpTools:
             cli_credentials.set(CRED_NAME, MCP_AUTH_KEY)
 
             # Step j: Discover tools with auth, validate all present
-            discovered_auth = _discover_tools_via_mcp(
-                MCP_SERVER_URL, auth_key=MCP_AUTH_KEY
-            )
+            discovered_auth = _discover_tools_via_mcp(MCP_SERVER_URL, auth_key=MCP_AUTH_KEY)
             assert len(discovered_auth) == EXPECTED_TOOL_COUNT, (
                 f"[Phase 2: Auth Discovery] Expected {EXPECTED_TOOL_COUNT} tools, "
                 f"discovered {len(discovered_auth)}."
@@ -445,12 +434,8 @@ class TestSuite4McpTools:
             )
 
             # Step k: Execute and validate
-            result_auth = runtime.run(
-                auth_agent, PROMPT_USE_3_TOOLS, timeout=TIMEOUT
-            )
-            _validate_tool_execution(
-                result_auth, "Phase 2: Authenticated execution"
-            )
+            result_auth = runtime.run(auth_agent, PROMPT_USE_3_TOOLS, timeout=TIMEOUT)
+            _validate_tool_execution(result_auth, "Phase 2: Authenticated execution")
 
         finally:
             if server_proc:

@@ -92,18 +92,18 @@ class CredentialsCLI:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=15, env=env)
 
     def set(self, name: str, value: str) -> None:
-        result = self._run("secrets", "set", name, value)
-        assert result.returncode == 0, f"secrets set {name} failed: {result.stderr}"
+        result = self._run("credentials", "set", name, value)
+        assert result.returncode == 0, f"credentials set {name} failed: {result.stderr}"
 
     def delete(self, name: str) -> None:
-        result = self._run("secrets", "delete", name)
+        result = self._run("credentials", "delete", name)
         # Ignore "not found" errors during cleanup
         if result.returncode != 0 and "not found" not in result.stderr.lower():
-            raise AssertionError(f"secrets delete {name} failed: {result.stderr}")
+            raise AssertionError(f"credentials delete {name} failed: {result.stderr}")
 
     def list(self) -> str:
-        result = self._run("secrets", "list")
-        assert result.returncode == 0, f"secrets list failed: {result.stderr}"
+        result = self._run("credentials", "list")
+        assert result.returncode == 0, f"credentials list failed: {result.stderr}"
         return result.stdout
 
 

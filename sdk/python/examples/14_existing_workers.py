@@ -23,6 +23,7 @@ from settings import settings
 
 # --- Existing @worker_task functions (already deployed, already working) ---
 
+
 @worker_task(task_definition_name="get_customer_data")
 def get_customer_data(customer_id: str) -> dict:
     """Fetch customer data from the database."""
@@ -51,10 +52,16 @@ def get_order_history(customer_id: str, limit: int = 5) -> dict:
 
 # --- A new @tool function specific to this agent ---
 
+
 @tool
 def create_support_ticket(customer_id: str, issue: str, priority: str = "medium") -> dict:
     """Create a support ticket for a customer."""
-    return {"ticket_id": "TKT-999", "customer_id": customer_id, "issue": issue, "priority": priority}
+    return {
+        "ticket_id": "TKT-999",
+        "customer_id": customer_id,
+        "issue": issue,
+        "priority": priority,
+    }
 
 
 # --- Agent that mixes both @worker_task and @tool functions ---
@@ -72,7 +79,9 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
+        result = runtime.run(
+            agent, "Customer C001 is asking about their recent orders. Look them up and summarize."
+        )
         result.print_result()
 
         # Production pattern:
@@ -83,4 +92,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

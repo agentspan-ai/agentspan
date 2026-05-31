@@ -99,8 +99,7 @@ def fetch_slack_bug_reports(limit: int = 10) -> str:
     messages = [
         {"ts": m["ts"], "user": m.get("user", "unknown"), "text": m.get("text", "")}
         for m in data.get("messages", [])
-        if m.get("type") == "message"
-        and m["ts"] not in state.get("processed", [])
+        if m.get("type") == "message" and m["ts"] not in state.get("processed", [])
     ]
     return json.dumps({"messages": messages, "count": len(messages)})
 
@@ -117,7 +116,8 @@ def search_codebase(query: str, path: str = "", file_pattern: str = "*.py") -> s
     search_path = REPO_PATH / path if path else REPO_PATH
     result = subprocess.run(
         ["grep", "-rn", "--include", file_pattern, query, str(search_path)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     output = result.stdout.strip()
     if not output:
@@ -172,7 +172,9 @@ def run_git_command(args: str) -> str:
     """
     result = subprocess.run(
         ["git"] + args.split(),
-        capture_output=True, text=True, cwd=str(REPO_PATH),
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_PATH),
     )
     output = (result.stdout + result.stderr).strip()
     return output[:3000] if len(output) > 3000 else output
@@ -193,7 +195,9 @@ def create_branch_and_commit(branch_name: str, commit_message: str, files: str) 
     # Create branch
     r = subprocess.run(
         ["git", "checkout", "-b", branch_name],
-        capture_output=True, text=True, cwd=str(REPO_PATH),
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_PATH),
     )
     if r.returncode != 0:
         return f"Failed to create branch: {r.stderr}"
@@ -205,7 +209,9 @@ def create_branch_and_commit(branch_name: str, commit_message: str, files: str) 
     # Commit
     r = subprocess.run(
         ["git", "commit", "--no-verify", "-m", commit_message],
-        capture_output=True, text=True, cwd=str(REPO_PATH),
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_PATH),
     )
     if r.returncode != 0:
         return f"Commit failed: {r.stderr}"
@@ -225,7 +231,9 @@ def push_branch(branch_name: str) -> str:
 
     r = subprocess.run(
         ["git", "push", "-u", "origin", branch_name],
-        capture_output=True, text=True, cwd=str(REPO_PATH),
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_PATH),
     )
     output = (r.stdout + r.stderr).strip()
     return output
@@ -245,13 +253,24 @@ def create_github_pr(title: str, body: str, branch: str, base: str = "main") -> 
         return f"[DRY RUN] Would create PR: '{title}' ({branch} → {base})"
 
     r = subprocess.run(
-        ["gh", "pr", "create",
-         "--repo", GITHUB_REPO,
-         "--title", title,
-         "--body", body,
-         "--head", branch,
-         "--base", base],
-        capture_output=True, text=True, cwd=str(REPO_PATH),
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            GITHUB_REPO,
+            "--title",
+            title,
+            "--body",
+            body,
+            "--head",
+            branch,
+            "--base",
+            base,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_PATH),
         env={**os.environ, "GITHUB_TOKEN": GITHUB_TOKEN},
     )
     output = (r.stdout + r.stderr).strip()
@@ -421,6 +440,7 @@ run the remaining agents.
 
 # ── Entry point ──────────────────────────────────────────────────────────────
 
+
 def run_once() -> None:
     with AgentRuntime() as runtime:
         result = runtime.run(
@@ -442,12 +462,15 @@ def run_loop(interval_seconds: int = 300) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Slack Auto-Fix Agent")
-    parser.add_argument("--loop", action="store_true",
-                        help="Poll continuously (every 5 min)")
-    parser.add_argument("--interval", type=int, default=300,
-                        help="Poll interval in seconds (default: 300)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Investigate and plan fix but don't write files or create PR")
+    parser.add_argument("--loop", action="store_true", help="Poll continuously (every 5 min)")
+    parser.add_argument(
+        "--interval", type=int, default=300, help="Poll interval in seconds (default: 300)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Investigate and plan fix but don't write files or create PR",
+    )
     args = parser.parse_args()
 
     if args.dry_run:

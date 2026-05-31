@@ -37,7 +37,7 @@ var navItems = []NavItem{
 	{ViewExecutions, "Executions"},
 	{ViewServer, "Server"},
 	{ViewSkills, "Skills"},
-	{ViewSecrets, "Secrets"},
+	{ViewSecrets, "Credentials"},
 	{ViewDoctor, "Doctor"},
 	{ViewConfigure, "Configure"},
 }

@@ -40,7 +40,12 @@ class MockWorkflowRun:
     """Mock workflow run result."""
 
     def __init__(
-        self, output=None, variables=None, tasks=None, status="COMPLETED", execution_id="test-wf-123"
+        self,
+        output=None,
+        variables=None,
+        tasks=None,
+        status="COMPLETED",
+        execution_id="test-wf-123",
     ):
         self.output = output
         self.variables = variables or {}
@@ -1970,18 +1975,18 @@ class TestStartFrameworkViaServer:
                 return AgentRuntime(config=config)
 
     def test_start_framework_via_server_passes_secrets(self, runtime):
-        """Framework start payload includes request-level secrets."""
+        """Framework start payload includes request-level credentials."""
         mock_post = _mock_requests_post({"executionId": "wf-fw-1"})
         with patch("requests.post", mock_post):
             runtime._start_framework_via_server(
                 framework="openai",
                 raw_config={"name": "fw_agent"},
                 prompt="hello",
-                secrets=["OPENAI_API_KEY"],
+                credentials=["OPENAI_API_KEY"],
             )
 
         payload = mock_post.call_args[1]["json"]
-        assert payload["secrets"] == ["OPENAI_API_KEY"]
+        assert payload["credentials"] == ["OPENAI_API_KEY"]
 
     def test_start_framework_via_server_passes_context(self, runtime):
         """Framework start payload includes context."""
@@ -2012,7 +2017,7 @@ class TestFrameworkCredentials:
                 return AgentRuntime(config=config)
 
     def test_run_framework_registers_and_clears_workflow_secrets(self, runtime):
-        """Framework run() exposes request secrets to extracted tools for the run lifetime."""
+        """Framework run() exposes request credentials to extracted tools for the run lifetime."""
         from agentspan.agents.runtime._dispatch import (
             _workflow_secrets,
             _workflow_secrets_lock,
@@ -2030,7 +2035,9 @@ class TestFrameworkCredentials:
                 output={"result": "ok"},
             )
 
-        with patch("agentspan.agents.frameworks.serializer.detect_framework", return_value="openai"):
+        with patch(
+            "agentspan.agents.frameworks.serializer.detect_framework", return_value="openai"
+        ):
             with patch(
                 "agentspan.agents.frameworks.serializer.serialize_agent",
                 return_value=({"name": "fw_agent"}, []),
@@ -2047,11 +2054,11 @@ class TestFrameworkCredentials:
                             result = runtime.run(
                                 fake_framework_agent,
                                 "hello",
-                                secrets=["FW_API_KEY"],
+                                credentials=["FW_API_KEY"],
                             )
 
         assert result.execution_id == "wf-framework-1"
-        assert mock_start.call_args.kwargs["secrets"] == ["FW_API_KEY"]
+        assert mock_start.call_args.kwargs["credentials"] == ["FW_API_KEY"]
         with _workflow_secrets_lock:
             assert "wf-framework-1" not in _workflow_secrets
 

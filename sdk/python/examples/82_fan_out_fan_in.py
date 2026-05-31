@@ -48,7 +48,7 @@ from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 # ---------------------------------------------------------------------------
 
 _ipc_dir = Path(tempfile.mkdtemp(prefix="fan_out_fan_in_"))
-_ANSWERS_DIR = _ipc_dir / "answers"   # one sentinel per submitted answer
+_ANSWERS_DIR = _ipc_dir / "answers"  # one sentinel per submitted answer
 _REPORTS_DIR = _ipc_dir / "reports"  # one JSON file per aggregated report
 _ANSWERS_DIR.mkdir()
 _REPORTS_DIR.mkdir()
@@ -67,13 +67,11 @@ QUESTIONS = [
 # Collector agent — fan-in
 # ---------------------------------------------------------------------------
 
+
 def build_collector() -> Agent:
     receive_result = wait_for_message_tool(
         name="receive_result",
-        description=(
-            "Wait for the next worker result. "
-            "Payload: {question, worker_name, answer}."
-        ),
+        description=("Wait for the next worker result. Payload: {question, worker_name, answer}."),
     )
 
     @tool
@@ -110,6 +108,7 @@ def build_collector() -> Agent:
 # Worker agents — unique tool names per worker to avoid Conductor name collision
 # ---------------------------------------------------------------------------
 
+
 def build_worker(worker_name: str, runtime: AgentRuntime, collector_id: str) -> Agent:
     receive_task = wait_for_message_tool(
         name=f"receive_task_{worker_name}",
@@ -121,11 +120,14 @@ def build_worker(worker_name: str, runtime: AgentRuntime, collector_id: str) -> 
     @tool(name=f"submit_answer_{worker_name}")
     def submit_answer(question: str, answer: str) -> str:
         """Send this worker's answer to the Collector and write a completion sentinel."""
-        runtime.send_message(collector_id, {
-            "question": question,
-            "worker_name": worker_name,
-            "answer": answer,
-        })
+        runtime.send_message(
+            collector_id,
+            {
+                "question": question,
+                "worker_name": worker_name,
+                "answer": answer,
+            },
+        )
         (_ANSWERS_DIR / f"{worker_name}_{time.time_ns()}.done").touch()
         return "submitted"
 
@@ -149,6 +151,7 @@ def build_worker(worker_name: str, runtime: AgentRuntime, collector_id: str) -> 
 # ---------------------------------------------------------------------------
 # Orchestrator agent
 # ---------------------------------------------------------------------------
+
 
 def build_orchestrator(runtime: AgentRuntime, worker_ids: list) -> Agent:
     receive_question = wait_for_message_tool(
@@ -214,8 +217,10 @@ try:
         # Give all agents time to reach their first wait call.
         time.sleep(5)
 
-        print(f"Fanning out {len(QUESTIONS)} question(s) to {NUM_WORKERS} workers each "
-              f"({total_answers} total answers expected)...\n")
+        print(
+            f"Fanning out {len(QUESTIONS)} question(s) to {NUM_WORKERS} workers each "
+            f"({total_answers} total answers expected)...\n"
+        )
         for q in QUESTIONS:
             print(f"  → {q[:70]}")
             runtime.send_message(orchestrator_id, {"question": q})

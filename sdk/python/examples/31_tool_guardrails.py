@@ -33,6 +33,7 @@ from settings import settings
 
 # ── Guardrail ────────────────────────────────────────────────────────────
 
+
 @guardrail
 def no_sql_injection(content: str) -> GuardrailResult:
     """Block inputs that contain SQL injection patterns."""
@@ -48,13 +49,14 @@ def no_sql_injection(content: str) -> GuardrailResult:
 
 sql_guard = Guardrail(
     no_sql_injection,
-    position=Position.INPUT,    # Check BEFORE tool execution
-    on_fail=OnFail.RAISE,       # Hard block — don't retry
+    position=Position.INPUT,  # Check BEFORE tool execution
+    on_fail=OnFail.RAISE,  # Hard block — don't retry
     name="sql_injection_guard",
 )
 
 
 # ── Tool with guardrail ─────────────────────────────────────────────────
+
 
 @tool(guardrails=[sql_guard])
 def run_query(query: str) -> str:
@@ -70,8 +72,7 @@ agent = Agent(
     model=settings.llm_model,
     tools=[run_query],
     instructions=(
-        "You help users query the database. Use the run_query tool. "
-        "Only execute SELECT queries."
+        "You help users query the database. Use the run_query tool. Only execute SELECT queries."
     ),
 )
 
@@ -99,4 +100,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

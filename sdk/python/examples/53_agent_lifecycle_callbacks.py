@@ -21,6 +21,7 @@ from settings import settings
 
 # ── Handler 1: Timing ────────────────────────────────────────────
 
+
 class TimingHandler(CallbackHandler):
     """Measures wall-clock time for the full agent run."""
 
@@ -34,6 +35,7 @@ class TimingHandler(CallbackHandler):
 
 
 # ── Handler 2: Logging ───────────────────────────────────────────
+
 
 class LoggingHandler(CallbackHandler):
     """Logs model calls and tool invocations."""
@@ -53,6 +55,7 @@ class LoggingHandler(CallbackHandler):
 
 
 # ── Tool ───────────────────────────────────────────────────────────
+
 
 @tool
 def lookup_weather(city: str) -> dict:
@@ -91,4 +94,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

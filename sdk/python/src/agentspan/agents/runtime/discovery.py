@@ -41,9 +41,7 @@ def discover_agents(packages: List[str]) -> list:
 
         # If it's a package, scan submodules recursively
         if hasattr(module, "__path__"):
-            for _, submod_name, _ in pkgutil.walk_packages(
-                module.__path__, module.__name__ + "."
-            ):
+            for _, submod_name, _ in pkgutil.walk_packages(module.__path__, module.__name__ + "."):
                 try:
                     submod = importlib.import_module(submod_name)
                     _scan_module(submod, Agent, discovered, seen_names)

@@ -29,6 +29,7 @@ from settings import settings
 # The function stub defines the schema; no implementation needed.
 # Conductor dispatches "process_order" tasks to whatever worker is polling.
 
+
 @tool(external=True)
 def process_order(order_id: str, action: str) -> dict:
     """Process a customer order. Actions: refund, cancel, update."""
@@ -38,6 +39,7 @@ def process_order(order_id: str, action: str) -> dict:
 # ── Example 2: External worker with approval gate ────────────────────
 # Dangerous operations can require human approval before execution.
 
+
 @tool(external=True, approval_required=True)
 def delete_account(user_id: str, reason: str) -> dict:
     """Permanently delete a user account. Requires manager approval."""
@@ -46,6 +48,7 @@ def delete_account(user_id: str, reason: str) -> dict:
 
 # ── Example 3: Mix local and external tools ──────────────────────────
 # Local @tool functions and external references work side-by-side.
+
 
 @tool
 def format_response(data: dict) -> str:
@@ -76,10 +79,10 @@ support_agent = Agent(
         "responses for the customer."
     ),
     tools=[
-        format_response,     # Local — runs in this process
-        get_customer,        # External — runs in CRM service
-        check_inventory,     # External — runs in inventory service
-        process_order,       # External — runs in order service
+        format_response,  # Local — runs in this process
+        get_customer,  # External — runs in CRM service
+        check_inventory,  # External — runs in inventory service
+        process_order,  # External — runs in order service
     ],
 )
 
@@ -105,4 +108,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(support_agent)
-

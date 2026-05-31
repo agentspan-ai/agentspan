@@ -35,6 +35,7 @@ vision_agent = Agent(
 
 # ── Example 2: Image analysis with tools ─────────────────────────────
 
+
 @tool
 def search_similar(description: str) -> str:
     """Search for similar images based on a description."""
@@ -140,4 +141,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(vision_agent)
-

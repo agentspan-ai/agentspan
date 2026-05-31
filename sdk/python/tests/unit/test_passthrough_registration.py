@@ -1,5 +1,6 @@
 # sdk/python/tests/unit/test_passthrough_registration.py
 """Tests for passthrough worker registration path in runtime.py."""
+
 import os
 import pytest
 from unittest.mock import MagicMock, patch, call  # noqa: F401
@@ -73,9 +74,10 @@ class TestSerializeAgentFuncPlaceholder:
         graph.name = "test_graph"
 
         with patch("agentspan.agents.frameworks.langgraph.serialize_langgraph") as mock_sl:
-            mock_sl.return_value = ({"name": "test_graph"}, [
-                MagicMock(name="test_graph", func=None)
-            ])
+            mock_sl.return_value = (
+                {"name": "test_graph"},
+                [MagicMock(name="test_graph", func=None)],
+            )
             _, workers = serialize_agent(graph)
 
         # func=None is expected here — it is a placeholder
@@ -105,7 +107,11 @@ class TestBuildPassthroughFunc:
             runtime._build_passthrough_func(graph, "langgraph", "test_graph")
 
         mock_worker.assert_called_once_with(
-            graph, "test_graph", "http://testserver:8080/api", "my_key", "my_secret",
+            graph,
+            "test_graph",
+            "http://testserver:8080/api",
+            "my_key",
+            "my_secret",
             credential_names=None,
         )
 
@@ -128,11 +134,18 @@ class TestBuildPassthroughFunc:
             runtime = AgentRuntime.__new__(AgentRuntime)
             runtime._config = config
             runtime._build_passthrough_func(
-                graph, "langgraph", "test_graph", secrets=["GITHUB_TOKEN"],
+                graph,
+                "langgraph",
+                "test_graph",
+                credentials=["GITHUB_TOKEN"],
             )
 
         mock_worker.assert_called_once_with(
-            graph, "test_graph", "http://testserver:8080/api", "my_key", "my_secret",
+            graph,
+            "test_graph",
+            "http://testserver:8080/api",
+            "my_key",
+            "my_secret",
             credential_names=["GITHUB_TOKEN"],
         )
 
@@ -158,7 +171,11 @@ class TestBuildPassthroughFunc:
             runtime._build_passthrough_func(options, "claude_agent_sdk", "test_agent")
 
         mock_worker.assert_called_once_with(
-            options, "test_agent", "http://testserver:8080/api", "my_key", "my_secret",
+            options,
+            "test_agent",
+            "http://testserver:8080/api",
+            "my_key",
+            "my_secret",
             credential_names=None,
         )
 
@@ -175,9 +192,8 @@ def _make_fake_task(workflow_instance_id="wf-123", prompt="test prompt"):
     return task
 
 
-
 class TestLangchainWorkerCredentialInjection:
-    """Verify that make_langchain_worker actually injects secrets into os.environ."""
+    """Verify that make_langchain_worker actually injects credentials into os.environ."""
 
     pytestmark = pytest.mark.skipif(
         not __import__("importlib").util.find_spec("langchain_core"),
@@ -204,7 +220,11 @@ class TestLangchainWorkerCredentialInjection:
         executor.invoke.side_effect = fake_invoke
 
         worker_fn = make_langchain_worker(
-            executor, "test_lc", "http://s:8080", "k", "s",
+            executor,
+            "test_lc",
+            "http://s:8080",
+            "k",
+            "s",
             credential_names=["GITHUB_TOKEN"],
         )
 
@@ -248,7 +268,11 @@ class TestLangchainWorkerCredentialInjection:
         executor.invoke.side_effect = fake_invoke
 
         worker_fn = make_langchain_worker(
-            executor, "test_lc", "http://s:8080", "k", "s",
+            executor,
+            "test_lc",
+            "http://s:8080",
+            "k",
+            "s",
             credential_names=["MY_SECRET"],
         )
 
@@ -281,7 +305,11 @@ class TestLangchainWorkerCredentialInjection:
         executor.invoke.return_value = {"output": "no creds needed"}
 
         worker_fn = make_langchain_worker(
-            executor, "test_lc", "http://s:8080", "k", "s",
+            executor,
+            "test_lc",
+            "http://s:8080",
+            "k",
+            "s",
             credential_names=None,
         )
 
@@ -290,10 +318,9 @@ class TestLangchainWorkerCredentialInjection:
         with patch(self._FETCHER_PATCH) as mock_get_fetcher:
             result = worker_fn(task)
 
-        # Fetcher factory should never be called — no secrets requested
+        # Fetcher factory should never be called — no credentials requested
         mock_get_fetcher.assert_not_called()
         assert result.status.name == "COMPLETED"
-
 
     # Full extraction path tests moved to test_credential_injection_integration.py
     # which uses real LangChain tools, real serialize_agent, real Conductor Tasks.

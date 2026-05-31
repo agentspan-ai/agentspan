@@ -13,7 +13,7 @@ Setup:
     pip install agentspan requests
     agentspan server start
 
-    # Store secrets in the AgentSpan UI (localhost:6767 → Credentials):
+    # Store credentials in the AgentSpan UI (localhost:6767 → Credentials):
     #   ZENDESK_API   = your Zendesk API token
     #   ZENDESK_EMAIL = your Zendesk email (e.g. you@company.com)
 
@@ -27,12 +27,12 @@ from agentspan.agents import Agent, AgentRuntime, tool
 
 # ── Zendesk Tools ────────────────────────────────────────────────
 # Credentials are injected into os.environ by the AgentSpan server
-# at execution time. No secrets in code.
+# at execution time. No credentials in code.
 
 ZENDESK_SUBDOMAIN = "orkeshelp"
 
 
-@tool(secrets=["ZENDESK_EMAIL", "ZENDESK_API"])
+@tool(credentials=["ZENDESK_EMAIL", "ZENDESK_API"])
 def get_ticket(ticket_id: int) -> dict:
     """Fetch a support ticket from Zendesk by ID."""
     auth = (f"{os.environ['ZENDESK_EMAIL']}/token", os.environ["ZENDESK_API"])
@@ -52,7 +52,7 @@ def get_ticket(ticket_id: int) -> dict:
     }
 
 
-@tool(secrets=["ZENDESK_EMAIL", "ZENDESK_API"])
+@tool(credentials=["ZENDESK_EMAIL", "ZENDESK_API"])
 def get_ticket_comments(ticket_id: int) -> list:
     """Fetch all comments/replies on a Zendesk ticket."""
     auth = (f"{os.environ['ZENDESK_EMAIL']}/token", os.environ["ZENDESK_API"])
@@ -72,7 +72,7 @@ def get_ticket_comments(ticket_id: int) -> list:
     ]
 
 
-@tool(secrets=["ZENDESK_EMAIL", "ZENDESK_API"])
+@tool(credentials=["ZENDESK_EMAIL", "ZENDESK_API"])
 def search_recent_tickets(query: str) -> list:
     """Search Zendesk tickets. Use keywords like status, priority, or text."""
     auth = (f"{os.environ['ZENDESK_EMAIL']}/token", os.environ["ZENDESK_API"])
@@ -94,7 +94,7 @@ def search_recent_tickets(query: str) -> list:
     ]
 
 
-@tool(secrets=["ZENDESK_EMAIL", "ZENDESK_API"])
+@tool(credentials=["ZENDESK_EMAIL", "ZENDESK_API"])
 def reply_to_ticket(ticket_id: int, message: str) -> dict:
     """Post a public comment on a Zendesk ticket. The customer will see this."""
     auth = (f"{os.environ['ZENDESK_EMAIL']}/token", os.environ["ZENDESK_API"])
@@ -106,7 +106,7 @@ def reply_to_ticket(ticket_id: int, message: str) -> dict:
     return {"status": "posted", "ticket_id": ticket_id}
 
 
-@tool(secrets=["ZENDESK_EMAIL", "ZENDESK_API"])
+@tool(credentials=["ZENDESK_EMAIL", "ZENDESK_API"])
 def add_internal_note(ticket_id: int, note: str) -> dict:
     """Add a private internal note on a Zendesk ticket. Only your team sees this."""
     auth = (f"{os.environ['ZENDESK_EMAIL']}/token", os.environ["ZENDESK_API"])

@@ -44,10 +44,12 @@ if is_tracing_enabled():
 
 # ── Agent with tools ─────────────────────────────────────────────────
 
+
 @tool
 def lookup(query: str) -> str:
     """Look up information."""
     return f"Result for '{query}': Python was created by Guido van Rossum in 1991."
+
 
 agent = Agent(
     name="traced_agent",
@@ -61,7 +63,9 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # The runtime automatically creates spans if OTel is configured.
         # You can also create manual spans for custom instrumentation:
-        with trace_agent_run("traced_agent", "Who created Python?", model=settings.llm_model) as span:
+        with trace_agent_run(
+            "traced_agent", "Who created Python?", model=settings.llm_model
+        ) as span:
             result = runtime.run(agent, "Who created Python?")
             if span:
                 span.set_attribute("agent.output_length", len(str(result.output)))
@@ -79,4 +83,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

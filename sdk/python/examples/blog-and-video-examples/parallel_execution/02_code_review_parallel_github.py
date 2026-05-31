@@ -13,7 +13,7 @@ Setup:
     pip install agentspan requests
     agentspan server start
 
-    # Store secrets in the AgentSpan UI (localhost:6767 → Credentials):
+    # Store credentials in the AgentSpan UI (localhost:6767 → Credentials):
     #   GITHUB_TOKEN = your GitHub personal access token (needs repo scope)
 
     python 02_code_review_parallel_github.py
@@ -29,7 +29,7 @@ from agentspan.agents import Agent, AgentRuntime, Strategy, tool
 GITHUB_API = "https://api.github.com"
 
 
-@tool(secrets=["GITHUB_TOKEN"])
+@tool(credentials=["GITHUB_TOKEN"])
 def get_pr_diff(repo: str, pr_number: int) -> dict:
     """Fetch the diff for a GitHub pull request. repo format: owner/repo"""
     token = os.environ["GITHUB_TOKEN"]
@@ -54,7 +54,7 @@ def get_pr_diff(repo: str, pr_number: int) -> dict:
     }
 
 
-@tool(secrets=["GITHUB_TOKEN"])
+@tool(credentials=["GITHUB_TOKEN"])
 def post_pr_review(repo: str, pr_number: int, body: str) -> dict:
     """Post a review comment on a GitHub pull request."""
     token = os.environ["GITHUB_TOKEN"]

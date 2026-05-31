@@ -70,8 +70,16 @@ def calculate(expression: str) -> dict:
     """Evaluate a math expression."""
     import math
 
-    safe = {"abs": abs, "round": round, "min": min, "max": max,
-            "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e}
+    safe = {
+        "abs": abs,
+        "round": round,
+        "min": min,
+        "max": max,
+        "sqrt": math.sqrt,
+        "pow": pow,
+        "pi": math.pi,
+        "e": math.e,
+    }
     try:
         return {"expression": expression, "result": eval(expression, {"__builtins__": {}}, safe)}
     except Exception as e:
@@ -97,10 +105,10 @@ def calculate(expression: str) -> dict:
 # semantics, write a custom callable (``@guardrail`` decorator) that
 # parses the JSON and inspects fields by name instead.
 no_pii_in_email = RegexGuardrail(
-    patterns=[r"\b(?:\d[ -]?){15}\d\b"],   # 16-digit groups with optional separators
+    patterns=[r"\b(?:\d[ -]?){15}\d\b"],  # 16-digit groups with optional separators
     name="no_pii_in_email",
     position=Position.INPUT,
-    on_fail=OnFail.RAISE,                  # raise → TERMINATE the plan; harness falls back
+    on_fail=OnFail.RAISE,  # raise → TERMINATE the plan; harness falls back
     message="Email body looks like it contains a credit-card number — refusing to send.",
 )
 
@@ -195,12 +203,14 @@ def run_one(harness: Agent, prompt: str) -> dict:
         wf = pac["workflowDef"]
         all_tasks = list(_walk(wf.get("tasks") or []))
         guardrail_gates = [
-            t for t in all_tasks
-            if t.get("type") == "SWITCH"
-            and "guardrail_gate" in str(t.get("taskReferenceName", ""))
+            t
+            for t in all_tasks
+            if t.get("type") == "SWITCH" and "guardrail_gate" in str(t.get("taskReferenceName", ""))
         ]
-        print(f"PAC stats:     stepCount={pac['stats'].get('stepCount')}, "
-              f"taskCount={pac['stats'].get('taskCount')}")
+        print(
+            f"PAC stats:     stepCount={pac['stats'].get('stepCount')}, "
+            f"taskCount={pac['stats'].get('taskCount')}"
+        )
         print(f"guardrail gates emitted: {len(guardrail_gates)}")
         for g in guardrail_gates:
             cases = list((g.get("decisionCases") or {}).keys())

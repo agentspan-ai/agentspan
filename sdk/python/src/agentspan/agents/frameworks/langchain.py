@@ -107,10 +107,10 @@ def make_langchain_worker(
                 session_id,
             )
 
-        # Resolve workflow-level secrets via the centralized injection helper.
+        # Resolve workflow-level credentials via the centralized injection helper.
         # See docs/design/secret-injection-contract.md — this is the tier-2
         # (env-injection with lock-around-full-invoke) path. Tier-1 explicit-key
-        # passthrough lands when a user's agent factory accepts a `secrets` kwarg.
+        # passthrough lands when a user's agent factory accepts a `credentials` kwarg.
         resolved_secrets = {}
         try:
             from agentspan.agents.runtime._dispatch import (
@@ -119,6 +119,7 @@ def make_langchain_worker(
                 _workflow_secrets,
                 _workflow_secrets_lock,
             )
+
             cred_names = list(_closure_cred_names)
             if not cred_names:
                 exec_id = execution_id or ""
@@ -132,11 +133,11 @@ def make_langchain_worker(
                 else:
                     logger.warning(
                         "No execution token in task for LangChain worker — "
-                        "secrets %s will not be injected",
+                        "credentials %s will not be injected",
                         cred_names,
                     )
         except Exception as _cred_err:
-            logger.warning("Failed to resolve secrets for LangChain: %s", _cred_err)
+            logger.warning("Failed to resolve credentials for LangChain: %s", _cred_err)
 
         from agentspan.agents.runtime.secret_injection import inject_via_env
 

@@ -146,9 +146,9 @@ from agentspan.agents.runtime.credentials.types import (
 
 
 def resolve_secrets(input_data: dict, names: list) -> dict:
-    """Resolve secrets from Conductor task input data.
+    """Resolve credentials from Conductor task input data.
 
-    For external workers that need to resolve secrets from the
+    For external workers that need to resolve credentials from the
     agentspan credential store. Extracts the execution token from
     ``__agentspan_ctx__`` in the task input and calls the server.
 

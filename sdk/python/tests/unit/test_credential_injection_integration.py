@@ -6,6 +6,7 @@ invocation.  Only the external credential server HTTP call is stubbed.
 Everything else — serialize_agent, make_tool_worker, Conductor Task,
 os.environ injection — is real.
 """
+
 import pytest
 
 pytest.importorskip("langchain_core", reason="langchain_core not installed")
@@ -19,6 +20,7 @@ from conductor.client.http.models import Task, TaskResult
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _real_conductor_task(workflow_instance_id="wf-integ-001"):
     """Build a real Conductor Task object (not a mock)."""
@@ -98,7 +100,9 @@ class TestFullExtractionPathIntegration:
         tool_func = workers[0].func
         tool_func._agentspan_framework_callable = True
         worker_fn = make_tool_worker(
-            tool_func, workers[0].name, credential_names=["GITHUB_TOKEN"],
+            tool_func,
+            workers[0].name,
+            credential_names=["GITHUB_TOKEN"],
         )
 
         fake_fetcher = MagicMock()
@@ -160,7 +164,9 @@ class TestFullExtractionPathIntegration:
             raise RuntimeError("intentional failure")
 
         worker_fn = make_tool_worker(
-            failing_tool, "failing_tool", credential_names=["SECRET_KEY"],
+            failing_tool,
+            "failing_tool",
+            credential_names=["SECRET_KEY"],
         )
 
         fake_fetcher = MagicMock()
@@ -174,10 +180,10 @@ class TestFullExtractionPathIntegration:
         assert "SECRET_KEY" not in os.environ
 
     def test_register_framework_workers_wires_secrets_to_make_tool_worker(self):
-        """_register_framework_workers passes secrets through so the
+        """_register_framework_workers passes credentials through so the
         resulting Conductor worker has them in its closure.
 
-        This is the exact flow that was broken: secrets were passed to
+        This is the exact flow that was broken: credentials were passed to
         runtime.run() but never reached the tool worker's closure."""
         from agentspan.agents.frameworks.serializer import serialize_agent
         from agentspan.agents.runtime._dispatch import make_tool_worker
@@ -208,9 +214,14 @@ class TestFullExtractionPathIntegration:
         runtime._registered_tool_names = set()
         runtime._workers_started = False
 
-        with patch("agentspan.agents.runtime._dispatch.make_tool_worker", side_effect=spy_make_tool_worker), \
-             patch("conductor.client.worker.worker_task.worker_task", return_value=lambda f: f):
-            runtime._register_framework_workers(workers, secrets=["GITHUB_TOKEN"])
+        with (
+            patch(
+                "agentspan.agents.runtime._dispatch.make_tool_worker",
+                side_effect=spy_make_tool_worker,
+            ),
+            patch("conductor.client.worker.worker_task.worker_task", return_value=lambda f: f),
+        ):
+            runtime._register_framework_workers(workers, credentials=["GITHUB_TOKEN"])
 
         assert len(captured_calls) == 1
         _, kwargs = captured_calls[0]

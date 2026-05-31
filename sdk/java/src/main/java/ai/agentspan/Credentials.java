@@ -20,7 +20,7 @@ import java.util.Map;
  * <pre>
  *   {@literal @}Tool(credentials = {"OPENAI_API_KEY"})
  *   public String chat(String prompt) {
- *       String key = Secrets.get("OPENAI_API_KEY");
+ *       String key = Credentials.get("OPENAI_API_KEY");
  *       OpenAIClient client = new OpenAIClient(key);
  *       ...
  *   }
@@ -36,12 +36,12 @@ import java.util.Map;
  * cross-SDK contract. Java's design corresponds to Python's contextvars
  * accessor and .NET's per-call IToolContext — all tier-1 explicit-key.</p>
  */
-public final class Secrets {
+public final class Credentials {
 
     private static final ThreadLocal<Map<String, String>> CURRENT =
             new ThreadLocal<>();
 
-    private Secrets() {
+    private Credentials() {
         // static-only utility
     }
 
@@ -58,7 +58,7 @@ public final class Secrets {
         Map<String, String> ctx = CURRENT.get();
         if (ctx == null) {
             throw new CredentialNotFoundException(
-                    "Secrets.get(\"" + name + "\") called outside a credential-aware "
+                    "Credentials.get(\"" + name + "\") called outside a credential-aware "
                             + "@Tool method. Either the calling code isn't a worker, or "
                             + "the tool was invoked without going through WorkerManager.");
         }

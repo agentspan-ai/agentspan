@@ -40,19 +40,27 @@ def validate_query(state: State) -> State:
 
 def refine_query(state: State) -> State:
     """Rewrite the query to be more precise using the LLM."""
-    response = llm.invoke([
-        SystemMessage(content="Rewrite the user query to be more specific and clear. Return only the rewritten query."),
-        HumanMessage(content=state["query"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="Rewrite the user query to be more specific and clear. Return only the rewritten query."
+            ),
+            HumanMessage(content=state["query"]),
+        ]
+    )
     return {"refined_query": response.content.strip()}
 
 
 def generate_answer(state: State) -> State:
     """Generate a comprehensive answer to the refined query."""
-    response = llm.invoke([
-        SystemMessage(content="You are a knowledgeable assistant. Answer the question clearly and concisely."),
-        HumanMessage(content=state["refined_query"] or state["query"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a knowledgeable assistant. Answer the question clearly and concisely."
+            ),
+            HumanMessage(content=state["refined_query"] or state["query"]),
+        ]
+    )
     return {"answer": response.content.strip()}
 
 

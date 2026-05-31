@@ -17,6 +17,7 @@ from agentspan.agents.handoff import OnTextMention
 
 # ── Tools ────────────────────────────────────────────────────────────
 
+
 @tool
 def lookup_order(order_id: str) -> dict:
     """Look up order details and status."""

@@ -439,8 +439,7 @@ class AgentHandle:
                     break
                 if timeout is not None and elapsed >= timeout:
                     raise TimeoutError(
-                        f"Agent execution {self.execution_id!r} did not complete "
-                        f"within {timeout}s."
+                        f"Agent execution {self.execution_id!r} did not complete within {timeout}s."
                     )
                 time.sleep(poll_interval)
                 elapsed += poll_interval
@@ -518,8 +517,7 @@ class AgentHandle:
                     break
                 if timeout is not None and elapsed >= timeout:
                     raise TimeoutError(
-                        f"Agent execution {self.execution_id!r} did not complete "
-                        f"within {timeout}s."
+                        f"Agent execution {self.execution_id!r} did not complete within {timeout}s."
                     )
                 await asyncio.sleep(poll_interval)
                 elapsed += poll_interval
@@ -601,9 +599,10 @@ class AgentHandle:
 
         if policy == "warn":
             log.warning(
-                "Worker stall detected on execution %s for tasks=%s "
-                "(policy=warn); not raising. %s",
-                err.execution_id, stalled_names, err.remediation,
+                "Worker stall detected on execution %s for tasks=%s (policy=warn); not raising. %s",
+                err.execution_id,
+                stalled_names,
+                err.remediation,
             )
             return
 
@@ -618,8 +617,11 @@ class AgentHandle:
                     "Worker stall detected on %s for tasks=%s (attempt "
                     "%d/%d) — killed pid(s)=%s; TaskHandler monitor will "
                     "respawn.",
-                    err.execution_id, stalled_names,
-                    self._stall_restart_count, max_restarts, killed,
+                    err.execution_id,
+                    stalled_names,
+                    self._stall_restart_count,
+                    max_restarts,
+                    killed,
                 )
                 return
 
@@ -794,9 +796,7 @@ class AgentStream:
         attach_reasoning = getattr(self.handle._runtime, "_attach_reasoning_metadata", None)
         if attach_reasoning is not None:
             try:
-                output, metadata = attach_reasoning(
-                    output, metadata, self.handle.execution_id
-                )
+                output, metadata = attach_reasoning(output, metadata, self.handle.execution_id)
             except Exception:
                 pass  # Reasoning metadata is best-effort.
 
@@ -980,8 +980,9 @@ class AsyncAgentStream:
             yield event
         self._exhausted = True
         self.result = _build_result_from_events(
-            self.events, self.handle,
-            token_fetcher=getattr(self._runtime, '_extract_token_usage', None),
+            self.events,
+            self.handle,
+            token_fetcher=getattr(self._runtime, "_extract_token_usage", None),
         )
 
     async def get_result(self) -> AgentResult:
@@ -991,13 +992,15 @@ class AsyncAgentStream:
                 self.events.append(event)
             self._exhausted = True
             self.result = _build_result_from_events(
-                self.events, self.handle,
-                token_fetcher=getattr(self._runtime, '_extract_token_usage', None),
+                self.events,
+                self.handle,
+                token_fetcher=getattr(self._runtime, "_extract_token_usage", None),
             )
         if self.result is None:
             self.result = _build_result_from_events(
-                self.events, self.handle,
-                token_fetcher=getattr(self._runtime, '_extract_token_usage', None),
+                self.events,
+                self.handle,
+                token_fetcher=getattr(self._runtime, "_extract_token_usage", None),
             )
         return self.result
 

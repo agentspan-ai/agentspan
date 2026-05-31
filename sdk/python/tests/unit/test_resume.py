@@ -73,15 +73,11 @@ class TestExtractDomain:
         assert rt._extract_domain("wf-2") is None
 
     def test_returns_domain_for_stateful_agent(self):
-        rt = self._make_runtime(
-            task_to_domain={"tool_a": "deadbeef", "tool_b": "deadbeef"}
-        )
+        rt = self._make_runtime(task_to_domain={"tool_a": "deadbeef", "tool_b": "deadbeef"})
         assert rt._extract_domain("wf-3") == "deadbeef"
 
     def test_returns_most_common_domain_when_multiple(self):
-        rt = self._make_runtime(
-            task_to_domain={"tool_a": "aaa", "tool_b": "bbb", "tool_c": "aaa"}
-        )
+        rt = self._make_runtime(task_to_domain={"tool_a": "aaa", "tool_b": "bbb", "tool_c": "aaa"})
         assert rt._extract_domain("wf-4") == "aaa"
 
     def test_returns_none_on_exception(self):
@@ -122,9 +118,7 @@ class TestResume:
         assert handle.run_id is None
 
     def test_resume_stateful_registers_workers_with_domain(self):
-        rt = self._make_runtime(
-            task_to_domain={"my_tool": "deadbeef", "other_tool": "deadbeef"}
-        )
+        rt = self._make_runtime(task_to_domain={"my_tool": "deadbeef", "other_tool": "deadbeef"})
         agent = Agent(name="bot", model="openai/gpt-4o")
 
         handle = rt.resume("wf-2", agent)

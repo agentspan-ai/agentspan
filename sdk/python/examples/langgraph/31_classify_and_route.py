@@ -31,56 +31,76 @@ class State(TypedDict):
 
 
 def classify(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(
-            content=(
-                "Classify the input into exactly one category. "
-                "Categories: science, history, sports, technology, cooking. "
-                "Respond with the category name only."
-            )
-        ),
-        HumanMessage(content=state["input"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "Classify the input into exactly one category. "
+                    "Categories: science, history, sports, technology, cooking. "
+                    "Respond with the category name only."
+                )
+            ),
+            HumanMessage(content=state["input"]),
+        ]
+    )
     return {"category": response.content.strip().lower()}
 
 
 def answer_science(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(content="You are a science expert. Answer precisely with relevant scientific context."),
-        HumanMessage(content=state["input"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a science expert. Answer precisely with relevant scientific context."
+            ),
+            HumanMessage(content=state["input"]),
+        ]
+    )
     return {"answer": f"[Science Expert] {response.content.strip()}"}
 
 
 def answer_history(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(content="You are a history expert. Provide historical context and key dates."),
-        HumanMessage(content=state["input"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a history expert. Provide historical context and key dates."
+            ),
+            HumanMessage(content=state["input"]),
+        ]
+    )
     return {"answer": f"[History Expert] {response.content.strip()}"}
 
 
 def answer_sports(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(content="You are a sports analyst. Give stats and context when relevant."),
-        HumanMessage(content=state["input"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a sports analyst. Give stats and context when relevant."
+            ),
+            HumanMessage(content=state["input"]),
+        ]
+    )
     return {"answer": f"[Sports Analyst] {response.content.strip()}"}
 
 
 def answer_technology(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(content="You are a technology expert. Be clear and technically accurate."),
-        HumanMessage(content=state["input"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a technology expert. Be clear and technically accurate."
+            ),
+            HumanMessage(content=state["input"]),
+        ]
+    )
     return {"answer": f"[Tech Expert] {response.content.strip()}"}
 
 
 def answer_cooking(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(content="You are a professional chef. Give practical, delicious advice."),
-        HumanMessage(content=state["input"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(content="You are a professional chef. Give practical, delicious advice."),
+            HumanMessage(content=state["input"]),
+        ]
+    )
     return {"answer": f"[Chef] {response.content.strip()}"}
 
 

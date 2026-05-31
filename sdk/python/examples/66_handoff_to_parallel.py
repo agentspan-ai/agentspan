@@ -29,9 +29,7 @@ from settings import settings
 quick_check = Agent(
     name="quick_check",
     model=settings.llm_model,
-    instructions=(
-        "You provide quick, 1-sentence assessments. Be brief and direct."
-    ),
+    instructions=("You provide quick, 1-sentence assessments. Be brief and direct."),
 )
 
 # ── Deep analysis (parallel group) ──────────────────────────────────
@@ -116,4 +114,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(coordinator)
-

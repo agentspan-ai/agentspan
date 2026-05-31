@@ -4,16 +4,16 @@
 """Credentials — OpenAI Agent SDK with credential injection.
 
 Demonstrates:
-    - runtime.run(openai_agent, secrets=["GITHUB_TOKEN"]) for OpenAI agents
+    - runtime.run(openai_agent, credentials=["GITHUB_TOKEN"]) for OpenAI agents
     - Credentials resolved from server and injected into os.environ
-    - OpenAI agent tools can read secrets from os.environ
+    - OpenAI agent tools can read credentials from os.environ
 
 Setup (one-time):
-    agentspan secrets set GITHUB_TOKEN <your-github-token>
+    agentspan credentials set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - GITHUB_TOKEN stored via `agentspan secrets set`
+    - GITHUB_TOKEN stored via `agentspan credentials set`
     - openai-agents installed: pip install openai-agents
 """
 
@@ -46,12 +46,12 @@ if __name__ == "__main__":
     agent = create_openai_agent()
 
     with AgentRuntime() as runtime:
-        # secrets=["GITHUB_TOKEN"] resolves from server credential store
+        # credentials=["GITHUB_TOKEN"] resolves from server credential store
         # and injects into os.environ for the agent's tools
         result = runtime.run(
             agent,
             "Is GitHub authentication available?",
-            secrets=["GITHUB_TOKEN"],
+            credentials=["GITHUB_TOKEN"],
         )
         result.print_result()
 
@@ -63,4 +63,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

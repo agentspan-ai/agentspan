@@ -457,9 +457,12 @@ def _serialize_skill(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
             WorkerInfo(
                 name=sw.name,
                 description=sw.description,
-                input_schema={"type": "object", "properties": {
-                    "command": {"type": "string", "description": "Arguments to pass"},
-                }},
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string", "description": "Arguments to pass"},
+                    },
+                },
                 func=sw.func,
             )
         )

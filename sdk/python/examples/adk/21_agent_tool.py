@@ -32,6 +32,7 @@ from settings import settings
 
 # ── Child agents (each has their own tools) ──────────────────────
 
+
 def search_knowledge_base(query: str) -> dict:
     """Search an internal knowledge base for information.
 
@@ -81,8 +82,16 @@ def compute(expression: str) -> dict:
     """
     import math
 
-    safe = {"abs": abs, "round": round, "min": min, "max": max,
-            "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e}
+    safe = {
+        "abs": abs,
+        "round": round,
+        "min": min,
+        "max": max,
+        "sqrt": math.sqrt,
+        "pow": pow,
+        "pi": math.pi,
+        "e": math.e,
+    }
     try:
         result = eval(expression, {"__builtins__": {}}, safe)
         return {"expression": expression, "result": result}
@@ -120,9 +129,9 @@ manager = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        manager,
-        "Look up information about Python and Rust, then calculate "
-        "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
+            manager,
+            "Look up information about Python and Rust, then calculate "
+            "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
         )
         result.print_result()
 

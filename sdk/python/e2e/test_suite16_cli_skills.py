@@ -288,12 +288,18 @@ class TestSuite16CliSkills:
         assert got_detail["checksum"] == detail["checksum"]
 
         pulled = tmp_path / "pulled-skill"
-        pull = _run_cli(cli_path, "skill", "pull", skill_name, str(pulled), "--version", version, timeout=60)
+        pull = _run_cli(
+            cli_path, "skill", "pull", skill_name, str(pulled), "--version", version, timeout=60
+        )
         assert pull.returncode == 0, f"stdout:\n{pull.stdout}\nstderr:\n{pull.stderr}"
         assert (pulled / "SKILL.md").exists()
-        assert (pulled / "references" / "guide.md").read_text() == "# CLI_REFERENCE_GUIDE\nUse this guide.\n"
+        assert (
+            pulled / "references" / "guide.md"
+        ).read_text() == "# CLI_REFERENCE_GUIDE\nUse this guide.\n"
 
-        deleted = _run_cli(cli_path, "skill", "delete", skill_name, "--version", version, "--yes", timeout=60)
+        deleted = _run_cli(
+            cli_path, "skill", "delete", skill_name, "--version", version, "--yes", timeout=60
+        )
         assert deleted.returncode == 0, f"stdout:\n{deleted.stdout}\nstderr:\n{deleted.stderr}"
 
         missing = _run_cli(cli_path, "skill", "get", skill_name, "--version", version, timeout=60)
@@ -301,7 +307,9 @@ class TestSuite16CliSkills:
 
     def test_registered_cross_skill_dependency_versions_are_pinned(self, cli_path, tmp_path):
         """Registered parent skills compile against dependency versions pinned at registration."""
-        parent_name, parent_dir, child_name, child_v1, child_v2 = _write_registered_dependency_skills(tmp_path)
+        parent_name, parent_dir, child_name, child_v1, child_v2 = (
+            _write_registered_dependency_skills(tmp_path)
+        )
 
         child_v1_version = f"v1-{uuid.uuid4().hex[:8]}"
         parent_version = f"v1-{uuid.uuid4().hex[:8]}"
@@ -377,7 +385,9 @@ class TestSuite16CliSkills:
         assert "echo_args" in child_ref["scripts"]
         assert "references/guide.md" in child_ref["resourceFiles"]
 
-    def test_cli_skill_run_registered_executes_downloaded_script_worker(self, cli_path, cli_skill_dir):
+    def test_cli_skill_run_registered_executes_downloaded_script_worker(
+        self, cli_path, cli_skill_dir
+    ):
         """`agentspan skill run <name>` downloads a registered skill and runs its script workers."""
         skill_name, skill_dir = cli_skill_dir
         version = f"run-{uuid.uuid4().hex[:8]}"

@@ -6,7 +6,7 @@
 │    Executions    ││   Skills management coming soon.                                                                                                                                                                   │
 │    Server        ││                                                                                                                                                                                                    │
 │  > Skills        ││   Use 'agentspan skill run <path> <prompt>' to run skills from the CLI.                                                                                                                            │
-│    Secrets       ││                                                                                                                                                                                                    │
+│    Credentials   ││                                                                                                                                                                                                    │
 │    Doctor        ││                                                                                                                                                                                                    │
 │    Configure     ││                                                                                                                                                                                                    │
 │                  ││                                                                                                                                                                                                    │

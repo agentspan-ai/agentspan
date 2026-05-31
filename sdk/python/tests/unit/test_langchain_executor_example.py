@@ -3,6 +3,7 @@
 Example 4: LangChain AgentExecutor.
 Verifies full pipeline from executor creation through worker invocation.
 """
+
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -24,10 +25,12 @@ def agent_executor():
 class TestLangChainExecutorDetection:
     def test_detect_framework_returns_langchain(self, agent_executor):
         from agentspan.agents.frameworks.serializer import detect_framework
+
         assert detect_framework(agent_executor) == "langchain"
 
     def test_serialize_returns_single_worker(self, agent_executor):
         from agentspan.agents.frameworks.langchain import serialize_langchain
+
         raw_config, workers = serialize_langchain(agent_executor)
         assert len(workers) == 1
         assert raw_config["name"] == "math_executor"
@@ -53,7 +56,10 @@ class TestLangChainWorkerInvocation:
 
     def test_worker_injects_callback_handler(self, agent_executor):
         """Verify that AgentspanCallbackHandler is passed to executor.invoke."""
-        from agentspan.agents.frameworks.langchain import make_langchain_worker, AgentspanCallbackHandler
+        from agentspan.agents.frameworks.langchain import (
+            make_langchain_worker,
+            AgentspanCallbackHandler,
+        )
 
         task = MagicMock()
         task.task_id = "t-cb"
@@ -68,7 +74,9 @@ class TestLangChainWorkerInvocation:
 
         invoke_call = agent_executor.invoke.call_args
         # config is passed as a keyword argument: executor.invoke({...}, config={...})
-        config = invoke_call[1].get("config") or (invoke_call[0][1] if len(invoke_call[0]) > 1 else {})
+        config = invoke_call[1].get("config") or (
+            invoke_call[0][1] if len(invoke_call[0]) > 1 else {}
+        )
         callbacks = config.get("callbacks", [])
         assert any(isinstance(cb, AgentspanCallbackHandler) for cb in callbacks)
 
@@ -79,8 +87,10 @@ class TestLangChainWorkerInvocation:
         from uuid import uuid4
 
         pushed = []
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking",
-                   side_effect=lambda exec_id, event, *a: pushed.append(event)):
+        with patch(
+            "agentspan.agents.frameworks.langchain._push_event_nonblocking",
+            side_effect=lambda exec_id, event, *a: pushed.append(event),
+        ):
             run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-1", "http://localhost:8080", "k", "s")
             handler.on_tool_start({"name": "calculator"}, "6*7", run_id=run_id)
@@ -96,8 +106,10 @@ class TestLangChainWorkerInvocation:
         from uuid import uuid4
 
         pushed = []
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking",
-                   side_effect=lambda exec_id, event, *a: pushed.append(event)):
+        with patch(
+            "agentspan.agents.frameworks.langchain._push_event_nonblocking",
+            side_effect=lambda exec_id, event, *a: pushed.append(event),
+        ):
             run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-1", "http://localhost:8080", "k", "s")
             handler.on_tool_start({"name": "calculator"}, "6*7", run_id=run_id)

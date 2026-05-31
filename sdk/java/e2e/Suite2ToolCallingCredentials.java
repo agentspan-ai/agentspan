@@ -3,7 +3,7 @@
 
 import ai.agentspan.Agent;
 import ai.agentspan.AgentRuntime;
-import ai.agentspan.Secrets;
+import ai.agentspan.Credentials;
 import ai.agentspan.annotations.Tool;
 import ai.agentspan.exceptions.AgentspanException;
 import ai.agentspan.internal.ToolRegistry;
@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * runtime injection must verify the same four guarantees:
  * <ol>
  *   <li>No cred in store → tool task TERMINAL-fails (no retries on config bug)</li>
- *   <li>Cred set via API → tool sees the stored value at runtime via {@code Secrets.get()}</li>
+ *   <li>Cred set via API → tool sees the stored value at runtime via {@code Credentials.get()}</li>
  *   <li>Cred updated via API → next run sees the new value (no token snapshotting)</li>
  *   <li>Cred deleted → tool task TERMINAL-fails again</li>
  * </ol>
@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * "env vars not used as fallback" security check from Python's Step 3 is
  * structurally satisfied by language design. We test it explicitly anyway
  * (set a JVM-startup env var; verify the SDK doesn't surface it via
- * {@code Secrets.get()}).</p>
+ * {@code Credentials.get()}).</p>
  *
  * <p>This is the test that would catch URL drift on {@code /api/workers/secrets},
  * silent-swallow regressions in {@code WorkerCredentialFetcher}, or any
@@ -61,7 +61,7 @@ class Suite2ToolCallingCredentials extends BaseTest {
             credentials = {"E2E_JAVA_CRED_A"}
         )
         public Map<String, Object> paidToolA(String x) {
-            String value = Secrets.getOrNull(CRED_A);
+            String value = Credentials.getOrNull(CRED_A);
             if (value == null) {
                 throw new IllegalStateException(
                         "Credential " + CRED_A + " not in Secrets context. "

@@ -71,7 +71,10 @@ def check_summary(text: str, min_chars: int) -> str:
         min_chars: Minimum acceptable length in characters.
     """
     import json as _json
-    return _json.dumps({"passed": len(text) >= min_chars, "length": len(text), "min_chars": min_chars})
+
+    return _json.dumps(
+        {"passed": len(text) >= min_chars, "length": len(text), "min_chars": min_chars}
+    )
 
 
 # ── Planner instructions ────────────────────────────────────────────
@@ -156,8 +159,10 @@ def main() -> int:
 
     pac = find_plan_and_compile_output(result.execution_id)
     if pac is None:
-        print("(!) No PLAN_AND_COMPILE task found in workflow tree —"
-              " did the server pick up the new bean?")
+        print(
+            "(!) No PLAN_AND_COMPILE task found in workflow tree —"
+            " did the server pick up the new bean?"
+        )
         return 1
 
     print("--- PLAN_AND_COMPILE output ---")

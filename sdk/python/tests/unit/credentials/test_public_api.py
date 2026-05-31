@@ -9,52 +9,64 @@ class TestPublicApiExports:
 
     def test_get_secret_importable_from_top_level(self):
         from agentspan.agents import get_secret
+
         assert callable(get_secret)
 
     def test_credential_not_found_error_importable(self):
         from agentspan.agents import CredentialNotFoundError
+
         exc = CredentialNotFoundError(["MISSING"])
         assert "MISSING" in str(exc)
 
     def test_credential_auth_error_importable(self):
         from agentspan.agents import CredentialAuthError
+
         exc = CredentialAuthError("expired")
         assert isinstance(exc, Exception)
 
     def test_credential_rate_limit_error_importable(self):
         from agentspan.agents import CredentialRateLimitError
+
         exc = CredentialRateLimitError()
         assert isinstance(exc, Exception)
 
     def test_credential_service_error_importable(self):
         from agentspan.agents import CredentialServiceError
+
         exc = CredentialServiceError(503)
         assert isinstance(exc, Exception)
 
     def test_tool_accepts_secrets_param_end_to_end(self):
-        """@tool with secrets= is accepted and ToolDef.secrets is set."""
+        """@tool with credentials= is accepted and ToolDef.credentials is set."""
         from agentspan.agents import tool
 
-        @tool(secrets=["GITHUB_TOKEN"])
+        @tool(credentials=["GITHUB_TOKEN"])
         def my_tool(branch: str) -> str:
             """Deploy."""
             return "ok"
 
         td = my_tool._tool_def
-        assert "GITHUB_TOKEN" in td.secrets
+        assert "GITHUB_TOKEN" in td.credentials
 
     def test_agent_accepts_secrets_param(self):
         from agentspan.agents import Agent
+
         a = Agent(
             name="test_agent_export",
             model="openai/gpt-4o",
-            secrets=["GITHUB_TOKEN"],
+            credentials=["GITHUB_TOKEN"],
         )
-        assert "GITHUB_TOKEN" in a.secrets
+        assert "GITHUB_TOKEN" in a.credentials
 
     def test_all_credential_names_in_all_exports(self):
         """Every credential name must appear in __all__."""
         import agentspan.agents as module
-        for name in ["get_secret", "CredentialNotFoundError",
-                     "CredentialAuthError", "CredentialRateLimitError", "CredentialServiceError"]:
+
+        for name in [
+            "get_secret",
+            "CredentialNotFoundError",
+            "CredentialAuthError",
+            "CredentialRateLimitError",
+            "CredentialServiceError",
+        ]:
             assert name in module.__all__, f"{name!r} missing from __all__"

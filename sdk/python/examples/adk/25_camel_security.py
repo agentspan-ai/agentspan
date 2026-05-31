@@ -126,8 +126,8 @@ pipeline = SequentialAgent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        pipeline,
-        "Tell me everything about user U001 including their financial details.",
+            pipeline,
+            "Tell me everything about user U001 including their financial details.",
         )
         result.print_result()
 

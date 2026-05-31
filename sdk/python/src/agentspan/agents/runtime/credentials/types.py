@@ -11,17 +11,17 @@ from agentspan.agents.exceptions import AgentspanError
 
 
 class CredentialNotFoundError(AgentspanError):
-    """One or more required secrets could not be resolved.
+    """One or more required credentials could not be resolved.
 
     Raised when a declared credential is not found in the credential store.
-    There is no env var fallback for declared secrets — store them with
-    ``agentspan secrets set --name <NAME>``.
+    There is no env var fallback for declared credentials — store them with
+    ``agentspan credentials set --name <NAME>``.
     """
 
     def __init__(self, missing_names: List[str], detail: str = "") -> None:
         self.missing_names = list(missing_names)
         names_str = ", ".join(missing_names)
-        msg = f"Required secrets not found: {names_str}"
+        msg = f"Required credentials not found: {names_str}"
         if detail:
             msg += f". {detail}"
         super().__init__(msg)
@@ -30,7 +30,7 @@ class CredentialNotFoundError(AgentspanError):
 class CredentialAuthError(AgentspanError):
     """Execution token is invalid, expired, or revoked.
 
-    Raised on HTTP 401 from ``/api/workers/secrets``.
+    Raised on HTTP 401 from ``/api/workers/credentials``.
     Do NOT retry and do NOT fall through to env var fallback.
     """
 
@@ -42,7 +42,7 @@ class CredentialAuthError(AgentspanError):
 
 
 class CredentialRateLimitError(AgentspanError):
-    """Rate limit exceeded on ``/api/workers/secrets`` (HTTP 429).
+    """Rate limit exceeded on ``/api/workers/credentials`` (HTTP 429).
 
     Do NOT fall through to env var fallback.
     """

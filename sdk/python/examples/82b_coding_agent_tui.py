@@ -83,6 +83,7 @@ Resume a previous session:
 # Agent state tracking
 # ---------------------------------------------------------------------------
 
+
 class AgentState(enum.Enum):
     BUSY = "busy"
     WAITING = "waiting"
@@ -92,6 +93,7 @@ class AgentState(enum.Enum):
 # ---------------------------------------------------------------------------
 # Background process registry
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class BgProcess:
@@ -106,6 +108,7 @@ class BgProcess:
 
 def _start_reader_thread(bg: BgProcess) -> None:
     """Daemon thread that reads stdout/stderr into the buffer."""
+
     def _read():
         try:
             for line in bg.proc.stdout:
@@ -117,6 +120,7 @@ def _start_reader_thread(bg: BgProcess) -> None:
                         bg._read_pos = max(0, bg._read_pos - 1)
         except Exception:
             pass
+
     threading.Thread(target=_read, daemon=True).start()
 
 
@@ -154,7 +158,7 @@ def _make_bg_tools(working_dir: str):
         if bg is None:
             return f"Error: no background process with id {id}."
         with bg.lock:
-            new_lines = bg.buffer[bg._read_pos:]
+            new_lines = bg.buffer[bg._read_pos :]
             bg._read_pos = len(bg.buffer)
             new_output = "".join(new_lines)
         status = "running" if bg.proc.poll() is None else f"exited (code {bg.proc.returncode})"
@@ -177,7 +181,7 @@ def _make_bg_tools(working_dir: str):
             bg.proc.kill()
             bg.proc.wait(timeout=2)
         with bg.lock:
-            final = "".join(bg.buffer[bg._read_pos:])
+            final = "".join(bg.buffer[bg._read_pos :])
             bg._read_pos = len(bg.buffer)
         status = f"exited (code {bg.proc.returncode})"
         if final.strip():
@@ -215,6 +219,7 @@ def _make_bg_tools(working_dir: str):
 # ---------------------------------------------------------------------------
 # Event formatting
 # ---------------------------------------------------------------------------
+
 
 def _format_event(event) -> str:
     """Format a single stream event as display text. Returns empty string if suppressed."""
@@ -280,6 +285,7 @@ def _format_event(event) -> str:
 # ---------------------------------------------------------------------------
 # TUI REPL
 # ---------------------------------------------------------------------------
+
 
 def _run_tui_repl(
     runtime: AgentRuntime,
@@ -418,10 +424,7 @@ def _run_tui_repl(
             event.app.exit()
             return
         _stop_requested[0] = True
-        _append_output(
-            "\n\nCtrl+C — stopping agent gracefully "
-            "(Ctrl+C again to force exit)...\n"
-        )
+        _append_output("\n\nCtrl+C — stopping agent gracefully (Ctrl+C again to force exit)...\n")
         handle.stop()
 
     @kb.add("pageup")
@@ -436,11 +439,13 @@ def _run_tui_repl(
 
     # ── Layout ─────────────────────────────────────────────────────
     layout = Layout(
-        HSplit([
-            output_area,
-            Window(height=1, char="━"),
-            input_area,
-        ]),
+        HSplit(
+            [
+                output_area,
+                Window(height=1, char="━"),
+                input_area,
+            ]
+        ),
         focused_element=input_area,
     )
 
@@ -502,6 +507,7 @@ def _run_tui_repl(
 # Agent builder
 # ---------------------------------------------------------------------------
 
+
 def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
     """Build the coding agent and return (agent, cleanup_fn).
 
@@ -514,8 +520,8 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
     )
 
     # Background process tools (shared registry via closure)
-    run_background, check_process, stop_process, list_processes, cleanup_bg = (
-        _make_bg_tools(working_dir)
+    run_background, check_process, stop_process, list_processes, cleanup_bg = _make_bg_tools(
+        working_dir
     )
 
     @tool
@@ -597,6 +603,7 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
     def search_in_files(regex: str, path: str = ".", file_glob: str = "**/*") -> str:
         """Search for a regex pattern in file contents. Returns file:line: matching_line entries."""
         import re as _re
+
         base = Path(path) if os.path.isabs(path) else Path(working_dir) / path
         try:
             compiled = _re.compile(regex)
@@ -642,8 +649,15 @@ def build_agent(working_dir: str, shell_timeout: int = _DEFAULT_SHELL_TIMEOUT):
             )
             combined = (proc.stdout + proc.stderr).strip()
             if len(combined) > _MAX_SHELL_OUTPUT:
-                combined = combined[:_MAX_SHELL_OUTPUT] + f"\n... (truncated, {len(combined):,} chars total)"
-            return f"[exit {proc.returncode}]\n{combined}" if combined else f"[exit {proc.returncode}] (no output)"
+                combined = (
+                    combined[:_MAX_SHELL_OUTPUT]
+                    + f"\n... (truncated, {len(combined):,} chars total)"
+                )
+            return (
+                f"[exit {proc.returncode}]\n{combined}"
+                if combined
+                else f"[exit {proc.returncode}] (no output)"
+            )
         except subprocess.TimeoutExpired:
             return f"Error: command timed out after {shell_timeout}s. Use run_background for long-running commands."
         except Exception as exc:
@@ -714,6 +728,7 @@ Repeat indefinitely:
 # CLI + main
 # ---------------------------------------------------------------------------
 
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Coding Agent TUI — coding assistant with split-pane terminal UI.",
@@ -773,7 +788,12 @@ def main() -> None:
             print(f"Session saved to {args.session_file}")
 
         _run_tui_repl(
-            runtime, handle, execution_id, working_dir, args.timeout, cleanup_bg,
+            runtime,
+            handle,
+            execution_id,
+            working_dir,
+            args.timeout,
+            cleanup_bg,
         )
 
 

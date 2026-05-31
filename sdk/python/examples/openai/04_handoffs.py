@@ -25,6 +25,7 @@ from settings import settings
 
 # ── Specialist tools ──────────────────────────────────────────────────
 
+
 @function_tool
 def check_order_status(order_id: str) -> str:
     """Check the status of a customer order."""
@@ -46,7 +47,7 @@ def process_refund(order_id: str, reason: str) -> str:
 def get_product_info(product_name: str) -> str:
     """Get product information and pricing."""
     products = {
-        "laptop pro": "Laptop Pro X1 — $1,299 — 16GB RAM, 512GB SSD, 14\" display",
+        "laptop pro": 'Laptop Pro X1 — $1,299 — 16GB RAM, 512GB SSD, 14" display',
         "wireless earbuds": "SoundMax Earbuds — $79 — ANC, 24hr battery, Bluetooth 5.3",
         "smart watch": "TimeSync Watch — $249 — GPS, health tracking, 5-day battery",
     }
@@ -105,8 +106,8 @@ triage_agent = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        triage_agent,
-        "I'd like a refund for order ORD-002, the product arrived damaged.",
+            triage_agent,
+            "I'd like a refund for order ORD-002, the product arrived damaged.",
         )
         result.print_result()
 

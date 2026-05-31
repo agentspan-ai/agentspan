@@ -54,7 +54,9 @@ def stream_to_console(prompt: str):
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(graph, "Explain the concept of gradient descent in machine learning in about 150 words.")
+        result = runtime.run(
+            graph, "Explain the concept of gradient descent in machine learning in about 150 words."
+        )
 
         result.print_result()
 

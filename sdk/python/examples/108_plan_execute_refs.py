@@ -138,9 +138,7 @@ def _show_pipeline_outputs(execution_id: str) -> None:
     if not sub_id:
         return
 
-    sub = requests.get(
-        f"{base_url}/api/workflow/{sub_id}?includeTasks=true", timeout=10
-    ).json()
+    sub = requests.get(f"{base_url}/api/workflow/{sub_id}?includeTasks=true", timeout=10).json()
     print("\n── pipeline trace (Ref data flow) ────────────────────────")
     for t in sub.get("tasks", []):
         name = t.get("taskDefName")

@@ -55,10 +55,12 @@ def human_task(func=None, *, prompt=""):
         def review_email(state):
             pass
     """
+
     def decorator(f):
         f._agentspan_human_task = True
         f._agentspan_human_prompt = prompt
         return f
+
     if func is not None:
         return decorator(func)
     return decorator
@@ -227,12 +229,14 @@ def _serialize_graph_structure(
         if getattr(func, "_agentspan_human_task", False):
             human_prompt = getattr(func, "_agentspan_human_prompt", "")
             logger.info("Human node '%s': will compile as Conductor HUMAN task", node_name)
-            graph_nodes.append({
-                "name": node_name,
-                "_worker_ref": worker_name,
-                "_human_node": True,
-                "_human_prompt": human_prompt,
-            })
+            graph_nodes.append(
+                {
+                    "name": node_name,
+                    "_worker_ref": worker_name,
+                    "_human_node": True,
+                    "_human_prompt": human_prompt,
+                }
+            )
             # No worker registered — HUMAN is a Conductor system task
             continue
 
@@ -248,37 +252,43 @@ def _serialize_graph_structure(
                 node_name,
                 llm_var_name,
             )
-            graph_nodes.append({
-                "name": node_name,
-                "_worker_ref": worker_name,
-                "_llm_node": True,
-                "_llm_prep_ref": prep_name,
-                "_llm_finish_ref": finish_name,
-            })
+            graph_nodes.append(
+                {
+                    "name": node_name,
+                    "_worker_ref": worker_name,
+                    "_llm_node": True,
+                    "_llm_prep_ref": prep_name,
+                    "_llm_finish_ref": finish_name,
+                }
+            )
             # Prep worker: captures llm.invoke() messages
-            workers.append(WorkerInfo(
-                name=prep_name,
-                description=f"LLM prep for node '{node_name}'",
-                input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
-                func=func,  # original func — make_llm_prep_worker wraps it at registration
-                _pre_wrapped=True,
-                _extra={"llm_var_name": llm_var_name, "llm_role": "prep"},
-            ))
+            workers.append(
+                WorkerInfo(
+                    name=prep_name,
+                    description=f"LLM prep for node '{node_name}'",
+                    input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
+                    func=func,  # original func — make_llm_prep_worker wraps it at registration
+                    _pre_wrapped=True,
+                    _extra={"llm_var_name": llm_var_name, "llm_role": "prep"},
+                )
+            )
             # Finish worker: re-runs node with mock LLM response
-            workers.append(WorkerInfo(
-                name=finish_name,
-                description=f"LLM finish for node '{node_name}'",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "state": {"type": "object"},
-                        "llm_result": {"type": "string"},
+            workers.append(
+                WorkerInfo(
+                    name=finish_name,
+                    description=f"LLM finish for node '{node_name}'",
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "state": {"type": "object"},
+                            "llm_result": {"type": "string"},
+                        },
                     },
-                },
-                func=func,  # original func — make_llm_finish_worker wraps it at registration
-                _pre_wrapped=True,
-                _extra={"llm_var_name": llm_var_name, "llm_role": "finish"},
-            ))
+                    func=func,  # original func — make_llm_finish_worker wraps it at registration
+                    _pre_wrapped=True,
+                    _extra={"llm_var_name": llm_var_name, "llm_role": "finish"},
+                )
+            )
         else:
             # Check for subgraph invocation (e.g. compiled_graph.invoke({...}))
             subgraph_info = _find_subgraph_in_func(func)
@@ -301,38 +311,53 @@ def _serialize_graph_structure(
                     # Mark as subgraph for compiler (affects input/output handling)
                     sub_config["_graph"]["_is_subgraph"] = True
 
-                    graph_nodes.append({
-                        "name": node_name,
-                        "_worker_ref": worker_name,
-                        "_subgraph_node": True,
-                        "_subgraph_prep_ref": prep_name,
-                        "_subgraph_finish_ref": finish_name,
-                        "_subgraph_config": sub_config,
-                    })
+                    graph_nodes.append(
+                        {
+                            "name": node_name,
+                            "_worker_ref": worker_name,
+                            "_subgraph_node": True,
+                            "_subgraph_prep_ref": prep_name,
+                            "_subgraph_finish_ref": finish_name,
+                            "_subgraph_config": sub_config,
+                        }
+                    )
                     # Prep worker: captures subgraph.invoke() input
-                    workers.append(WorkerInfo(
-                        name=prep_name,
-                        description=f"Subgraph prep for node '{node_name}'",
-                        input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
-                        func=func,
-                        _pre_wrapped=True,
-                        _extra={"subgraph_var_name": subgraph_var_name, "subgraph_role": "prep"},
-                    ))
-                    # Finish worker: re-runs node with mock subgraph result
-                    workers.append(WorkerInfo(
-                        name=finish_name,
-                        description=f"Subgraph finish for node '{node_name}'",
-                        input_schema={
-                            "type": "object",
-                            "properties": {
-                                "state": {"type": "object"},
-                                "subgraph_result": {"type": "object"},
+                    workers.append(
+                        WorkerInfo(
+                            name=prep_name,
+                            description=f"Subgraph prep for node '{node_name}'",
+                            input_schema={
+                                "type": "object",
+                                "properties": {"state": {"type": "object"}},
                             },
-                        },
-                        func=func,
-                        _pre_wrapped=True,
-                        _extra={"subgraph_var_name": subgraph_var_name, "subgraph_role": "finish"},
-                    ))
+                            func=func,
+                            _pre_wrapped=True,
+                            _extra={
+                                "subgraph_var_name": subgraph_var_name,
+                                "subgraph_role": "prep",
+                            },
+                        )
+                    )
+                    # Finish worker: re-runs node with mock subgraph result
+                    workers.append(
+                        WorkerInfo(
+                            name=finish_name,
+                            description=f"Subgraph finish for node '{node_name}'",
+                            input_schema={
+                                "type": "object",
+                                "properties": {
+                                    "state": {"type": "object"},
+                                    "subgraph_result": {"type": "object"},
+                                },
+                            },
+                            func=func,
+                            _pre_wrapped=True,
+                            _extra={
+                                "subgraph_var_name": subgraph_var_name,
+                                "subgraph_role": "finish",
+                            },
+                        )
+                    )
                     # Include all subgraph workers for registration
                     workers.extend(sub_workers)
                 else:
@@ -342,23 +367,33 @@ def _serialize_graph_structure(
                         node_name,
                     )
                     graph_nodes.append({"name": node_name, "_worker_ref": worker_name})
-                    workers.append(WorkerInfo(
-                        name=worker_name,
-                        description=f"Graph node '{node_name}'",
-                        input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
-                        func=func,
-                        _pre_wrapped=True,
-                    ))
+                    workers.append(
+                        WorkerInfo(
+                            name=worker_name,
+                            description=f"Graph node '{node_name}'",
+                            input_schema={
+                                "type": "object",
+                                "properties": {"state": {"type": "object"}},
+                            },
+                            func=func,
+                            _pre_wrapped=True,
+                        )
+                    )
             else:
                 # Non-LLM, non-subgraph node: regular node worker
                 graph_nodes.append({"name": node_name, "_worker_ref": worker_name})
-                workers.append(WorkerInfo(
-                    name=worker_name,
-                    description=f"Graph node '{node_name}'",
-                    input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
-                    func=func,
-                    _pre_wrapped=True,
-                ))
+                workers.append(
+                    WorkerInfo(
+                        name=worker_name,
+                        description=f"Graph node '{node_name}'",
+                        input_schema={
+                            "type": "object",
+                            "properties": {"state": {"type": "object"}},
+                        },
+                        func=func,
+                        _pre_wrapped=True,
+                    )
+                )
 
     graph_edges: List[Dict[str, str]] = []
     for src, tgt in edges:
@@ -383,17 +418,20 @@ def _serialize_graph_structure(
                     dynamic_fanout_targets.add(target_node)
             logger.info(
                 "LangGraph '%s': conditional edge from '%s' uses Send API (dynamic fan-out)",
-                name, src,
+                name,
+                src,
             )
         graph_conditional.append(ce_entry)
-        workers.append(WorkerInfo(
-            name=router_name,
-            description=f"Router for conditional edge from '{src}'",
-            input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
-            func=router_func,
-            _pre_wrapped=True,
-            _extra={"is_dynamic_fanout": is_dynamic},
-        ))
+        workers.append(
+            WorkerInfo(
+                name=router_name,
+                description=f"Router for conditional edge from '{src}'",
+                input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
+                func=router_func,
+                _pre_wrapped=True,
+                _extra={"is_dynamic_fanout": is_dynamic},
+            )
+        )
 
     # For dynamic fanout targets that are LLM nodes, register a direct (non-intercepted)
     # node worker under the base worker name. FORK_JOIN_DYNAMIC invokes each branch as a
@@ -408,16 +446,19 @@ def _serialize_graph_structure(
         if worker_name not in existing_names:
             logger.info(
                 "LangGraph '%s': registering direct worker '%s' for dynamic fanout target",
-                name, worker_name,
+                name,
+                worker_name,
             )
-            workers.append(WorkerInfo(
-                name=worker_name,
-                description=f"Direct worker for dynamic fanout node '{target_node}'",
-                input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
-                func=func,
-                _pre_wrapped=True,
-                _extra={"direct_node_worker": True},
-            ))
+            workers.append(
+                WorkerInfo(
+                    name=worker_name,
+                    description=f"Direct worker for dynamic fanout node '{target_node}'",
+                    input_schema={"type": "object", "properties": {"state": {"type": "object"}}},
+                    func=func,
+                    _pre_wrapped=True,
+                    _extra={"direct_node_worker": True},
+                )
+            )
 
     raw_config: Dict[str, Any] = {
         "name": name,
@@ -570,7 +611,8 @@ def _get_node_function(node: Any) -> Optional[Any]:
                 1
                 for p in sig.parameters.values()
                 if p.default is inspect.Parameter.empty
-                and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                and p.kind
+                in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
             )
             if required > 1:
                 return None
@@ -678,6 +720,7 @@ def _reconstitute_state(state: Dict[str, Any]) -> Dict[str, Any]:
         if stripped.startswith("{") and stripped.endswith("}"):
             try:
                 import ast
+
                 parsed = ast.literal_eval(stripped)
                 if isinstance(parsed, dict):
                     state.update(parsed)
@@ -941,7 +984,11 @@ def make_llm_prep_worker(node_func: Any, node_name: str, llm_var_name: str) -> A
         if not isinstance(state, dict):
             state = {}
         state = _reconstitute_state(state)
-        logger.debug("LLM prep worker '%s' capturing messages (state keys: %s)", node_name, list(state.keys()))
+        logger.debug(
+            "LLM prep worker '%s' capturing messages (state keys: %s)",
+            node_name,
+            list(state.keys()),
+        )
 
         with _llm_intercept_lock:
             original = node_func.__globals__.get(llm_var_name)
@@ -1129,7 +1176,11 @@ def make_subgraph_prep_worker(node_func: Any, node_name: str, subgraph_var_name:
         if not isinstance(state, dict):
             state = {}
         state = _reconstitute_state(state)
-        logger.debug("Subgraph prep worker '%s' capturing input (state keys: %s)", node_name, list(state.keys()))
+        logger.debug(
+            "Subgraph prep worker '%s' capturing input (state keys: %s)",
+            node_name,
+            list(state.keys()),
+        )
 
         with _llm_intercept_lock:
             original = node_func.__globals__.get(subgraph_var_name)
@@ -1474,7 +1525,7 @@ def make_langgraph_worker(
         prompt = task.input_data.get("prompt", "")
         session_id = (task.input_data.get("session_id") or "").strip()
 
-        # Resolve workflow-level secrets via the centralized injection helper.
+        # Resolve workflow-level credentials via the centralized injection helper.
         # See docs/design/secret-injection-contract.md.
         resolved_secrets = {}
         try:
@@ -1484,6 +1535,7 @@ def make_langgraph_worker(
                 _workflow_secrets,
                 _workflow_secrets_lock,
             )
+
             cred_names = list(_closure_cred_names)
             if not cred_names:
                 exec_id = execution_id or ""
@@ -1497,11 +1549,11 @@ def make_langgraph_worker(
                 else:
                     logger.warning(
                         "No execution token in task for LangGraph worker — "
-                        "secrets %s will not be injected",
+                        "credentials %s will not be injected",
                         cred_names,
                     )
         except Exception as _cred_err:
-            logger.warning("Failed to resolve secrets for LangGraph: %s", _cred_err)
+            logger.warning("Failed to resolve credentials for LangGraph: %s", _cred_err)
 
         from agentspan.agents.runtime.secret_injection import inject_via_env
 
@@ -1540,9 +1592,7 @@ def make_langgraph_worker(
     return tool_worker
 
 
-def _detect_input_key_from_nodes(
-    raw_config: Dict[str, Any], node_funcs: Dict[str, Any]
-) -> None:
+def _detect_input_key_from_nodes(raw_config: Dict[str, Any], node_funcs: Dict[str, Any]) -> None:
     """Detect input_key by scanning node function source for state access patterns.
 
     Fallback for StateGraph(dict) where get_input_jsonschema() returns no

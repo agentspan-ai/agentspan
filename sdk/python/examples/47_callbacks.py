@@ -19,6 +19,7 @@ from settings import settings
 
 # ── Callback functions ─────────────────────────────────────────────
 
+
 def log_before_model(messages: list = None, **kwargs) -> dict:
     """Log details before each LLM call.
 
@@ -50,6 +51,7 @@ def inspect_after_model(llm_result: str = None, **kwargs) -> dict:
 
 
 # ── Tool ───────────────────────────────────────────────────────────
+
 
 @tool
 def get_facts(topic: str) -> dict:
@@ -96,4 +98,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

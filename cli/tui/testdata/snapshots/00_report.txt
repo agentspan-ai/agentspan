@@ -6,7 +6,7 @@ Terminal: 220×50
   ✓  Agents            height=48/50  maxWidth=220/220
   ✓  Executions        height=48/50  maxWidth=220/220
   ✓  Server            height=49/50  maxWidth=220/220
-  ✓  Secrets           height=48/50  maxWidth=220/220
+  ✓  Credentials       height=48/50  maxWidth=220/220
   ✓  Doctor            height=48/50  maxWidth=220/220
   ✓  Configure         height=48/50  maxWidth=220/220
   ✓  Skills            height=48/50  maxWidth=220/220

@@ -123,6 +123,7 @@ def _run_async_safely(coro: Any) -> Any:
 
     if loop.is_running():
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(asyncio.run, coro)
             return future.result()
@@ -208,8 +209,10 @@ def _to_agentspan_agent(agent: Any) -> Any:
         instructions = str(instructions) if instructions else ""
 
     _raw_model = getattr(agent, "model", None)
-    model: str = _model_to_agentspan(_raw_model) if _raw_model else (
-        os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o")
+    model: str = (
+        _model_to_agentspan(_raw_model)
+        if _raw_model
+        else (os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o"))
     )
 
     raw_tools: list = getattr(agent, "tools", []) or []

@@ -3,6 +3,7 @@
 Example 2: LangGraph custom StateGraph with non-messages state.
 Verifies auto-detection of non-messages input/output schemas.
 """
+
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 
@@ -31,6 +32,7 @@ def custom_graph():
 class TestCustomStateGraph:
     def test_detect_framework(self, custom_graph):
         from agentspan.agents.frameworks.serializer import detect_framework
+
         assert detect_framework(custom_graph) == "langgraph"
 
     def test_worker_extracts_non_messages_output_as_json(self, custom_graph):

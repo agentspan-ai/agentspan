@@ -76,8 +76,8 @@ coordinator = LlmAgent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        coordinator,
-        "Research the current state of renewable energy adoption worldwide.",
+            coordinator,
+            "Research the current state of renewable energy adoption worldwide.",
         )
         result.print_result()
 

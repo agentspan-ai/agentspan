@@ -41,10 +41,12 @@ class TestGetCredential:
             get_secret("SOME_CRED")
 
     def test_multiple_secrets_accessible(self):
-        set_credential_context({
-            "GITHUB_TOKEN": "ghp_test",
-            "OPENAI_API_KEY": "sk-test",
-        })
+        set_credential_context(
+            {
+                "GITHUB_TOKEN": "ghp_test",
+                "OPENAI_API_KEY": "sk-test",
+            }
+        )
         assert get_secret("GITHUB_TOKEN") == "ghp_test"
         assert get_secret("OPENAI_API_KEY") == "sk-test"
 

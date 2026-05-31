@@ -5,7 +5,7 @@ package ai.agentspan.examples;
 
 import ai.agentspan.Agent;
 import ai.agentspan.Agentspan;
-import ai.agentspan.Secrets;
+import ai.agentspan.Credentials;
 import ai.agentspan.annotations.Tool;
 import ai.agentspan.exceptions.CredentialNotFoundException;
 import ai.agentspan.internal.ToolRegistry;
@@ -28,11 +28,11 @@ import java.util.Map;
  * credential names are resolved by the server before each tool call. The
  * worker fetches the value via {@code POST /api/workers/secrets} using the
  * execution token, then makes it available to the tool body via
- * {@link ai.agentspan.Secrets#get(String)}.
+ * {@link ai.agentspan.Credentials#get(String)}.
  *
  * <p>Java is tier-1-only — {@code System.getenv()} is immutable at JVM
  * runtime, so unlike Python/.NET/TypeScript there is no env-injection mode.
- * Tools MUST read declared credentials via {@code Secrets.get(name)}; reading
+ * Tools MUST read declared credentials via {@code Credentials.get(name)}; reading
  * via {@code System.getenv} would only see whatever the JVM inherited from
  * the shell at startup. See {@code docs/design/secret-injection-contract.md} §6.
  *
@@ -63,8 +63,8 @@ public class Example16CredentialsTool {
                 int n = limit > 0 ? Math.min(limit, 10) : 5;
                 // GITHUB_TOKEN was resolved by the worker before this handler ran
                 // (via POST /api/workers/secrets) and is available through the
-                // Secrets thread-local accessor — no env-var mutation involved.
-                String token = Secrets.getOrNull("GITHUB_TOKEN");
+                // Credentials thread-local accessor — no env-var mutation involved.
+                String token = Credentials.getOrNull("GITHUB_TOKEN");
                 HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.github.com/users/" + username
                         + "/repos?per_page=" + n + "&sort=updated"))
@@ -98,7 +98,7 @@ public class Example16CredentialsTool {
         )
         public Map<String, Object> getGithubUser(String username) {
             try {
-                String token = Secrets.getOrNull("GITHUB_TOKEN");
+                String token = Credentials.getOrNull("GITHUB_TOKEN");
                 HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.github.com/users/" + username))
                     .timeout(Duration.ofSeconds(10))

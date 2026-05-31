@@ -77,6 +77,7 @@ def keyword_retrieve(query: str, top_k: int = 2) -> List[Document]:
 
 # ── State and nodes ───────────────────────────────────────────────────────────
 
+
 class State(TypedDict):
     question: str
     rewritten_question: Optional[str]
@@ -97,15 +98,17 @@ def grade_documents(state: State) -> State:
     question = state["question"]
     relevant = []
     for doc in state["documents"]:
-        response = llm.invoke([
-            SystemMessage(
-                content=(
-                    "Determine if the document is relevant to the question. "
-                    "Reply with 'yes' or 'no' only."
-                )
-            ),
-            HumanMessage(content=f"Question: {question}\n\nDocument: {doc.page_content}"),
-        ])
+        response = llm.invoke(
+            [
+                SystemMessage(
+                    content=(
+                        "Determine if the document is relevant to the question. "
+                        "Reply with 'yes' or 'no' only."
+                    )
+                ),
+                HumanMessage(content=f"Question: {question}\n\nDocument: {doc.page_content}"),
+            ]
+        )
         if "yes" in response.content.lower():
             relevant.append(doc)
     return {"relevant_docs": relevant}
@@ -113,10 +116,14 @@ def grade_documents(state: State) -> State:
 
 def rewrite_question(state: State) -> State:
     """Rewrite the question to improve retrieval."""
-    response = llm.invoke([
-        SystemMessage(content="Rewrite this question to be more specific for document retrieval. Return only the rewritten question."),
-        HumanMessage(content=state["question"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="Rewrite this question to be more specific for document retrieval. Return only the rewritten question."
+            ),
+            HumanMessage(content=state["question"]),
+        ]
+    )
     return {"rewritten_question": response.content.strip()}
 
 
@@ -126,15 +133,17 @@ def generate_answer(state: State) -> State:
     if not context:
         context = "No relevant documents found."
 
-    response = llm.invoke([
-        SystemMessage(
-            content=(
-                "You are a helpful assistant. Answer the question based on the provided context. "
-                "If the context doesn't contain enough information, say so."
-            )
-        ),
-        HumanMessage(content=f"Context:\n{context}\n\nQuestion: {state['question']}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "You are a helpful assistant. Answer the question based on the provided context. "
+                    "If the context doesn't contain enough information, say so."
+                )
+            ),
+            HumanMessage(content=f"Context:\n{context}\n\nQuestion: {state['question']}"),
+        ]
+    )
     return {"generation": response.content.strip()}
 
 

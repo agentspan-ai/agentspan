@@ -6,7 +6,7 @@
 │    Executions    ││ │ Current Configuration                                                                                                                                                                          │ │
 │    Server        ││ │ ─────────────────────                                                                                                                                                                          │ │
 │    Skills        ││ │ Server URL    http://localhost:6767                                                                                                                                                            │ │
-│    Secrets       ││ │ Config file   ~/.agentspan/config.json                                                                                                                                                         │ │
+│    Credentials   ││ │ Config file   ~/.agentspan/config.json                                                                                                                                                         │ │
 │    Doctor        ││ │                                                                                                                                                                                                │ │
 │  > Configure     ││ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
 │                  ││                                                                                                                                                                                                    │

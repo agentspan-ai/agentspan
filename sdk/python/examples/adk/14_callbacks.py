@@ -68,9 +68,9 @@ def main():
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-        agent,
-        "Look up customer C001 and check if order ORD-1001 has shipped. "
-        "If the customer is gold tier, apply a 10% discount.",
+            agent,
+            "Look up customer C001 and check if order ORD-1001 has shipped. "
+            "If the customer is gold tier, apply a 10% discount.",
         )
         print(f"Status: {result.status}")
         result.print_result()
@@ -83,7 +83,6 @@ def main():
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-
 
 
 if __name__ == "__main__":

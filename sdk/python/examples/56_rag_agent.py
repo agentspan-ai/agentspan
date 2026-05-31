@@ -132,7 +132,7 @@ DOCUMENTS = [
 kb_search = search_tool(
     name="search_knowledge_base",
     description="Search the product documentation knowledge base. "
-                "Use this to find relevant documentation before answering questions.",
+    "Use this to find relevant documentation before answering questions.",
     vector_db="pgvectordb",
     index="product_docs",
     embedding_model_provider="openai",
@@ -143,7 +143,7 @@ kb_search = search_tool(
 kb_index = index_tool(
     name="index_document",
     description="Add a new document to the product documentation knowledge base. "
-                "Use this when the user provides new information that should be stored.",
+    "Use this when the user provides new information that should be stored.",
     vector_db="pgvectordb",
     index="product_docs",
     embedding_model_provider="openai",

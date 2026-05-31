@@ -23,12 +23,12 @@ from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-WINDOW_SIZE = 6          # keep last N messages before summarizing
-SUMMARY_THRESHOLD = 8    # summarize when history exceeds this length
+WINDOW_SIZE = 6  # keep last N messages before summarizing
+SUMMARY_THRESHOLD = 8  # summarize when history exceeds this length
 
 
 class Message(TypedDict):
-    role: str   # "user" | "assistant"
+    role: str  # "user" | "assistant"
     content: str
 
 
@@ -41,10 +41,14 @@ class State(TypedDict):
 
 def _call_summarize_llm(conversation_text: str) -> str:
     """Call the LLM to summarize conversation text."""
-    response = llm.invoke([
-        SystemMessage(content="Summarize the following conversation in 2-3 sentences, preserving key facts."),
-        HumanMessage(content=conversation_text),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="Summarize the following conversation in 2-3 sentences, preserving key facts."
+            ),
+            HumanMessage(content=conversation_text),
+        ]
+    )
     return response.content.strip()
 
 
@@ -61,9 +65,7 @@ def maybe_summarize(state: State) -> State:
     old_messages = history[:-WINDOW_SIZE]
     recent_messages = history[-WINDOW_SIZE:]
 
-    conversation_text = "\n".join(
-        f"{m['role'].capitalize()}: {m['content']}" for m in old_messages
-    )
+    conversation_text = "\n".join(f"{m['role'].capitalize()}: {m['content']}" for m in old_messages)
     new_summary = _call_summarize_llm(conversation_text)
 
     if state.get("summary"):
@@ -117,13 +119,13 @@ if __name__ == "__main__":
             print(f"You: {turn}")
             result.print_result()
 
-        # Production pattern:
-        # 1. Deploy once during CI/CD:
-        # runtime.deploy(graph)
-        # CLI alternative:
-        # agentspan deploy --package examples.langgraph.35_conversation_manager
-        #
-        # 2. In a separate long-lived worker process:
-        # runtime.serve(graph)
+            # Production pattern:
+            # 1. Deploy once during CI/CD:
+            # runtime.deploy(graph)
+            # CLI alternative:
+            # agentspan deploy --package examples.langgraph.35_conversation_manager
+            #
+            # 2. In a separate long-lived worker process:
+            # runtime.serve(graph)
 
             print()

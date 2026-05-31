@@ -23,15 +23,15 @@ MCP Test Server Setup (mcp-testkit) — required for examples 1-3:
     # Or start with auth (requires storing the secret as a credential):
     mcp-testkit --transport http --auth <secret>
 
-    # Store secrets via CLI or Agentspan UI:
-    agentspan secrets set HTTP_TEST_API_KEY <secret>
+    # Store credentials via CLI or Agentspan UI:
+    agentspan credentials set HTTP_TEST_API_KEY <secret>
 
 Requirements:
     - Conductor server with LLM support
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
     - mcp-testkit running on http://localhost:3001 (for examples 1-3, see setup above)
-    - For GitHub example: agentspan secrets set GITHUB_TOKEN ghp_xxx
+    - For GitHub example: agentspan credentials set GITHUB_TOKEN ghp_xxx
 """
 
 from agentspan.agents import Agent, AgentRuntime, api_tool, tool
@@ -52,7 +52,7 @@ math_api = api_tool(
     url=MCP_TEST_SERVER_SPEC,
     name="mcp_test_tools",
     headers={"Authorization": "Bearer ${HTTP_TEST_API_KEY}"},
-    secrets=["HTTP_TEST_API_KEY"],
+    credentials=["HTTP_TEST_API_KEY"],
     max_tools=10,  # 65 ops — filter to top 10 most relevant
 )
 
@@ -72,7 +72,7 @@ math_agent = Agent(
 string_api = api_tool(
     url=MCP_TEST_SERVER_SPEC,
     headers={"Authorization": "Bearer ${HTTP_TEST_API_KEY}"},
-    secrets=["HTTP_TEST_API_KEY"],
+    credentials=["HTTP_TEST_API_KEY"],
     tool_names=["string_reverse", "string_uppercase", "string_length"],
 )
 
@@ -90,10 +90,12 @@ string_agent = Agent(
 # The LLM sees all tools uniformly — it doesn't know which are
 # auto-discovered vs hand-defined.
 
+
 @tool
 def calculate(expression: str) -> dict:
     """Evaluate a math expression."""
     import math
+
     safe_builtins = {"abs": abs, "round": round, "sqrt": math.sqrt, "pow": pow}
     try:
         result = eval(expression, {"__builtins__": {}}, safe_builtins)
@@ -105,7 +107,7 @@ def calculate(expression: str) -> dict:
 collection_api = api_tool(
     url=MCP_TEST_SERVER_SPEC,
     headers={"Authorization": "Bearer ${HTTP_TEST_API_KEY}"},
-    secrets=["HTTP_TEST_API_KEY"],
+    credentials=["HTTP_TEST_API_KEY"],
     tool_names=["collection_sort", "collection_unique", "collection_flatten"],
     max_tools=10,
 )
@@ -129,14 +131,18 @@ multi_tool_agent = Agent(
 # it needs.
 #
 # Before running:
-#   agentspan secrets set GITHUB_TOKEN ghp_xxxxxxxxxxxx
+#   agentspan credentials set GITHUB_TOKEN ghp_xxxxxxxxxxxx
 
 github = api_tool(
     url="https://api.github.com",
     headers={"Authorization": "token ${GITHUB_TOKEN}", "Accept": "application/vnd.github+json"},
-    secrets=["GITHUB_TOKEN"],
-    tool_names=["repos_list_for_user", "repos_create_for_authenticated_user",
-                "issues_list_for_repo", "issues_create"],
+    credentials=["GITHUB_TOKEN"],
+    tool_names=[
+        "repos_list_for_user",
+        "repos_create_for_authenticated_user",
+        "issues_list_for_repo",
+        "issues_create",
+    ],
     max_tools=20,
 )
 
@@ -159,7 +165,9 @@ if __name__ == "__main__":
 
         # Example 2: Filtered string tools
         print("\n=== String API (filtered) ===")
-        result = runtime.run(string_agent, "Reverse the string 'hello world' and tell me its length.")
+        result = runtime.run(
+            string_agent, "Reverse the string 'hello world' and tell me its length."
+        )
         result.print_result()
 
         # Example 3: Mixed tools
@@ -175,4 +183,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(math_agent)
-

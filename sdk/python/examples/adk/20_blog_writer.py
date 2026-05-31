@@ -106,9 +106,9 @@ def main():
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-        coordinator,
-        "Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era."
-        "Make sure to write at-least 5000 word and use markdown to format the content",
+            coordinator,
+            "Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era."
+            "Make sure to write at-least 5000 word and use markdown to format the content",
         )
         print(f"Status: {result.status}")
         result.print_result()
@@ -121,7 +121,6 @@ def main():
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(coordinator)
-
 
 
 if __name__ == "__main__":

@@ -85,7 +85,10 @@ class TestCredentialExtraction:
         from agentspan.agents.runtime._dispatch import _extract_execution_token
 
         class FakeTask:
-            input_data = {"__agentspan_ctx__": {"execution_token": "token-from-input"}, "x": "hello"}
+            input_data = {
+                "__agentspan_ctx__": {"execution_token": "token-from-input"},
+                "x": "hello",
+            }
             workflow_input = {}
 
         token = _extract_execution_token(FakeTask())
@@ -134,24 +137,24 @@ class TestCredentialExtraction:
 
 
 class TestToolDefCredentialsSurvival:
-    """Verify secrets from @tool decorator survive into make_tool_worker."""
+    """Verify credentials from @tool decorator survive into make_tool_worker."""
 
     def test_tool_def_secrets_accessible_via_get_tool_def(self):
         from agentspan.agents.tool import tool, get_tool_def
 
-        @tool(secrets=["MY_SECRET"])
+        @tool(credentials=["MY_SECRET"])
         def my_tool(x: str) -> str:
             return x
 
         td = get_tool_def(my_tool)
-        assert td.secrets == ["MY_SECRET"]
+        assert td.credentials == ["MY_SECRET"]
 
     def test_make_tool_worker_with_tool_def_has_secrets(self):
-        """When tool_def is passed, make_tool_worker can access secrets."""
+        """When tool_def is passed, make_tool_worker can access credentials."""
         from agentspan.agents.runtime._dispatch import make_tool_worker, _get_secret_names_from_tool
         from agentspan.agents.tool import tool, get_tool_def
 
-        @tool(secrets=["GITHUB_TOKEN", "OPENAI_API_KEY"])
+        @tool(credentials=["GITHUB_TOKEN", "OPENAI_API_KEY"])
         def cred_tool(x: str) -> str:
             return x
 
@@ -168,10 +171,10 @@ class TestToolDefCredentialsSurvival:
             return x
 
         td = get_tool_def(simple_tool)
-        assert td.secrets == []
+        assert td.credentials == []
 
     def test_tool_worker_no_secrets_runs_directly(self):
-        """Tool without secrets runs without subprocess isolation."""
+        """Tool without credentials runs without subprocess isolation."""
         from agentspan.agents.runtime._dispatch import make_tool_worker
         from agentspan.agents.tool import tool, get_tool_def
         from conductor.client.http.models.task import Task

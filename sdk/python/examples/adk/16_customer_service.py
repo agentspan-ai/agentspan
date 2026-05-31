@@ -87,14 +87,19 @@ def main():
             "and support tickets. Always verify the account exists before making changes. "
             "Be professional and empathetic."
         ),
-        tools=[get_account_details, get_billing_history, submit_support_ticket, update_account_plan],
+        tools=[
+            get_account_details,
+            get_billing_history,
+            submit_support_ticket,
+            update_account_plan,
+        ],
     )
 
     with AgentRuntime() as runtime:
         result = runtime.run(
-        agent,
-        "I'm customer ACC-001. Can you check my billing history and tell me my current plan? "
-        "I'm thinking about downgrading to the basic plan.",
+            agent,
+            "I'm customer ACC-001. Can you check my billing history and tell me my current plan? "
+            "I'm thinking about downgrading to the basic plan.",
         )
         print(f"Status: {result.status}")
         result.print_result()
@@ -107,7 +112,6 @@ def main():
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-
 
 
 if __name__ == "__main__":

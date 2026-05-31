@@ -164,9 +164,7 @@ def skill(
     # 1. Read SKILL.md (required)
     skill_md_path = path / "SKILL.md"
     if not skill_md_path.exists():
-        raise SkillLoadError(
-            f"Directory {path} is not a valid skill: SKILL.md not found"
-        )
+        raise SkillLoadError(f"Directory {path} is not a valid skill: SKILL.md not found")
     skill_md = skill_md_path.read_text()
     frontmatter = parse_frontmatter(skill_md)
     name = frontmatter["name"]
@@ -207,9 +205,7 @@ def skill(
         d = path / subdir
         if d.exists():
             resource_files.extend(
-                sorted(
-                    str(f.relative_to(path)) for f in d.rglob("*") if f.is_file()
-                )
+                sorted(str(f.relative_to(path)) for f in d.rglob("*") if f.is_file())
             )
     # Non-agent, non-SKILL.md files in root
     for f in sorted(path.iterdir()):
@@ -248,8 +244,7 @@ def skill(
         "skillMd": skill_md,
         "agentFiles": agent_files,
         "scripts": {
-            k: {"filename": v["filename"], "language": v["language"]}
-            for k, v in scripts.items()
+            k: {"filename": v["filename"], "language": v["language"]} for k, v in scripts.items()
         },
         "resourceFiles": resource_files,
         "crossSkillRefs": cross_refs,
@@ -340,9 +335,7 @@ def resolve_cross_skills(
                     if sd.exists():
                         ref_resources.extend(
                             sorted(
-                                str(f.relative_to(ref_dir))
-                                for f in sd.rglob("*")
-                                if f.is_file()
+                                str(f.relative_to(ref_dir)) for f in sd.rglob("*") if f.is_file()
                             )
                         )
                 ref_body = extract_body(ref_md)
@@ -468,15 +461,13 @@ def create_skill_workers(agent: Agent) -> List[SkillWorker]:
     read_worker_name = f"{skill_name}__read_skill_file"
     skill_sections = getattr(agent, "_skill_sections", {})
 
-    def make_read_func(
-        sdir: Path, allowed: set, sections: Dict[str, str]
-    ) -> Callable[..., str]:
+    def make_read_func(sdir: Path, allowed: set, sections: Dict[str, str]) -> Callable[..., str]:
         def read_skill_file(path: str = "") -> str:
             if path not in allowed:
                 return f"ERROR: '{path}' not found. Available: {sorted(allowed)}"
             # Handle virtual skill_section:* paths
             if path.startswith("skill_section:"):
-                section_name = path[len("skill_section:"):]
+                section_name = path[len("skill_section:") :]
                 if section_name in sections:
                     return sections[section_name]
                 return f"ERROR: section '{section_name}' not found"

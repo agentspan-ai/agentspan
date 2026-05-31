@@ -31,10 +31,12 @@ from settings import settings
 
 # ── Example 1: Simple text mention ───────────────────────────────────
 
+
 @tool
 def search(query: str) -> str:
     """Search for information."""
     return f"Results for '{query}': AI agents are software programs that act autonomously."
+
 
 agent1 = Agent(
     name="researcher",
@@ -51,9 +53,7 @@ agent2 = Agent(
     name="chatbot",
     model=settings.llm_model,
     instructions="Have a conversation. Say GOODBYE when you're finished.",
-    termination=(
-        TextMentionTermination("GOODBYE") | MaxMessageTermination(20)
-    ),
+    termination=(TextMentionTermination("GOODBYE") | MaxMessageTermination(20)),
 )
 
 
@@ -69,9 +69,7 @@ agent3 = Agent(
         "Research thoroughly. Only provide your FINAL ANSWER after "
         "using the search tool at least twice."
     ),
-    termination=(
-        TextMentionTermination("FINAL ANSWER") & MaxMessageTermination(5)
-    ),
+    termination=(TextMentionTermination("FINAL ANSWER") & MaxMessageTermination(5)),
 )
 
 
@@ -107,4 +105,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent1)
-

@@ -24,6 +24,7 @@ from settings import settings
 
 # ── Specialist tools ──────────────────────────────────────────────────
 
+
 def search_flights(origin: str, destination: str, date: str) -> dict:
     """Search for available flights.
 
@@ -77,9 +78,18 @@ def get_travel_advisory(country: str) -> dict:
         Dictionary with travel advisory details.
     """
     advisories = {
-        "japan": {"level": "Level 1 - Exercise Normal Precautions", "visa": "Visa-free for 90 days"},
-        "france": {"level": "Level 2 - Exercise Increased Caution", "visa": "Schengen visa required"},
-        "australia": {"level": "Level 1 - Exercise Normal Precautions", "visa": "eVisitor visa required"},
+        "japan": {
+            "level": "Level 1 - Exercise Normal Precautions",
+            "visa": "Visa-free for 90 days",
+        },
+        "france": {
+            "level": "Level 2 - Exercise Increased Caution",
+            "visa": "Schengen visa required",
+        },
+        "australia": {
+            "level": "Level 1 - Exercise Normal Precautions",
+            "visa": "eVisitor visa required",
+        },
     }
     return advisories.get(country.lower(), {"level": "Unknown", "visa": "Check embassy website"})
 
@@ -102,8 +112,7 @@ hotel_agent = Agent(
     model=settings.llm_model,
     description="Handles hotel searches and accommodation inquiries.",
     instruction=(
-        "You are a hotel specialist. Search for hotels and present "
-        "options with ratings and prices."
+        "You are a hotel specialist. Search for hotels and present options with ratings and prices."
     ),
     tools=[search_hotels],
 )
@@ -138,9 +147,9 @@ coordinator = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        coordinator,
-        "I want to plan a trip to Japan. I need a flight from San Francisco "
-        "on 2025-04-15 and a hotel for 5 nights. Also, what's the travel advisory?",
+            coordinator,
+            "I want to plan a trip to Japan. I need a flight from San Francisco "
+            "on 2025-04-15 and a hotel for 5 nights. Also, what's the travel advisory?",
         )
         result.print_result()
 

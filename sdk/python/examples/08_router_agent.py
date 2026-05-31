@@ -70,7 +70,9 @@ team = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(team, "Write a Python function to validate email addresses using regex")
+        result = runtime.run(
+            team, "Write a Python function to validate email addresses using regex"
+        )
         result.print_result()
 
         # Production pattern:

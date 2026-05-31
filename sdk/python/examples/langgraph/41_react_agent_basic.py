@@ -54,15 +54,17 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 # create_react_agent from langgraph.prebuilt — no Agentspan wrapper needed.
 # AgentRuntime automatically detects the "agent" + "tools" node structure,
 # extracts the LLM and tools, and runs them on Conductor as separate tasks.
-graph = create_react_agent(llm, tools=[calculate, count_words, reverse_string], name="math_and_text_agent")
+graph = create_react_agent(
+    llm, tools=[calculate, count_words, reverse_string], name="math_and_text_agent"
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        graph,
-        "What is sqrt(256) + 2**10? "
-        "Also count the words in 'the quick brown fox jumps over the lazy dog'. "
-        "And what is 'Agentspan' reversed?",
+            graph,
+            "What is sqrt(256) + 2**10? "
+            "Also count the words in 'the quick brown fox jumps over the lazy dog'. "
+            "And what is 'Agentspan' reversed?",
         )
         print(f"Status: {result.status}")
         result.print_result()

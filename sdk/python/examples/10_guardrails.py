@@ -43,6 +43,7 @@ from settings import settings
 
 # ── Tools ─────────────────────────────────────────────────────────────
 
+
 @tool
 def get_order_status(order_id: str) -> dict:
     """Look up the current status of an order."""
@@ -69,6 +70,7 @@ def get_customer_info(customer_id: str) -> dict:
 
 
 # ── Guardrail (using @guardrail decorator) ────────────────────────────
+
 
 @guardrail
 def no_pii(content: str) -> GuardrailResult:
@@ -115,7 +117,7 @@ if __name__ == "__main__":
         result = runtime.run(
             agent,
             "I need a full summary: What's the status of order ORD-42, "
-            "and what's the profile for customer CUST-7?"
+            "and what's the profile for customer CUST-7?",
         )
         result.print_result()
 
@@ -133,4 +135,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

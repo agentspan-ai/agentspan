@@ -36,10 +36,12 @@ class State(TypedDict):
 
 def analyze_pros(state: State) -> State:
     """Analyze the advantages/pros of the topic."""
-    response = llm.invoke([
-        SystemMessage(content="List 3 clear advantages or pros. Be concise and specific."),
-        HumanMessage(content=f"Topic: {state['topic']}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(content="List 3 clear advantages or pros. Be concise and specific."),
+            HumanMessage(content=f"Topic: {state['topic']}"),
+        ]
+    )
     return {
         "pros": response.content,
         "branch_outputs": [f"PROS:\n{response.content}"],
@@ -48,10 +50,12 @@ def analyze_pros(state: State) -> State:
 
 def analyze_cons(state: State) -> State:
     """Analyze the disadvantages/cons of the topic."""
-    response = llm.invoke([
-        SystemMessage(content="List 3 clear disadvantages or cons. Be concise and specific."),
-        HumanMessage(content=f"Topic: {state['topic']}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(content="List 3 clear disadvantages or cons. Be concise and specific."),
+            HumanMessage(content=f"Topic: {state['topic']}"),
+        ]
+    )
     return {
         "cons": response.content,
         "branch_outputs": [f"CONS:\n{response.content}"],
@@ -61,15 +65,17 @@ def analyze_cons(state: State) -> State:
 def merge_and_summarize(state: State) -> State:
     """Merge results from both branches and write a balanced conclusion."""
     combined = "\n\n".join(state["branch_outputs"])
-    response = llm.invoke([
-        SystemMessage(
-            content=(
-                "You have received a pros and cons analysis. "
-                "Write a balanced, one-paragraph conclusion with a clear recommendation."
-            )
-        ),
-        HumanMessage(content=f"Topic: {state['topic']}\n\n{combined}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "You have received a pros and cons analysis. "
+                    "Write a balanced, one-paragraph conclusion with a clear recommendation."
+                )
+            ),
+            HumanMessage(content=f"Topic: {state['topic']}\n\n{combined}"),
+        ]
+    )
     return {"final_summary": response.content}
 
 

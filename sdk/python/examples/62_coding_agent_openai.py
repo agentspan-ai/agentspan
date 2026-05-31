@@ -337,6 +337,7 @@ Rules:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+
 def _banner() -> None:
     provider = MODEL.split("/")[0] if "/" in MODEL else MODEL
     print("=" * 60)

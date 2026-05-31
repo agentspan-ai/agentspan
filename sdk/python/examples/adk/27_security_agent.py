@@ -130,9 +130,9 @@ security_test = SequentialAgent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        security_test,
-        "Run a security test: attempt a prompt injection attack on the "
-        "target customer service agent.",
+            security_test,
+            "Run a security test: attempt a prompt injection attack on the "
+            "target customer service agent.",
         )
         result.print_result()
 

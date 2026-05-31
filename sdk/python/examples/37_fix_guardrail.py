@@ -42,6 +42,7 @@ from settings import settings
 # Instead of asking the LLM to retry, this guardrail redacts phone
 # numbers directly and returns the cleaned output.
 
+
 @guardrail
 def redact_phone_numbers(content: str) -> GuardrailResult:
     """Redact US phone numbers from the output."""
@@ -58,6 +59,7 @@ def redact_phone_numbers(content: str) -> GuardrailResult:
 
 
 # ── Tool ─────────────────────────────────────────────────────────────
+
 
 @tool
 def get_contact_info(name: str) -> dict:
@@ -94,7 +96,7 @@ agent = Agent(
         Guardrail(
             redact_phone_numbers,
             position=Position.OUTPUT,
-            on_fail=OnFail.FIX,      # Auto-correct instead of retry
+            on_fail=OnFail.FIX,  # Auto-correct instead of retry
             name="phone_redactor",
         ),
     ],
@@ -145,4 +147,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

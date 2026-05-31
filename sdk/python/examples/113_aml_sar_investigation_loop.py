@@ -440,13 +440,13 @@ PLANNER_SYSTEM = (
     "to narrow the disposition, or (b) finalize the investigation.\n\n"
     "Respond with ONLY a JSON object — no prose, no markdown fences. Two shapes:\n\n"
     "  Investigate further:\n"
-    "  {\"tool\": \"<one of: query_transactions, query_kyc_profile, query_world_check, "
-    "query_adverse_media, query_counterparty_network>\", \"args\": { ... }}\n\n"
+    '  {"tool": "<one of: query_transactions, query_kyc_profile, query_world_check, '
+    'query_adverse_media, query_counterparty_network>", "args": { ... }}\n\n'
     "  Finalize:\n"
-    "  {\"tool\": \"finalize_disposition\", \"args\": {\"disposition\": "
-    "\"clear|escalate|sar_eligible\", \"narrative\": \"<5W1H narrative>\", "
-    "\"red_flags\": [\"<bsa red flag>\", ...], \"supporting_evidence\": "
-    "[\"<source citations>\", ...]}}\n\n"
+    '  {"tool": "finalize_disposition", "args": {"disposition": '
+    '"clear|escalate|sar_eligible", "narrative": "<5W1H narrative>", '
+    '"red_flags": ["<bsa red flag>", ...], "supporting_evidence": '
+    '["<source citations>", ...]}}\n\n'
     "Disposition guide:\n"
     "  clear        — alert is a false positive; activity is consistent with KYC.\n"
     "  escalate     — suspicious but not strong enough for SAR; refer to L2.\n"

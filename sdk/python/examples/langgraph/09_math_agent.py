@@ -50,7 +50,7 @@ def divide(a: float, b: float) -> str:
 @tool
 def power(base: float, exponent: float) -> float:
     """Raise base to the given exponent and return the result."""
-    return base ** exponent
+    return base**exponent
 
 
 @tool
@@ -82,8 +82,8 @@ graph = create_agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        graph,
-        "Calculate: (2^10 + sqrt(144)) / 4, then compute 5! and tell me the final answers.",
+            graph,
+            "Calculate: (2^10 + sqrt(144)) / 4, then compute 5! and tell me the final answers.",
         )
         print(f"Status: {result.status}")
         result.print_result()

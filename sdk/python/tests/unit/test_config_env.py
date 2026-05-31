@@ -223,11 +223,13 @@ class TestAgentConfigCredentialFields:
 
     def test_secret_strict_mode_defaults_false(self):
         from agentspan.agents.runtime.config import AgentConfig
+
         config = AgentConfig()
         assert config.secret_strict_mode is False
 
     def test_secret_strict_mode_can_be_set(self):
         from agentspan.agents.runtime.config import AgentConfig
+
         config = AgentConfig(secret_strict_mode=True)
         assert config.secret_strict_mode is True
 
@@ -235,6 +237,7 @@ class TestAgentConfigCredentialFields:
         import os
         from unittest import mock
         from agentspan.agents.runtime.config import AgentConfig
+
         with mock.patch.dict(os.environ, {"AGENTSPAN_SECRET_STRICT_MODE": "true"}):
             config = AgentConfig.from_env()
         assert config.secret_strict_mode is True
@@ -243,18 +246,21 @@ class TestAgentConfigCredentialFields:
         import os
         from unittest import mock
         from agentspan.agents.runtime.config import AgentConfig
+
         with mock.patch.dict(os.environ, {"AGENTSPAN_SECRET_STRICT_MODE": "false"}):
             config = AgentConfig.from_env()
         assert config.secret_strict_mode is False
 
     def test_api_key_field_defaults_none(self):
         from agentspan.agents.runtime.config import AgentConfig
+
         config = AgentConfig()
         # api_key field (new) takes precedence; auth_key kept for backward compat
         assert config.api_key is None
 
     def test_api_key_field_can_be_set(self):
         from agentspan.agents.runtime.config import AgentConfig
+
         config = AgentConfig(api_key="asp_my_key")
         assert config.api_key == "asp_my_key"
 
@@ -262,6 +268,7 @@ class TestAgentConfigCredentialFields:
         import os
         from unittest import mock
         from agentspan.agents.runtime.config import AgentConfig
+
         with mock.patch.dict(os.environ, {"AGENTSPAN_API_KEY": "asp_env_key"}):
             config = AgentConfig.from_env()
         assert config.api_key == "asp_env_key"
@@ -269,5 +276,6 @@ class TestAgentConfigCredentialFields:
     def test_auth_key_backward_compat_still_works(self):
         """auth_key must still be accepted for backward compat."""
         from agentspan.agents.runtime.config import AgentConfig
+
         config = AgentConfig(auth_key="old_key")
         assert config.auth_key == "old_key"

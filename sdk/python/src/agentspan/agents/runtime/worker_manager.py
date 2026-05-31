@@ -45,8 +45,12 @@ def _patch_conductor_use_threads_on_windows() -> None:
     class _ThreadAsProcess(threading.Thread):
         """threading.Thread shim that satisfies the multiprocessing.Process interface."""
 
-        def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, *, daemon=None):
-            super().__init__(group=group, target=target, name=name, args=args, kwargs=kwargs or {}, daemon=daemon)
+        def __init__(
+            self, group=None, target=None, name=None, args=(), kwargs=None, *, daemon=None
+        ):
+            super().__init__(
+                group=group, target=target, name=name, args=args, kwargs=kwargs or {}, daemon=daemon
+            )
             self.exitcode: Any = None
 
         def terminate(self) -> None:
@@ -85,6 +89,7 @@ def _patch_conductor_use_threads_on_windows() -> None:
     _signal_mod.signal = _thread_safe_signal  # type: ignore[attr-defined]
 
     _th_module._agentspan_thread_patched = True  # type: ignore[attr-defined]
+
 
 if TYPE_CHECKING:
     from conductor.client.automator.task_handler import TaskHandler
@@ -204,10 +209,7 @@ class WorkerManager:
         # Track (task_name, domain) pairs that already have a running process.
         # A worker registered under domain=None and the same worker under a
         # specific domain are DIFFERENT polling targets and both need processes.
-        existing = {
-            (w.get_task_definition_name(), getattr(w, "domain", None))
-            for w in th.workers
-        }
+        existing = {(w.get_task_definition_name(), getattr(w, "domain", None)) for w in th.workers}
 
         for (task_def_name, domain), record in list(_decorated_functions.items()):
             if (task_def_name, domain) in existing:

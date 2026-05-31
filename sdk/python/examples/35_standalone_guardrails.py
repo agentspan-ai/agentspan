@@ -27,6 +27,7 @@ from agentspan.agents import GuardrailResult, guardrail
 
 # ── Define guardrails ────────────────────────────────────────────────
 
+
 @guardrail
 def no_pii(content: str) -> GuardrailResult:
     """Reject content that contains credit card numbers or SSNs."""
@@ -70,6 +71,7 @@ def word_limit(content: str) -> GuardrailResult:
 # =====================================================================
 # Part 1: Standalone — call guardrails directly, no server needed
 # =====================================================================
+
 
 def validate(text: str, guardrails: list) -> bool:
     """Run a list of guardrails against text.  Returns True if all pass."""
@@ -126,6 +128,7 @@ def run_standalone():
 #   Input:  {"content": "<text to validate>"}
 #   Output: {"passed": bool, "message": str}
 
+
 def register_guardrail_worker(guardrail_fn):
     """Wrap a @guardrail function as a Conductor @worker_task.
 
@@ -173,6 +176,7 @@ def run_as_workers():
 
     # Start polling — TaskHandler discovers all @worker_task functions
     from agentspan.agents.runtime.config import AgentConfig
+
     config = Configuration(server_api_url=AgentConfig.from_env().server_url)
     handler = TaskHandler(
         workers=[],
@@ -189,6 +193,7 @@ def run_as_workers():
 
     try:
         import time
+
         while True:
             time.sleep(1)
     except KeyboardInterrupt:

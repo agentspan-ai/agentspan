@@ -265,7 +265,15 @@ def dump_08():
 def dump_10():
     import re
 
-    from agentspan.agents import Agent, Guardrail, GuardrailResult, OnFail, Position, guardrail, tool
+    from agentspan.agents import (
+        Agent,
+        Guardrail,
+        GuardrailResult,
+        OnFail,
+        Position,
+        guardrail,
+        tool,
+    )
     from settings import settings
 
     @tool
@@ -457,9 +465,7 @@ def dump_19():
         name="chatbot",
         model=settings.llm_model,
         instructions="Have a conversation. Say GOODBYE when you're finished.",
-        termination=(
-            TextMentionTermination("GOODBYE") | MaxMessageTermination(20)
-        ),
+        termination=(TextMentionTermination("GOODBYE") | MaxMessageTermination(20)),
     )
     dump("19_composable_termination_or", agent2)
 
@@ -471,9 +477,7 @@ def dump_19():
             "Research thoroughly. Only provide your FINAL ANSWER after "
             "using the search tool at least twice."
         ),
-        termination=(
-            TextMentionTermination("FINAL ANSWER") & MaxMessageTermination(5)
-        ),
+        termination=(TextMentionTermination("FINAL ANSWER") & MaxMessageTermination(5)),
     )
     dump("19_composable_termination_and", agent3)
 
@@ -671,6 +675,7 @@ def dump_52():
 
 if __name__ == "__main__":
     import warnings
+
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 
     print("Dumping Python AgentConfig JSONs...\n")

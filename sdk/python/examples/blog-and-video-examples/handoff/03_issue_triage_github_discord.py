@@ -23,7 +23,7 @@ Setup:
     pip install agentspan requests
     agentspan server start
 
-    # Store secrets in the AgentSpan UI (localhost:6767 → Credentials):
+    # Store credentials in the AgentSpan UI (localhost:6767 → Credentials):
     #   GITHUB_TOKEN  = GitHub personal access token (needs repo scope)
     #   DISCORD_TOKEN = Discord bot token
 
@@ -60,7 +60,8 @@ DISCORD_CHANNELS = {
 
 # ── GitHub Tools ─────────────────────────────────────────────────
 
-@tool(secrets=["GITHUB_TOKEN"])
+
+@tool(credentials=["GITHUB_TOKEN"])
 def get_issue(repo: str, issue_number: int) -> dict:
     """Fetch a GitHub issue by number. repo format: owner/repo"""
     token = os.environ["GITHUB_TOKEN"]
@@ -80,7 +81,7 @@ def get_issue(repo: str, issue_number: int) -> dict:
     }
 
 
-@tool(secrets=["GITHUB_TOKEN"])
+@tool(credentials=["GITHUB_TOKEN"])
 def search_issues(repo: str, query: str) -> list:
     """Search for similar or duplicate issues in a repo."""
     token = os.environ["GITHUB_TOKEN"]
@@ -99,7 +100,7 @@ def search_issues(repo: str, query: str) -> list:
     ]
 
 
-@tool(secrets=["GITHUB_TOKEN"])
+@tool(credentials=["GITHUB_TOKEN"])
 def add_labels(repo: str, issue_number: int, labels: list) -> dict:
     """Add labels to a GitHub issue."""
     token = os.environ["GITHUB_TOKEN"]
@@ -111,7 +112,7 @@ def add_labels(repo: str, issue_number: int, labels: list) -> dict:
     return {"status": "labeled", "labels": labels}
 
 
-@tool(secrets=["GITHUB_TOKEN"])
+@tool(credentials=["GITHUB_TOKEN"])
 def post_comment(repo: str, issue_number: int, body: str) -> dict:
     """Post a comment on a GitHub issue."""
     token = os.environ["GITHUB_TOKEN"]
@@ -125,7 +126,8 @@ def post_comment(repo: str, issue_number: int, body: str) -> dict:
 
 # ── Discord Tools ────────────────────────────────────────────────
 
-@tool(secrets=["DISCORD_TOKEN"])
+
+@tool(credentials=["DISCORD_TOKEN"])
 def post_to_discord(channel_name: str, message: str) -> dict:
     """Post a message to a Discord channel. channel_name: bugs, feature-requests, or docs."""
     token = os.environ["DISCORD_TOKEN"]

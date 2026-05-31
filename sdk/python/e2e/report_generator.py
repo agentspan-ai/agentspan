@@ -76,13 +76,9 @@ def generate_report(junit_xml_path: str, output_path: str) -> None:
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    suite_data = [
-        {"name": key, "tests": tests} for key, tests in suite_map.items()
-    ]
+    suite_data = [{"name": key, "tests": tests} for key, tests in suite_map.items()]
 
-    html = _render_html(
-        timestamp, total_time, total, passed, failed, skipped, errors, suite_data
-    )
+    html = _render_html(timestamp, total_time, total, passed, failed, skipped, errors, suite_data)
     Path(output_path).write_text(html, encoding="utf-8")
     print(f"Report written to {output_path}")
 
@@ -128,15 +124,15 @@ def _extract_error_summary(message: str, detail: str) -> str:
     for line in detail.splitlines():
         line = line.strip()
         if line.startswith("AssertionError:"):
-            return line[len("AssertionError:"):].strip()
+            return line[len("AssertionError:") :].strip()
         if line.startswith("E   AssertionError:"):
-            return line[len("E   AssertionError:"):].strip()
+            return line[len("E   AssertionError:") :].strip()
 
     # Fall back to the message attribute (often has the assertion text)
     if message:
         # Strip "AssertionError:" prefix if present
         if message.startswith("AssertionError:"):
-            return message[len("AssertionError:"):].strip()
+            return message[len("AssertionError:") :].strip()
         return message.split("\n")[0].strip()
 
     return ""
@@ -156,9 +152,7 @@ def _extract_location(detail: str) -> str:
     return locations[-1] if locations else ""
 
 
-def _render_html(
-    timestamp, total_time, total, passed, failed, skipped, errors, suites
-):
+def _render_html(timestamp, total_time, total, passed, failed, skipped, errors, suites):
     status_colors = {
         "PASSED": "#22c55e",
         "FAILED": "#ef4444",
@@ -170,9 +164,7 @@ def _render_html(
     for suite in suites:
         suite_id = re.sub(r"[^a-zA-Z0-9]", "_", suite["name"])
         suite_pass = sum(1 for t in suite["tests"] if t["status"] == "PASSED")
-        suite_fail = sum(
-            1 for t in suite["tests"] if t["status"] in ("FAILED", "ERROR")
-        )
+        suite_fail = sum(1 for t in suite["tests"] if t["status"] in ("FAILED", "ERROR"))
         suite_total = len(suite["tests"])
         suite_status_color = "#22c55e" if suite_fail == 0 else "#ef4444"
         suite_label = (
@@ -194,15 +186,11 @@ def _render_html(
 
             # For failures/errors: show error summary prominently
             if t["status"] in ("FAILED", "ERROR") and t["error_summary"]:
-                detail_parts.append(
-                    f"<div class='error-summary'>{_esc(t['error_summary'])}</div>"
-                )
+                detail_parts.append(f"<div class='error-summary'>{_esc(t['error_summary'])}</div>")
 
             # Show file:line for failures
             if t["location"]:
-                detail_parts.append(
-                    f"<div class='error-location'>{_esc(t['location'])}</div>"
-                )
+                detail_parts.append(f"<div class='error-location'>{_esc(t['location'])}</div>")
 
             # Full traceback in collapsible section
             if t["detail"]:
@@ -213,9 +201,7 @@ def _render_html(
 
             # For skipped tests, show the skip reason
             if t["status"] == "SKIPPED" and t["error_summary"]:
-                detail_parts.append(
-                    f"<span class='skip-reason'>{_esc(t['error_summary'])}</span>"
-                )
+                detail_parts.append(f"<span class='skip-reason'>{_esc(t['error_summary'])}</span>")
 
             detail_html = "\n".join(detail_parts)
 
@@ -323,10 +309,7 @@ function toggleSuite(suiteId) {{
 def _esc(text: str) -> str:
     """HTML-escape a string."""
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 

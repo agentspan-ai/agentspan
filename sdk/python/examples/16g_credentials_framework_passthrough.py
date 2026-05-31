@@ -4,21 +4,21 @@
 """Credentials — Framework passthrough with credential injection.
 
 Demonstrates:
-    - runtime.run(graph, secrets=["GITHUB_TOKEN"]) for LangGraph agents
+    - runtime.run(graph, credentials=["GITHUB_TOKEN"]) for LangGraph agents
     - Credentials resolved from the server and injected into os.environ
       before the graph executes
     - Works the same for LangChain, OpenAI Agent SDK, and Google ADK
 
 This pattern is used when you run a foreign framework agent (LangGraph,
 LangChain, OpenAI, ADK) through Agentspan and need tools inside the
-graph to access secrets from the credential store.
+graph to access credentials from the credential store.
 
 Setup (one-time):
-    agentspan secrets set GITHUB_TOKEN <your-github-token>
+    agentspan credentials set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - GITHUB_TOKEN stored via `agentspan secrets set`
+    - GITHUB_TOKEN stored via `agentspan credentials set`
     - langgraph installed: pip install langgraph langchain-openai
 """
 
@@ -56,13 +56,13 @@ if __name__ == "__main__":
     graph = create_langgraph_agent()
 
     with AgentRuntime() as runtime:
-        # secrets=["GITHUB_TOKEN"] tells the runtime to resolve
+        # credentials=["GITHUB_TOKEN"] tells the runtime to resolve
         # GITHUB_TOKEN from the server and inject it into os.environ
         # before the graph executes.
         result = runtime.run(
             graph,
             "Check if GitHub authentication is available",
-            secrets=["GITHUB_TOKEN"],
+            credentials=["GITHUB_TOKEN"],
         )
         result.print_result()
 
@@ -74,4 +74,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(graph)
-

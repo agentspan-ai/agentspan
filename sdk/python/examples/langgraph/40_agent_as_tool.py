@@ -29,6 +29,7 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # ── Specialist agents (as plain compiled graphs) ──────────────────────────────
 
+
 class SimpleState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
 
@@ -62,6 +63,7 @@ trivia_graph = _make_specialist(
 
 
 # ── Wrap specialist graphs as @tool callables ─────────────────────────────────
+
 
 @tool
 def ask_math_expert(question: str) -> str:

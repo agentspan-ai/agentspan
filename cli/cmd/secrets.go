@@ -12,9 +12,12 @@ import (
 )
 
 var secretsCmd = &cobra.Command{
-	Use:     "secrets",
-	Aliases: []string{"secret"},
-	Short:   "Manage secrets stored on the AgentSpan server",
+	// User-facing command name stays `credentials` — the rename to "secrets"
+	// is a server/internal-only change. `secrets`/`secret` are kept as
+	// aliases so anything that started using the new name still works.
+	Use:     "credentials",
+	Aliases: []string{"credential", "secrets", "secret"},
+	Short:   "Manage credentials stored on the AgentSpan server",
 }
 
 // ─── secrets set ──────────────────────────────────────────────────────────────

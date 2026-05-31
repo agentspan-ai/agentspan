@@ -27,12 +27,30 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 # ── Sample document corpus ────────────────────────────────────────────────────
 
 CORPUS = [
-    Document(page_content="Python is a high-level, general-purpose programming language known for its readability.", metadata={"id": 1, "title": "Python Overview"}),
-    Document(page_content="The Eiffel Tower is located in Paris and was built in 1889.", metadata={"id": 2, "title": "Eiffel Tower"}),
-    Document(page_content="Python supports multiple programming paradigms including procedural, OOP, and functional programming.", metadata={"id": 3, "title": "Python Paradigms"}),
-    Document(page_content="Machine learning is a subset of AI that enables systems to learn from data.", metadata={"id": 4, "title": "Machine Learning"}),
-    Document(page_content="Python has a rich ecosystem of scientific libraries: NumPy, pandas, matplotlib, and scikit-learn.", metadata={"id": 5, "title": "Python Science Stack"}),
-    Document(page_content="The Great Wall of China stretches over 13,000 miles.", metadata={"id": 6, "title": "Great Wall"}),
+    Document(
+        page_content="Python is a high-level, general-purpose programming language known for its readability.",
+        metadata={"id": 1, "title": "Python Overview"},
+    ),
+    Document(
+        page_content="The Eiffel Tower is located in Paris and was built in 1889.",
+        metadata={"id": 2, "title": "Eiffel Tower"},
+    ),
+    Document(
+        page_content="Python supports multiple programming paradigms including procedural, OOP, and functional programming.",
+        metadata={"id": 3, "title": "Python Paradigms"},
+    ),
+    Document(
+        page_content="Machine learning is a subset of AI that enables systems to learn from data.",
+        metadata={"id": 4, "title": "Machine Learning"},
+    ),
+    Document(
+        page_content="Python has a rich ecosystem of scientific libraries: NumPy, pandas, matplotlib, and scikit-learn.",
+        metadata={"id": 5, "title": "Python Science Stack"},
+    ),
+    Document(
+        page_content="The Great Wall of China stretches over 13,000 miles.",
+        metadata={"id": 6, "title": "Great Wall"},
+    ),
 ]
 
 
@@ -54,24 +72,26 @@ def grade_documents(state: State) -> State:
     query = state["query"]
     scores = []
     for doc in state["documents"]:
-        response = llm.invoke([
-            SystemMessage(
-                content=(
-                    "Score the relevance of the document to the query from 1 (not relevant) to 5 (highly relevant). "
-                    "Respond with only a single integer."
-                )
-            ),
-            HumanMessage(content=f"Query: {query}\n\nDocument: {doc.page_content}"),
-        ])
+        response = llm.invoke(
+            [
+                SystemMessage(
+                    content=(
+                        "Score the relevance of the document to the query from 1 (not relevant) to 5 (highly relevant). "
+                        "Respond with only a single integer."
+                    )
+                ),
+                HumanMessage(content=f"Query: {query}\n\nDocument: {doc.page_content}"),
+            ]
+        )
         try:
             score = int(response.content.strip()[0])
         except (ValueError, IndexError):
             score = 1
-        scores.append({"doc_id": doc.metadata.get("id"), "title": doc.metadata.get("title"), "score": score})
+        scores.append(
+            {"doc_id": doc.metadata.get("id"), "title": doc.metadata.get("title"), "score": score}
+        )
 
-    relevant = [
-        doc for doc, s in zip(state["documents"], scores) if s["score"] >= 3
-    ]
+    relevant = [doc for doc, s in zip(state["documents"], scores) if s["score"] >= 3]
     return {"scores": scores, "relevant_docs": relevant}
 
 
@@ -86,15 +106,17 @@ def generate_answer(state: State) -> State:
         context_parts.append(f"[{title}]: {doc.page_content}")
     context = "\n".join(context_parts)
 
-    response = llm.invoke([
-        SystemMessage(
-            content=(
-                "Answer the question using only the provided sources. "
-                "Cite the source title in brackets when using information from it."
-            )
-        ),
-        HumanMessage(content=f"Query: {state['query']}\n\nSources:\n{context}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "Answer the question using only the provided sources. "
+                    "Cite the source title in brackets when using information from it."
+                )
+            ),
+            HumanMessage(content=f"Query: {state['query']}\n\nSources:\n{context}"),
+        ]
+    )
     return {"answer": response.content.strip()}
 
 

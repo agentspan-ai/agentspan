@@ -209,7 +209,7 @@ def _get_secret_names_from_tool(tool_func) -> list:
     tool_def = getattr(tool_func, "_tool_def", None)
     if tool_def is None:
         return []
-    return list(getattr(tool_def, "secrets", []))
+    return list(getattr(tool_def, "credentials", []))
 
 
 # Module-level registry: task_name -> {tool_name: tool_func}
@@ -398,7 +398,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
 
             # ── Credential fetching ───────────────────────────────────────
             # Priority order for credential names:
-            # 1. Closure-captured secrets (framework-extracted tools via
+            # 1. Closure-captured credentials (framework-extracted tools via
             #    _register_framework_workers → make_tool_worker(credential_names=...))
             # 2. tool_def from registry or closure (native @tool decorated)
             # 3. _tool_def attribute on tool_func
@@ -407,12 +407,18 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
                 credential_names = list(_closure_cred_names)
             else:
                 _td = _tool_def_registry.get(tool_name) or tool_def
-                raw_secrets = list(getattr(_td, "secrets", [])) if _td else _get_secret_names_from_tool(tool_func)
+                raw_secrets = (
+                    list(getattr(_td, "credentials", []))
+                    if _td
+                    else _get_secret_names_from_tool(tool_func)
+                )
                 credential_names = [c for c in raw_secrets if isinstance(c, str)]
-                # Fallback: workflow-level secrets (for framework-extracted tools)
+                # Fallback: workflow-level credentials (for framework-extracted tools)
                 if not credential_names and task.workflow_instance_id:
                     with _workflow_secrets_lock:
-                        credential_names = list(_workflow_secrets.get(task.workflow_instance_id, []))
+                        credential_names = list(
+                            _workflow_secrets.get(task.workflow_instance_id, [])
+                        )
             resolved_secrets = {}
             if credential_names:
                 token = _extract_execution_token(task)
@@ -421,7 +427,9 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
                     resolved_secrets = fetcher.fetch(token, credential_names)
                 except Exception as cred_err:
                     # Credential errors are configuration issues — non-retryable.
-                    logger.error("Credential resolution failed for tool '%s': %s", tool_name, cred_err)
+                    logger.error(
+                        "Credential resolution failed for tool '%s': %s", tool_name, cred_err
+                    )
                     task_result.status = TaskResultStatus.FAILED_WITH_TERMINAL_ERROR
                     task_result.reason_for_incompletion = str(cred_err)
                     return task_result
@@ -442,7 +450,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
                     fn_kwargs[param_name] = None
 
             # ── Secret injection ──────────────────────────────────────────
-            # Inject resolved secrets via the shared helper so the mutate +
+            # Inject resolved credentials via the shared helper so the mutate +
             # invoke + restore sequence is atomic under a process-wide lock.
             # See docs/design/secret-injection-contract.md.
             #
@@ -457,9 +465,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
             )
             from agentspan.agents.runtime.secret_injection import inject_via_env
 
-            secret_env = {
-                k: v for k, v in (resolved_secrets or {}).items() if isinstance(v, str)
-            }
+            secret_env = {k: v for k, v in (resolved_secrets or {}).items() if isinstance(v, str)}
 
             def _invoke_with_context():
                 # contextvars are async-task/thread scoped — safe to set without a lock

@@ -31,13 +31,15 @@ class State(TypedDict):
 
 def classify_sentiment(state: State) -> State:
     """Classify the sentiment of the input text."""
-    response = llm.invoke([
-        SystemMessage(
-            content="Classify the sentiment of the text as exactly one word: "
-                    "'positive', 'negative', or 'neutral'. Return only that word."
-        ),
-        HumanMessage(content=state["text"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="Classify the sentiment of the text as exactly one word: "
+                "'positive', 'negative', or 'neutral'. Return only that word."
+            ),
+            HumanMessage(content=state["text"]),
+        ]
+    )
     sentiment = response.content.strip().lower()
     if sentiment not in ("positive", "negative", "neutral"):
         sentiment = "neutral"
@@ -51,28 +53,40 @@ def route_sentiment(state: State) -> Literal["positive", "negative", "neutral"]:
 
 def handle_positive(state: State) -> State:
     """Craft an enthusiastic reply for positive sentiment."""
-    response = llm.invoke([
-        SystemMessage(content="The user expressed something positive. Respond warmly and encouragingly."),
-        HumanMessage(content=state["text"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="The user expressed something positive. Respond warmly and encouragingly."
+            ),
+            HumanMessage(content=state["text"]),
+        ]
+    )
     return {"response": response.content}
 
 
 def handle_negative(state: State) -> State:
     """Craft an empathetic reply for negative sentiment."""
-    response = llm.invoke([
-        SystemMessage(content="The user expressed something negative. Respond with empathy and offer support."),
-        HumanMessage(content=state["text"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="The user expressed something negative. Respond with empathy and offer support."
+            ),
+            HumanMessage(content=state["text"]),
+        ]
+    )
     return {"response": response.content}
 
 
 def handle_neutral(state: State) -> State:
     """Craft an informative reply for neutral sentiment."""
-    response = llm.invoke([
-        SystemMessage(content="The user expressed something neutral. Respond helpfully and informatively."),
-        HumanMessage(content=state["text"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="The user expressed something neutral. Respond helpfully and informatively."
+            ),
+            HumanMessage(content=state["text"]),
+        ]
+    )
     return {"response": response.content}
 
 

@@ -142,8 +142,8 @@ graph = create_agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        graph,
-        "Write a binary search function in Python and explain how it works.",
+            graph,
+            "Write a binary search function in Python and explain how it works.",
         )
         print(f"Status: {result.status}")
         result.print_result()

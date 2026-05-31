@@ -3,6 +3,7 @@
 Example 3: LangGraph with MemorySaver checkpointer.
 Verifies session_id -> thread_id mapping for multi-turn conversation.
 """
+
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -39,7 +40,9 @@ class TestCheckpointerSupport:
         task.workflow_instance_id = "wf-ckpt-1"
         task.input_data = {"prompt": "Hi", "session_id": "user-session-abc"}
 
-        with patch.object(graph_with_checkpointer, "stream", return_value=iter(stream_chunks)) as mock_stream:
+        with patch.object(
+            graph_with_checkpointer, "stream", return_value=iter(stream_chunks)
+        ) as mock_stream:
             with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
                     graph_with_checkpointer, "memory_graph", "http://localhost:8080", "k", "s"
@@ -64,7 +67,9 @@ class TestCheckpointerSupport:
         task.workflow_instance_id = "wf-no-session"
         task.input_data = {"prompt": "Hi", "session_id": ""}
 
-        with patch.object(graph_with_checkpointer, "stream", return_value=iter(stream_chunks)) as mock_stream:
+        with patch.object(
+            graph_with_checkpointer, "stream", return_value=iter(stream_chunks)
+        ) as mock_stream:
             with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
                     graph_with_checkpointer, "memory_graph", "http://localhost:8080", "k", "s"

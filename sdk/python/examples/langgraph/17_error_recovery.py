@@ -58,24 +58,30 @@ def should_recover(state: State) -> Literal["process", "recover"]:
 
 def process_data(state: State) -> State:
     """Process the fetched data with LLM analysis (happy path)."""
-    response = llm.invoke([
-        SystemMessage(content="You are a data analyst. Summarize the following data in one sentence."),
-        HumanMessage(content=state["data"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a data analyst. Summarize the following data in one sentence."
+            ),
+            HumanMessage(content=state["data"]),
+        ]
+    )
     return {"response": response.content}
 
 
 def recover_from_error(state: State) -> State:
     """Generate a helpful error message and suggest alternatives (recovery path)."""
-    response = llm.invoke([
-        SystemMessage(
-            content=(
-                "A data fetch error occurred. Apologize briefly, explain what may have gone wrong, "
-                "and suggest 2 alternative approaches the user could try. Be concise."
-            )
-        ),
-        HumanMessage(content=f"Error: {state['error']}\nOriginal query: {state['query']}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "A data fetch error occurred. Apologize briefly, explain what may have gone wrong, "
+                    "and suggest 2 alternative approaches the user could try. Be concise."
+                )
+            ),
+            HumanMessage(content=f"Error: {state['error']}\nOriginal query: {state['query']}"),
+        ]
+    )
     return {"response": f"[RECOVERED FROM ERROR]\n{response.content}"}
 
 
@@ -110,7 +116,6 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(graph)
-
 
         print("\n=== Error recovery path ===")
         result = runtime.run(graph, "intentionally fail this query")

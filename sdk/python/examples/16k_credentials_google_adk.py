@@ -4,16 +4,16 @@
 """Credentials — Google ADK agent with credential injection.
 
 Demonstrates:
-    - runtime.run(adk_agent, secrets=["GITHUB_TOKEN"]) for Google ADK
-    - Same pattern as other frameworks — secrets resolved from server
+    - runtime.run(adk_agent, credentials=["GITHUB_TOKEN"]) for Google ADK
+    - Same pattern as other frameworks — credentials resolved from server
       and injected into os.environ before agent execution
 
 Setup (one-time):
-    agentspan secrets set GITHUB_TOKEN <your-github-token>
+    agentspan credentials set GITHUB_TOKEN <your-github-token>
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - GITHUB_TOKEN stored via `agentspan secrets set`
+    - GITHUB_TOKEN stored via `agentspan credentials set`
     - google-adk installed: pip install google-adk
 """
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         result = runtime.run(
             agent,
             "Is GitHub authentication available?",
-            secrets=["GITHUB_TOKEN"],
+            credentials=["GITHUB_TOKEN"],
         )
         result.print_result()
 
@@ -62,4 +62,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

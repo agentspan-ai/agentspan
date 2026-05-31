@@ -34,16 +34,18 @@ class State(TypedDict):
 
 def plan(state: State) -> State:
     """Use the LLM to decompose the goal into 3-5 concrete, actionable steps."""
-    response = llm.invoke([
-        SystemMessage(
-            content=(
-                "You are a project planner. Break the user's goal into 3-5 concrete, "
-                "actionable steps. Return ONLY a JSON array of step strings. "
-                "Example: [\"Step 1: ...\", \"Step 2: ...\"]"
-            )
-        ),
-        HumanMessage(content=f"Goal: {state['goal']}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "You are a project planner. Break the user's goal into 3-5 concrete, "
+                    "actionable steps. Return ONLY a JSON array of step strings. "
+                    'Example: ["Step 1: ...", "Step 2: ..."]'
+                )
+            ),
+            HumanMessage(content=f"Goal: {state['goal']}"),
+        ]
+    )
 
     raw = response.content.strip()
     # Extract JSON array from the response
@@ -68,15 +70,17 @@ def execute_steps(state: State) -> State:
     results = list(state.get("step_results", []))
 
     for step in state["steps"]:
-        response = llm.invoke([
-            SystemMessage(
-                content=(
-                    "You are an expert executor. Complete the following task step "
-                    "in the context of the overall goal. Provide a concise result (2-3 sentences)."
-                )
-            ),
-            HumanMessage(content=f"Goal: {state['goal']}\nStep to execute: {step}"),
-        ])
+        response = llm.invoke(
+            [
+                SystemMessage(
+                    content=(
+                        "You are an expert executor. Complete the following task step "
+                        "in the context of the overall goal. Provide a concise result (2-3 sentences)."
+                    )
+                ),
+                HumanMessage(content=f"Goal: {state['goal']}\nStep to execute: {step}"),
+            ]
+        )
         results.append(f"[{step}]\n{response.content.strip()}")
 
     return {"step_results": results}
@@ -85,23 +89,20 @@ def execute_steps(state: State) -> State:
 def review(state: State) -> State:
     """Review all step results and produce a final consolidated summary."""
     steps_summary = "\n\n".join(state["step_results"])
-    response = llm.invoke([
-        SystemMessage(
-            content=(
-                "You are a quality reviewer. Given the goal and the results of each execution step, "
-                "write a concise final review that:\n"
-                "1) Confirms whether the goal was achieved\n"
-                "2) Highlights the most important outcomes\n"
-                "3) Notes any gaps or next actions needed"
-            )
-        ),
-        HumanMessage(
-            content=(
-                f"Goal: {state['goal']}\n\n"
-                f"Step Results:\n{steps_summary}"
-            )
-        ),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "You are a quality reviewer. Given the goal and the results of each execution step, "
+                    "write a concise final review that:\n"
+                    "1) Confirms whether the goal was achieved\n"
+                    "2) Highlights the most important outcomes\n"
+                    "3) Notes any gaps or next actions needed"
+                )
+            ),
+            HumanMessage(content=(f"Goal: {state['goal']}\n\nStep Results:\n{steps_summary}")),
+        ]
+    )
     return {"review": response.content}
 
 
@@ -120,8 +121,8 @@ graph = builder.compile(name="planner_agent")
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        graph,
-        "Launch a new open-source Python library for data validation.",
+            graph,
+            "Launch a new open-source Python library for data validation.",
         )
         print(f"Status: {result.status}")
         result.print_result()

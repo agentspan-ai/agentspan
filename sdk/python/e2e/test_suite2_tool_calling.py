@@ -38,7 +38,7 @@ def free_tool(x: str) -> str:
     return "free:ok"
 
 
-@tool(secrets=[CRED_A])
+@tool(credentials=[CRED_A])
 def paid_tool_a(x: str) -> str:
     """A tool that needs E2E_CRED_A. Returns first 3 chars of credential."""
     cred_val = os.environ.get(CRED_A)
@@ -50,7 +50,7 @@ def paid_tool_a(x: str) -> str:
     return f"paid_a:{cred_val[:3]}"
 
 
-@tool(secrets=[CRED_B])
+@tool(credentials=[CRED_B])
 def paid_tool_b(x: str) -> str:
     """A tool that needs E2E_CRED_B. Returns first 3 chars of credential."""
     cred_val = os.environ.get(CRED_B)
@@ -68,7 +68,7 @@ def paid_tool_b(x: str) -> str:
 LEAK_CRED = "E2E_MASK_LEAK_KEY"
 
 
-@tool(secrets=[LEAK_CRED])
+@tool(credentials=[LEAK_CRED])
 def leaky_tool(x: str) -> str:
     """Tool that deliberately echoes its full credential value (leak simulation)."""
     cred_val = os.environ.get(LEAK_CRED)
@@ -236,7 +236,9 @@ def _credential_audit(agent: Agent) -> str:
                 cred_statuses.append(f"{name}: {status}")
                 if name not in stored:
                     missing.append(f"{name} (needed by {tool_name})")
-            lines.append(f"  {tool_name}: requires [{', '.join(str(c) for c in creds)}] — {', '.join(cred_statuses)}")
+            lines.append(
+                f"  {tool_name}: requires [{', '.join(str(c) for c in creds)}] — {', '.join(cred_statuses)}"
+            )
 
     header = "Credential audit (tool requirements vs server store):"
     report = "\n".join([header] + lines)
@@ -249,9 +251,7 @@ def _assert_run_completed(result, step_name: str, agent: Agent | None = None):
     """Assert a run completed successfully with actionable diagnostics."""
     diag = _run_diagnostic(result)
 
-    assert result.execution_id, (
-        f"[{step_name}] No execution_id returned. {diag}"
-    )
+    assert result.execution_id, f"[{step_name}] No execution_id returned. {diag}"
 
     # Check for stuck-at-tool-calls: the run returned but tools didn't execute
     output = result.output
@@ -269,8 +269,7 @@ def _assert_run_completed(result, step_name: str, agent: Agent | None = None):
         )
 
     assert result.status == "COMPLETED", (
-        f"[{step_name}] Run did not complete. {diag}\n"
-        f"  {_tool_diagnostics(result.execution_id)}"
+        f"[{step_name}] Run did not complete. {diag}\n  {_tool_diagnostics(result.execution_id)}"
     )
 
 
@@ -338,8 +337,7 @@ class TestSuite2ToolCalling:
             result = runtime.run(agent, "Call all three tools.", timeout=TIMEOUT)
 
             assert result.execution_id, (
-                f"[Step 2: No credentials] No execution_id returned. "
-                f"{_run_diagnostic(result)}"
+                f"[Step 2: No credentials] No execution_id returned. {_run_diagnostic(result)}"
             )
 
             # The run should reach a terminal state (COMPLETED or FAILED).
@@ -371,9 +369,7 @@ class TestSuite2ToolCalling:
             os.environ[CRED_A] = "from-env-aaa"
             os.environ[CRED_B] = "from-env-bbb"
             try:
-                result_env = runtime.run(
-                    agent, "Call all three tools.", timeout=TIMEOUT
-                )
+                result_env = runtime.run(agent, "Call all three tools.", timeout=TIMEOUT)
 
                 # The paid tools should STILL fail despite env vars being set.
                 # The SDK resolves credentials from the server, not env.
@@ -398,9 +394,7 @@ class TestSuite2ToolCalling:
             cli_credentials.set(CRED_A, "secret-aaa-value")
             cli_credentials.set(CRED_B, "secret-bbb-value")
 
-            result_with_creds = runtime.run(
-                agent, "Call all three tools.", timeout=TIMEOUT
-            )
+            result_with_creds = runtime.run(agent, "Call all three tools.", timeout=TIMEOUT)
             _assert_run_completed(result_with_creds, "Step 4: With credentials", agent)
 
             # Primary: validate via workflow task data
@@ -411,8 +405,7 @@ class TestSuite2ToolCalling:
                 f"  found_tasks={list(tool_tasks_s4.keys())}"
             )
             assert tool_tasks_s4["free_tool"]["status"] == "COMPLETED", (
-                f"[Step 4] free_tool not COMPLETED.\n"
-                f"  task={tool_tasks_s4['free_tool']}"
+                f"[Step 4] free_tool not COMPLETED.\n  task={tool_tasks_s4['free_tool']}"
             )
 
             assert "paid_tool_a" in tool_tasks_s4, (
@@ -420,8 +413,7 @@ class TestSuite2ToolCalling:
                 f"  found_tasks={list(tool_tasks_s4.keys())}"
             )
             assert tool_tasks_s4["paid_tool_a"]["status"] == "COMPLETED", (
-                f"[Step 4] paid_tool_a not COMPLETED.\n"
-                f"  task={tool_tasks_s4['paid_tool_a']}"
+                f"[Step 4] paid_tool_a not COMPLETED.\n  task={tool_tasks_s4['paid_tool_a']}"
             )
             s4_paid_a_output = str(tool_tasks_s4["paid_tool_a"]["output"])
             assert "sec" in s4_paid_a_output, (
@@ -435,8 +427,7 @@ class TestSuite2ToolCalling:
                 f"  found_tasks={list(tool_tasks_s4.keys())}"
             )
             assert tool_tasks_s4["paid_tool_b"]["status"] == "COMPLETED", (
-                f"[Step 4] paid_tool_b not COMPLETED.\n"
-                f"  task={tool_tasks_s4['paid_tool_b']}"
+                f"[Step 4] paid_tool_b not COMPLETED.\n  task={tool_tasks_s4['paid_tool_b']}"
             )
             s4_paid_b_output = str(tool_tasks_s4["paid_tool_b"]["output"])
             assert "sec" in s4_paid_b_output, (
@@ -470,9 +461,7 @@ class TestSuite2ToolCalling:
             cli_credentials.set(CRED_A, "newval-xxx-updated")
             cli_credentials.set(CRED_B, "newval-yyy-updated")
 
-            result_updated = runtime.run(
-                agent, "Call all three tools.", timeout=TIMEOUT
-            )
+            result_updated = runtime.run(agent, "Call all three tools.", timeout=TIMEOUT)
             _assert_run_completed(result_updated, "Step 5: Updated credentials", agent)
 
             # Primary: validate via workflow task data
@@ -483,8 +472,7 @@ class TestSuite2ToolCalling:
                 f"  found_tasks={list(tool_tasks_s5.keys())}"
             )
             assert tool_tasks_s5["paid_tool_a"]["status"] == "COMPLETED", (
-                f"[Step 5] paid_tool_a not COMPLETED.\n"
-                f"  task={tool_tasks_s5['paid_tool_a']}"
+                f"[Step 5] paid_tool_a not COMPLETED.\n  task={tool_tasks_s5['paid_tool_a']}"
             )
             s5_paid_a_output = str(tool_tasks_s5["paid_tool_a"]["output"])
             assert "new" in s5_paid_a_output, (
@@ -561,9 +549,7 @@ class TestSuite2OutputMasking:
         # watches), NOT Conductor's raw /api/workflow endpoint.
         base = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
         base_url = base.rstrip("/").replace("/api", "")
-        resp = requests.get(
-            f"{base_url}/api/agent/executions/{result.execution_id}", timeout=15
-        )
+        resp = requests.get(f"{base_url}/api/agent/executions/{result.execution_id}", timeout=15)
         assert resp.status_code == 200, (
             f"execution-detail fetch failed: {resp.status_code} {resp.text[:200]}"
         )

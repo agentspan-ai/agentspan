@@ -31,7 +31,7 @@ import java.util.Map;
  * {@code docs/design/secret-injection-contract.md} §6 rule 1: {@code System.getenv()}
  * is immutable at runtime, so env-injection isn't possible without reflection
  * hacks. The fetcher returns values to the caller, who passes them to tool
- * handlers via {@link ai.agentspan.runtime.Secrets}.</p>
+ * handlers via {@link ai.agentspan.Credentials}.</p>
  *
  * <p>Error contract — every failure mode produces a typed exception. Silent
  * swallow (the bug class that affected .NET pre-fix) is structurally impossible

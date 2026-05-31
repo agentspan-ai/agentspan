@@ -24,6 +24,7 @@ from settings import settings
 
 # ── Stage tools ──────────────────────────────────────────────────────
 
+
 @tool
 def create_concept(title: str, genre: str, logline: str) -> dict:
     """Create a movie concept document.
@@ -47,8 +48,7 @@ def create_concept(title: str, genre: str, logline: str) -> dict:
 
 
 @tool
-def write_scene(scene_number: int, location: str, action: str,
-                dialogue: str = "") -> dict:
+def write_scene(scene_number: int, location: str, action: str, dialogue: str = "") -> dict:
     """Write a single scene for the script.
 
     Args:
@@ -71,8 +71,7 @@ def write_scene(scene_number: int, location: str, action: str,
 
 
 @tool
-def describe_visual(scene_number: int, shot_type: str,
-                    description: str) -> dict:
+def describe_visual(scene_number: int, shot_type: str, description: str) -> dict:
     """Describe visual direction for a scene.
 
     Args:
@@ -93,8 +92,7 @@ def describe_visual(scene_number: int, shot_type: str,
 
 
 @tool
-def specify_audio(scene_number: int, music_mood: str,
-                  sound_effects: str) -> dict:
+def specify_audio(scene_number: int, music_mood: str, sound_effects: str) -> dict:
     """Specify audio direction for a scene.
 
     Args:
@@ -115,8 +113,7 @@ def specify_audio(scene_number: int, music_mood: str,
 
 
 @tool
-def assemble_production(title: str, total_scenes: int,
-                        estimated_runtime: str) -> dict:
+def assemble_production(title: str, total_scenes: int, estimated_runtime: str) -> dict:
     """Assemble final production notes.
 
     Args:
@@ -215,4 +212,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(pipeline)
-

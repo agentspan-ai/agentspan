@@ -6,4 +6,3 @@ from agentspan.agents.openai_compat import RunResult, Runner
 from agentspan.agents.tool import tool as function_tool
 
 __all__ = ["Runner", "RunResult", "function_tool"]
-

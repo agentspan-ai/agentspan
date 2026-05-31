@@ -60,8 +60,8 @@ from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 
 # Filesystem IPC between main process and worker processes (separate OS PIDs).
 _ipc_dir = Path(tempfile.mkdtemp(prefix="live_dashboard_"))
-_BATCH_DIR = _ipc_dir / "batches"    # one file per batch dispatched by Feeder
-_DISPLAY_DIR = _ipc_dir / "displays" # one file per display_dashboard call by Monitor
+_BATCH_DIR = _ipc_dir / "batches"  # one file per batch dispatched by Feeder
+_DISPLAY_DIR = _ipc_dir / "displays"  # one file per display_dashboard call by Monitor
 _BATCH_DIR.mkdir()
 _DISPLAY_DIR.mkdir()
 _MONITOR_ID_FILE = _ipc_dir / "monitor_id.txt"  # written by main, read by Feeder tool
@@ -70,6 +70,7 @@ _MONITOR_ID_FILE = _ipc_dir / "monitor_id.txt"  # written by main, read by Feede
 # ---------------------------------------------------------------------------
 # Monitor agent
 # ---------------------------------------------------------------------------
+
 
 def build_monitor() -> Agent:
     """Monitor: pulls up to 10 metrics per call and prints aggregated stats."""
@@ -116,6 +117,7 @@ def build_monitor() -> Agent:
 # ---------------------------------------------------------------------------
 # Feeder agent
 # ---------------------------------------------------------------------------
+
 
 def build_feeder(runtime: AgentRuntime) -> Agent:
     """Feeder: generates metric samples and pushes them into the Monitor's queue."""
@@ -173,9 +175,9 @@ def build_feeder(runtime: AgentRuntime) -> Agent:
 # Main orchestration
 # ---------------------------------------------------------------------------
 
-TOTAL_BATCHES = 6        # total metric batches to push (5 samples each → 30 metrics)
-SAMPLES_PER_BATCH = 5   # push_metrics_batch sends this many samples each call
-MONITOR_BATCH_SIZE = 10 # wait_for_message_tool batch_size for Monitor
+TOTAL_BATCHES = 6  # total metric batches to push (5 samples each → 30 metrics)
+SAMPLES_PER_BATCH = 5  # push_metrics_batch sends this many samples each call
+MONITOR_BATCH_SIZE = 10  # wait_for_message_tool batch_size for Monitor
 # How many display_dashboard calls to expect before sending stop:
 EXPECTED_DISPLAYS = math.ceil(TOTAL_BATCHES * SAMPLES_PER_BATCH / MONITOR_BATCH_SIZE)
 
@@ -187,15 +189,19 @@ try:
         _MONITOR_ID_FILE.write_text(monitor_id)
         print(f"Monitor  started: {monitor_id}")
 
-        feeder_handle = runtime.start(build_feeder(runtime), "Begin. Wait for orchestrator signals.")
+        feeder_handle = runtime.start(
+            build_feeder(runtime), "Begin. Wait for orchestrator signals."
+        )
         feeder_id = feeder_handle.execution_id
         print(f"Feeder   started: {feeder_id}\n")
 
         # Give agents time to reach their first wait_for_message call.
         time.sleep(4)
 
-        print(f"Sending {TOTAL_BATCHES} batch signals to Feeder (5 metrics each = "
-              f"{TOTAL_BATCHES * 5} total samples, Monitor reads ≤10 per call)...\n")
+        print(
+            f"Sending {TOTAL_BATCHES} batch signals to Feeder (5 metrics each = "
+            f"{TOTAL_BATCHES * 5} total samples, Monitor reads ≤10 per call)...\n"
+        )
 
         # Send batch signals two at a time to let the Feeder bundle them.
         runtime.send_message(feeder_id, {"batches": TOTAL_BATCHES // 2})
@@ -205,7 +211,9 @@ try:
         print("Waiting for all batches to be dispatched...")
         while len(list(_BATCH_DIR.iterdir())) < TOTAL_BATCHES:
             time.sleep(0.1)
-        print(f"  All {TOTAL_BATCHES} batches dispatched ({TOTAL_BATCHES * SAMPLES_PER_BATCH} samples in Monitor's queue).\n")
+        print(
+            f"  All {TOTAL_BATCHES} batches dispatched ({TOTAL_BATCHES * SAMPLES_PER_BATCH} samples in Monitor's queue).\n"
+        )
 
         # Tail _DISPLAY_DIR: print summaries as they arrive, wait until all done.
         # Without this barrier, AgentRuntime.__exit__ kills the display_dashboard

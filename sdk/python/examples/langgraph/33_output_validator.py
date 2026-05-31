@@ -41,19 +41,23 @@ def generate_profile(state: State) -> State:
     attempt = state.get("attempts", 0) + 1
     error_hint = ""
     if state.get("validation_error"):
-        error_hint = f"\n\nPrevious attempt failed validation: {state['validation_error']}. Please fix this."
+        error_hint = (
+            f"\n\nPrevious attempt failed validation: {state['validation_error']}. Please fix this."
+        )
 
-    response = llm.invoke([
-        SystemMessage(
-            content=(
-                "Generate a fictional person profile as a JSON object with exactly these fields: "
-                "name (string), age (integer), occupation (string), hobby (string). "
-                "Return ONLY valid JSON — no markdown, no backticks, no explanation."
-                + error_hint
-            )
-        ),
-        HumanMessage(content=state["prompt"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "Generate a fictional person profile as a JSON object with exactly these fields: "
+                    "name (string), age (integer), occupation (string), hobby (string). "
+                    "Return ONLY valid JSON — no markdown, no backticks, no explanation."
+                    + error_hint
+                )
+            ),
+            HumanMessage(content=state["prompt"]),
+        ]
+    )
     return {"raw_output": response.content.strip(), "attempts": attempt}
 
 
@@ -97,7 +101,9 @@ def finalize(state: State) -> State:
             f"  (Attempts:  {state.get('attempts', 1)})"
         )
         return {"raw_output": summary}
-    return {"raw_output": f"Failed to generate valid output after {state.get('attempts', 1)} attempts."}
+    return {
+        "raw_output": f"Failed to generate valid output after {state.get('attempts', 1)} attempts."
+    }
 
 
 builder = StateGraph(State)

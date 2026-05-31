@@ -25,7 +25,11 @@ from settings import settings
 @tool(approval_required=True)
 def publish_article(title: str, body: str) -> dict:
     """Publish an article to the blog. Requires editorial approval."""
-    return {"status": "published", "title": title, "url": f"/blog/{title.lower().replace(' ', '-')}"}
+    return {
+        "status": "published",
+        "title": title,
+        "url": f"/blog/{title.lower().replace(' ', '-')}",
+    }
 
 
 agent = Agent(
@@ -85,4 +89,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

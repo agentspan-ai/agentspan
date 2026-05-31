@@ -39,7 +39,7 @@ safety_guard = LLMGuardrail(
     name="content_safety",
     position=Position.OUTPUT,
     on_fail=OnFail.RETRY,
-    max_tokens=10000
+    max_tokens=10000,
 )
 
 # ── Agent with LLM guardrail ────────────────────────────────────────
@@ -71,4 +71,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

@@ -48,30 +48,42 @@ def supervisor(state: State) -> State:
 
 
 def researcher(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(content="You are a researcher. Gather key facts and insights about the topic in 3-5 bullet points."),
-        HumanMessage(content=f"Topic: {state['task']}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a researcher. Gather key facts and insights about the topic in 3-5 bullet points."
+            ),
+            HumanMessage(content=f"Topic: {state['task']}"),
+        ]
+    )
     completed = list(state.get("completed", []))
     completed.append("researcher")
     return {"research": response.content.strip(), "completed": completed}
 
 
 def writer(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(content="You are a writer. Using the research notes, write a short article (3 paragraphs)."),
-        HumanMessage(content=f"Topic: {state['task']}\n\nResearch:\n{state['research']}"),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a writer. Using the research notes, write a short article (3 paragraphs)."
+            ),
+            HumanMessage(content=f"Topic: {state['task']}\n\nResearch:\n{state['research']}"),
+        ]
+    )
     completed = list(state.get("completed", []))
     completed.append("writer")
     return {"draft": response.content.strip(), "completed": completed}
 
 
 def editor(state: State) -> State:
-    response = llm.invoke([
-        SystemMessage(content="You are an editor. Improve clarity, flow, and correctness of the article. Return the polished version only."),
-        HumanMessage(content=state["draft"]),
-    ])
+    response = llm.invoke(
+        [
+            SystemMessage(
+                content="You are an editor. Improve clarity, flow, and correctness of the article. Return the polished version only."
+            ),
+            HumanMessage(content=state["draft"]),
+        ]
+    )
     completed = list(state.get("completed", []))
     completed.append("editor")
     return {"final_article": response.content.strip(), "completed": completed}

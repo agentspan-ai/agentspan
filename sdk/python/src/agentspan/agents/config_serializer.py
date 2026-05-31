@@ -70,8 +70,8 @@ class AgentConfigSerializer:
             }
             # Declared credential names — wire-format key is "credentials"
             # to match AgentConfig#credentials on the server (see note above).
-            if hasattr(agent, "secrets") and agent.secrets:
-                stub["credentials"] = [c for c in agent.secrets if isinstance(c, str)]
+            if hasattr(agent, "credentials") and agent.credentials:
+                stub["credentials"] = [c for c in agent.credentials if isinstance(c, str)]
             return stub
 
         # Strategy is emitted when the agent has any sub-agent declaration:
@@ -288,8 +288,8 @@ class AgentConfigSerializer:
 
         # Agent-level declared credentials — wire key is "credentials" to
         # match the server's AgentConfig#credentials field.
-        if hasattr(agent, "secrets") and agent.secrets:
-            config["credentials"] = [c for c in agent.secrets if isinstance(c, str)]
+        if hasattr(agent, "credentials") and agent.credentials:
+            config["credentials"] = [c for c in agent.credentials if isinstance(c, str)]
 
         # Remove None values for cleaner JSON
         return {k: v for k, v in config.items() if v is not None}
@@ -336,13 +336,13 @@ class AgentConfigSerializer:
 
         # Declared credential names — must land in config so the server can
         # extract them into the execution token's declared_names list (bounds
-        # /api/workers/secrets resolution). The wire-format key is "credentials"
+        # /api/workers/credentials resolution). The wire-format key is "credentials"
         # because the server-side compiler (AgentService#collectCredentialsRecursive)
         # reads `tool.config["credentials"]`. The SDK-facing parameter is named
-        # `secrets=` after the user-facing rename; only the wire key kept the
+        # `credentials=` after the user-facing rename; only the wire key kept the
         # old name to avoid a cross-language compiler/serializer fan-out.
-        if td.secrets:
-            cred_names = [c if isinstance(c, str) else c.env_var for c in td.secrets]
+        if td.credentials:
+            cred_names = [c if isinstance(c, str) else c.env_var for c in td.credentials]
             if "config" not in result:
                 result["config"] = {}
             result["config"]["credentials"] = cred_names

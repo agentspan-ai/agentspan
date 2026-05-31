@@ -60,10 +60,10 @@ class TestRunFunction:
 
         from agentspan.agents.run import run
 
-        run(agent, "Hi", secrets=["OPENAI_API_KEY"], runtime=mock_runtime)
+        run(agent, "Hi", credentials=["OPENAI_API_KEY"], runtime=mock_runtime)
 
         call_kwargs = mock_runtime.run.call_args
-        assert call_kwargs.kwargs["secrets"] == ["OPENAI_API_KEY"]
+        assert call_kwargs.kwargs["credentials"] == ["OPENAI_API_KEY"]
 
 
 class TestStartFunction:
@@ -158,10 +158,10 @@ class TestRunAsyncFunction:
 
         from agentspan.agents.run import run_async
 
-        await run_async(agent, "Hi", secrets=["OPENAI_API_KEY"], runtime=mock_runtime)
+        await run_async(agent, "Hi", credentials=["OPENAI_API_KEY"], runtime=mock_runtime)
 
         call_kwargs = mock_runtime.run_async.call_args
-        assert call_kwargs.kwargs["secrets"] == ["OPENAI_API_KEY"]
+        assert call_kwargs.kwargs["credentials"] == ["OPENAI_API_KEY"]
 
 
 class TestConfigure:

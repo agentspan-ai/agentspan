@@ -837,7 +837,7 @@ class TestCircuitBreakerReset:
 
 
 class TestToolCredentialParams:
-    """@tool decorator: secrets param."""
+    """@tool decorator: credentials param."""
 
     def test_secrets_defaults_to_empty_list(self):
         @tool
@@ -845,19 +845,19 @@ class TestToolCredentialParams:
             """A tool."""
             return x
 
-        assert my_tool._tool_def.secrets == []
+        assert my_tool._tool_def.credentials == []
 
     def test_secrets_string_list(self):
-        @tool(secrets=["GITHUB_TOKEN", "GH_TOKEN"])
+        @tool(credentials=["GITHUB_TOKEN", "GH_TOKEN"])
         def my_tool(x: str) -> str:
             """A tool."""
             return x
 
-        assert "GITHUB_TOKEN" in my_tool._tool_def.secrets
-        assert "GH_TOKEN" in my_tool._tool_def.secrets
+        assert "GITHUB_TOKEN" in my_tool._tool_def.credentials
+        assert "GH_TOKEN" in my_tool._tool_def.credentials
 
     def test_existing_params_still_work_alongside_new_params(self):
-        @tool(name="custom_name", approval_required=True, secrets=["KEY"])
+        @tool(name="custom_name", approval_required=True, credentials=["KEY"])
         def my_tool(x: str) -> str:
             """A tool."""
             return x
@@ -865,4 +865,4 @@ class TestToolCredentialParams:
         td = my_tool._tool_def
         assert td.name == "custom_name"
         assert td.approval_required is True
-        assert "KEY" in td.secrets
+        assert "KEY" in td.credentials

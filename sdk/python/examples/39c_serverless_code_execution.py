@@ -44,7 +44,9 @@ class _ExecuteHandler(BaseHTTPRequestHandler):
         try:
             proc = subprocess.run(
                 ["python3", "-c", code],
-                capture_output=True, text=True, timeout=timeout,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
             )
             resp = {"output": proc.stdout, "error": proc.stderr, "exit_code": proc.returncode}
         except subprocess.TimeoutExpired:
@@ -105,4 +107,3 @@ if __name__ == "__main__":
         # runtime.serve(serverless_coder)
 
         mock_server.shutdown()
-

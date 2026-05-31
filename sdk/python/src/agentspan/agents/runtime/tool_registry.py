@@ -28,7 +28,13 @@ class ToolRegistry:
     locally for Conductor task polling.
     """
 
-    def register_tool_workers(self, tools: List[Any], agent_name: str, domain: Optional[str] = None, agent_stateful: bool = False) -> None:
+    def register_tool_workers(
+        self,
+        tools: List[Any],
+        agent_name: str,
+        domain: Optional[str] = None,
+        agent_stateful: bool = False,
+    ) -> None:
         """Register tool functions as Conductor workers and populate global registries.
 
         Registers each ``@tool`` function as a Conductor worker task so that
@@ -68,7 +74,12 @@ class ToolRegistry:
                 wrapper = make_tool_worker(td.func, td.name, guardrails=guardrails, tool_def=td)
                 worker_task(
                     task_definition_name=td.name,
-                    task_def=_default_task_def(td.name, retry_count=td.retry_count, retry_delay_seconds=td.retry_delay_seconds, retry_policy=td.retry_policy),
+                    task_def=_default_task_def(
+                        td.name,
+                        retry_count=td.retry_count,
+                        retry_delay_seconds=td.retry_delay_seconds,
+                        retry_policy=td.retry_policy,
+                    ),
                     register_task_def=True,
                     overwrite_task_def=True,
                     domain=domain if (agent_stateful or td.stateful) else None,

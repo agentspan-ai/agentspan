@@ -1,10 +1,10 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""get_secret() accessor — read resolved secrets without going through env vars.
+"""get_secret() accessor — read resolved credentials without going through env vars.
 
 The worker framework calls ``set_credential_context(secrets_dict)`` before
-executing a tool, making secrets available via ``get_secret(name)`` inside
+executing a tool, making credentials available via ``get_secret(name)`` inside
 that tool's call frame.
 
 Uses ``contextvars.ContextVar`` so each thread (Conductor worker thread) /
@@ -15,7 +15,7 @@ Prefer this accessor over ``os.environ`` when the tool's framework SDK accepts
 an explicit ``api_key`` parameter — it avoids touching the shared
 ``os.environ`` entirely (see ``docs/design/secret-injection-contract.md``)::
 
-    @tool(secrets=["OPENAI_API_KEY"])
+    @tool(credentials=["OPENAI_API_KEY"])
     def call_openai(prompt: str) -> str:
         key = get_secret("OPENAI_API_KEY")
         client = openai.OpenAI(api_key=key)
@@ -38,16 +38,16 @@ _credential_context: contextvars.ContextVar[Optional[Dict[str, str]]] = contextv
 )
 
 
-def set_credential_context(secrets: Dict[str, str]) -> None:
+def set_credential_context(credentials: Dict[str, str]) -> None:
     """Set the credential context for the current execution context (thread/task).
 
     Called by the worker framework (``_dispatch.py``) before executing a tool
-    that declares ``secrets=[...]``.
+    that declares ``credentials=[...]``.
 
     Args:
-        secrets: Dict mapping credential name → plaintext value.
+        credentials: Dict mapping credential name → plaintext value.
     """
-    _credential_context.set(secrets)
+    _credential_context.set(credentials)
 
 
 def clear_credential_context() -> None:
@@ -61,7 +61,7 @@ def clear_credential_context() -> None:
 def get_secret(name: str) -> str:
     """Read a credential value from the current execution context.
 
-    Only usable inside ``@tool(secrets=[...])`` functions. The worker framework
+    Only usable inside ``@tool(credentials=[...])`` functions. The worker framework
     populates the context before your tool runs.
 
     Args:
@@ -76,7 +76,7 @@ def get_secret(name: str) -> str:
 
     Example::
 
-        @tool(secrets=["OPENAI_API_KEY"])
+        @tool(credentials=["OPENAI_API_KEY"])
         def call_openai(prompt: str) -> str:
             key = get_secret("OPENAI_API_KEY")
             client = openai.OpenAI(api_key=key)

@@ -68,7 +68,9 @@ class State(TypedDict):
 
 def call_model(state: State) -> State:
     """Call the LLM; it may emit tool calls or a final answer."""
-    system = SystemMessage(content="You are a helpful geography assistant. Use tools to look up facts.")
+    system = SystemMessage(
+        content="You are a helpful geography assistant. Use tools to look up facts."
+    )
     response = llm_with_tools.invoke([system] + state["messages"])
     return {"messages": [response]}
 
@@ -88,8 +90,8 @@ graph = builder.compile(name="tool_node_agent")
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        graph,
-        "What is the capital and population of Japan and Brazil?",
+            graph,
+            "What is the capital and population of Japan and Brazil?",
         )
         print(f"Status: {result.status}")
         result.print_result()

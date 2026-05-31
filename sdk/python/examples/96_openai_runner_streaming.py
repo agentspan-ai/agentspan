@@ -43,7 +43,7 @@ from agents import Agent
 
 # ── Only this line changes ──────────────────────────────────────────────────
 # from agents import Runner          # ← original (runs directly on OpenAI)
-from agentspan import Runner         # ← agentspan (runs on Agentspan)
+from agentspan import Runner  # ← agentspan (runs on Agentspan)
 # ───────────────────────────────────────────────────────────────────────────
 
 

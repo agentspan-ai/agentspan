@@ -130,10 +130,7 @@ def _make_cli_tool(
 
         # Shell gate
         if shell and not allow_shell:
-            raise ValueError(
-                "Shell mode is disabled for this agent. "
-                "Do not set shell=True."
-            )
+            raise ValueError("Shell mode is disabled for this agent. Do not set shell=True.")
 
         # Normalise args
         if args is None:
@@ -147,9 +144,7 @@ def _make_cli_tool(
         try:
             if shell:
                 # Build a safe shell command string
-                cmd_str = command + " " + " ".join(
-                    shlex.quote(str(a)) for a in args
-                )
+                cmd_str = command + " " + " ".join(shlex.quote(str(a)) for a in args)
                 result = subprocess.run(
                     cmd_str,
                     shell=True,
@@ -188,21 +183,14 @@ def _make_cli_tool(
                 }
 
         except subprocess.TimeoutExpired:
-            raise TerminalToolError(
-                f"Command timed out after {timeout}s"
-            )
+            raise TerminalToolError(f"Command timed out after {timeout}s")
         except FileNotFoundError:
-            raise TerminalToolError(
-                f"Command not found: {command}"
-            )
+            raise TerminalToolError(f"Command not found: {command}")
         except Exception as e:
             raise TerminalToolError(str(e))
 
     # Build dynamic description
-    desc = (
-        "Run a CLI command directly. "
-        f"Timeout: {timeout}s."
-    )
+    desc = f"Run a CLI command directly. Timeout: {timeout}s."
     if allowed_commands:
         desc += f" Allowed commands: {', '.join(sorted(allowed_commands))}."
     if not allow_shell:

@@ -43,7 +43,7 @@ Example shape::
 
 This example runs WITHOUT a real Confluence backend — the
 ``planner_context`` is text-only by default so you can run it against
-a stock server without setting up secrets. The Context(url=…)
+a stock server without setting up credentials. The Context(url=…)
 example above is commented in the code below as a reference for how
 real installations wire credentialed docs.
 

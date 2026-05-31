@@ -23,9 +23,7 @@ from settings import settings
 independent_summarizer = Agent(
     name="independent_summarizer",
     model=settings.llm_model,
-    instruction=(
-        "You are a summarizer. Summarize any text given to you concisely."
-    ),
+    instruction=("You are a summarizer. Summarize any text given to you concisely."),
     include_contents="none",  # No parent context
 )
 
@@ -33,9 +31,7 @@ independent_summarizer = Agent(
 context_aware_helper = Agent(
     name="context_aware_helper",
     model=settings.llm_model,
-    instruction=(
-        "You are a helpful assistant that builds on prior conversation context."
-    ),
+    instruction=("You are a helpful assistant that builds on prior conversation context."),
 )
 
 coordinator = Agent(
@@ -52,10 +48,10 @@ coordinator = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        coordinator,
-        "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
-        "This sentence contains every letter of the alphabet and is commonly "
-        "used for typography testing.'",
+            coordinator,
+            "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
+            "This sentence contains every letter of the alphabet and is commonly "
+            "used for typography testing.'",
         )
         result.print_result()
 

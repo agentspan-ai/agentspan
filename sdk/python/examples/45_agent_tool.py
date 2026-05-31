@@ -96,8 +96,7 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
             manager,
-            "Research Python and Rust, then calculate how many use cases they "
-            "have combined.",
+            "Research Python and Rust, then calculate how many use cases they have combined.",
         )
         result.print_result()
 
@@ -109,4 +108,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(manager)
-

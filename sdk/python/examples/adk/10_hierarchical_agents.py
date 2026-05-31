@@ -25,6 +25,7 @@ from settings import settings
 
 # ── Level 3: Specialist tools ─────────────────────────────────────────
 
+
 def check_api_health(service: str) -> dict:
     """Check the health status of an API service.
 
@@ -39,7 +40,9 @@ def check_api_health(service: str) -> dict:
         "payments": {"status": "degraded", "latency_ms": 350, "uptime": "99.5%"},
         "users": {"status": "healthy", "latency_ms": 28, "uptime": "99.98%"},
     }
-    return services.get(service.lower(), {"status": "unknown", "message": f"Service '{service}' not found"})
+    return services.get(
+        service.lower(), {"status": "unknown", "message": f"Service '{service}' not found"}
+    )
 
 
 def check_error_logs(service: str, hours: int = 1) -> dict:
@@ -170,9 +173,9 @@ coordinator = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        coordinator,
-        "Give me a full platform health assessment. Focus on the payments service "
-        "which seems to be having issues.",
+            coordinator,
+            "Give me a full platform health assessment. Focus on the payments service "
+            "which seems to be having issues.",
         )
         result.print_result()
 

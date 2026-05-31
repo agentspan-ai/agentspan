@@ -63,9 +63,7 @@ def calculate(expression: str) -> str:
     Supports +, -, *, /, **, sqrt, and basic math operations.
     """
     try:
-        result = eval(
-            expression, {"__builtins__": {}}, {"sqrt": math.sqrt, "pi": math.pi}
-        )
+        result = eval(expression, {"__builtins__": {}}, {"sqrt": math.sqrt, "pi": math.pi})
         return f"{result}"
     except Exception as e:
         return f"Error: {e}"
@@ -126,14 +124,12 @@ class TestSuite11LangGraph:
 
         # Full extraction: must have 'model' key
         assert "model" in raw_config, (
-            f"[HelloWorld] 'model' missing from rawConfig. "
-            f"Keys: {list(raw_config.keys())}"
+            f"[HelloWorld] 'model' missing from rawConfig. Keys: {list(raw_config.keys())}"
         )
 
         # Must have 'tools' key (empty list)
         assert "tools" in raw_config, (
-            f"[HelloWorld] 'tools' missing from rawConfig. "
-            f"Keys: {list(raw_config.keys())}"
+            f"[HelloWorld] 'tools' missing from rawConfig. Keys: {list(raw_config.keys())}"
         )
         assert isinstance(raw_config["tools"], list), (
             f"[HelloWorld] tools is not a list: {type(raw_config['tools'])}"
@@ -154,8 +150,7 @@ class TestSuite11LangGraph:
 
         # No workers for a no-tool agent
         assert len(workers) == 0, (
-            f"[HelloWorld] Expected 0 workers, got {len(workers)}: "
-            f"{[w.name for w in workers]}"
+            f"[HelloWorld] Expected 0 workers, got {len(workers)}: {[w.name for w in workers]}"
         )
 
     # ── 3. React agent with tools — full extraction ──────────────────
@@ -165,16 +160,12 @@ class TestSuite11LangGraph:
         from langchain.agents import create_agent
 
         llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-        graph = create_agent(
-            llm, tools=[calculate, count_words], name="react_tools_test"
-        )
+        graph = create_agent(llm, tools=[calculate, count_words], name="react_tools_test")
 
         raw_config, workers = serialize_langgraph(graph)
 
         # Model present
-        assert "model" in raw_config, (
-            f"[React] 'model' missing. Keys: {list(raw_config.keys())}"
-        )
+        assert "model" in raw_config, f"[React] 'model' missing. Keys: {list(raw_config.keys())}"
         assert "gpt-4o-mini" in str(raw_config["model"]), (
             f"[React] Wrong model: {raw_config['model']}"
         )
@@ -190,25 +181,20 @@ class TestSuite11LangGraph:
         for t in tools:
             ref = t.get("_worker_ref") or t.get("name")
             assert ref, f"[React] Tool missing _worker_ref: {t}"
-            assert t.get("description"), (
-                f"[React] Tool '{ref}' missing description"
-            )
+            assert t.get("description"), f"[React] Tool '{ref}' missing description"
             params = t.get("parameters", {})
             assert params.get("type") == "object", (
                 f"[React] Tool '{ref}' parameters.type != 'object'. "
                 f"Got: {params}. This may indicate raw Pydantic was passed."
             )
             assert "properties" in params, (
-                f"[React] Tool '{ref}' parameters.properties missing. "
-                f"Keys: {list(params.keys())}"
+                f"[React] Tool '{ref}' parameters.properties missing. Keys: {list(params.keys())}"
             )
 
         # Tool names
         tool_names = [t.get("_worker_ref") or t.get("name") for t in tools]
         assert "calculate" in tool_names, f"[React] 'calculate' not found. Got: {tool_names}"
-        assert "count_words" in tool_names, (
-            f"[React] 'count_words' not found. Got: {tool_names}"
-        )
+        assert "count_words" in tool_names, f"[React] 'count_words' not found. Got: {tool_names}"
 
         # Check properties for calculate tool
         calc_tool = next(t for t in tools if (t.get("_worker_ref") or t.get("name")) == "calculate")
@@ -220,8 +206,7 @@ class TestSuite11LangGraph:
 
         # Workers: 2 (one per tool)
         assert len(workers) == 2, (
-            f"[React] Expected 2 workers, got {len(workers)}: "
-            f"{[w.name for w in workers]}"
+            f"[React] Expected 2 workers, got {len(workers)}: {[w.name for w in workers]}"
         )
         worker_names = [w.name for w in workers]
         assert "calculate" in worker_names, f"[React] Worker 'calculate' missing"
@@ -248,18 +233,22 @@ class TestSuite11LangGraph:
 
         def refine_query(state: State) -> dict:
             """Rewrite the query using the LLM."""
-            response = _module_llm.invoke([
-                SystemMessage(content="Rewrite the query to be more specific."),
-                HumanMessage(content=state["query"]),
-            ])
+            response = _module_llm.invoke(
+                [
+                    SystemMessage(content="Rewrite the query to be more specific."),
+                    HumanMessage(content=state["query"]),
+                ]
+            )
             return {"refined_query": response.content.strip()}
 
         def generate_answer(state: State) -> dict:
             """Generate an answer using the LLM."""
-            response = _module_llm.invoke([
-                SystemMessage(content="Answer the question concisely."),
-                HumanMessage(content=state["refined_query"] or state["query"]),
-            ])
+            response = _module_llm.invoke(
+                [
+                    SystemMessage(content="Answer the question concisely."),
+                    HumanMessage(content=state["refined_query"] or state["query"]),
+                ]
+            )
             return {"answer": response.content.strip()}
 
         builder = StateGraph(State)
@@ -278,8 +267,7 @@ class TestSuite11LangGraph:
 
         # Must be graph-structure path: has _graph key
         assert "_graph" in raw_config, (
-            f"[StateGraph] '_graph' missing from rawConfig. "
-            f"Keys: {list(raw_config.keys())}"
+            f"[StateGraph] '_graph' missing from rawConfig. Keys: {list(raw_config.keys())}"
         )
 
         graph_data = raw_config["_graph"]
@@ -287,8 +275,7 @@ class TestSuite11LangGraph:
         # 3 nodes
         nodes = graph_data.get("nodes", [])
         assert len(nodes) == 3, (
-            f"[StateGraph] Expected 3 nodes, got {len(nodes)}: "
-            f"{[n.get('name') for n in nodes]}"
+            f"[StateGraph] Expected 3 nodes, got {len(nodes)}: {[n.get('name') for n in nodes]}"
         )
         node_names = [n["name"] for n in nodes]
         assert "validate" in node_names, f"[StateGraph] 'validate' missing. Nodes: {node_names}"
@@ -304,9 +291,7 @@ class TestSuite11LangGraph:
 
         # Edges: START->validate, validate->refine, refine->answer, answer->END = 4
         edges = graph_data.get("edges", [])
-        assert len(edges) == 4, (
-            f"[StateGraph] Expected 4 edges, got {len(edges)}: {edges}"
-        )
+        assert len(edges) == 4, f"[StateGraph] Expected 4 edges, got {len(edges)}: {edges}"
 
         # input_key should be "query"
         assert graph_data.get("input_key") == "query", (
@@ -315,8 +300,7 @@ class TestSuite11LangGraph:
 
         # Workers: validate (1 regular) + refine_prep + refine_finish + answer_prep + answer_finish = 5
         assert len(workers) == 5, (
-            f"[StateGraph] Expected 5 workers, got {len(workers)}: "
-            f"{[w.name for w in workers]}"
+            f"[StateGraph] Expected 5 workers, got {len(workers)}: {[w.name for w in workers]}"
         )
 
     # ── 5. Conditional routing — graph structure ─────────────────────
@@ -479,9 +463,7 @@ class TestSuite11LangGraph:
         from langchain.agents import create_agent
 
         llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-        graph = create_agent(
-            llm, tools=[calculate, multiply], name="schema_test"
-        )
+        graph = create_agent(llm, tools=[calculate, multiply], name="schema_test")
 
         raw_config, _workers = serialize_langgraph(graph)
 
@@ -499,8 +481,7 @@ class TestSuite11LangGraph:
                 f"This indicates raw Pydantic/Zod was passed instead of JSON Schema."
             )
             assert "properties" in params, (
-                f"[Schema] Tool '{ref}' parameters.properties missing. "
-                f"Keys: {list(params.keys())}"
+                f"[Schema] Tool '{ref}' parameters.properties missing. Keys: {list(params.keys())}"
             )
 
             # Must NOT have _def (raw Pydantic marker)
@@ -510,10 +491,7 @@ class TestSuite11LangGraph:
             )
 
         # Check specific tool: multiply should have 'a' and 'b' properties
-        mult = next(
-            t for t in tools
-            if (t.get("_worker_ref") or t.get("name")) == "multiply"
-        )
+        mult = next(t for t in tools if (t.get("_worker_ref") or t.get("name")) == "multiply")
         mult_params = mult.get("parameters", {})
         props = mult_params.get("properties", {})
         assert "a" in props, f"[Schema] multiply missing property 'a'. Props: {list(props.keys())}"
@@ -545,8 +523,7 @@ class TestSuite11LangGraph:
             timeout=30,
         )
         assert resp.status_code == 200, (
-            f"[Compile hello_world] Expected 200, got {resp.status_code}. "
-            f"Body: {resp.text[:500]}"
+            f"[Compile hello_world] Expected 200, got {resp.status_code}. Body: {resp.text[:500]}"
         )
 
     def test_compile_react_tools_via_server(self):
@@ -557,9 +534,7 @@ class TestSuite11LangGraph:
         from langchain.agents import create_agent
 
         llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-        graph = create_agent(
-            llm, tools=[calculate, count_words], name="compile_react_tools"
-        )
+        graph = create_agent(llm, tools=[calculate, count_words], name="compile_react_tools")
 
         raw_config, _workers = serialize_langgraph(graph)
 
@@ -570,8 +545,7 @@ class TestSuite11LangGraph:
             timeout=30,
         )
         assert resp.status_code == 200, (
-            f"[Compile react_tools] Expected 200, got {resp.status_code}. "
-            f"Body: {resp.text[:500]}"
+            f"[Compile react_tools] Expected 200, got {resp.status_code}. Body: {resp.text[:500]}"
         )
 
     def test_compile_stategraph_via_server(self):
@@ -589,10 +563,12 @@ class TestSuite11LangGraph:
             return {"query": state.get("query", "").strip() or "default"}
 
         def answer_q(state: State) -> dict:
-            response = llm.invoke([
-                SystemMessage(content="Answer concisely."),
-                HumanMessage(content=state["query"]),
-            ])
+            response = llm.invoke(
+                [
+                    SystemMessage(content="Answer concisely."),
+                    HumanMessage(content=state["query"]),
+                ]
+            )
             return {"answer": response.content.strip()}
 
         builder = StateGraph(State)
@@ -613,8 +589,7 @@ class TestSuite11LangGraph:
             timeout=30,
         )
         assert resp.status_code == 200, (
-            f"[Compile stategraph] Expected 200, got {resp.status_code}. "
-            f"Body: {resp.text[:500]}"
+            f"[Compile stategraph] Expected 200, got {resp.status_code}. Body: {resp.text[:500]}"
         )
 
     # ── 10. Runtime execution ────────────────────────────────────────
@@ -630,19 +605,15 @@ class TestSuite11LangGraph:
             timeout=TIMEOUT,
         )
 
-        assert result.execution_id, (
-            f"[Runtime] No execution_id. status={result.status}"
-        )
+        assert result.execution_id, f"[Runtime] No execution_id. status={result.status}"
         assert result.status == "COMPLETED", (
-            f"[Runtime] Expected COMPLETED, got {result.status}. "
-            f"execution_id={result.execution_id}"
+            f"[Runtime] Expected COMPLETED, got {result.status}. execution_id={result.execution_id}"
         )
 
         # Output must contain "56" (7*8) — deterministic tool output
         output_str = str(result.output)
         assert "56" in output_str, (
-            f"[Runtime] Output should contain '56' (7*8). "
-            f"output={output_str[:300]}"
+            f"[Runtime] Output should contain '56' (7*8). output={output_str[:300]}"
         )
 
 

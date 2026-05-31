@@ -13,7 +13,7 @@ Demonstrates:
     - HITL (approve, reject, feedback, UserProxyAgent, human_tool)
     - Memory (conversation + semantic)
     - Code execution (local, docker, jupyter, serverless)
-    - Credentials (declared via secrets=[...], read via env or get_secret())
+    - Credentials (declared via credentials=[...], read via env or get_secret())
     - Streaming (sync + async), termination, handoffs, callbacks
     - Structured output, prompt templates, agent chaining, gate conditions
     - Extended thinking, planner mode, required_tools, include_contents
@@ -28,9 +28,9 @@ MCP Test Server Setup (mcp-testkit):
     # Or start with auth (requires storing the secret as a credential):
     mcp-testkit --transport http --auth <secret>
 
-    # Store secrets via CLI or Agentspan UI:
-    agentspan secrets set MCP_AUTH_TOKEN <secret>
-    agentspan secrets set SEARCH_API_KEY <key>
+    # Store credentials via CLI or Agentspan UI:
+    agentspan credentials set MCP_AUTH_TOKEN <secret>
+    agentspan credentials set SEARCH_API_KEY <key>
 
 Requirements:
     - Conductor server with LLM support
@@ -199,13 +199,13 @@ intake_router = Agent(
 # STAGE 2: Research Team
 # Features: #4 Parallel, #76 scatter_gather, #10 native tool,
 #   #11 http_tool, #12 mcp_tool, #89 api_tool, #18 ToolContext,
-#   #19 tool secrets, #21 external tool, #52 isolated creds,
+#   #19 tool credentials, #21 external tool, #52 isolated creds,
 #   #53 in-process creds, #55 HTTP header creds, #56 MCP creds
 # ═══════════════════════════════════════════════════════════════════════
 
 
-# -- Native tool with ToolContext injection + secrets --
-@tool(secrets=["RESEARCH_API_KEY"])
+# -- Native tool with ToolContext injection + credentials --
+@tool(credentials=["RESEARCH_API_KEY"])
 def research_database(query: str, ctx: ToolContext = None) -> dict:
     """Search internal research database."""
     session = ctx.session_id if ctx else "unknown"
@@ -219,7 +219,7 @@ def research_database(query: str, ctx: ToolContext = None) -> dict:
 
 
 # -- Native tool reading the injected secret via get_secret() accessor --
-@tool(secrets=["ANALYTICS_KEY"])
+@tool(credentials=["ANALYTICS_KEY"])
 def analyze_trends(topic: str) -> dict:
     """Analyze trending topics using analytics API."""
     key = get_secret("ANALYTICS_KEY")
@@ -238,17 +238,17 @@ web_search = http_tool(
         "properties": {"q": {"type": "string"}},
         "required": ["q"],
     },
-    secrets=["SEARCH_API_KEY"],
+    credentials=["SEARCH_API_KEY"],
 )
 
-# -- MCP tool with secrets --
+# -- MCP tool with credentials --
 mcp_fact_checker = mcp_tool(
     server_url="http://localhost:3001/mcp",
     name="fact_checker",
     description="Verify factual claims using knowledge base.",
     tool_names=["verify_claim", "check_source"],
     headers={"Authorization": "Bearer ${MCP_AUTH_TOKEN}"},
-    secrets=["MCP_AUTH_TOKEN"],
+    credentials=["MCP_AUTH_TOKEN"],
 )
 
 # -- API tool (auto-discovered from OpenAPI spec) --
@@ -257,6 +257,7 @@ petstore_api = api_tool(
     name="petstore",
     max_tools=5,
 )
+
 
 # -- External tool (by-reference, no local worker) --
 @tool(external=True)
@@ -271,7 +272,7 @@ researcher_worker = Agent(
     model=settings.llm_model,
     instructions="Research the given topic thoroughly using available tools.",
     tools=[research_database, web_search, mcp_fact_checker, external_research_aggregator],
-    secrets=["SEARCH_API_KEY", "MCP_AUTH_TOKEN"],
+    credentials=["SEARCH_API_KEY", "MCP_AUTH_TOKEN"],
 )
 
 # -- scatter_gather (#76): dispatches parallel research workers --
@@ -434,11 +435,7 @@ def sql_injection_guard(content: str) -> GuardrailResult:
     return GuardrailResult(passed=True)
 
 
-@tool(
-    guardrails=[
-        Guardrail(sql_injection_guard, position=Position.INPUT, on_fail=OnFail.RAISE)
-    ]
-)
+@tool(guardrails=[Guardrail(sql_injection_guard, position=Position.INPUT, on_fail=OnFail.RAISE)])
 def safe_search(query: str) -> dict:
     """Search with SQL injection protection."""
     return {"query": query, "results": ["result1", "result2"]}
@@ -610,9 +607,7 @@ publishing_pipeline = Agent(
     strategy=Strategy.HANDOFF,
     handoffs=[
         OnToolResult(target="external_publisher", tool_name="format_check"),  # #34
-        OnCondition(
-            target="external_publisher", condition=should_handoff_to_publisher
-        ),  # #36
+        OnCondition(target="external_publisher", condition=should_handoff_to_publisher),  # #36
     ],
     termination=(  # #33 composable
         TextMentionTermination("PUBLISHED")
@@ -738,7 +733,7 @@ analytics_agent = Agent(
         allowed_commands=["git", "gh"],
         timeout=30,
     ),
-    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     metadata={"stage": "analytics", "version": "1.0"},
     planner=True,  # #69
 )
@@ -767,9 +762,7 @@ full_pipeline = Agent(
         analytics_agent,  # Stage 8
     ],
     strategy=Strategy.SEQUENTIAL,
-    termination=(
-        TextMentionTermination("PIPELINE_COMPLETE") | MaxMessageTermination(200)
-    ),
+    termination=(TextMentionTermination("PIPELINE_COMPLETE") | MaxMessageTermination(200)),
 )
 
 

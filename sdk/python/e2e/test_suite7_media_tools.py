@@ -65,9 +65,7 @@ def _assert_media_generated(result, step_name, task_type_prefix):
     diag = _run_diagnostic(result)
 
     assert result.execution_id, f"[{step_name}] No execution_id. {diag}"
-    assert result.status == "COMPLETED", (
-        f"[{step_name}] Run did not complete. {diag}"
-    )
+    assert result.status == "COMPLETED", f"[{step_name}] Run did not complete. {diag}"
 
     media_task = _find_media_task(result.execution_id, task_type_prefix)
     assert media_task is not None, (
@@ -83,9 +81,7 @@ def _assert_media_generated(result, step_name, task_type_prefix):
     )
 
     output = media_task.get("outputData", {})
-    assert output, (
-        f"[{step_name}] {task_type_prefix} task has empty outputData."
-    )
+    assert output, f"[{step_name}] {task_type_prefix} task has empty outputData."
 
     return output
 
@@ -116,7 +112,9 @@ class TestSuite7MediaTools:
 
     # ── Image: OpenAI ─────────────────────────────────────────────────
 
-    @pytest.mark.xfail(reason="OpenAI removed dall-e-2 default; model passthrough issue in Conductor runtime")
+    @pytest.mark.xfail(
+        reason="OpenAI removed dall-e-2 default; model passthrough issue in Conductor runtime"
+    )
     def test_image_openai(self, runtime, model):
         """Generate image via OpenAI DALL-E 3."""
         if not os.environ.get("OPENAI_API_KEY"):
@@ -164,7 +162,9 @@ class TestSuite7MediaTools:
             tools=[img],
         )
 
-        _assert_tool_compiled(runtime, agent, "generate_image", "imagen-3.0-generate-002", "Image/Gemini")
+        _assert_tool_compiled(
+            runtime, agent, "generate_image", "imagen-3.0-generate-002", "Image/Gemini"
+        )
 
         result = runtime.run(
             agent,
@@ -201,4 +201,3 @@ class TestSuite7MediaTools:
             timeout=TIMEOUT,
         )
         _assert_media_generated(result, "Audio/OpenAI", "GENERATE_AUDIO")
-

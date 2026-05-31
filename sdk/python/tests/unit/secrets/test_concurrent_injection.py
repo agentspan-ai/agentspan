@@ -111,8 +111,8 @@ def test_buggy_injection_races_deterministically():
     # "at least one thread did not see its own injected value".
     a_value = a_observed[0]
     b_value = b_observed[0]
-    a_correct = (a_value == "A")
-    b_correct = (b_value == "B")
+    a_correct = a_value == "A"
+    b_correct = b_value == "B"
     assert not (a_correct and b_correct), (
         f"Counterfactual expected at least one thread to observe a clobbered "
         f"env value, but both saw their own. Got A={a_value!r}, B={b_value!r}. "
@@ -145,7 +145,7 @@ def test_fixed_injection_isolates_concurrent_calls():
     def fake_invoke_a():
         # We're inside the lock. Capture what env looks like right now.
         a_observed.append(os.environ.get(KEY))
-        a_holding.set()       # signal main thread that A is inside its invoke
+        a_holding.set()  # signal main thread that A is inside its invoke
         # Hold here so B has time to try (and fail) to clobber.
         # B will be blocked by the lock; this delay is the proof.
         a_can_release.wait(timeout=5)
@@ -166,10 +166,11 @@ def test_fixed_injection_isolates_concurrent_calls():
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         fa = pool.submit(worker_a)
-        a_holding.wait(timeout=5)   # don't launch B until A is inside the lock
+        a_holding.wait(timeout=5)  # don't launch B until A is inside the lock
         fb = pool.submit(worker_b)
         # Give B time to attempt to enter (it will block on the lock)
         import time
+
         time.sleep(0.1)
         # Release A
         a_can_release.set()
@@ -190,8 +191,7 @@ def test_fixed_injection_isolates_concurrent_calls():
 
     # FIX ASSERTION 3: env is fully cleaned up afterwards.
     assert os.environ.get(KEY) is None, (
-        f"env not restored after both invocations completed: "
-        f"{KEY}={os.environ.get(KEY)!r}"
+        f"env not restored after both invocations completed: {KEY}={os.environ.get(KEY)!r}"
     )
 
 
@@ -257,6 +257,7 @@ def test_native_dispatch_and_framework_share_one_lock():
             held.set()
             release.wait(timeout=5)
             return None
+
         inject_via_env({KEY: "holder"}, invoke)
 
     def other():

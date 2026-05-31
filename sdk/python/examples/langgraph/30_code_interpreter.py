@@ -40,6 +40,7 @@ _ALLOWED_OPS = {
 
 def _safe_eval(expr: str) -> Union[float, int]:
     """Safely evaluate a simple arithmetic expression."""
+
     def _eval(node):
         if isinstance(node, ast.Constant):
             return node.value
@@ -51,6 +52,7 @@ def _safe_eval(expr: str) -> Union[float, int]:
             operand = _eval(node.operand)
             return _ALLOWED_OPS[type(node.op)](operand)
         raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+
     tree = ast.parse(expr, mode="eval")
     return _eval(tree.body)
 

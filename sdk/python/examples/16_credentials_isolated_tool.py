@@ -1,30 +1,30 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Credentials — per-user secrets injected into the tool worker process.
+"""Credentials — per-user credentials injected into the tool worker process.
 
 Demonstrates:
-    - @tool with secrets=["GITHUB_TOKEN"]
+    - @tool with credentials=["GITHUB_TOKEN"]
     - Credentials resolved from the server and injected as env vars around the
       tool invocation (under a process-wide lock — see secret-injection-contract)
     - Tool reads credential from os.environ
-    - Server-only resolution: no env-var fallback for declared secrets
+    - Server-only resolution: no env-var fallback for declared credentials
 
 How it works:
     1. Agent starts → server mints a short-lived execution token
-    2. Before each tool call, the SDK fetches declared secrets from
-       POST /api/workers/secrets using that token
-    3. The tool function runs in a fresh subprocess with secrets
+    2. Before each tool call, the SDK fetches declared credentials from
+       POST /api/workers/credentials using that token
+    3. The tool function runs in a fresh subprocess with credentials
        injected as env vars. The parent process's os.environ is unchanged.
 
 Setup (one-time, via CLI):
     agentspan login                                     # authenticate
-    agentspan secrets set GITHUB_TOKEN <your-github-token> # enter token when prompted
+    agentspan credentials set GITHUB_TOKEN <your-github-token> # enter token when prompted
 
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
     - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
-    - GITHUB_TOKEN stored via `agentspan secrets set` OR set in os.environ
+    - GITHUB_TOKEN stored via `agentspan credentials set` OR set in os.environ
 """
 
 import os
@@ -34,7 +34,7 @@ from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 
-@tool(secrets=["GITHUB_TOKEN"])
+@tool(credentials=["GITHUB_TOKEN"])
 def list_github_repos(username: str) -> dict:
     """List public repositories for a GitHub user.
 
@@ -46,14 +46,24 @@ def list_github_repos(username: str) -> dict:
         headers.append(f"Authorization: Bearer {token}")
 
     result = subprocess.run(
-        ["curl", "-sf", "-H", headers[0], "-H", headers[-1],
-         f"https://api.github.com/users/{username}/repos?per_page=5&sort=updated"],
-        capture_output=True, text=True, timeout=10,
+        [
+            "curl",
+            "-sf",
+            "-H",
+            headers[0],
+            "-H",
+            headers[-1],
+            f"https://api.github.com/users/{username}/repos?per_page=5&sort=updated",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode != 0:
         return {"error": result.stderr.strip()}
 
     import json
+
     repos = json.loads(result.stdout)
     return {
         "username": username,
@@ -62,7 +72,7 @@ def list_github_repos(username: str) -> dict:
     }
 
 
-@tool(secrets=["GITHUB_TOKEN"])
+@tool(credentials=["GITHUB_TOKEN"])
 def create_github_issue(repo: str, title: str, body: str) -> dict:
     """Create a GitHub issue. Requires GITHUB_TOKEN with write access.
 
@@ -73,15 +83,27 @@ def create_github_issue(repo: str, title: str, body: str) -> dict:
         return {"error": "GITHUB_TOKEN not available — cannot create issues without auth"}
 
     import json
+
     payload = json.dumps({"title": title, "body": body})
     result = subprocess.run(
-        ["curl", "-sf", "-X", "POST",
-         "-H", "Accept: application/vnd.github+json",
-         "-H", f"Authorization: Bearer {token}",
-         "-H", "Content-Type: application/json",
-         "-d", payload,
-         f"https://api.github.com/repos/{repo}/issues"],
-        capture_output=True, text=True, timeout=10,
+        [
+            "curl",
+            "-sf",
+            "-X",
+            "POST",
+            "-H",
+            "Accept: application/vnd.github+json",
+            "-H",
+            f"Authorization: Bearer {token}",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            payload,
+            f"https://api.github.com/repos/{repo}/issues",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode != 0:
         return {"error": result.stderr.strip()}
@@ -94,8 +116,8 @@ agent = Agent(
     name="github_agent",
     model=settings.llm_model,
     tools=[list_github_repos, create_github_issue],
-    # Declare secrets at the agent level — SDK auto-fetches for all tools
-    secrets=["GITHUB_TOKEN"],
+    # Declare credentials at the agent level — SDK auto-fetches for all tools
+    credentials=["GITHUB_TOKEN"],
     instructions=(
         "You are a GitHub assistant. You can list repos and create issues. "
         "Always confirm with the user before creating issues."
@@ -119,4 +141,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

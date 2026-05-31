@@ -76,17 +76,17 @@ PORTFOLIO = {
     # right trade clears it; precise share-counting isn't the demo's point.
     "current_holdings": {
         "AAPL": {"shares": 230, "price": 220.0, "asset_class": "stocks_us_large"},
-        "MSFT": {"shares": 95,  "price": 425.0, "asset_class": "stocks_us_large"},
-        "NVDA": {"shares": 32,  "price": 920.0, "asset_class": "stocks_us_large"},
-        "VTI":  {"shares": 225, "price": 268.0, "asset_class": "stocks_us_broad"},
-        "BND":  {"shares": 1450,"price": 73.0,  "asset_class": "bonds"},
-        "GLD":  {"shares": 60,  "price": 245.0, "asset_class": "alternatives"},
+        "MSFT": {"shares": 95, "price": 425.0, "asset_class": "stocks_us_large"},
+        "NVDA": {"shares": 32, "price": 920.0, "asset_class": "stocks_us_large"},
+        "VTI": {"shares": 225, "price": 268.0, "asset_class": "stocks_us_broad"},
+        "BND": {"shares": 1450, "price": 73.0, "asset_class": "bonds"},
+        "GLD": {"shares": 60, "price": 245.0, "asset_class": "alternatives"},
     },
     "target_weights": {
         "stocks_us_large": 0.40,
         "stocks_us_broad": 0.30,
-        "bonds":           0.25,
-        "alternatives":    0.05,
+        "bonds": 0.25,
+        "alternatives": 0.05,
     },
     "restrictions": {
         "restricted_symbols": ["TSLA", "MO"],
@@ -453,15 +453,15 @@ PLANNER_SYSTEM = (
     "constraints clear and drift is within tolerance, call submit_trades.\n\n"
     "Respond with ONLY a JSON object (no prose, no markdown fences):\n\n"
     "  Iterate:\n"
-    "  {\"tool\": \"check_constraints\", \"args\": {\"trades\": ["
-    "    {\"action\": \"buy\"|\"sell\", \"symbol\": \"<sym>\", \"shares\": <int>}, ...]}}\n\n"
+    '  {"tool": "check_constraints", "args": {"trades": ['
+    '    {"action": "buy"|"sell", "symbol": "<sym>", "shares": <int>}, ...]}}\n\n'
     "  Submit:\n"
-    "  {\"tool\": \"submit_trades\", \"args\": {\"trades\": [...], "
-    "    \"rationale\": \"<one-sentence why these trades + how violations were resolved>\"}}\n\n"
+    '  {"tool": "submit_trades", "args": {"trades": [...], '
+    '    "rationale": "<one-sentence why these trades + how violations were resolved>"}}\n\n'
     "Constraints in force:\n"
     "  - max_position_pct: 30% of portfolio value per symbol\n"
-    "  - restricted_symbols: [\"TSLA\", \"MO\"] — no trades in these allowed\n"
-    "  - wash_sale_window_symbols: [\"VTI\"] — cannot BUY VTI for 30 days "
+    '  - restricted_symbols: ["TSLA", "MO"] — no trades in these allowed\n'
+    '  - wash_sale_window_symbols: ["VTI"] — cannot BUY VTI for 30 days '
     "    (substitute SCHB @ ~$24, ITOT @ ~$122, or VOO @ ~$510 for similar "
     "    stocks_us_broad exposure)\n"
     "  - drift_tolerance_bps: 300 — post-trade asset-class weights must be "
@@ -741,7 +741,10 @@ def print_rebalance_trace(wf: dict) -> None:
         tool_name = action.get("tool", "?") if isinstance(action, dict) else "?"
         trades = (action.get("args") or {}).get("trades") if isinstance(action, dict) else []
         trades_summary = (
-            ", ".join(f"{t.get('action', '?')[0].upper()}{t.get('shares', '?')} {t.get('symbol', '?')}" for t in (trades or [])[:3])
+            ", ".join(
+                f"{t.get('action', '?')[0].upper()}{t.get('shares', '?')} {t.get('symbol', '?')}"
+                for t in (trades or [])[:3]
+            )
             if trades
             else "—"
         )
@@ -779,7 +782,9 @@ def main(argv: list[str]) -> None:
     for ac, w in cw.items():
         target = PORTFOLIO["target_weights"].get(ac, 0.0)
         drift = (w - target) * 10000
-        print(f"           {ac:<20}: {w * 100:5.1f}% (target {target * 100:.0f}%, drift {drift:+.0f} bps)")
+        print(
+            f"           {ac:<20}: {w * 100:5.1f}% (target {target * 100:.0f}%, drift {drift:+.0f} bps)"
+        )
     print("         }")
     print(f"restrictions: {PORTFOLIO['restrictions']}")
     print(f"budget:  {MAX_ITER} iterations\n")
@@ -827,7 +832,9 @@ def main(argv: list[str]) -> None:
         trades = final.get("trades") or []
         print(f"  trades ({len(trades)}):")
         for t in trades:
-            print(f"    - {t.get('action', '?').upper():<4} {t.get('shares', '?')} {t.get('symbol', '?')}")
+            print(
+                f"    - {t.get('action', '?').upper():<4} {t.get('shares', '?')} {t.get('symbol', '?')}"
+            )
         if final.get("rationale"):
             print()
             print(f"  rationale: {final['rationale']}")

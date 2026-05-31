@@ -149,9 +149,7 @@ class TestSuite12TerminationGates:
         result = runtime.run(agent, "Say hello.", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.execution_id, (
-            f"[TextMentionTermination] No execution_id. {diag}"
-        )
+        assert result.execution_id, f"[TextMentionTermination] No execution_id. {diag}"
         assert result.status in ("COMPLETED", "TERMINATED"), (
             f"[TextMentionTermination] Expected COMPLETED or TERMINATED, "
             f"got '{result.status}'. {diag}"
@@ -193,7 +191,7 @@ class TestSuite12TerminationGates:
             instructions=(
                 "You are a counting assistant. You MUST use the echo_tool for every "
                 "step — never answer directly. Call echo_tool once per number with "
-                "{text: \"<number>\"}. After each tool result, call echo_tool again "
+                '{text: "<number>"}. After each tool result, call echo_tool again '
                 "for the next number. Continue until told to stop."
             ),
             tools=[echo_tool],
@@ -202,18 +200,14 @@ class TestSuite12TerminationGates:
         result = runtime.run(agent, "Say hello.", timeout=TIMEOUT)
         diag = _run_diagnostic(result)
 
-        assert result.execution_id, (
-            f"[MaxMessageTermination] No execution_id. {diag}"
-        )
+        assert result.execution_id, f"[MaxMessageTermination] No execution_id. {diag}"
         assert result.status in ("COMPLETED", "TERMINATED"), (
             f"[MaxMessageTermination] Expected COMPLETED or TERMINATED, "
             f"got '{result.status}'. {diag}"
         )
 
         term_task = _find_task_by_ref(result.execution_id, "e2e_s12_max_msg_termination")
-        assert term_task is not None, (
-            f"[MaxMessageTermination] No termination task found. {diag}"
-        )
+        assert term_task is not None, f"[MaxMessageTermination] No termination task found. {diag}"
         assert term_task.get("status") == "COMPLETED", (
             f"[MaxMessageTermination] Termination task status "
             f"{term_task.get('status')}, expected COMPLETED. {diag}"
@@ -285,8 +279,7 @@ class TestSuite12TerminationGates:
         # Gate should produce an INLINE task (the JS gate check)
         gate_tasks = [r for r in all_task_refs if "gate" in r.lower()]
         assert len(gate_tasks) > 0, (
-            f"[TextGate] No gate task found in workflow definition. "
-            f"Task refs: {all_task_refs}"
+            f"[TextGate] No gate task found in workflow definition. Task refs: {all_task_refs}"
         )
 
         # Gate should produce a SWITCH task (continue vs stop)
@@ -330,9 +323,7 @@ class TestSuite12TerminationGates:
         tasks = wf_def.get("tasks", [])
 
         # Find the SWITCH task
-        switch_tasks = [
-            t for t in tasks if t.get("type") == "SWITCH"
-        ]
+        switch_tasks = [t for t in tasks if t.get("type") == "SWITCH"]
         assert len(switch_tasks) > 0, (
             f"[TextGate SWITCH] No SWITCH task found in workflow. "
             f"Task types: {[t.get('type') for t in tasks]}"

@@ -63,7 +63,7 @@ export function runDiagnostic(result: Record<string, unknown>): string {
 import { execSync } from 'node:child_process';
 
 export function credentialSet(name: string, value: string): void {
-  execSync(`${CLI_PATH} secrets set ${name} ${value}`, {
+  execSync(`${CLI_PATH} credentials set ${name} ${value}`, {
     env: { ...process.env, AGENTSPAN_SERVER_URL: BASE_URL },
     timeout: 15_000,
   });
@@ -71,7 +71,7 @@ export function credentialSet(name: string, value: string): void {
 
 export function credentialDelete(name: string): void {
   try {
-    execSync(`${CLI_PATH} secrets delete ${name}`, {
+    execSync(`${CLI_PATH} credentials delete ${name}`, {
       env: { ...process.env, AGENTSPAN_SERVER_URL: BASE_URL },
       timeout: 15_000,
     });

@@ -28,6 +28,7 @@ from settings import settings
 
 # ── Red-team tools ───────────────────────────────────────────────────
 
+
 @tool
 def log_test_case(category: str, prompt: str, risk_level: str) -> dict:
     """Log a security test case for tracking.
@@ -49,6 +50,7 @@ def log_test_case(category: str, prompt: str, risk_level: str) -> dict:
 
 
 # ── Evaluator tools ─────────────────────────────────────────────────
+
 
 @tool
 def score_safety(response_text: str, attack_category: str) -> dict:
@@ -148,4 +150,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(pipeline)
-

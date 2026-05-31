@@ -39,6 +39,7 @@ conductor_skill = skill(
 
 # ── Shared tools ───────────────────────────────────────────────────
 
+
 @tool
 def read_file(path: str) -> str:
     """Read a file from the filesystem."""
@@ -157,7 +158,7 @@ def example_pipeline():
         if result.sub_results:
             print("\nSub-agent executions:")
             for sub in result.sub_results:
-                print(f"  - {getattr(sub, "execution_id", "?")}: {sub.status}")
+                print(f"  - {getattr(sub, 'execution_id', '?')}: {sub.status}")
         result.print_result()
 
 
@@ -219,13 +220,14 @@ def example_parallel():
         if result.sub_results:
             print("\nParallel sub-agent executions:")
             for sub in result.sub_results:
-                print(f"  - {getattr(sub, "execution_id", "?")}: {sub.status}")
+                print(f"  - {getattr(sub, 'execution_id', '?')}: {sub.status}")
         result.print_result()
 
 
 # ══════════════════════════════════════════════════════════════════
 # Example 4: Skills as tools on an orchestrator
 # ══════════════════════════════════════════════════════════════════
+
 
 @tool
 def run_tests(code: str) -> str:
@@ -346,7 +348,7 @@ if __name__ == "__main__":
     choice = sys.argv[1] if len(sys.argv) > 1 else "router"
     if choice == "all":
         for name, fn in examples.items():
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             fn()
     elif choice in examples:
         examples[choice]()

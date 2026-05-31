@@ -56,7 +56,9 @@ analysis = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
+        result = runtime.run(
+            analysis, "Launching an AI-powered healthcare diagnostic tool in the US market"
+        )
         result.print_result()
 
         # Production pattern:
@@ -67,4 +69,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(analysis)
-

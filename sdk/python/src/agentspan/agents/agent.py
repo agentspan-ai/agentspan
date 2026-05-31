@@ -26,7 +26,7 @@ class ConfigurationError(ValueError):
     """Raised at agent definition time for invalid configuration.
 
     Example: using ``terraform`` in ``cli_allowed_commands`` without providing
-    an explicit ``secrets=[...]`` list.
+    an explicit ``credentials=[...]`` list.
     """
 
 
@@ -109,7 +109,7 @@ class AgentDef:
     cli_commands: bool = False
     cli_config: Optional[Any] = None
     cli_allowed_commands: List[str] = field(default_factory=list)
-    secrets: List[Any] = field(default_factory=list)
+    credentials: List[Any] = field(default_factory=list)
     context_window_budget: Optional[int] = None
     prefill_tools: List[Any] = field(default_factory=list)
 
@@ -137,7 +137,7 @@ def agent(
     cli_commands: bool = False,
     cli_config: Optional[Any] = None,
     cli_allowed_commands: Optional[List[str]] = None,
-    secrets: Optional[List[Any]] = None,
+    credentials: Optional[List[Any]] = None,
     context_window_budget: Optional[int] = None,
 ) -> Any:
     """Register a Python function as an agent definition.
@@ -190,7 +190,7 @@ def agent(
             cli_commands=cli_commands,
             cli_config=cli_config,
             cli_allowed_commands=list(cli_allowed_commands) if cli_allowed_commands else [],
-            secrets=list(secrets) if secrets else [],
+            credentials=list(credentials) if credentials else [],
             context_window_budget=context_window_budget,
         )
 
@@ -248,7 +248,7 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
             cli_commands=ad.cli_commands,
             cli_config=ad.cli_config,
             cli_allowed_commands=ad.cli_allowed_commands or None,
-            secrets=ad.secrets or None,
+            credentials=ad.credentials or None,
             context_window_budget=ad.context_window_budget,
             prefill_tools=ad.prefill_tools or None,
         )
@@ -368,7 +368,7 @@ class Agent:
         required_tools: Optional[List[str]] = None,
         gate: Optional[Any] = None,
         base_url: Optional[str] = None,
-        secrets: Optional[List[Any]] = None,
+        credentials: Optional[List[Any]] = None,
         stateful: bool = False,
         context_window_budget: Optional[int] = None,
         prefill_tools: Optional[List[Any]] = None,
@@ -623,24 +623,24 @@ class Agent:
 
         # ── Credential setup ─────────────────────────────────────────────
         # Credentials must be explicitly declared — no auto-mapping.
-        if secrets is not None:
-            self.secrets: List[Any] = list(secrets)
+        if credentials is not None:
+            self.credentials: List[Any] = list(credentials)
         else:
-            self.secrets = []
+            self.credentials = []
 
-        # Propagate agent-level secrets to CLI/code tools so the
+        # Propagate agent-level credentials to CLI/code tools so the
         # dispatch layer can resolve them per-tool (the dispatch only
-        # looks at tool_def.secrets, not agent-level secrets).
-        if self.secrets:
+        # looks at tool_def.credentials, not agent-level credentials).
+        if self.credentials:
             from agentspan.agents.tool import get_tool_def
 
             for t in self.tools:
                 td = getattr(t, "_tool_def", None)
-                if td is not None and not td.secrets and td.tool_type in ("cli", "code"):
-                    td.secrets = list(self.secrets)
+                if td is not None and not td.credentials and td.tool_type in ("cli", "code"):
+                    td.credentials = list(self.credentials)
                     # Also update _tool_def on raw func for pickle survival
                     if td.func and hasattr(td.func, "_tool_def"):
-                        td.func._tool_def.secrets = list(self.secrets)
+                        td.func._tool_def.credentials = list(self.credentials)
 
     def _attach_code_execution_tool(self) -> None:
         """Auto-create and attach a code execution tool from config."""

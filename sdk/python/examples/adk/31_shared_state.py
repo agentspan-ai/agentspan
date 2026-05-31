@@ -81,8 +81,8 @@ agent = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        agent,
-        "Add milk, eggs, and bread to my shopping list, then show me the list.",
+            agent,
+            "Add milk, eggs, and bread to my shopping list, then show me the list.",
         )
         result.print_result()
 

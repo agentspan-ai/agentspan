@@ -315,7 +315,6 @@ class TestAgentConfigSerializer:
 
         assert "cliConfig" not in config
 
-
     def test_none_values_omitted(self):
         """None values are not included in the output."""
         from agentspan.agents.agent import Agent

@@ -25,7 +25,7 @@ Run:
 
 Requirements:
     - Agentspan server running
-    - GITHUB_TOKEN stored: agentspan secrets set GITHUB_TOKEN <your-github-token>
+    - GITHUB_TOKEN stored: agentspan credentials set GITHUB_TOKEN <your-github-token>
     - gh CLI installed
     - Claude Code SDK installed (pip install claude-code-sdk)
 """
@@ -39,6 +39,7 @@ MODEL = "anthropic/claude-sonnet-4-6"
 
 
 # ── Stage 1: Fetch issues ─────────────────────────────────────────
+
 
 def _fetch_done(context: dict, **kwargs) -> bool:
     """Stop when the agent has produced the structured output with issue details."""
@@ -84,7 +85,7 @@ RULES:
         allow_shell=True,
         timeout=60,
     ),
-    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     max_turns=20,
     stop_when=_fetch_done,
     gate=TextGate("NO_OPEN_ISSUES"),
@@ -95,7 +96,7 @@ RULES:
 claude_code_fixer = Agent(
     name="claude_code_fixer",
     model=ClaudeCode("sonnet", permission_mode=ClaudeCode.PermissionMode.ACCEPT_EDITS),
-    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions=f"""\
 You are a senior developer fixing a GitHub issue.
 
@@ -144,6 +145,7 @@ RULES:
 
 # ── Stage 3: Create PR ────────────────────────────────────────────
 
+
 def _pr_done(context: dict, **kwargs) -> bool:
     """Stop when the agent has output a PR URL."""
     result = context.get("result", "")
@@ -155,7 +157,7 @@ git_push_pr = Agent(
     model=MODEL,
     max_tokens=8192,
     max_turns=15,
-    secrets=["GITHUB_TOKEN", "GH_TOKEN"],
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
 Create a pull request. Extract REPO, BRANCH, and ISSUE from the previous stage output.
 

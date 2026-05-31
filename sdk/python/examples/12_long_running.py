@@ -21,10 +21,7 @@ from settings import settings
 agent = Agent(
     name="saas_analyst",
     model=settings.llm_model,
-    instructions=(
-        "You are a data analyst. Provide a brief analysis "
-        "when asked about data topics."
-    ),
+    instructions=("You are a data analyst. Provide a brief analysis when asked about data topics."),
 )
 
 
@@ -57,4 +54,3 @@ if __name__ == "__main__":
         # else:
         #     print("\nAgent still running. Check the Conductor UI:")
         #     print(f"  http://localhost:6767/execution/{handle.execution_id}")
-

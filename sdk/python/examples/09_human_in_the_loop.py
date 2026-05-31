@@ -44,7 +44,9 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456. Check the balance first.")
+        handle = runtime.start(
+            agent, "Transfer $500 from ACC-789 to ACC-456. Check the balance first."
+        )
         print(f"Started: {handle.execution_id}\n")
 
         for event in handle.stream():

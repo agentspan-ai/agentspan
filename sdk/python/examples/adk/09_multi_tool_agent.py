@@ -37,17 +37,41 @@ def search_products(query: str, category: str = "all", max_results: int = 5) -> 
         Dictionary with search results including product details and prices.
     """
     products = [
-        {"id": "P001", "name": "Wireless Mouse", "category": "electronics", "price": 29.99, "rating": 4.5},
-        {"id": "P002", "name": "Python Cookbook", "category": "books", "price": 45.00, "rating": 4.8},
-        {"id": "P003", "name": "USB-C Hub", "category": "electronics", "price": 39.99, "rating": 4.2},
-        {"id": "P004", "name": "Ergonomic Keyboard", "category": "electronics", "price": 89.99, "rating": 4.7},
+        {
+            "id": "P001",
+            "name": "Wireless Mouse",
+            "category": "electronics",
+            "price": 29.99,
+            "rating": 4.5,
+        },
+        {
+            "id": "P002",
+            "name": "Python Cookbook",
+            "category": "books",
+            "price": 45.00,
+            "rating": 4.8,
+        },
+        {
+            "id": "P003",
+            "name": "USB-C Hub",
+            "category": "electronics",
+            "price": 39.99,
+            "rating": 4.2,
+        },
+        {
+            "id": "P004",
+            "name": "Ergonomic Keyboard",
+            "category": "electronics",
+            "price": 89.99,
+            "rating": 4.7,
+        },
         {"id": "P005", "name": "Clean Code", "category": "books", "price": 35.00, "rating": 4.9},
     ]
     query_lower = query.lower()
     results = [
-        p for p in products
-        if query_lower in p["name"].lower()
-        or (category != "all" and p["category"] == category)
+        p
+        for p in products
+        if query_lower in p["name"].lower() or (category != "all" and p["category"] == category)
     ]
     return {"status": "success", "results": results[:max_results], "total": len(results)}
 
@@ -147,9 +171,9 @@ agent = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        agent,
-        "I'm looking for electronics. Show me what you have, check if they're "
-        "in stock, and calculate shipping to San Francisco. I have coupon code SAVE10.",
+            agent,
+            "I'm looking for electronics. Show me what you have, check if they're "
+            "in stock, and calculate shipping to San Francisco. I have coupon code SAVE10.",
         )
         result.print_result()
 

@@ -27,6 +27,7 @@ from settings import settings
 
 # ── Stage tools ──────────────────────────────────────────────────
 
+
 def create_concept(title: str, genre: str, logline: str) -> dict:
     """Create a movie concept document.
 
@@ -48,8 +49,7 @@ def create_concept(title: str, genre: str, logline: str) -> dict:
     }
 
 
-def write_scene(scene_number: int, location: str, action: str,
-                dialogue: str = "") -> dict:
+def write_scene(scene_number: int, location: str, action: str, dialogue: str = "") -> dict:
     """Write a single scene for the script.
 
     Args:
@@ -71,8 +71,7 @@ def write_scene(scene_number: int, location: str, action: str,
     return {"scene": scene}
 
 
-def describe_visual(scene_number: int, shot_type: str,
-                    description: str) -> dict:
+def describe_visual(scene_number: int, shot_type: str, description: str) -> dict:
     """Describe visual direction for a scene.
 
     Args:
@@ -92,8 +91,7 @@ def describe_visual(scene_number: int, shot_type: str,
     }
 
 
-def specify_audio(scene_number: int, music_mood: str,
-                  sound_effects: str) -> dict:
+def specify_audio(scene_number: int, music_mood: str, sound_effects: str) -> dict:
     """Specify audio direction for a scene.
 
     Args:
@@ -113,8 +111,7 @@ def specify_audio(scene_number: int, music_mood: str,
     }
 
 
-def assemble_production(title: str, total_scenes: int,
-                        estimated_runtime: str) -> dict:
+def assemble_production(title: str, total_scenes: int, estimated_runtime: str) -> dict:
     """Assemble final production notes.
 
     Args:
@@ -195,17 +192,16 @@ producer = Agent(
 # Full pipeline: concept → script → visuals → audio → assembly
 movie_pipeline = SequentialAgent(
     name="short_movie_pipeline",
-    sub_agents=[concept_developer, scriptwriter, visual_director,
-                audio_designer, producer],
+    sub_agents=[concept_developer, scriptwriter, visual_director, audio_designer, producer],
 )
 
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        movie_pipeline,
-        "Create a 3-scene short film about a robot discovering music "
-        "for the first time in a post-apocalyptic world.",
+            movie_pipeline,
+            "Create a 3-scene short film about a robot discovering music "
+            "for the first time in a post-apocalyptic world.",
         )
         result.print_result()
 

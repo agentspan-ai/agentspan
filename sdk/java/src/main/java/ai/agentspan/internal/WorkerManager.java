@@ -4,7 +4,7 @@
 package ai.agentspan.internal;
 
 import ai.agentspan.AgentConfig;
-import ai.agentspan.Secrets;
+import ai.agentspan.Credentials;
 import ai.agentspan.exceptions.CredentialAuthException;
 import ai.agentspan.exceptions.CredentialNotFoundException;
 import ai.agentspan.exceptions.CredentialRateLimitException;
@@ -115,7 +115,7 @@ public class WorkerManager {
      * Register a task handler scoped to a domain AND declaring a list of
      * credential names that the worker should resolve from the server before
      * invoking the handler. Resolved values are available to the handler via
-     * {@link ai.agentspan.Secrets#get(String)}.
+     * {@link ai.agentspan.Credentials#get(String)}.
      */
     public void register(
             String taskName,
@@ -261,14 +261,14 @@ public class WorkerManager {
             }
 
             try {
-                Secrets.setForCall(resolvedSecrets);
+                Credentials.setForCall(resolvedSecrets);
                 try {
                     Object result = handler.apply(inputData);
                     Map<String, Object> output = buildOutput(result);
                     workerHttp.completeTask(taskId, workflowInstanceId, output);
                     logger.debug("Completed task {} ({})", taskName, taskId);
                 } finally {
-                    Secrets.clearForCall();
+                    Credentials.clearForCall();
                 }
             } catch (Exception e) {
                 logger.error("Task {} ({}) failed: {}", taskName, taskId, e.getMessage(), e);

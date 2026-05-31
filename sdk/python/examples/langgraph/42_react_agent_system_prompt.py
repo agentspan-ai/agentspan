@@ -77,9 +77,9 @@ graph = create_react_agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        graph,
-        "I'm flying from the US to Japan with $800. "
-        "How many yen will I get? The flight is 9,540 km — how far is that in miles?",
+            graph,
+            "I'm flying from the US to Japan with $800. "
+            "How many yen will I get? The flight is 9,540 km — how far is that in miles?",
         )
         print(f"Status: {result.status}")
         result.print_result()

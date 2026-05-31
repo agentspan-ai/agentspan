@@ -39,9 +39,16 @@ def get_weather(city: str) -> str:
 def calculate(expression: str) -> str:
     """Evaluate a mathematical expression and return the result."""
     import math
+
     safe_builtins = {
-        "abs": abs, "round": round, "min": min, "max": max,
-        "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e,
+        "abs": abs,
+        "round": round,
+        "min": min,
+        "max": max,
+        "sqrt": math.sqrt,
+        "pow": pow,
+        "pi": math.pi,
+        "e": math.e,
     }
     try:
         result = eval(expression, {"__builtins__": {}}, safe_builtins)
@@ -76,9 +83,9 @@ agent = Agent(
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-        agent,
-        "What's the weather in San Francisco? Also, what's the population there "
-        "and what's the square root of that number (just the digits)?",
+            agent,
+            "What's the weather in San Francisco? Also, what's the population there "
+            "and what's the square root of that number (just the digits)?",
         )
         result.print_result()
 

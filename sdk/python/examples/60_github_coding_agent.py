@@ -58,9 +58,22 @@ def list_github_issues(state: str = "open", limit: int = 10) -> str:
         The list of issues as text.
     """
     result = subprocess.run(
-        ["gh", "issue", "list", "--repo", REPO, "--state", state,
-         "--limit", str(limit), "--json", "number,title,body,labels"],
-        capture_output=True, text=True, timeout=30,
+        [
+            "gh",
+            "issue",
+            "list",
+            "--repo",
+            REPO,
+            "--state",
+            state,
+            "--limit",
+            str(limit),
+            "--json",
+            "number,title,body,labels",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         return f"Error listing issues: {result.stderr}"
@@ -78,9 +91,19 @@ def get_github_issue(issue_number: int) -> str:
         The issue details as JSON.
     """
     result = subprocess.run(
-        ["gh", "issue", "view", str(issue_number), "--repo", REPO,
-         "--json", "number,title,body,labels,comments"],
-        capture_output=True, text=True, timeout=30,
+        [
+            "gh",
+            "issue",
+            "view",
+            str(issue_number),
+            "--repo",
+            REPO,
+            "--json",
+            "number,title,body,labels,comments",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         return f"Error getting issue: {result.stderr}"
@@ -96,7 +119,9 @@ def clone_repo() -> str:
     """
     result = subprocess.run(
         ["gh", "repo", "clone", REPO, WORK_DIR],
-        capture_output=True, text=True, timeout=60,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     if result.returncode != 0:
         return f"Error cloning: {result.stderr}"
@@ -115,7 +140,10 @@ def git_create_branch(branch_name: str) -> str:
     """
     result = subprocess.run(
         ["git", "checkout", "-b", branch_name],
-        capture_output=True, text=True, timeout=10, cwd=WORK_DIR,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        cwd=WORK_DIR,
     )
     if result.returncode != 0:
         return f"Error creating branch: {result.stderr}"
@@ -172,7 +200,10 @@ def list_files(path: str = ".") -> str:
         return f"Not a directory: {path}"
     result = subprocess.run(
         ["find", ".", "-type", "f", "-not", "-path", "./.git/*"],
-        capture_output=True, text=True, timeout=10, cwd=full_path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        cwd=full_path,
     )
     return result.stdout or "Empty directory"
 
@@ -189,21 +220,30 @@ def git_commit_and_push(message: str) -> str:
     """
     result = subprocess.run(
         ["git", "add", "-A"],
-        capture_output=True, text=True, timeout=10, cwd=WORK_DIR,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        cwd=WORK_DIR,
     )
     if result.returncode != 0:
         return f"Error staging: {result.stderr}"
 
     result = subprocess.run(
         ["git", "commit", "-m", message],
-        capture_output=True, text=True, timeout=10, cwd=WORK_DIR,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        cwd=WORK_DIR,
     )
     if result.returncode != 0:
         return f"Error committing: {result.stderr}"
 
     result = subprocess.run(
         ["git", "push", "-u", "origin", "HEAD"],
-        capture_output=True, text=True, timeout=30, cwd=WORK_DIR,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=WORK_DIR,
     )
     if result.returncode != 0:
         return f"Error pushing: {result.stderr}"
@@ -226,7 +266,10 @@ def create_pull_request(title: str, body: str, issue_number: int = 0) -> str:
         body = f"{body}\n\nCloses #{issue_number}"
     result = subprocess.run(
         ["gh", "pr", "create", "--repo", REPO, "--title", title, "--body", body],
-        capture_output=True, text=True, timeout=30, cwd=WORK_DIR,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=WORK_DIR,
     )
     if result.returncode != 0:
         return f"Error creating PR: {result.stderr}"
@@ -236,16 +279,23 @@ def create_pull_request(title: str, body: str, issue_number: int = 0) -> str:
 # ── Tool sets per agent ──────────────────────────────────────────────
 
 github_tools = [
-    list_github_issues, get_github_issue, clone_repo,
-    git_create_branch, git_commit_and_push, create_pull_request,
+    list_github_issues,
+    get_github_issue,
+    clone_repo,
+    git_create_branch,
+    git_commit_and_push,
+    create_pull_request,
 ]
 
 coding_tools = [
-    write_file, read_file, list_files,
+    write_file,
+    read_file,
+    list_files,
 ]
 
 qa_tools = [
-    read_file, list_files,
+    read_file,
+    list_files,
 ]
 
 # ── GitHub Agent: handles all git/gh operations ──────────────────────
@@ -382,7 +432,6 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"\nPrompt: {prompt}\n")
 
-
     with AgentRuntime() as runtime:
         result = runtime.run(coding_team, prompt)
 
@@ -411,4 +460,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(coding_team)
-

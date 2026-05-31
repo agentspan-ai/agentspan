@@ -51,10 +51,7 @@ try:
     from agents.sandbox.config import DEFAULT_PYTHON_SANDBOX_IMAGE
     from agents.sandbox.entries import File
 except ImportError:
-    raise SystemExit(
-        "openai-agents not installed.\n"
-        "Install it with: uv add openai-agents"
-    )
+    raise SystemExit("openai-agents not installed.\nInstall it with: uv add openai-agents")
 
 try:
     from docker import from_env as docker_from_env
@@ -68,7 +65,7 @@ except ImportError:
 
 # ── Only this line changes ──────────────────────────────────────────────────
 # from agents import Runner          # ← original (runs directly on OpenAI)
-from agentspan import Runner         # ← agentspan (runs on Agentspan)
+from agentspan import Runner  # ← agentspan (runs on Agentspan)
 # ───────────────────────────────────────────────────────────────────────────
 
 DEFAULT_QUESTION = "Summarize this project in 2 sentences."
@@ -112,8 +109,7 @@ def _build_agent(model: str, manifest: Manifest) -> SandboxAgent:
             from agents.sandbox import WorkspaceShellCapability  # type: ignore
         except ImportError:
             raise SystemExit(
-                "WorkspaceShellCapability not found. "
-                "Ensure openai-agents[docker] is installed."
+                "WorkspaceShellCapability not found. Ensure openai-agents[docker] is installed."
             )
 
     return SandboxAgent(

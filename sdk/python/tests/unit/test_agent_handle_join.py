@@ -63,7 +63,9 @@ class TestAgentHandleJoinSync:
 
     def test_join_polls_until_complete(self):
         """join() keeps polling until is_complete=True."""
-        running = AgentStatus(execution_id="wf-1", is_complete=False, is_running=True, status="RUNNING", output=None)
+        running = AgentStatus(
+            execution_id="wf-1", is_complete=False, is_running=True, status="RUNNING", output=None
+        )
         completed = AgentStatus(
             execution_id="wf-1", is_complete=True, status="COMPLETED", output={"result": "done"}
         )
@@ -172,7 +174,9 @@ class TestAgentHandleJoinAsync:
             return completed
 
         runtime.get_status_async = AsyncMock(side_effect=_get_status_async)
-        runtime._normalize_output.side_effect = lambda o, s, reason=None: o if isinstance(o, dict) else {"result": o}
+        runtime._normalize_output.side_effect = lambda o, s, reason=None: (
+            o if isinstance(o, dict) else {"result": o}
+        )
         runtime._derive_finish_reason.return_value = FinishReason.STOP
         runtime._extract_token_usage.return_value = None
 
@@ -211,7 +215,9 @@ class TestAgentHandleJoinAsync:
         responses = [
             AgentStatus(execution_id="wf-a3", is_complete=False, status="RUNNING", output=None),
             AgentStatus(execution_id="wf-a3", is_complete=False, status="RUNNING", output=None),
-            AgentStatus(execution_id="wf-a3", is_complete=True, status="COMPLETED", output={"result": "yes"}),
+            AgentStatus(
+                execution_id="wf-a3", is_complete=True, status="COMPLETED", output={"result": "yes"}
+            ),
         ]
         idx = {"i": 0}
 
@@ -222,7 +228,9 @@ class TestAgentHandleJoinAsync:
 
         runtime = MagicMock()
         runtime.get_status_async = AsyncMock(side_effect=_get)
-        runtime._normalize_output.side_effect = lambda o, s, reason=None: o if isinstance(o, dict) else {"result": o}
+        runtime._normalize_output.side_effect = lambda o, s, reason=None: (
+            o if isinstance(o, dict) else {"result": o}
+        )
         runtime._derive_finish_reason.return_value = FinishReason.STOP
         runtime._extract_token_usage.return_value = None
 

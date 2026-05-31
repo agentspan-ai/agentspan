@@ -46,16 +46,18 @@ no_ssn = RegexGuardrail(
 
 # ── Agent with PII-blocking guardrails ───────────────────────────────
 
+
 @tool
 def get_user_profile(user_id: str) -> dict:
     """Retrieve a user's profile from the database."""
     return {
         "name": "Alice Johnson",
         "email": "alice.johnson@example.com",  # PII - should be blocked
-        "ssn": "123-45-6789",                  # PII - should be blocked
+        "ssn": "123-45-6789",  # PII - should be blocked
         "department": "Engineering",
         "role": "Senior Developer",
     }
+
 
 agent = Agent(
     name="hr_assistant",
@@ -120,4 +122,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

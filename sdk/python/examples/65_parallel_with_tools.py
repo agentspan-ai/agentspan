@@ -27,6 +27,7 @@ from settings import settings
 
 # ── Domain tools ────────────────────────────────────────────────────
 
+
 @tool
 def check_balance(account_id: str) -> dict:
     """Check the balance of a bank account."""
@@ -99,4 +100,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(analysis)
-

@@ -18,8 +18,16 @@ from agentspan.agents.frameworks.serializer import detect_framework
 
 # Directories that should never be scanned during discovery.
 SKIP_DIRS = {
-    "__pycache__", ".git", ".venv", "venv", "node_modules",
-    ".mypy_cache", ".pytest_cache", ".tox", "dist", "build",
+    "__pycache__",
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    "dist",
+    "build",
     ".eggs",
 }
 
@@ -61,10 +69,9 @@ def discover_from_path(directory: str) -> list:
         for root, dirs, files in os.walk(abs_dir):
             # Prune directories we should never scan
             dirs[:] = [
-                d for d in dirs
-                if d not in SKIP_DIRS
-                and not d.startswith(".")
-                and not d.endswith(".egg-info")
+                d
+                for d in dirs
+                if d not in SKIP_DIRS and not d.startswith(".") and not d.endswith(".egg-info")
             ]
 
             for fname in sorted(files):
@@ -150,10 +157,7 @@ def main():
         print(f"Discovery failed: {e}", file=sys.stderr)
         sys.exit(1)
 
-    result = [
-        {"name": a.name, "framework": detect_framework(a) or "native"}
-        for a in agents
-    ]
+    result = [{"name": a.name, "framework": detect_framework(a) or "native"} for a in agents]
     json.dump(result, sys.stdout)
 
 
