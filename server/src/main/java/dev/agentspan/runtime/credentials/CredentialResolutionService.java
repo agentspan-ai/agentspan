@@ -12,7 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * Single authority for secret resolution across all call paths.
+ * Single authority for credential resolution across all call paths.
  *
  * <p>Two forms of name accepted:
  * <ul>
@@ -23,14 +23,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *       {@code ${workflow.secrets.NAME.path}} convention.</li>
  * </ul>
  *
- * <p>Returns {@code null} when (a) the base secret isn't in the store, (b) the base
+ * <p>Returns {@code null} when (a) the base credential isn't in the store, (b) the base
  * value isn't valid JSON when a dotted path was requested, or (c) the path doesn't
  * resolve to a field. Non-string leaves (numbers, booleans, nested objects) are
  * returned in their JSON representation so callers (HTTP placeholder substitution,
  * MCP header rewriting) can interpolate them as strings.</p>
  *
  * <p><strong>Constraint:</strong> dotted resolution always splits on the first
- * {@code .}. If a secret name itself contains a dot, dotted resolution will not
+ * {@code .}. If a credential name itself contains a dot, dotted resolution will not
  * find it — store such secrets under dot-free names.</p>
  *
  * <p>No env-var fallback — the store is the source of truth. The SDK applies its
@@ -49,7 +49,7 @@ public class CredentialResolutionService {
     }
 
     /**
-     * Resolve a secret name for a user. Supports dotted JSONPath into JSON-valued
+     * Resolve a credential name for a user. Supports dotted JSONPath into JSON-valued
      * secrets — see class javadoc.
      *
      * @return the value (extracted scalar or full JSON), or null if not found
@@ -58,7 +58,7 @@ public class CredentialResolutionService {
         int dot = name.indexOf('.');
         if (dot < 0) {
             String value = storeProvider.get(userId, name);
-            if (value == null) log.debug("Secret '{}' not found for user '{}'", name, userId);
+            if (value == null) log.debug("Credential '{}' not found for user '{}'", name, userId);
             return value;
         }
 
@@ -66,7 +66,7 @@ public class CredentialResolutionService {
         String path = name.substring(dot + 1);
         String json = storeProvider.get(userId, base);
         if (json == null) {
-            log.debug("Base secret '{}' for path '{}' not found for user '{}'", base, path, userId);
+            log.debug("Base credential '{}' for path '{}' not found for user '{}'", base, path, userId);
             return null;
         }
         return extractByDottedPath(json, path);
@@ -82,7 +82,7 @@ public class CredentialResolutionService {
         try {
             node = mapper.readTree(json);
         } catch (Exception e) {
-            log.debug("Secret value is not JSON; cannot extract path '{}': {}", dottedPath, e.toString());
+            log.debug("Credential value is not JSON; cannot extract path '{}': {}", dottedPath, e.toString());
             return null;
         }
         for (String segment : dottedPath.split("\\.")) {

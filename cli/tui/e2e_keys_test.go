@@ -114,7 +114,7 @@ func TestE2ENavNumberShortcuts(t *testing.T) {
 		{"3", ViewExecutions},
 		{"4", ViewServer},
 		{"5", ViewSkills},
-		{"6", ViewSecrets},
+		{"6", ViewCredentials},
 		{"7", ViewDoctor},
 		{"8", ViewConfigure},
 	}
@@ -664,13 +664,13 @@ func TestE2EServerRRefresh(t *testing.T) {
 // ─── 6. Credentials ──────────────────────────────────────────────────────────
 
 func TestE2ECredentialsRendered(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewSecrets)
+	m := enavTo(t, ebaseApp(t), ViewCredentials)
 	out := eout(m)
 	ehas(t, "secrets", out, "Secrets")
 }
 
 func TestE2ECredentialsButtonBar(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewSecrets)
+	m := enavTo(t, ebaseApp(t), ViewCredentials)
 	if m.credentials.BtnCursor() != -1 {
 		t.Errorf("initial btnCursor=%d, want -1", m.credentials.BtnCursor())
 	}
@@ -693,7 +693,7 @@ func TestE2ECredentialsButtonBar(t *testing.T) {
 }
 
 func TestE2ECredentialsAddForm(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewSecrets)
+	m := enavTo(t, ebaseApp(t), ViewCredentials)
 	m = esend(m, "a")
 	if !m.credentials.AddMode() {
 		t.Fatal("a: should open add form")
@@ -707,7 +707,7 @@ func TestE2ECredentialsAddForm(t *testing.T) {
 }
 
 func TestE2ECredentialsAddFormEsc(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewSecrets)
+	m := enavTo(t, ebaseApp(t), ViewCredentials)
 	m = esend(m, "a")
 	if !m.credentials.AddMode() {
 		t.Skip("add form not opened")
@@ -726,7 +726,7 @@ func TestE2ECredentialsAddFormEsc(t *testing.T) {
 }
 
 func TestE2ECredentialsDeleteConfirm(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewSecrets)
+	m := enavTo(t, ebaseApp(t), ViewCredentials)
 	m = esend(m, "d") // no creds → no confirm
 	if m.credentials.DelConfirm() {
 		t.Error("d with no creds should not confirm")
@@ -745,7 +745,7 @@ func TestE2ECredentialsDeleteConfirm(t *testing.T) {
 }
 
 func TestE2ECredentialsRRefresh(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewSecrets)
+	m := enavTo(t, ebaseApp(t), ViewCredentials)
 	tmpCS := m.credentials
 	tmpCS.SetSuccess("done")
 	m.credentials = tmpCS
@@ -838,7 +838,7 @@ func TestE2EHelpFromAllViews(t *testing.T) {
 	}{
 		{ViewDashboard, "dashboard"}, {ViewAgents, "agents"},
 		{ViewExecutions, "executions"}, {ViewServer, "server"},
-		{ViewSecrets, "secrets"}, {ViewDoctor, "doctor"},
+		{ViewCredentials, "secrets"}, {ViewDoctor, "doctor"},
 		{ViewSkills, "skills"},
 	}
 	for _, v := range all {
@@ -896,7 +896,7 @@ func TestE2EWindowResizePropagates(t *testing.T) {
 	}
 
 	// Navigate to a new view using the current dimensions (not esz() which is 220×50)
-	r2, _ := m.Update(NavSelectMsg{View: ViewSecrets})
+	r2, _ := m.Update(NavSelectMsg{View: ViewCredentials})
 	m2 := r2.(*AppModel)
 	// Propagate size to the new view
 	r3, _ := m2.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -923,7 +923,7 @@ func TestE2ECrossViewNumberJumpAlwaysFocusesContent(t *testing.T) {
 }
 
 func TestE2ECrossViewEscReturnsSidebar(t *testing.T) {
-	for _, v := range []ViewID{ViewAgents, ViewServer, ViewSecrets} {
+	for _, v := range []ViewID{ViewAgents, ViewServer, ViewCredentials} {
 		t.Run("", func(t *testing.T) {
 			m := enavTo(t, ebaseApp(t), v)
 			efocused(t, "after nav", m, true)

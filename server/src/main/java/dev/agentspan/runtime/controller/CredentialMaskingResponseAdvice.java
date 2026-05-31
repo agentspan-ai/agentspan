@@ -25,7 +25,7 @@ import dev.agentspan.runtime.auth.User;
 import dev.agentspan.runtime.credentials.CredentialOutputMasker;
 
 /**
- * Redacts disclosed secret values from execution-read response bodies.
+ * Redacts disclosed credential values from execution-read response bodies.
  *
  * <p>Activates for endpoints that include an {@code executionId} in their URL —
  * specifically, {@code /api/agent/executions/{id}}, its {@code /full},
@@ -114,7 +114,7 @@ public class CredentialMaskingResponseAdvice implements ResponseBodyAdvice<Objec
             if (masked == null || masked.equals(json)) return body; // no-op fast path
             return mapper.readTree(masked);
         } catch (Exception e) {
-            log.warn("Secret masking skipped for {} ({}): {}", path, executionId, e.toString());
+            log.warn("Credential masking skipped for {} ({}): {}", path, executionId, e.toString());
             return body;
         }
     }

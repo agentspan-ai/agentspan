@@ -691,7 +691,7 @@ func (c *Client) ListCredentials() ([]CredentialMeta, error) {
 	defer resp.Body.Close()
 	var result []CredentialMeta
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode secrets: %w", err)
+		return nil, fmt.Errorf("decode credentials: %w", err)
 	}
 	return result, nil
 }

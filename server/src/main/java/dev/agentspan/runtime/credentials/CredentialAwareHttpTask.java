@@ -72,7 +72,7 @@ public class CredentialAwareHttpTask extends HttpTask {
         try {
             super.start(workflow, task, executor);
         } finally {
-            // Restore placeholder headers so resolved secrets are never persisted.
+            // Restore placeholder headers so resolved credentials are never persisted.
             if (originalHeaders != null && httpRequest instanceof Map<?, ?> reqMap) {
                 ((Map<String, Object>) reqMap).put("headers", originalHeaders);
             }

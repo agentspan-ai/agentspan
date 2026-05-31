@@ -31,7 +31,7 @@ import lombok.RequiredArgsConstructor;
  * declared-name-bound, rate-limited) — NOT a login JWT or API key.</p>
  *
  * <p>This is the AgentSpan-specific complement to {@code SecretController}:
- * Conductor has no equivalent because Conductor substitutes secret plaintext
+ * Conductor has no equivalent because Conductor substitutes credential plaintext
  * into task input at dispatch time. AgentSpan workers are out-of-process and
  * pull secrets at runtime using the execution token embedded in
  * {@code __agentspan_ctx__} on the workflow.</p>
@@ -59,7 +59,7 @@ public class WorkerController {
     /**
      * POST /api/workers/secrets — resolve declared secrets using an execution token.
      *
-     * <p>The token is validated, rate-limited, and secret names are bounded to those
+     * <p>The token is validated, rate-limited, and credential names are bounded to those
      * declared at dispatch time. Returns a map of name → plaintext for each name that
      * (a) is in the request, (b) was declared by the dispatching tool/agent, and
      * (c) exists in the store. Missing names are simply omitted from the response.</p>
@@ -119,7 +119,7 @@ public class WorkerController {
                 String value = resolutionService.resolve(payload.userId(), name);
                 if (value != null) result.put(name, value);
             } catch (CredentialResolutionService.CredentialNotFoundException e) {
-                log.warn("Secret not found: user={}, name={}", payload.userId(), name);
+                log.warn("Credential not found: user={}, name={}", payload.userId(), name);
             }
         }
 

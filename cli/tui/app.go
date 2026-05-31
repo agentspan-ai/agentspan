@@ -288,7 +288,7 @@ func (m *AppModel) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "5":
 		return m.jumpTo(ViewSkills)
 	case "6":
-		return m.jumpTo(ViewSecrets)
+		return m.jumpTo(ViewCredentials)
 	case "7":
 		return m.jumpTo(ViewDoctor)
 	case "8":
@@ -392,7 +392,7 @@ func (m *AppModel) handleNavigation(nav NavigateMsg) (tea.Model, tea.Cmd) {
 		m.server = views.NewServer(m.client)
 		m.server, _ = m.server.Update(sizeMsg)
 		initCmd = m.server.Init()
-	case ViewSecrets:
+	case ViewCredentials:
 		m.credentials = views.NewCredentials(m.client)
 		m.credentials, _ = m.credentials.Update(sizeMsg)
 		initCmd = m.credentials.Init()
@@ -423,7 +423,7 @@ func (m *AppModel) activeViewWantsEsc() bool {
 		return m.executions.WantsEsc()
 	case ViewServer:
 		return m.server.WantsEsc()
-	case ViewSecrets:
+	case ViewCredentials:
 		return m.credentials.WantsEsc()
 	}
 	return false
@@ -438,7 +438,7 @@ func (m *AppModel) activeViewWantsAllKeys() bool {
 		return m.configure.FormActive()
 	case ViewAgents:
 		return m.agents.FormActive()
-	case ViewSecrets:
+	case ViewCredentials:
 		return m.credentials.FormActive()
 	}
 	return false
@@ -460,7 +460,7 @@ func (m *AppModel) delegateToActiveView(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case ViewServer:
 		m.server, cmd = m.server.Update(msg)
-	case ViewSecrets:
+	case ViewCredentials:
 		m.credentials, cmd = m.credentials.Update(msg)
 	case ViewDoctor:
 		m.doctor, cmd = m.doctor.Update(msg)
@@ -526,7 +526,7 @@ func (m *AppModel) renderActiveView() string {
 		return m.executions.View()
 	case ViewServer:
 		return m.server.View()
-	case ViewSecrets:
+	case ViewCredentials:
 		return m.credentials.View()
 	case ViewDoctor:
 		return m.doctor.View()
@@ -569,7 +569,7 @@ func (m *AppModel) footerHints() string {
 		}
 	case ViewServer:
 		viewHints = m.server.FooterHints()
-	case ViewSecrets:
+	case ViewCredentials:
 		viewHints = m.credentials.FooterHints()
 	case ViewDoctor:
 		viewHints = m.doctor.FooterHints()
