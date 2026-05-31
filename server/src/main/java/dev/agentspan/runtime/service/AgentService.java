@@ -288,6 +288,14 @@ public class AgentService {
         }
         input.put("cwd", cwd);
 
+        // Pre-generate the workflow id so the execution token can be minted
+        // against the same id Conductor will use. Without this the token's
+        // executionId is null, and SecretDisclosureService.record() crashes
+        // with NPE when it tries Map.of(..., null, ...) on the not-null
+        // execution_id column. Passing this id to setWorkflowId on the start
+        // input below makes Conductor adopt it instead of generating one.
+        String preallocatedExecutionId = UUID.randomUUID().toString();
+
         // Mint execution token and embed in workflow variables for worker credential resolution
         if (executionTokenService != null) {
             try {
@@ -307,7 +315,7 @@ public class AgentService {
                         RequestContextHolder.get().map(ctx -> ctx.getUser()).orElse(null);
                 if (currentUser != null) {
                     String token = executionTokenService.mint(
-                            currentUser.getId(), null /* executionId not known yet */, declaredNames, timeoutSeconds);
+                            currentUser.getId(), preallocatedExecutionId, declaredNames, timeoutSeconds);
                     Map<String, Object> agentCtx = new LinkedHashMap<>();
                     agentCtx.put("execution_token", token);
                     input.put("__agentspan_ctx__", agentCtx);
@@ -363,7 +371,12 @@ public class AgentService {
             }
         }
 
-        String executionId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
+        StartWorkflowInput startInput = new StartWorkflowInput(startReq);
+        // Adopt the pre-generated id so the token's executionId matches the
+        // workflow Conductor actually creates. If unset, Conductor would mint
+        // a fresh UUID and the token binding would never line up.
+        startInput.setWorkflowId(preallocatedExecutionId);
+        String executionId = workflowExecutor.startWorkflow(startInput);
         log.info("Started workflow: {} (id={})", def.getName(), executionId);
 
         // Validate provider AFTER start — workflow is captured for replay

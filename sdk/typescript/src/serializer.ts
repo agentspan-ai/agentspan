@@ -352,6 +352,17 @@ export class AgentConfigSerializer {
       config.config = toolDef.config;
     }
 
+    // Declared credentials must land inside `config.credentials` on the wire —
+    // that's where the server's compiler extracts them into the execution
+    // token's declared_names list. ToolDef stores credentials as a top-level
+    // field, so without this merge they'd never reach the server and every
+    // worker resolve would fail with "Credential not found" (mirrors the
+    // Java SDK's AgentConfigSerializer behaviour).
+    if (toolDef.credentials && toolDef.credentials.length > 0) {
+      const existing = (config.config as Record<string, unknown>) ?? {};
+      config.config = { ...existing, credentials: toolDef.credentials };
+    }
+
     return omitNulls(config);
   }
 

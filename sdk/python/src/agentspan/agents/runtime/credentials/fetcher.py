@@ -89,7 +89,9 @@ class WorkerCredentialFetcher:
         execution_token: str,
         names: List[str],
     ) -> Dict[str, str]:
-        url = f"{self._server_url}/workers/credentials"
+        # Server endpoint was renamed to /workers/secrets (Conductor parity);
+        # the SDK keeps the credentials terminology on the user-facing side.
+        url = f"{self._server_url}/workers/secrets"
         headers: Dict[str, str] = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
