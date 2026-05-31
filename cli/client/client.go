@@ -673,32 +673,32 @@ func (c *Client) Login(username, password string) (*LoginResponse, error) {
 	return &result, nil
 }
 
-// ─── Secrets management API ───────────────────────────────────────────────────
+// ─── Credentials management API ───────────────────────────────────────────────────
 
-// SecretMeta is the list-view for a stored secret (from GET /api/secrets/v2).
-type SecretMeta struct {
+// CredentialMeta is the list-view for a stored credential (from GET /api/secrets/v2).
+type CredentialMeta struct {
 	Name      string `json:"name"`
 	Partial   string `json:"partial"`
 	UpdatedAt string `json:"updated_at"`
 }
 
-// ListSecrets returns all stored secret metadata (uses /api/secrets/v2 for richer payload).
-func (c *Client) ListSecrets() ([]SecretMeta, error) {
+// ListCredentials returns all stored credential metadata (uses /api/secrets/v2 for richer payload).
+func (c *Client) ListCredentials() ([]CredentialMeta, error) {
 	resp, err := c.doRequest("GET", "/api/secrets/v2", nil)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var result []SecretMeta
+	var result []CredentialMeta
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode secrets: %w", err)
 	}
 	return result, nil
 }
 
-// SetSecret stores (upserts) a secret value via PUT /api/secrets/{key}.
+// SetCredential stores (upserts) a credential value via PUT /api/secrets/{key}.
 // Body is the raw plaintext value (Conductor parity).
-func (c *Client) SetSecret(name, value string) error {
+func (c *Client) SetCredential(name, value string) error {
 	req, err := http.NewRequest("PUT",
 		c.baseURL+"/api/secrets/"+url.PathEscape(name),
 		strings.NewReader(value))
@@ -721,8 +721,8 @@ func (c *Client) SetSecret(name, value string) error {
 	return nil
 }
 
-// DeleteSecret removes a stored secret by name.
-func (c *Client) DeleteSecret(name string) error {
+// DeleteCredential removes a stored credential by name.
+func (c *Client) DeleteCredential(name string) error {
 	resp, err := c.doRequest("DELETE", "/api/secrets/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
--- schema-secrets.sql
+-- schema-credentials.sql
 -- AgentSpan secrets tables. Created with spring.sql.init.mode=always
 -- using a separate DataSource bean (see SecretDataSourceConfig).
 -- SQLite-compatible DDL — IF NOT EXISTS guards make this idempotent.
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at   TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS secrets_store (
+CREATE TABLE IF NOT EXISTS credentials_store (
     user_id         TEXT NOT NULL,
     name            TEXT NOT NULL,
     encrypted_value BLOB NOT NULL,           -- AES-256-GCM ciphertext
@@ -42,12 +42,12 @@ CREATE TABLE IF NOT EXISTS secrets_store (
 
 -- Per-execution record of which secret names were resolved for a worker.
 -- Used by SecretOutputMasker to redact secret values from execution-read responses.
-CREATE TABLE IF NOT EXISTS secret_disclosures (
+CREATE TABLE IF NOT EXISTS credential_disclosures (
     execution_id TEXT NOT NULL,
     user_id      TEXT NOT NULL,
-    name         TEXT NOT NULL,              -- secret name (matches secrets_store.name)
+    name         TEXT NOT NULL,              -- secret name (matches credentials_store.name)
     disclosed_at TEXT NOT NULL,              -- ISO-8601 UTC, first disclosure for this exec+name
     PRIMARY KEY (execution_id, name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_secret_disclosures_user ON secret_disclosures(user_id, execution_id);
+CREATE INDEX IF NOT EXISTS idx_credential_disclosures_user ON credential_disclosures(user_id, execution_id);

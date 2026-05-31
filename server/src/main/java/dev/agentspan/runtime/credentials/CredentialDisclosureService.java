@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
  * Records which secret names were resolved for each execution.
  *
  * <p>{@link dev.agentspan.runtime.controller.WorkerController} writes a row to
- * {@code secret_disclosures} every time a worker successfully resolves a name
+ * {@code credential_disclosures} every time a worker successfully resolves a name
  * via {@code POST /api/workers/secrets}. {@link CredentialOutputMasker} reads
  * these rows on the execution-read path to know which secret values to redact
  * from response payloads.</p>
@@ -40,7 +40,7 @@ public class CredentialDisclosureService {
 
     public CredentialDisclosureService(
             @Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc,
-            @Value("${agentspan.secrets.disclosure-retention-days:30}") int retentionDays) {
+            @Value("${agentspan.credentials.disclosure-retention-days:30}") int retentionDays) {
         this.jdbc = jdbc;
         this.retentionDays = retentionDays;
     }
@@ -51,7 +51,7 @@ public class CredentialDisclosureService {
         String now = Instant.now().toString();
         for (String name : names) {
             jdbc.update(
-                    "INSERT INTO secret_disclosures (execution_id, user_id, name, disclosed_at) "
+                    "INSERT INTO credential_disclosures (execution_id, user_id, name, disclosed_at) "
                             + "VALUES (:e, :u, :n, :t) ON CONFLICT DO NOTHING",
                     Map.of("e", executionId, "u", userId, "n", name, "t", now));
         }
@@ -61,7 +61,7 @@ public class CredentialDisclosureService {
     public List<String> namesFor(String executionId, String userId) {
         List<String> result = new ArrayList<>();
         jdbc.query(
-                "SELECT name FROM secret_disclosures WHERE execution_id = :e AND user_id = :u",
+                "SELECT name FROM credential_disclosures WHERE execution_id = :e AND user_id = :u",
                 Map.of("e", executionId, "u", userId),
                 (ResultSetExtractor<Void>) rs -> {
                     while (rs.next()) result.add(rs.getString("name"));
@@ -76,23 +76,23 @@ public class CredentialDisclosureService {
      */
     public int pruneOlderThan(int days) {
         String cutoff = Instant.now().minus(days, ChronoUnit.DAYS).toString();
-        return jdbc.update("DELETE FROM secret_disclosures WHERE disclosed_at < :cutoff", Map.of("cutoff", cutoff));
+        return jdbc.update("DELETE FROM credential_disclosures WHERE disclosed_at < :cutoff", Map.of("cutoff", cutoff));
     }
 
     /**
      * Hourly background prune. Disclosure rows are an unbounded log otherwise:
      * every worker-side secret resolution writes one. Retention default is
-     * 30 days, configurable via {@code agentspan.secrets.disclosure-retention-days}.
+     * 30 days, configurable via {@code agentspan.credentials.disclosure-retention-days}.
      */
     @Scheduled(fixedDelay = 3_600_000L, initialDelay = 60_000L)
     public void pruneScheduled() {
         try {
             int n = pruneOlderThan(retentionDays);
             if (n > 0) {
-                log.info("Pruned {} secret_disclosures row(s) older than {} day(s)", n, retentionDays);
+                log.info("Pruned {} credential_disclosures row(s) older than {} day(s)", n, retentionDays);
             }
         } catch (Exception e) {
-            log.warn("secret_disclosures prune failed: {}", e.toString());
+            log.warn("credential_disclosures prune failed: {}", e.toString());
         }
     }
 }

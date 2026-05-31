@@ -39,7 +39,7 @@ class CredentialResolutionServiceTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM secrets_store WHERE user_id = :uid", Map.of("uid", USER_ID));
+        jdbc.update("DELETE FROM credentials_store WHERE user_id = :uid", Map.of("uid", USER_ID));
     }
 
     @Test

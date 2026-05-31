@@ -14,7 +14,7 @@ import (
 // ─── Messages ────────────────────────────────────────────────────────────────
 
 type SecretsLoadedMsg struct {
-	Creds []client.SecretMeta
+	Creds []client.CredentialMeta
 	Err   error
 }
 
@@ -33,11 +33,11 @@ var secButtons = []ui.ButtonDef{
 
 // ─── Model ───────────────────────────────────────────────────────────────────
 
-type SecretsModel struct {
+type CredentialsModel struct {
 	client    *client.Client
 	width     int
 	height    int
-	creds     []client.SecretMeta
+	creds     []client.CredentialMeta
 	cursor    int
 	btnCursor int // -1 = table, >=0 = button bar
 	loading   bool
@@ -53,19 +53,19 @@ type SecretsModel struct {
 	delConfirm bool
 }
 
-func NewSecrets(c *client.Client) SecretsModel {
-	return SecretsModel{
+func NewCredentials(c *client.Client) CredentialsModel {
+	return CredentialsModel{
 		client:    c,
 		loading:   true,
 		btnCursor: -1,
 	}
 }
 
-func (m SecretsModel) Init() tea.Cmd {
+func (m CredentialsModel) Init() tea.Cmd {
 	return tea.Batch(m.loadAll(), ui.SpinnerTickCmd())
 }
 
-func (m SecretsModel) Update(msg tea.Msg) (SecretsModel, tea.Cmd) {
+func (m CredentialsModel) Update(msg tea.Msg) (CredentialsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -153,7 +153,7 @@ func (m SecretsModel) Update(msg tea.Msg) (SecretsModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m SecretsModel) handleKey(key string) (SecretsModel, tea.Cmd) {
+func (m CredentialsModel) handleKey(key string) (CredentialsModel, tea.Cmd) {
 	switch key {
 	case "up", "k":
 		if m.btnCursor >= 0 {
@@ -215,7 +215,7 @@ func (m SecretsModel) handleKey(key string) (SecretsModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m SecretsModel) activateButton(idx int) (SecretsModel, tea.Cmd) {
+func (m CredentialsModel) activateButton(idx int) (CredentialsModel, tea.Cmd) {
 	if idx < 0 || idx >= len(secButtons) {
 		return m, nil
 	}
@@ -224,7 +224,7 @@ func (m SecretsModel) activateButton(idx int) (SecretsModel, tea.Cmd) {
 
 // ─── View ────────────────────────────────────────────────────────────────────
 
-func (m SecretsModel) View() string {
+func (m CredentialsModel) View() string {
 	cw := ui.ContentWidth(m.width)
 	ch := ui.ContentHeight(m.height)
 	innerW := cw - 4
@@ -275,7 +275,7 @@ func (m SecretsModel) View() string {
 	return ui.ContentPanel(cw, ch, "Secrets", body)
 }
 
-func (m SecretsModel) renderTable(width int) string {
+func (m CredentialsModel) renderTable(width int) string {
 	sep := lipgloss.NewStyle().Foreground(ui.ColorDarkGreen).Render(strings.Repeat("─", width))
 
 	if len(m.creds) == 0 {
@@ -299,7 +299,7 @@ func (m SecretsModel) renderTable(width int) string {
 	return headerLine + "\n" + sep + "\n" + rows.String() + count
 }
 
-func (m SecretsModel) buildAddForm() *huh.Form {
+func (m CredentialsModel) buildAddForm() *huh.Form {
 	return huh.NewForm(huh.NewGroup(
 		huh.NewInput().Key("name").Title("Name (key)").
 			Description("e.g. OPENAI_API_KEY").
@@ -313,9 +313,9 @@ func (m SecretsModel) buildAddForm() *huh.Form {
 
 // ─── Commands ────────────────────────────────────────────────────────────────
 
-func (m SecretsModel) loadAll() tea.Cmd {
+func (m CredentialsModel) loadAll() tea.Cmd {
 	return func() tea.Msg {
-		creds, err := m.client.ListSecrets()
+		creds, err := m.client.ListCredentials()
 		if err != nil {
 			return SecretsLoadedMsg{Err: err}
 		}
@@ -323,7 +323,7 @@ func (m SecretsModel) loadAll() tea.Cmd {
 	}
 }
 
-func (m SecretsModel) saveCredential() tea.Cmd {
+func (m CredentialsModel) saveCredential() tea.Cmd {
 	name := m.addName
 	value := m.addValue
 	if m.addForm != nil {
@@ -331,26 +331,26 @@ func (m SecretsModel) saveCredential() tea.Cmd {
 		value = m.addForm.GetString("value")
 	}
 	return func() tea.Msg {
-		err := m.client.SetSecret(name, value)
+		err := m.client.SetCredential(name, value)
 		return SecretActionMsg{Action: "Credential stored", Err: err}
 	}
 }
 
-func (m SecretsModel) deleteSelected() tea.Cmd {
+func (m CredentialsModel) deleteSelected() tea.Cmd {
 	name := m.selectedName()
 	return func() tea.Msg {
-		err := m.client.DeleteSecret(name)
+		err := m.client.DeleteCredential(name)
 		return SecretActionMsg{Action: "Credential deleted", Err: err}
 	}
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-func (m SecretsModel) rowCount() int {
+func (m CredentialsModel) rowCount() int {
 	return len(m.creds)
 }
 
-func (m SecretsModel) selectedName() string {
+func (m CredentialsModel) selectedName() string {
 	if m.cursor < len(m.creds) {
 		return m.creds[m.cursor].Name
 	}
@@ -358,12 +358,12 @@ func (m SecretsModel) selectedName() string {
 }
 
 // FormActive returns true when the add form is open and being edited.
-func (m SecretsModel) FormActive() bool {
+func (m CredentialsModel) FormActive() bool {
 	return m.addMode && m.addForm != nil && m.addForm.State == huh.StateNormal
 }
 
 // FooterHints returns context-sensitive key hints.
-func (m SecretsModel) FooterHints() string {
+func (m CredentialsModel) FooterHints() string {
 	if m.addMode {
 		return ui.KeyHint("tab", "next field") + "  " +
 			ui.KeyHint("enter", "save") + "  " +
@@ -382,18 +382,18 @@ func (m SecretsModel) FooterHints() string {
 
 // ─── Test accessors ───────────────────────────────────────────────────────────
 
-func (m SecretsModel) BtnCursor() int       { return m.btnCursor }
-func (m SecretsModel) AddMode() bool        { return m.addMode }
-func (m SecretsModel) DelConfirm() bool     { return m.delConfirm }
-func (m SecretsModel) Loading() bool        { return m.loading }
-func (m SecretsModel) Success() string      { return m.success }
-func (m *SecretsModel) SetSuccess(s string) { m.success = s }
+func (m CredentialsModel) BtnCursor() int       { return m.btnCursor }
+func (m CredentialsModel) AddMode() bool        { return m.addMode }
+func (m CredentialsModel) DelConfirm() bool     { return m.delConfirm }
+func (m CredentialsModel) Loading() bool        { return m.loading }
+func (m CredentialsModel) Success() string      { return m.success }
+func (m *CredentialsModel) SetSuccess(s string) { m.success = s }
 
-func (m *SecretsModel) InjectCred(name string) {
-	m.creds = []client.SecretMeta{{Name: name, Partial: "xx...xx"}}
+func (m *CredentialsModel) InjectCred(name string) {
+	m.creds = []client.CredentialMeta{{Name: name, Partial: "xx...xx"}}
 }
 
 // WantsEsc returns true when the add form is open.
-func (m SecretsModel) WantsEsc() bool {
+func (m CredentialsModel) WantsEsc() bool {
 	return m.addMode || m.delConfirm
 }

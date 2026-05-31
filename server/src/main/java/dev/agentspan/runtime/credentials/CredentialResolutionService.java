@@ -93,8 +93,8 @@ public class CredentialResolutionService {
         return node.isTextual() ? node.asText() : node.toString();
     }
 
-    public static class SecretNotFoundException extends RuntimeException {
-        public SecretNotFoundException(String name) {
+    public static class CredentialNotFoundException extends RuntimeException {
+        public CredentialNotFoundException(String name) {
             super("Secret not found: " + name);
         }
     }

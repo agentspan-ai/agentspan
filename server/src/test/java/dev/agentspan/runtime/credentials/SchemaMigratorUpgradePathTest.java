@@ -34,7 +34,7 @@ import dev.agentspan.runtime.AgentRuntime;
  * <p>Mechanic: encrypt a value via the live store (so encryption format
  * matches the running master key), copy those encrypted bytes into a
  * synthetic {@code credentials_store} row under a different name, drop the
- * staging row from {@code secrets_store}, run the migrator, then GET via
+ * staging row from {@code credentials_store}, run the migrator, then GET via
  * the controller and assert the original plaintext comes back.</p>
  *
  * <p>Catches: a migration that copies bytes but encodes them wrong, or a
@@ -68,32 +68,31 @@ class SchemaMigratorUpgradePathTest {
     void setUp() {
         store.delete(ANON, STAGE_NAME);
         store.delete(ANON, MIGRATED_NAME);
-        jdbc.getJdbcOperations().execute("DROP TABLE IF EXISTS credentials_store");
+        jdbc.getJdbcOperations().execute("DROP TABLE IF EXISTS secrets_store");
     }
 
     @AfterEach
     void cleanUp() {
         store.delete(ANON, STAGE_NAME);
         store.delete(ANON, MIGRATED_NAME);
-        jdbc.getJdbcOperations().execute("DROP TABLE IF EXISTS credentials_store");
+        jdbc.getJdbcOperations().execute("DROP TABLE IF EXISTS secrets_store");
     }
 
     @Test
     void migratedRow_isReadableViaPublicApi() throws Exception {
-        // 1. Encrypt a plaintext through the live store. This guarantees the
-        //    bytes we move are encrypted with the same master key the running
-        //    server reads with.
+        // 1. Encrypt a plaintext through the live store (credentials_store).
+        //    This guarantees the bytes are in the format the running server reads.
         store.set(ANON, STAGE_NAME, PLAINTEXT);
         byte[] encryptedBytes = jdbc.queryForObject(
-                "SELECT encrypted_value FROM secrets_store WHERE user_id = :u AND name = :n",
+                "SELECT encrypted_value FROM credentials_store WHERE user_id = :u AND name = :n",
                 Map.of("u", ANON, "n", STAGE_NAME),
                 byte[].class);
 
-        // 2. Build the legacy table and seed a row under MIGRATED_NAME with
-        //    those same bytes. Then drop the staging row from secrets_store
-        //    so MIGRATED_NAME exists only in the legacy table.
+        // 2. Build the stale intermediate table (secrets_store) and seed a row
+        //    under MIGRATED_NAME. Remove the staging row from credentials_store
+        //    so MIGRATED_NAME exists only in the stale table.
         jdbc.getJdbcOperations()
-                .execute("CREATE TABLE credentials_store ("
+                .execute("CREATE TABLE secrets_store ("
                         + "  user_id TEXT NOT NULL, "
                         + "  name TEXT NOT NULL, "
                         + "  encrypted_value BLOB NOT NULL, "
@@ -101,7 +100,7 @@ class SchemaMigratorUpgradePathTest {
                         + "  updated_at TEXT NOT NULL, "
                         + "  PRIMARY KEY (user_id, name))");
         jdbc.update(
-                "INSERT INTO credentials_store (user_id, name, encrypted_value, created_at, updated_at) "
+                "INSERT INTO secrets_store (user_id, name, encrypted_value, created_at, updated_at) "
                         + "VALUES (:u, :n, :e, :t, :t)",
                 Map.of(
                         "u",
@@ -117,7 +116,7 @@ class SchemaMigratorUpgradePathTest {
         // Sanity: the migrated name is NOT yet visible via the public API.
         mvc.perform(get("/api/secrets/" + MIGRATED_NAME)).andExpect(status().isNotFound());
 
-        // 3. Run the migrator. After this, the row should be in secrets_store.
+        // 3. Run the migrator. After this, the row should be in credentials_store.
         migrator.migrate();
 
         // 4. Public API reads the plaintext correctly — proves the full

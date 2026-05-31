@@ -26,9 +26,9 @@ public class AgentExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
-    @ExceptionHandler(CredentialResolutionService.SecretNotFoundException.class)
+    @ExceptionHandler(CredentialResolutionService.CredentialNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleCredentialNotFound(
-            CredentialResolutionService.SecretNotFoundException ex) {
+            CredentialResolutionService.CredentialNotFoundException ex) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", ex.getMessage());
         body.put("status", 404);

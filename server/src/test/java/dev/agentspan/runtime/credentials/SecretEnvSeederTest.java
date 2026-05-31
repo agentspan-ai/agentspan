@@ -43,7 +43,7 @@ class CredentialEnvSeederTest {
         // Also guard against the table not yet existing on the very first run.
         try {
             jdbc.update(
-                    "DELETE FROM secrets_store WHERE user_id = :uid AND name LIKE '\\_TEST\\_%' ESCAPE '\\'",
+                    "DELETE FROM credentials_store WHERE user_id = :uid AND name LIKE '\\_TEST\\_%' ESCAPE '\\'",
                     Map.of("uid", ANONYMOUS_USER_ID));
         } catch (Exception ignored) {
             // Table may not exist yet on the first test run — safe to ignore.
@@ -150,7 +150,7 @@ class CredentialEnvSeederTest {
         byte[] staleBytes = new byte[29];
         java.util.Arrays.fill(staleBytes, (byte) 0x42);
         jdbc.update(
-                "INSERT INTO secrets_store (user_id, name, encrypted_value, created_at, updated_at) "
+                "INSERT INTO credentials_store (user_id, name, encrypted_value, created_at, updated_at) "
                         + "VALUES (:uid, :n, :enc, :now, :now)",
                 Map.of("uid", ANONYMOUS_USER_ID, "n", "ANTHROPIC_API_KEY", "enc", staleBytes, "now", now));
 

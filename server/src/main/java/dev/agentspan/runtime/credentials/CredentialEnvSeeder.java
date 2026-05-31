@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
  * <p>This removes the need for developers to re-enter API keys they already have in their
  * environment. Set the env var, start the server, and the credential is ready to use.</p>
  *
- * <p>Only runs when {@code agentspan.secrets.store=built-in}. External stores
+ * <p>Only runs when {@code agentspan.credentials.store=built-in}. External stores
  * (Vault, AWS SM, etc.) manage their own secrets.</p>
  */
 @Component
@@ -107,7 +107,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
     private final CredentialStoreProvider storeProvider;
     private final Function<String, String> envLookup;
 
-    @Value("${agentspan.secrets.store:built-in}")
+    @Value("${agentspan.credentials.store:built-in}")
     private String credentialsStore;
 
     /** Production constructor — reads from the real process environment. */

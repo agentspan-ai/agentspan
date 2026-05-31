@@ -39,7 +39,7 @@ import dev.agentspan.runtime.service.AgentService;
 @SpringBootTest(classes = AgentRuntime.class)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class SecretMaskingIntegrationTest {
+class CredentialMaskingIntegrationTest {
 
     @Autowired
     private MockMvc mvc;
@@ -73,7 +73,7 @@ class SecretMaskingIntegrationTest {
     @AfterEach
     void cleanUp() {
         store.delete(userId, SECRET_NAME);
-        jdbc.update("DELETE FROM secret_disclosures WHERE user_id = :u", Map.of("u", userId));
+        jdbc.update("DELETE FROM credential_disclosures WHERE user_id = :u", Map.of("u", userId));
     }
 
     @Test

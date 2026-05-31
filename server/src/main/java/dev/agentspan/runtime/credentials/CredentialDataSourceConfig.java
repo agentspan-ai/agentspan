@@ -117,9 +117,9 @@ public class CredentialDataSourceConfig {
     public DataSourceInitializer credentialSchemaInitializer(
             @org.springframework.beans.factory.annotation.Qualifier("credentialDataSource") DataSource dataSource) {
         // Use a database-specific DDL file so that column types are correct:
-        //   SQLite  → schema-secrets.sql          (BLOB for binary data)
-        //   Postgres → schema-secrets-postgres.sql (BYTEA for binary data)
-        String schemaFile = isPostgres() ? "schema-secrets-postgres.sql" : "schema-secrets.sql";
+        //   SQLite  → schema-credentials.sql          (BLOB for binary data)
+        //   Postgres → schema-credentials-postgres.sql (BYTEA for binary data)
+        String schemaFile = isPostgres() ? "schema-credentials-postgres.sql" : "schema-credentials.sql";
 
         DataSourceInitializer initializer = new DataSourceInitializer();
         initializer.setDataSource(dataSource);

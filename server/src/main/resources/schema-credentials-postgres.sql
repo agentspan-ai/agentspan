@@ -1,9 +1,9 @@
--- schema-secrets-postgres.sql
+-- schema-credentials-postgres.sql
 -- AgentSpan secrets tables for PostgreSQL.
 -- Loaded by SecretDataSourceConfig when spring.datasource.url starts with jdbc:postgresql.
 -- IF NOT EXISTS guards make this idempotent (safe to re-run on restart).
 --
--- Differences from schema-secrets.sql (SQLite):
+-- Differences from schema-credentials.sql (SQLite):
 --   - encrypted_value uses BYTEA instead of BLOB (PostgreSQL binary type)
 --   - All other column types are identical (TEXT compatibility maintained)
 --
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at   TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS secrets_store (
+CREATE TABLE IF NOT EXISTS credentials_store (
     user_id         TEXT    NOT NULL,
     name            TEXT    NOT NULL,
     encrypted_value BYTEA   NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS secrets_store (
 
 -- Tags not supported — secret_tags table is omitted.
 
-CREATE TABLE IF NOT EXISTS secret_disclosures (
+CREATE TABLE IF NOT EXISTS credential_disclosures (
     execution_id TEXT NOT NULL,
     user_id      TEXT NOT NULL,
     name         TEXT NOT NULL,
@@ -49,4 +49,4 @@ CREATE TABLE IF NOT EXISTS secret_disclosures (
     PRIMARY KEY (execution_id, name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_secret_disclosures_user ON secret_disclosures(user_id, execution_id);
+CREATE INDEX IF NOT EXISTS idx_credential_disclosures_user ON credential_disclosures(user_id, execution_id);

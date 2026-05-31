@@ -37,7 +37,7 @@ class CredentialDisclosureServiceTest {
 
     @BeforeEach
     void clean() {
-        jdbc.update("DELETE FROM secret_disclosures WHERE user_id = :u", Map.of("u", USER));
+        jdbc.update("DELETE FROM credential_disclosures WHERE user_id = :u", Map.of("u", USER));
     }
 
     @Test
@@ -76,13 +76,13 @@ class CredentialDisclosureServiceTest {
         assertThat(service.namesFor(EXEC, "different-user")).isEmpty();
     }
 
-    // ── Bug #1: secret_disclosures must be prunable to avoid unbounded growth ──
+    // ── Bug #1: credential_disclosures must be prunable to avoid unbounded growth ──
 
     @Test
     void pruneOlderThan_deletesOldRowsAndKeepsRecent() {
         // Seed an "old" disclosure (disclosed_at = 60 days ago) and a "recent" one
         // (disclosed_at = now). Pre-fix: service has no pruning, so both rows
-        // remain forever — secret_disclosures grows unboundedly. The new
+        // remain forever — credential_disclosures grows unboundedly. The new
         // pruneOlderThan() must delete the old row and keep the recent one.
         String oldExec = "exec-OLD-" + System.nanoTime();
         String newExec = "exec-NEW-" + System.nanoTime();
@@ -90,11 +90,11 @@ class CredentialDisclosureServiceTest {
         Instant recent = Instant.now();
 
         jdbc.update(
-                "INSERT INTO secret_disclosures (execution_id, user_id, name, disclosed_at) "
+                "INSERT INTO credential_disclosures (execution_id, user_id, name, disclosed_at) "
                         + "VALUES (:e, :u, :n, :t)",
                 Map.of("e", oldExec, "u", USER, "n", "OLD_TOKEN", "t", longAgo.toString()));
         jdbc.update(
-                "INSERT INTO secret_disclosures (execution_id, user_id, name, disclosed_at) "
+                "INSERT INTO credential_disclosures (execution_id, user_id, name, disclosed_at) "
                         + "VALUES (:e, :u, :n, :t)",
                 Map.of("e", newExec, "u", USER, "n", "NEW_TOKEN", "t", recent.toString()));
 

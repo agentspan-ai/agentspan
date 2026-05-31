@@ -35,7 +35,7 @@ class EncryptedDbCredentialStoreProviderTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM secrets_store WHERE user_id = :uid", Map.of("uid", USER_ID));
+        jdbc.update("DELETE FROM credentials_store WHERE user_id = :uid", Map.of("uid", USER_ID));
     }
 
     @Test
@@ -88,7 +88,7 @@ class EncryptedDbCredentialStoreProviderTest {
 
         // Read raw bytes from DB
         byte[] raw = jdbc.queryForObject(
-                "SELECT encrypted_value FROM secrets_store WHERE user_id=:uid AND name=:n",
+                "SELECT encrypted_value FROM credentials_store WHERE user_id=:uid AND name=:n",
                 Map.of("uid", USER_ID, "n", "SECRET"),
                 byte[].class);
 

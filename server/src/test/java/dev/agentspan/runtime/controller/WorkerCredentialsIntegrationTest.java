@@ -47,7 +47,7 @@ import dev.agentspan.runtime.model.credentials.ResolveRequest;
  */
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
-class WorkerSecretsIntegrationTest {
+class WorkerCredentialsIntegrationTest {
 
     @Autowired
     private WorkerController controller;
@@ -108,7 +108,7 @@ class WorkerSecretsIntegrationTest {
         store.delete(USER_A, NAME);
         store.delete(USER_B, NAME);
         jdbc.update("DELETE FROM users WHERE id IN (:a, :b)", Map.of("a", USER_A, "b", USER_B));
-        jdbc.update("DELETE FROM secret_disclosures WHERE user_id IN (:a, :b)", Map.of("a", USER_A, "b", USER_B));
+        jdbc.update("DELETE FROM credential_disclosures WHERE user_id IN (:a, :b)", Map.of("a", USER_A, "b", USER_B));
     }
 
     // ── Gap C: cross-user isolation ─────────────────────────────────────
@@ -123,7 +123,7 @@ class WorkerSecretsIntegrationTest {
         ResolveRequest reqA = new ResolveRequest();
         reqA.setToken(tokenA);
         reqA.setNames(List.of(NAME));
-        ResponseEntity<?> respA = controller.resolveSecrets(reqA);
+        ResponseEntity<?> respA = controller.resolveCredentials(reqA);
         assertThat(respA.getStatusCode().value()).isEqualTo(200);
         Map<String, String> bodyA = (Map<String, String>) respA.getBody();
         assertThat(bodyA).containsEntry(NAME, "VALUE-FROM-A");
@@ -134,7 +134,7 @@ class WorkerSecretsIntegrationTest {
         ResolveRequest reqB = new ResolveRequest();
         reqB.setToken(tokenB);
         reqB.setNames(List.of(NAME));
-        ResponseEntity<?> respB = controller.resolveSecrets(reqB);
+        ResponseEntity<?> respB = controller.resolveCredentials(reqB);
         assertThat(respB.getStatusCode().value()).isEqualTo(200);
         Map<String, String> bodyB = (Map<String, String>) respB.getBody();
         assertThat(bodyB).containsEntry(NAME, "VALUE-FROM-B");
@@ -153,7 +153,7 @@ class WorkerSecretsIntegrationTest {
         req.setToken(tokenA);
         req.setNames(List.of(NAME));
 
-        ResponseEntity<?> resp = controller.resolveSecrets(req);
+        ResponseEntity<?> resp = controller.resolveCredentials(req);
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         Map<String, String> body = (Map<String, String>) resp.getBody();
         // Server returns 200 with the missing name omitted (SDK turns this
@@ -176,7 +176,7 @@ class WorkerSecretsIntegrationTest {
 
         // First resolve → V1
         Map<String, String> first =
-                (Map<String, String>) controller.resolveSecrets(req).getBody();
+                (Map<String, String>) controller.resolveCredentials(req).getBody();
         assertThat(first).containsEntry(NAME, "VALUE-FROM-A");
 
         // Rotate to V2 while the SAME token is still valid
@@ -184,7 +184,7 @@ class WorkerSecretsIntegrationTest {
 
         // Second resolve with the same token → V2 (not snapshotted at mint)
         Map<String, String> second =
-                (Map<String, String>) controller.resolveSecrets(req).getBody();
+                (Map<String, String>) controller.resolveCredentials(req).getBody();
         assertThat(second).containsEntry(NAME, "ROTATED-VALUE-V2");
 
         // Final state matches the latest write
@@ -205,7 +205,7 @@ class WorkerSecretsIntegrationTest {
 
         @SuppressWarnings("unchecked")
         Map<String, String> body =
-                (Map<String, String>) controller.resolveSecrets(req).getBody();
+                (Map<String, String>) controller.resolveCredentials(req).getBody();
         assertThat(body).doesNotContainKey(NAME);
     }
 
@@ -225,7 +225,7 @@ class WorkerSecretsIntegrationTest {
         req.setNames(List.of(NAME));
 
         Map<String, String> body =
-                (Map<String, String>) controller.resolveSecrets(req).getBody();
+                (Map<String, String>) controller.resolveCredentials(req).getBody();
         // Pre-fix: this returned the actual stored value (bypass). After fix:
         // empty declared list means nothing is resolvable through this token.
         assertThat(body).isEmpty();
@@ -245,7 +245,7 @@ class WorkerSecretsIntegrationTest {
         req.setNames(List.of(NAME));
 
         Map<String, String> body =
-                (Map<String, String>) controller.resolveSecrets(req).getBody();
+                (Map<String, String>) controller.resolveCredentials(req).getBody();
         assertThat(body.values()).doesNotContain("VALUE-FROM-B");
         assertThat(body.values()).doesNotContain("VALUE-FROM-A");
     }

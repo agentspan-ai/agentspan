@@ -28,7 +28,7 @@ import dev.agentspan.runtime.model.credentials.CredentialMeta;
  * AES-256-GCM encrypted credential store backed by the credential SQLite/Postgres DB.
  *
  * <p>Encryption format: [12-byte IV][ciphertext+16-byte GCM tag]
- * All concatenated into a single BLOB stored in secrets_store.encrypted_value.</p>
+ * All concatenated into a single BLOB stored in credentials_store.encrypted_value.</p>
  *
  * <p>The master key is the 32-byte key from {@code MasterKeyConfig#credentialMasterKey()}.</p>
  */
@@ -55,7 +55,7 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
     public String get(String userId, String name) {
         try {
             byte[] encrypted = jdbc.queryForObject(
-                    "SELECT encrypted_value FROM secrets_store " + "WHERE user_id = :uid AND name = :n",
+                    "SELECT encrypted_value FROM credentials_store " + "WHERE user_id = :uid AND name = :n",
                     Map.of("uid", userId, "n", name),
                     byte[].class);
             if (encrypted == null) return null;
@@ -78,7 +78,7 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
             // earlier UPDATE-then-INSERT pattern that raced on concurrent
             // first-write to the same (user_id, name).
             jdbc.update(
-                    "INSERT INTO secrets_store (user_id, name, encrypted_value, created_at, updated_at) "
+                    "INSERT INTO credentials_store (user_id, name, encrypted_value, created_at, updated_at) "
                             + "VALUES (:uid, :n, :enc, :now, :now) "
                             + "ON CONFLICT(user_id, name) DO UPDATE SET "
                             + "  encrypted_value = excluded.encrypted_value, "
@@ -91,7 +91,8 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
 
     @Override
     public void delete(String userId, String name) {
-        jdbc.update("DELETE FROM secrets_store WHERE user_id = :uid AND name = :n", Map.of("uid", userId, "n", name));
+        jdbc.update(
+                "DELETE FROM credentials_store WHERE user_id = :uid AND name = :n", Map.of("uid", userId, "n", name));
     }
 
     @Override
@@ -102,7 +103,7 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
         // single-query approach remains more efficient regardless.
         return jdbc.query(
                 "SELECT name, encrypted_value, created_at, updated_at "
-                        + "FROM secrets_store WHERE user_id = :uid ORDER BY name",
+                        + "FROM credentials_store WHERE user_id = :uid ORDER BY name",
                 Map.of("uid", userId),
                 (rs, row) -> {
                     String name = rs.getString("name");

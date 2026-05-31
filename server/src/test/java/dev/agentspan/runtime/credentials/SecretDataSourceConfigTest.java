@@ -34,7 +34,7 @@ class CredentialDataSourceConfigTest {
 
     @Test
     void schemaIsCreated_allCoreTablesExist() {
-        for (String table : java.util.List.of("users", "api_keys", "secrets_store", "secret_tags")) {
+        for (String table : java.util.List.of("users", "api_keys", "credentials_store", "secret_tags")) {
             assertThatCode(() -> credentialJdbc.queryForObject(
                             "SELECT COUNT(*) FROM " + table, java.util.Map.of(), Integer.class))
                     .as("table %s should exist and be queryable", table)

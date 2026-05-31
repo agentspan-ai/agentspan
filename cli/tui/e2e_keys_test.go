@@ -671,34 +671,34 @@ func TestE2ECredentialsRendered(t *testing.T) {
 
 func TestE2ECredentialsButtonBar(t *testing.T) {
 	m := enavTo(t, ebaseApp(t), ViewSecrets)
-	if m.secrets.BtnCursor() != -1 {
-		t.Errorf("initial btnCursor=%d, want -1", m.secrets.BtnCursor())
+	if m.credentials.BtnCursor() != -1 {
+		t.Errorf("initial btnCursor=%d, want -1", m.credentials.BtnCursor())
 	}
 	m = esend(m, espec(tea.KeyDown)) // past empty list
-	if m.secrets.BtnCursor() != 0 {
-		t.Errorf("↓: btnCursor=%d, want 0", m.secrets.BtnCursor())
+	if m.credentials.BtnCursor() != 0 {
+		t.Errorf("↓: btnCursor=%d, want 0", m.credentials.BtnCursor())
 	}
 	m = esend(m, espec(tea.KeyRight))
-	if m.secrets.BtnCursor() != 1 {
-		t.Errorf("→: btnCursor=%d, want 1", m.secrets.BtnCursor())
+	if m.credentials.BtnCursor() != 1 {
+		t.Errorf("→: btnCursor=%d, want 1", m.credentials.BtnCursor())
 	}
 	m = esend(m, espec(tea.KeyLeft))
-	if m.secrets.BtnCursor() != 0 {
-		t.Errorf("←: btnCursor=%d, want 0", m.secrets.BtnCursor())
+	if m.credentials.BtnCursor() != 0 {
+		t.Errorf("←: btnCursor=%d, want 0", m.credentials.BtnCursor())
 	}
 	m = esend(m, espec(tea.KeyUp))
-	if m.secrets.BtnCursor() != -1 {
-		t.Errorf("↑: btnCursor=%d, want -1", m.secrets.BtnCursor())
+	if m.credentials.BtnCursor() != -1 {
+		t.Errorf("↑: btnCursor=%d, want -1", m.credentials.BtnCursor())
 	}
 }
 
 func TestE2ECredentialsAddForm(t *testing.T) {
 	m := enavTo(t, ebaseApp(t), ViewSecrets)
 	m = esend(m, "a")
-	if !m.secrets.AddMode() {
+	if !m.credentials.AddMode() {
 		t.Fatal("a: should open add form")
 	}
-	if !m.secrets.FormActive() {
+	if !m.credentials.FormActive() {
 		t.Error("FormActive() should be true after 'a'")
 	}
 	if !m.activeViewWantsAllKeys() {
@@ -709,17 +709,17 @@ func TestE2ECredentialsAddForm(t *testing.T) {
 func TestE2ECredentialsAddFormEsc(t *testing.T) {
 	m := enavTo(t, ebaseApp(t), ViewSecrets)
 	m = esend(m, "a")
-	if !m.secrets.AddMode() {
+	if !m.credentials.AddMode() {
 		t.Skip("add form not opened")
 	}
 	// huh form esc behavior depends on field state; try up to 5 times
 	for i := 0; i < 5; i++ {
-		if !m.secrets.AddMode() {
+		if !m.credentials.AddMode() {
 			return // closed
 		}
 		m = esend(m, espec(tea.KeyEscape))
 	}
-	if m.secrets.AddMode() {
+	if m.credentials.AddMode() {
 		t.Logf("add form not closed after 5 esc presses — huh behaviour is implementation-dependent")
 		t.Skip("skipping strict assertion on huh form esc")
 	}
@@ -728,32 +728,32 @@ func TestE2ECredentialsAddFormEsc(t *testing.T) {
 func TestE2ECredentialsDeleteConfirm(t *testing.T) {
 	m := enavTo(t, ebaseApp(t), ViewSecrets)
 	m = esend(m, "d") // no creds → no confirm
-	if m.secrets.DelConfirm() {
+	if m.credentials.DelConfirm() {
 		t.Error("d with no creds should not confirm")
 	}
-	tmpC := m.secrets
+	tmpC := m.credentials
 	tmpC.InjectCred("OPENAI_API_KEY")
-	m.secrets = tmpC
+	m.credentials = tmpC
 	m = esend(m, "d")
-	if !m.secrets.DelConfirm() {
+	if !m.credentials.DelConfirm() {
 		t.Error("d with cred should confirm")
 	}
 	m = esend(m, "N")
-	if m.secrets.DelConfirm() {
+	if m.credentials.DelConfirm() {
 		t.Error("N should cancel")
 	}
 }
 
 func TestE2ECredentialsRRefresh(t *testing.T) {
 	m := enavTo(t, ebaseApp(t), ViewSecrets)
-	tmpCS := m.secrets
+	tmpCS := m.credentials
 	tmpCS.SetSuccess("done")
-	m.secrets = tmpCS
+	m.credentials = tmpCS
 	m = esend(m, "R")
-	if m.secrets.Success() != "" {
+	if m.credentials.Success() != "" {
 		t.Error("R should clear success")
 	}
-	if !m.secrets.Loading() {
+	if !m.credentials.Loading() {
 		t.Error("R should set loading=true")
 	}
 }

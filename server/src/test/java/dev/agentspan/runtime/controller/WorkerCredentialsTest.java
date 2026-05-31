@@ -28,7 +28,7 @@ import dev.agentspan.runtime.credentials.*;
 import dev.agentspan.runtime.model.credentials.ResolveRequest;
 
 @ExtendWith(MockitoExtension.class)
-class WorkerSecretsTest {
+class WorkerCredentialsTest {
 
     @Mock
     private CredentialStoreProvider storeProvider;
@@ -74,7 +74,7 @@ class WorkerSecretsTest {
         req.setToken(token);
         req.setNames(List.of("GITHUB_TOKEN"));
 
-        ResponseEntity<?> response = controller.resolveSecrets(req);
+        ResponseEntity<?> response = controller.resolveCredentials(req);
         assertThat(response.getStatusCode().value()).isEqualTo(200);
 
         // Response body should be a flat map, not wrapped in {"credentials": ...}
@@ -97,7 +97,7 @@ class WorkerSecretsTest {
         req.setToken(token);
         req.setNames(List.of("GITHUB_TOKEN"));
 
-        controller.resolveSecrets(req);
+        controller.resolveCredentials(req);
 
         verify(disclosureService, never()).record(eq("wf-X"), eq("u-test"), anyList());
     }
@@ -111,7 +111,7 @@ class WorkerSecretsTest {
         req.setToken(loginToken);
         req.setNames(List.of("GITHUB_TOKEN"));
 
-        ResponseEntity<?> response = controller.resolveSecrets(req);
+        ResponseEntity<?> response = controller.resolveCredentials(req);
         assertThat(response.getStatusCode().value()).isEqualTo(401);
     }
 
@@ -125,7 +125,7 @@ class WorkerSecretsTest {
         req.setToken(token);
         req.setNames(List.of("GITHUB_TOKEN", "OPENAI_KEY"));
 
-        controller.resolveSecrets(req);
+        controller.resolveCredentials(req);
 
         // OPENAI_KEY must not be resolved (not in declared_names)
         verify(resolutionService, never()).resolve(eq("u-test"), eq("OPENAI_KEY"));
@@ -145,7 +145,7 @@ class WorkerSecretsTest {
 
         @SuppressWarnings("unchecked")
         Map<String, String> body =
-                (Map<String, String>) controller.resolveSecrets(req).getBody();
+                (Map<String, String>) controller.resolveCredentials(req).getBody();
         assertThat(body).containsEntry("GCP_SVC.project_id", "my-proj-123");
     }
 
@@ -158,7 +158,7 @@ class WorkerSecretsTest {
         req.setToken(token);
         req.setNames(List.of("OTHER.field"));
 
-        controller.resolveSecrets(req);
+        controller.resolveCredentials(req);
 
         verify(resolutionService, never()).resolve(eq("u-test"), eq("OTHER.field"));
     }
@@ -173,7 +173,7 @@ class WorkerSecretsTest {
         req.setToken(token);
         req.setNames(List.of("FOOBAR.x"));
 
-        controller.resolveSecrets(req);
+        controller.resolveCredentials(req);
 
         verify(resolutionService, never()).resolve(eq("u-test"), eq("FOOBAR.x"));
     }
@@ -188,12 +188,12 @@ class WorkerSecretsTest {
         req.setNames(List.of("KEY_A"));
 
         // Exhaust rate limit (3 calls allowed in test setup)
-        controller.resolveSecrets(req);
-        controller.resolveSecrets(req);
-        controller.resolveSecrets(req);
+        controller.resolveCredentials(req);
+        controller.resolveCredentials(req);
+        controller.resolveCredentials(req);
 
         // 4th call should be rate-limited
-        ResponseEntity<?> limited = controller.resolveSecrets(req);
+        ResponseEntity<?> limited = controller.resolveCredentials(req);
         assertThat(limited.getStatusCode().value()).isEqualTo(429);
     }
 
@@ -207,7 +207,7 @@ class WorkerSecretsTest {
         req.setToken(token);
         req.setNames(List.of("KEY_B"));
 
-        ResponseEntity<?> response = controller.resolveSecrets(req);
+        ResponseEntity<?> response = controller.resolveCredentials(req);
         assertThat(response.getStatusCode().value()).isEqualTo(401);
     }
 }

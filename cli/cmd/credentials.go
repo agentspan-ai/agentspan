@@ -39,7 +39,7 @@ var secretsSetCmd = &cobra.Command{
 func runSecretsSet(name, value string) error {
 	cfg := config.Load()
 	c := client.New(cfg)
-	return c.SetSecret(name, value)
+	return c.SetCredential(name, value)
 }
 
 // ─── secrets list ─────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ var secretsListCmd = &cobra.Command{
 func runSecretsList() (string, error) {
 	cfg := config.Load()
 	c := client.New(cfg)
-	secrets, err := c.ListSecrets()
+	secrets, err := c.ListCredentials()
 	if err != nil {
 		return "", fmt.Errorf("list secrets: %w", err)
 	}
@@ -95,7 +95,7 @@ var secretsDeleteCmd = &cobra.Command{
 
 func runSecretsDelete(name string) error {
 	cfg := config.Load()
-	return client.New(cfg).DeleteSecret(name)
+	return client.New(cfg).DeleteCredential(name)
 }
 
 // ─── init ─────────────────────────────────────────────────────────────────────

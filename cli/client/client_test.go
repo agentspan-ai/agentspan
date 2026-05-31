@@ -397,9 +397,9 @@ func TestStream_SendsBearerToken(t *testing.T) {
 	}
 }
 
-// ─── Secrets CRUD ────────────────────────────────────────────────────────────
+// ─── Credentials CRUD ────────────────────────────────────────────────────────────
 
-func TestSetSecret_PutsRawBodyAtKeyPath(t *testing.T) {
+func TestSetCredential_PutsRawBodyAtKeyPath(t *testing.T) {
 	var gotMethod, gotPath, gotCT, gotBody string
 	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
@@ -410,8 +410,8 @@ func TestSetSecret_PutsRawBodyAtKeyPath(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	if err := c.SetSecret("TOKEN", "secret-val"); err != nil {
-		t.Fatalf("SetSecret: %v", err)
+	if err := c.SetCredential("TOKEN", "secret-val"); err != nil {
+		t.Fatalf("SetCredential: %v", err)
 	}
 	if gotMethod != http.MethodPut {
 		t.Errorf("method = %q, want PUT", gotMethod)
@@ -427,7 +427,7 @@ func TestSetSecret_PutsRawBodyAtKeyPath(t *testing.T) {
 	}
 }
 
-func TestDeleteSecret_EscapesName(t *testing.T) {
+func TestDeleteCredential_EscapesName(t *testing.T) {
 	var gotPath string
 	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.RawPath
@@ -437,8 +437,8 @@ func TestDeleteSecret_EscapesName(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	if err := c.DeleteSecret("my/key"); err != nil {
-		t.Fatalf("DeleteSecret: %v", err)
+	if err := c.DeleteCredential("my/key"); err != nil {
+		t.Fatalf("DeleteCredential: %v", err)
 	}
 	if !strings.Contains(gotPath, "my%2Fkey") {
 		t.Errorf("path = %q, want escaped name", gotPath)

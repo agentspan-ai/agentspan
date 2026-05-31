@@ -43,7 +43,7 @@ type AppModel struct {
 	executions  views.ExecutionsModel
 	status      views.StatusModel
 	server      views.ServerModel
-	secrets views.SecretsModel
+	credentials views.CredentialsModel
 	doctor      views.DoctorModel
 	configure   views.ConfigureModel
 	skills      views.SkillsModel
@@ -94,7 +94,7 @@ func New(version string) *AppModel {
 	m.executions = views.NewExecutions(c)
 	m.status = views.NewStatus(c, "")
 	m.server = views.NewServer(c)
-	m.secrets = views.NewSecrets(c)
+	m.credentials = views.NewCredentials(c)
 	m.doctor = views.NewDoctor(c)
 	m.configure = views.NewConfigure(cfg)
 	m.skills = views.NewSkills(c)
@@ -136,7 +136,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		m.server, cmd = m.server.Update(msg)
 		cmds = append(cmds, cmd)
-		m.secrets, cmd = m.secrets.Update(msg)
+		m.credentials, cmd = m.credentials.Update(msg)
 		cmds = append(cmds, cmd)
 		m.doctor, cmd = m.doctor.Update(msg)
 		cmds = append(cmds, cmd)
@@ -393,9 +393,9 @@ func (m *AppModel) handleNavigation(nav NavigateMsg) (tea.Model, tea.Cmd) {
 		m.server, _ = m.server.Update(sizeMsg)
 		initCmd = m.server.Init()
 	case ViewSecrets:
-		m.secrets = views.NewSecrets(m.client)
-		m.secrets, _ = m.secrets.Update(sizeMsg)
-		initCmd = m.secrets.Init()
+		m.credentials = views.NewCredentials(m.client)
+		m.credentials, _ = m.credentials.Update(sizeMsg)
+		initCmd = m.credentials.Init()
 	case ViewDoctor:
 		m.doctor = views.NewDoctor(m.client)
 		m.doctor, _ = m.doctor.Update(sizeMsg)
@@ -424,7 +424,7 @@ func (m *AppModel) activeViewWantsEsc() bool {
 	case ViewServer:
 		return m.server.WantsEsc()
 	case ViewSecrets:
-		return m.secrets.WantsEsc()
+		return m.credentials.WantsEsc()
 	}
 	return false
 }
@@ -439,7 +439,7 @@ func (m *AppModel) activeViewWantsAllKeys() bool {
 	case ViewAgents:
 		return m.agents.FormActive()
 	case ViewSecrets:
-		return m.secrets.FormActive()
+		return m.credentials.FormActive()
 	}
 	return false
 }
@@ -461,7 +461,7 @@ func (m *AppModel) delegateToActiveView(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ViewServer:
 		m.server, cmd = m.server.Update(msg)
 	case ViewSecrets:
-		m.secrets, cmd = m.secrets.Update(msg)
+		m.credentials, cmd = m.credentials.Update(msg)
 	case ViewDoctor:
 		m.doctor, cmd = m.doctor.Update(msg)
 	case ViewConfigure:
@@ -527,7 +527,7 @@ func (m *AppModel) renderActiveView() string {
 	case ViewServer:
 		return m.server.View()
 	case ViewSecrets:
-		return m.secrets.View()
+		return m.credentials.View()
 	case ViewDoctor:
 		return m.doctor.View()
 	case ViewConfigure:
@@ -570,7 +570,7 @@ func (m *AppModel) footerHints() string {
 	case ViewServer:
 		viewHints = m.server.FooterHints()
 	case ViewSecrets:
-		viewHints = m.secrets.FooterHints()
+		viewHints = m.credentials.FooterHints()
 	case ViewDoctor:
 		viewHints = m.doctor.FooterHints()
 	case ViewConfigure:

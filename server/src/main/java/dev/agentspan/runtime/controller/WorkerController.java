@@ -55,7 +55,7 @@ public class WorkerController {
     /** Per-token fixed-window rate limiter (jti+minute → count). */
     private final ConcurrentHashMap<String, RateLimitBucket> rateLimitMap = new ConcurrentHashMap<>();
 
-    @Value("${agentspan.secrets.resolve.rate-limit:120}")
+    @Value("${agentspan.credentials.resolve.rate-limit:120}")
     private int resolveRateLimit;
 
     /**
@@ -67,7 +67,7 @@ public class WorkerController {
      * (c) exists in the store. Missing names are simply omitted from the response.</p>
      */
     @PostMapping("/secrets")
-    public ResponseEntity<Map<String, String>> resolveSecrets(@RequestBody ResolveRequest request) {
+    public ResponseEntity<Map<String, String>> resolveCredentials(@RequestBody ResolveRequest request) {
         if (request.getToken() == null || request.getToken().isBlank()) {
             return ResponseEntity.status(401).body(Map.of("error", "Missing execution token"));
         }
@@ -120,7 +120,7 @@ public class WorkerController {
             try {
                 String value = resolutionService.resolve(payload.userId(), name);
                 if (value != null) result.put(name, value);
-            } catch (CredentialResolutionService.SecretNotFoundException e) {
+            } catch (CredentialResolutionService.CredentialNotFoundException e) {
                 log.warn("Secret not found: user={}, name={}", payload.userId(), name);
             }
         }
