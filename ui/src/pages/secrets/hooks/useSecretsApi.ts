@@ -38,7 +38,7 @@ function authHeaders(token: string | null): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// Lists via /api/secrets/v2 — richer payload (name + partial + timestamps + tags).
+// Lists via /api/secrets/v2 — richer payload (name + partial + timestamps).
 // The v1 POST /api/secrets endpoint returns just names; v2 is the UI-friendly variant.
 export function useListSecrets(
   { token, onUnauthorized }: ApiOptions,

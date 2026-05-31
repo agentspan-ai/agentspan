@@ -5,9 +5,7 @@
 package dev.agentspan.runtime.model.secrets;
 
 import java.time.Instant;
-import java.util.List;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.AllArgsConstructor;
@@ -35,8 +33,4 @@ public class SecretMeta {
 
     @JsonProperty("updated_at")
     private Instant updatedAt;
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonProperty("tags")
-    private List<Tag> tags;
 }

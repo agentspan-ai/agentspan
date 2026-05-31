@@ -39,13 +39,7 @@ CREATE TABLE IF NOT EXISTS secrets_store (
     PRIMARY KEY (user_id, name)
 );
 
-CREATE TABLE IF NOT EXISTS secret_tags (
-    user_id   TEXT NOT NULL,
-    name      TEXT NOT NULL,
-    tag_key   TEXT NOT NULL,
-    tag_value TEXT NOT NULL,
-    PRIMARY KEY (user_id, name, tag_key, tag_value)
-);
+-- Tags not supported — secret_tags table is omitted.
 
 CREATE TABLE IF NOT EXISTS secret_disclosures (
     execution_id TEXT NOT NULL,
