@@ -1265,6 +1265,103 @@ events until `WAITING`, performs the action, then continues collecting until ter
 
 ---
 
+## Scheduling
+
+Run an agent on one or more cron schedules. The scheduler lives server-side (Conductor); the SDK is a typed wrapper.
+
+### `Schedule`
+
+```python
+from agentspan.agents.schedule import Schedule
+
+@dataclass(frozen=True)
+class Schedule:
+    name: str           # Short id, unique within this agent.
+    cron: str           # 6-field Quartz cron, e.g. "0 0 9 * * MON-FRI".
+    timezone: str = "UTC"
+    input: dict = field(default_factory=dict)
+    catchup: bool = False   # Replay missed fires on resume.
+    paused: bool = False    # Create in paused state.
+    start_at: int | None = None   # Epoch ms window start.
+    end_at:   int | None = None   # Epoch ms window end.
+    description: str | None = None
+```
+
+`name` and `cron` are required. The SDK auto-prefixes the wire name to `{agent.name}-{name}`; `ScheduleInfo` exposes both.
+
+### `ScheduleInfo`
+
+Returned by `schedules.list()` and `schedules.get()`.
+
+```python
+@dataclass
+class ScheduleInfo:
+    name: str           # Prefixed wire name: "{agent.name}-{short_name}"
+    short_name: str     # User's original name.
+    cron: str
+    timezone: str
+    input: dict
+    paused: bool
+    paused_reason: str | None
+    catchup: bool
+    start_at: int | None
+    end_at:   int | None
+    description: str | None
+    next_run: int | None      # Epoch ms (server-computed; reliable even when paused).
+    last_run: int | None      # Epoch ms of most recent fire.
+    create_time: int | None
+    update_time: int | None
+    created_by: str | None
+    updated_by: str | None
+    agent: str                # = startWorkflowRequest.name
+```
+
+### `schedules` module-level API
+
+```python
+from agentspan.agents import schedules
+
+schedules.list(agent: str) -> list[ScheduleInfo]
+schedules.get(name: str) -> ScheduleInfo
+schedules.pause(name: str, reason: str | None = None) -> None
+schedules.resume(name: str) -> None
+schedules.delete(name: str) -> None
+schedules.run_now(name: str, wait: bool = False) -> str | AgentResult
+schedules.preview_next(cron: str, n: int = 5) -> list[int]  # epoch ms
+
+# Async siblings
+schedules.list_async(agent: str) -> list[ScheduleInfo]
+schedules.get_async(name: str) -> ScheduleInfo
+schedules.pause_async(name: str, reason: str | None = None) -> None
+schedules.resume_async(name: str) -> None
+schedules.delete_async(name: str) -> None
+schedules.run_now_async(name: str, wait: bool = False) -> str | AgentResult
+schedules.preview_next_async(cron: str, n: int = 5) -> list[int]
+```
+
+`run_now` bypasses the scheduler, fires the agent with the schedule's stored input, and returns the execution id immediately. Pass `wait=True` to block until completion and return `AgentResult`.
+
+### Schedule errors
+
+| Exception | Raised when |
+|---|---|
+| `ScheduleNameConflict` | Two schedules in the same agent share a `name` (raised before any wire call). |
+| `ScheduleNotFound` | `get`/`pause`/`resume`/`delete` on a missing wire name. |
+| `InvalidCronExpression` | Server rejects the cron syntax (400). |
+| `ScheduleError` | Base class for all scheduler exceptions. |
+
+### `deploy()` integration
+
+```python
+deploy(agent, schedules=None)   # Leave existing schedules untouched.
+deploy(agent, schedules=[])     # Delete all schedules for this agent.
+deploy(agent, schedules=[...])  # Upsert listed; prune any others for this agent.
+```
+
+`deploy_async` accepts the same `schedules=` argument.
+
+---
+
 ## Package Structure
 
 ```
@@ -1276,8 +1373,14 @@ src/agentspan/agents/
 ├── result.py                   # AgentResult, AgentHandle, AgentEvent, EventType
 ├── guardrail.py                # Guardrail, RegexGuardrail, LLMGuardrail, GuardrailResult
 ├── memory.py                   # ConversationMemory
+├── schedule/
+│   ├── __init__.py             # Schedule, ScheduleInfo, schedules namespace, errors
+│   ├── schedule.py             # Schedule + ScheduleInfo frozen dataclasses
+│   ├── client.py               # ScheduleClient wrapping conductor-python
+│   ├── api.py                  # Module-level schedules.* functions
+│   └── errors.py               # ScheduleError, ScheduleNameConflict, ScheduleNotFound, InvalidCronExpression
 ├── runtime/
-│   ├── runtime.py              # AgentRuntime (compile + execute + stream)
+│   ├── runtime.py              # AgentRuntime (compile + execute + stream + schedule reconcile)
 │   ├── tool_registry.py        # Tool/worker registration and dispatch
 │   ├── _dispatch.py            # Universal dispatch worker (fuzzy parsing, circuit breaker)
 │   └── mcp_discovery.py        # MCP server tool discovery
