@@ -51,7 +51,7 @@ import okhttp3.OkHttpClient;
 public class AgentspanAIModelProvider extends AIModelProvider {
 
     private static final Logger log = LoggerFactory.getLogger(AgentspanAIModelProvider.class);
-    private static final OkHttpClient CONDUCTOR_AI_HTTP_CLIENT = new OkHttpClient();
+    private final OkHttpClient conductorAiHttpClient;
 
     /** Maps Conductor provider names to credential env var names. */
     private static final Map<String, String> PROVIDER_TO_ENV_VAR = Map.ofEntries(
@@ -82,9 +82,11 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     public AgentspanAIModelProvider(
             List<ModelConfiguration<? extends AIModel>> modelConfigurations,
             Environment env,
+            OkHttpClient conductorAiHttpClient,
             CredentialResolutionService resolutionService,
             ExecutionTokenService tokenService) {
         super(modelConfigurations, env);
+        this.conductorAiHttpClient = conductorAiHttpClient;
         this.resolutionService = resolutionService;
         this.tokenService = tokenService;
         log.info("AgentspanAIModelProvider initialized (per-user credential resolution enabled)");
@@ -265,18 +267,20 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     private AIModel createModelWithKey(String provider, String apiKey, String baseUrl) {
         ModelConfiguration<? extends AIModel> config =
                 switch (provider.toLowerCase()) {
-                    case "openai" -> openAIConfiguration(apiKey, baseUrl);
-                    case "anthropic" -> new AnthropicConfiguration(apiKey, baseUrl, null, null, null);
-                    case "azureopenai" -> new AzureOpenAIConfiguration(apiKey, baseUrl, null, null);
-                    case "mistral" -> new MistralAIConfiguration(apiKey, baseUrl);
-                    case "cohere" -> new CohereAIConfiguration(apiKey, baseUrl);
-                    case "grok" -> new GrokAIConfiguration(apiKey, baseUrl);
+                    case "openai" -> new OpenAIConfiguration(apiKey, baseUrl, null, conductorAiHttpClient);
+                    case "anthropic" -> new AnthropicConfiguration(
+                            apiKey, baseUrl, null, null, null, conductorAiHttpClient);
+                    case "azureopenai" -> new AzureOpenAIConfiguration(
+                            apiKey, baseUrl, null, null, conductorAiHttpClient);
+                    case "mistral" -> new MistralAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
+                    case "cohere" -> new CohereAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
+                    case "grok" -> new GrokAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
                     case "huggingface" -> {
                         var c = new HuggingFaceConfiguration();
                         c.setApiKey(apiKey);
                         yield c;
                     }
-                    case "perplexity" -> new PerplexityAIConfiguration(apiKey, baseUrl);
+                    case "perplexity" -> new PerplexityAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
                     case "gemini", "google_gemini" -> null; // Handled below
                     default -> null;
                 };
@@ -294,12 +298,6 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         return null;
     }
 
-    static OpenAIConfiguration openAIConfiguration(String apiKey, String baseUrl) {
-        OpenAIConfiguration config = new OpenAIConfiguration(apiKey, baseUrl, null);
-        config.setConductorAiHttpClient(CONDUCTOR_AI_HTTP_CLIENT);
-        return config;
-    }
-
     /**
      * Create a Gemini model using API key auth through the upstream Conductor configuration.
      */
@@ -309,6 +307,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         config.setApiKey(apiKey);
         config.setProjectId(projectId != null ? projectId : "google-ai-studio");
         config.setLocation("us-central1");
+        config.setHttpClient(conductorAiHttpClient);
         return config.get();
     }
 }

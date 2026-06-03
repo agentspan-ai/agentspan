@@ -32,8 +32,7 @@ public class UiRoutingConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/ui/**")
-                .addResourceLocations("classpath:/static/");
+        registry.addResourceHandler("/ui/**").addResourceLocations("classpath:/static/");
     }
 
     @Bean
