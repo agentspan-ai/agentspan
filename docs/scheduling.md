@@ -63,8 +63,7 @@ exec_id = schedules.run_now("daily_digest-friday-5pm")
 next_times = schedules.preview_next("0 0 9 * * MON-FRI", n=5)
 ```
 
-A full working example is in
-[`sdk/python/examples/hello_world_agent_schedule.py`](../sdk/python/examples/hello_world_agent_schedule.py).
+A full working example is in `sdk/python/examples/hello_world_agent_schedule.py`.
 
 ### TypeScript
 
