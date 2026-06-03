@@ -94,7 +94,8 @@ public class Example99ScheduledAgent {
             System.out.printf("✓ Resumed '%s': paused=%b%n", weekdayName, afterResume.isPaused());
 
             // 5. Ad-hoc run of the friday schedule.
-            String execId = sched.runNow(fridayName);
+            ScheduleInfo fridayInfo = sched.get(fridayName);
+            String execId = sched.runNow(fridayInfo);
             System.out.printf("%n✓ runNow '%s' → execution id: %s%n", fridayName, execId);
 
             // 6. Preview next 5 fire times for the weekday cron.
