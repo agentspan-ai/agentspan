@@ -13,6 +13,7 @@ import { useAuth } from "shared/auth";
 import { useState } from "react";
 import { ActorRef, State } from "xstate";
 import sharedStyles from "../styles";
+import AgentSchedulesTab from "./AgentSchedulesTab";
 import EditorPanel from "./EditorPanel/EditorPanel";
 import GraphPanel from "./GraphPanel";
 import { PromptIfChanges } from "./PromptIfChanges";
@@ -26,7 +27,7 @@ export default function Workflow() {
     { workflowName, message, definitionActor, leftPanelExpanded },
   ] = useWorkflowDefinition(conductorUser!);
 
-  const [activeView, setActiveView] = useState<"agentDef" | "conductorWorkflow">("agentDef");
+  const [activeView, setActiveView] = useState<"agentDef" | "conductorWorkflow" | "schedules">("agentDef");
 
   const agentDef = useSelector(
     definitionActor,
@@ -53,7 +54,7 @@ export default function Workflow() {
             definitionActor: definitionActor,
             leftPanelExpanded,
             setLeftPanelExpanded,
-            readOnly: activeView === "conductorWorkflow",
+            readOnly: activeView !== "agentDef",
           }}
         />
       )}
@@ -86,6 +87,7 @@ export default function Workflow() {
             >
               <Tab label="Agent Definition" value="agentDef" />
               <Tab label="Conductor Workflow" value="conductorWorkflow" />
+              <Tab label="Schedules" value="schedules" />
             </Tabs>
           </Box>
 
@@ -100,6 +102,13 @@ export default function Workflow() {
                     No agent definition found in workflow metadata
                   </Box>
                 )}
+              </Box>
+            )}
+
+            {/* Schedules view */}
+            {activeView === "schedules" && workflowName && (
+              <Box sx={{ height: "100%", width: "100%", overflowY: "auto" }}>
+                <AgentSchedulesTab agentName={workflowName} />
               </Box>
             )}
 

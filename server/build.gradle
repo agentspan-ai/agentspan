@@ -30,7 +30,7 @@ def pnpmCommand = { String args ->
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.30.0.rc17'
+    conductorVersion   = '3.30.2'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
     sqliteJdbcVersion  = '3.47.0.0'
@@ -64,7 +64,6 @@ dependencies {
     implementation "org.conductoross:conductor-rest:${conductorVersion}"
     implementation "org.conductoross:conductor-common:${conductorVersion}"
     implementation "org.conductoross:conductor-ai:${conductorVersion}"
-    implementation "org.conductoross:conductor-metrics:${conductorVersion}"
 
     // PostgreSQL persistence + queue + indexing + locking
     implementation "org.conductoross:conductor-postgres-persistence:${conductorVersion}"
@@ -72,6 +71,11 @@ dependencies {
 
     // SQLite persistence (activate with conductor.db.type=sqlite)
     implementation "org.conductoross:conductor-sqlite-persistence:${conductorVersion}"
+
+    // Scheduler — cron-based workflow scheduling
+    implementation "org.conductoross:conductor-scheduler-core:${conductorVersion}"
+    implementation "org.conductoross:conductor-scheduler-sqlite-persistence:${conductorVersion}"
+    implementation "org.conductoross:conductor-scheduler-postgres-persistence:${conductorVersion}"
 
     // Common system tasks
     implementation "org.conductoross:conductor-http-task:${conductorVersion}"

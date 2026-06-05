@@ -514,13 +514,19 @@ Triggers:
 
 ## 7. Execution Plan
 
-### Phase 1: Foundation (Schedule + Deploy/Undeploy)
-- `Schedule` trigger class
-- `runtime.deploy(agent, triggers=[Schedule(...)])` → registers cron with orchestration server
-- `runtime.undeploy()` → removes schedule
-- `DeploymentHandle` with pause/resume/executions
-- `runtime.wait()` to keep process alive for tool workers
-- **Example**: News monitor that checks every hour
+### Phase 1: Foundation (Schedule + Deploy/Undeploy) ✅ Shipped (2026-06)
+
+> **Status**: complete across all four SDKs (Python, TypeScript, Java, C#) and the UI.
+> See [`docs/scheduling.md`](../scheduling.md) for the user guide and
+> [`docs/design/scheduling.md`](../design/scheduling.md) for the design rationale.
+
+- ✅ `Schedule` dataclass / class in all four SDKs
+- ✅ `deploy(agent, schedules=[...])` with declarative tri-state reconciliation
+- ✅ Module-level lifecycle API: `list`, `get`, `pause`, `resume`, `delete`, `run_now`, `preview_next`
+- ✅ Typed errors: `ScheduleNameConflict`, `ScheduleNotFound`, `InvalidCronExpression`
+- ✅ Wire-name auto-prefix (`{agent.name}-{name}`) with `ScheduleInfo.short_name` for display
+- ✅ Agent detail UI tab (Schedules) + global Schedules list with Agent column/filter
+- ✅ `run_now` non-blocking by default; `wait=True` opt-in in Python
 
 ### Phase 2: Event & Webhook Triggers
 - `EventTrigger` class → registers event handler with orchestration server

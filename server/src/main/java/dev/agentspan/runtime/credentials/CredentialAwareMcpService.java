@@ -20,6 +20,7 @@ import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import okhttp3.OkHttpClient;
 
 /**
  * Extends Conductor's {@link MCPService} to resolve credential placeholders
@@ -50,7 +51,10 @@ public class CredentialAwareMcpService extends MCPService {
     private final CredentialResolutionService resolutionService;
 
     public CredentialAwareMcpService(
-            ExecutionTokenService tokenService, CredentialResolutionService resolutionService) {
+            OkHttpClient conductorAiHttpClient,
+            ExecutionTokenService tokenService,
+            CredentialResolutionService resolutionService) {
+        super(conductorAiHttpClient);
         this.tokenService = tokenService;
         this.resolutionService = resolutionService;
     }

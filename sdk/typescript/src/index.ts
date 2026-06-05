@@ -142,6 +142,19 @@ export {
   shutdown,
 } from "./runtime.js";
 
+// ── Scheduling ──────────────────────────────────────────
+export {
+  Schedule,
+  ScheduleClient,
+  ScheduleError,
+  ScheduleNameConflict,
+  ScheduleNotFound,
+  InvalidCronExpression,
+} from "./schedule.js";
+export type { ScheduleOptions, ScheduleInfo, SchedulerFetcher } from "./schedule.js";
+import * as schedules from "./schedules-api.js";
+export { schedules };
+
 // ── Credentials ─────────────────────────────────────────
 export {
   extractExecutionToken,
