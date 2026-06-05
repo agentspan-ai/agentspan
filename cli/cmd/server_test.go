@@ -111,6 +111,7 @@ func TestServerStartUsesRequestedVersion(t *testing.T) {
 	prevCheckJava := serverCheckJava
 	prevCheckAI := serverCheckAIProviderKeys
 	prevProcessRunning := serverProcessRunning
+	prevLaunch := serverLaunch
 	prevServerJar := serverJar
 	prevServerLocal := serverLocal
 	prevServerVersion := serverVersion
@@ -123,6 +124,7 @@ func TestServerStartUsesRequestedVersion(t *testing.T) {
 		serverCheckJava = prevCheckJava
 		serverCheckAIProviderKeys = prevCheckAI
 		serverProcessRunning = prevProcessRunning
+		serverLaunch = prevLaunch
 		serverJar = prevServerJar
 		serverLocal = prevServerLocal
 		serverVersion = prevServerVersion
@@ -154,14 +156,11 @@ func TestServerStartUsesRequestedVersion(t *testing.T) {
 		return "", nil
 	}
 	serverCheckAIProviderKeys = func() {}
-	serverCheckJava = func() (bool, string) { return false, "" }
+	serverCheckJava = func() (bool, string) { return true, "21.0.1" }
+	serverLaunch = func(jarPath, dir string) error { return nil }
 
-	err := runServerStart(serverStartCmd, nil)
-	if err == nil {
-		t.Fatal("expected runServerStart to stop at Java validation in test")
-	}
-	if !strings.Contains(err.Error(), "Java is not installed") {
-		t.Fatalf("unexpected error: %v", err)
+	if err := runServerStart(serverStartCmd, nil); err != nil {
+		t.Fatalf("runServerStart returned error: %v", err)
 	}
 	if !versionedCalled {
 		t.Fatal("expected versioned JAR downloader to be called")
@@ -172,6 +171,50 @@ func TestServerStartUsesRequestedVersion(t *testing.T) {
 	}
 	if gotVersion != "1.2.3" {
 		t.Fatalf("version = %q, want %q", gotVersion, "1.2.3")
+	}
+}
+
+func TestServerStartFailsWhenJavaMissing(t *testing.T) {
+	newTempHome(t)
+
+	prevCheckJava := serverCheckJava
+	prevLaunch := serverLaunch
+	prevEnsureLatest := serverEnsureLatestJAR
+	prevEnsureVersioned := serverEnsureVersionedJAR
+	prevFindLocal := serverFindLocalJAR
+	t.Cleanup(func() {
+		serverCheckJava = prevCheckJava
+		serverLaunch = prevLaunch
+		serverEnsureLatestJAR = prevEnsureLatest
+		serverEnsureVersionedJAR = prevEnsureVersioned
+		serverFindLocalJAR = prevFindLocal
+	})
+
+	serverCheckJava = func() (bool, string) { return false, "" }
+	// Nothing below the Java check should be reached.
+	serverEnsureLatestJAR = func(string) error {
+		t.Fatal("ensureLatestJAR should not be called when Java is missing")
+		return nil
+	}
+	serverEnsureVersionedJAR = func(string, string) error {
+		t.Fatal("ensureVersionedJAR should not be called when Java is missing")
+		return nil
+	}
+	serverFindLocalJAR = func() (string, error) {
+		t.Fatal("findLocalJAR should not be called when Java is missing")
+		return "", nil
+	}
+	serverLaunch = func(jarPath, dir string) error {
+		t.Fatal("launchServer should not be called when Java is missing")
+		return nil
+	}
+
+	err := runServerStart(serverStartCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error when Java is missing")
+	}
+	if !strings.Contains(err.Error(), "Java is not installed") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -42,6 +42,7 @@ var (
 	serverFindLocalJAR        = findLocalJAR
 	serverCheckJava           = checkJava
 	serverCheckAIProviderKeys = checkAIProviderKeys
+	serverLaunch              = launchServer
 )
 
 var serverCmd = &cobra.Command{
@@ -101,6 +102,22 @@ func logFile() string {
 
 func runServerStart(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+
+	// Validate JDK before doing anything
+	javaOk, javaVersion := serverCheckJava()
+	if !javaOk {
+		if javaVersion != "" {
+			return fmt.Errorf(
+				"Java %s detected but Java 21+ is required.\n"+
+					"  Install Java 21+: https://adoptium.net/\n"+
+					"  Run 'agentspan doctor' for full diagnostics.", javaVersion)
+		}
+		return fmt.Errorf(
+			"Java is not installed. The Agentspan server requires Java 21+.\n" +
+				"  Install: https://adoptium.net/\n" +
+				"  Run 'agentspan doctor' for full diagnostics.")
+	}
+
 	dir := serverDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create server dir: %w", err)
@@ -160,21 +177,10 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 
 	serverCheckAIProviderKeys()
 
-	// Validate JDK before launching java
-	javaOk, javaVersion := serverCheckJava()
-	if !javaOk {
-		if javaVersion != "" {
-			return fmt.Errorf(
-				"Java %s detected but Java 21+ is required.\n"+
-					"  Install Java 21+: https://adoptium.net/\n"+
-					"  Run 'agentspan doctor' for full diagnostics.", javaVersion)
-		}
-		return fmt.Errorf(
-			"Java is not installed. The Agentspan server requires Java 21+.\n" +
-				"  Install: https://adoptium.net/\n" +
-				"  Run 'agentspan doctor' for full diagnostics.")
-	}
+	return serverLaunch(jarPath, dir)
+}
 
+func launchServer(jarPath, dir string) error {
 	bold := color.New(color.Bold)
 	bold.Printf("Starting agent runtime on port %s...\n", serverPort)
 
