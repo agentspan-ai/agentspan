@@ -108,7 +108,7 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
                     resolvedCredentials[k] = v;
             }
 
-            object? result = await SecretInjection.InjectViaEnvAsync<object?>(
+            object? result = await CredentialInjection.InjectViaEnvAsync<object?>(
                 resolvedCredentials,
                 () => _handler(handlerInput, toolCtx),
                 ct);

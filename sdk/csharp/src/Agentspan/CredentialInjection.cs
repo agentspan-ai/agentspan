@@ -28,7 +28,7 @@ namespace Agentspan
     /// Concurrency-safe injection of resolved credentials into the process
     /// environment for the duration of a single framework invocation.
     /// </summary>
-    public static class SecretInjection
+    public static class CredentialInjection
     {
         // ONE process-wide semaphore. All tier-2 framework workers in this
         // process contend for it. Tier-1 (explicit-key) paths must NOT acquire it.
