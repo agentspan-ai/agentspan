@@ -1,13 +1,11 @@
-# Claude Code agent comparison: OCG-aware vs baseline.
-#
-# Two autonomous Claude Code CLI agents run the same docs task.
-# One is told about OCG and how to traverse the knowledge graph.
-# The other uses only grep/find/cat.
+# Test case 1: business-context lookup for AGENTSPAN_LOG_LEVEL.
+# Two autonomous Claude Code CLI agents answer the same docs question.
+# with_ocg uses the OCG /agent/query endpoint; no_ocg uses grep/find/git.
 #
 # Usage:
 #   cd sdk/python
-#   python -m validation.scripts.run_claude_code --config validation/cc_compare.toml
-#   python -m validation.scripts.run_claude_code --config validation/cc_compare.toml --judge
+#   python -m validation.scripts.run_claude_code \
+#       --config validation/cc_compare_test_case_1_logging_property.toml --judge
 
 [defaults]
 timeout = 300
@@ -25,12 +23,12 @@ max_tokens = 400
 rate_limit = 0.5
 
 [runs.with_ocg]
-prompt_file = "validation/prompts/with_ocg.md"
+prompt_file = "validation/prompts/test_case_1_logging_property/with_ocg.md"
 # OCG_API_KEY must be set in your shell environment before running
 allowed_tools = ["Bash(curl:*)"]
 
 [runs.no_ocg]
-prompt_file = "validation/prompts/no_ocg.md"
+prompt_file = "validation/prompts/test_case_1_logging_property/no_ocg.md"
 # Traditional grep-baseline: file inspection + git history, no OCG.
 allowed_tools = [
     "Read",

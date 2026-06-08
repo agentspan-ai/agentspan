@@ -31,6 +31,9 @@ except ModuleNotFoundError:
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SDK_DIR = SCRIPT_DIR.parent.parent  # sdk/python/
+REPO_ROOT = SDK_DIR.parent.parent  # repo root — claude is spawned here so the
+                                   # agent's workspace covers the full checkout,
+                                   # not just sdk/python
 OUTPUT_DIR = SDK_DIR / "output"
 
 
@@ -114,6 +117,7 @@ def _run_claude(prompt: str, timeout: int, allowed_tools: list[str]) -> dict:
             capture_output=True,
             text=True,
             timeout=timeout,
+            cwd=REPO_ROOT,
         )
     except FileNotFoundError:
         return {"error": "claude CLI not found — is it installed and on PATH?"}
@@ -173,6 +177,14 @@ def _iteration_example_name(stem: str, n: int) -> str:
     as `_iter_1`, matching the convention judge/report consumers will see.
     """
     return f"{stem}_iter_{n}"
+
+
+def _resolved_iterations(run_cfg: dict, cli_override: int | None) -> int:
+    # CLI override wins so a single `--iterations 1` smoke run doesn't require
+    # editing the toml; otherwise fall back to per-run config, then 1.
+    if cli_override is not None:
+        return cli_override
+    return int(run_cfg.get("iterations", 1))
 
 
 def _per_iteration_summary(examples: list[dict]) -> dict:
@@ -256,7 +268,17 @@ def main() -> None:
     parser.add_argument("--config", required=True, help="Path to TOML config (relative to sdk/python/)")
     parser.add_argument("--judge", action="store_true", help="Run LLM judge after execution")
     parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="Output root directory")
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=None,
+        help="Override iterations from TOML for all runs (e.g. --iterations 1 for a smoke run)",
+    )
     args = parser.parse_args()
+
+    if args.iterations is not None and args.iterations < 1:
+        print(f"ERROR: --iterations must be >= 1, got {args.iterations}", file=sys.stderr)
+        sys.exit(2)
 
     config_path = Path(args.config) if Path(args.config).is_absolute() else SDK_DIR / args.config
     if not config_path.exists():
@@ -300,7 +322,7 @@ def main() -> None:
             print(f"  [{run_name}] ERROR — {e}", file=sys.stderr)
             return None
         timeout = int(run_cfg.get("timeout", 300))
-        iterations = int(run_cfg.get("iterations", 1))
+        iterations = _resolved_iterations(run_cfg, args.iterations)
         allowed_tools = run_cfg.get("allowed_tools") or ["Bash(curl:*)"]
 
         # Sequential iterations within an agent; outer pool runs agents in

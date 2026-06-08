@@ -1,0 +1,50 @@
+# Test case 2: "I just found a bug — has it been reported, and where would a fix go?"
+# Scenario based on agentspan-ai/agentspan issue #257 (agentspan doctor picks
+# older Homebrew openjdk). The prompts deliberately do NOT mention the issue
+# number — the agent has to rediscover it.
+#
+# Usage:
+#   cd sdk/python
+#   python -m validation.scripts.run_claude_code \
+#       --config validation/cc_compare_test_case_2_found_issue.toml --judge
+
+[defaults]
+timeout = 300
+iterations = 5
+
+[judge]
+model = "gpt-4o-mini"
+max_output_chars = 4000
+max_tokens = 400
+rate_limit = 0.5
+
+[runs.with_ocg]
+prompt_file = "validation/prompts/test_case_2_found_issue/with_ocg.md"
+# OCG_API_KEY must be set in your shell environment before running.
+# gh must be authenticated (gh auth status) for the issue-search half.
+allowed_tools = [
+    "Bash(curl:*)",
+    "Bash(gh issue:*)",
+    "Bash(gh pr:*)",
+    "Bash(gh search:*)",
+]
+
+[runs.no_ocg]
+prompt_file = "validation/prompts/test_case_2_found_issue/no_ocg.md"
+allowed_tools = [
+    "Read",
+    "Glob",
+    "Grep",
+    "Bash(grep:*)",
+    "Bash(rg:*)",
+    "Bash(find:*)",
+    "Bash(cat:*)",
+    "Bash(ls:*)",
+    "Bash(git log:*)",
+    "Bash(git show:*)",
+    "Bash(git blame:*)",
+    "Bash(git diff:*)",
+    "Bash(gh issue:*)",
+    "Bash(gh pr:*)",
+    "Bash(gh search:*)",
+]
