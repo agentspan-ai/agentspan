@@ -399,7 +399,14 @@ public class AgentService {
      */
     @SuppressWarnings("unchecked")
     public List<AgentSummary> listAgents() {
-        List<WorkflowDef> allDefs = metadataDAO.getAllWorkflowDefsLatestVersions();
+        // Use the portable getAllWorkflowDefs() (present across Conductor cores, incl. orkes'
+        // vendored oss-core which lacks getAllWorkflowDefsLatestVersions()) and reduce to the
+        // latest version per name ourselves.
+        Map<String, WorkflowDef> latestByName = new HashMap<>();
+        for (WorkflowDef d : metadataDAO.getAllWorkflowDefs()) {
+            latestByName.merge(d.getName(), d, (a, b) -> a.getVersion() >= b.getVersion() ? a : b);
+        }
+        List<WorkflowDef> allDefs = new ArrayList<>(latestByName.values());
         List<AgentSummary> agents = new ArrayList<>();
 
         for (WorkflowDef def : allDefs) {

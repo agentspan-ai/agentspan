@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.netflix.conductor.annotations.VisibleForTesting;
@@ -24,6 +25,7 @@ import com.netflix.conductor.model.WorkflowModel;
 import lombok.extern.slf4j.Slf4j;
 
 @Component(TASK_TYPE_JOIN)
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 @Slf4j
 public class Join extends WorkflowSystemTask {
 
