@@ -38,7 +38,8 @@ public final class CredentialValueValidator {
     private static InvalidCredentialValueException invalidChar(String name, String charName) {
         return new InvalidCredentialValueException(
                 name,
-                "contains a " + charName + ". This usually means the value was wrapped or pasted with extra whitespace; "
+                "contains a " + charName
+                        + ". This usually means the value was wrapped or pasted with extra whitespace; "
                         + "re-export it on a single line and store it again.");
     }
 
