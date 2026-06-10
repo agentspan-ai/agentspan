@@ -24,6 +24,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import dev.agentspan.runtime.context.RequestContext;
 import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.model.skill.SkillDetail;
+import dev.agentspan.runtime.service.skill.FileSystemSkillMetadataDAO;
 import dev.agentspan.runtime.service.skill.FileSystemSkillPackageStore;
 
 class SkillRegistryServiceTest {
@@ -39,12 +40,12 @@ class SkillRegistryServiceTest {
     @Test
     void registeredSkillsAreVisibleOnlyToOwner() throws Exception {
         SkillRegistryService service = new SkillRegistryService(
-                tempDir.toString(),
                 1024 * 1024,
                 1024 * 1024,
                 10 * 1024 * 1024,
                 100,
-                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()));
+                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
+                new FileSystemSkillMetadataDAO(tempDir.toString()));
         String skillName = "owned-skill";
         String manifest = "{\"name\":\"" + skillName + "\"}";
 
@@ -67,12 +68,12 @@ class SkillRegistryServiceTest {
     @Test
     void deletingLatestVersionPromotesPreviousVersion() throws Exception {
         SkillRegistryService service = new SkillRegistryService(
-                tempDir.toString(),
                 1024 * 1024,
                 1024 * 1024,
                 10 * 1024 * 1024,
                 100,
-                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()));
+                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
+                new FileSystemSkillMetadataDAO(tempDir.toString()));
         String skillName = "versioned-skill";
         asUser("user-a");
 
@@ -90,12 +91,12 @@ class SkillRegistryServiceTest {
     @Test
     void sameSkillNameUsesPerOwnerLatestAndPackageStorage() throws Exception {
         SkillRegistryService service = new SkillRegistryService(
-                tempDir.toString(),
                 1024 * 1024,
                 1024 * 1024,
                 10 * 1024 * 1024,
                 100,
-                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()));
+                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
+                new FileSystemSkillMetadataDAO(tempDir.toString()));
         String skillName = "shared-name-skill";
 
         asUser("user-a");
@@ -131,12 +132,12 @@ class SkillRegistryServiceTest {
     @SuppressWarnings("unchecked")
     void skillRefRawConfigIncludesParamsAndRegisteredCrossSkills() throws Exception {
         SkillRegistryService service = new SkillRegistryService(
-                tempDir.toString(),
                 1024 * 1024,
                 1024 * 1024,
                 10 * 1024 * 1024,
                 100,
-                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()));
+                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
+                new FileSystemSkillMetadataDAO(tempDir.toString()));
         asUser("user-a");
 
         service.register(
@@ -175,12 +176,12 @@ class SkillRegistryServiceTest {
     @SuppressWarnings("unchecked")
     void registeredCrossSkillRefsArePinnedAtRegistrationTime() throws Exception {
         SkillRegistryService service = new SkillRegistryService(
-                tempDir.toString(),
                 1024 * 1024,
                 1024 * 1024,
                 10 * 1024 * 1024,
                 100,
-                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()));
+                new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
+                new FileSystemSkillMetadataDAO(tempDir.toString()));
         asUser("user-a");
 
         service.register(

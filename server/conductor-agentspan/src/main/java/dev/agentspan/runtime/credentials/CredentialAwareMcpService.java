@@ -13,7 +13,6 @@ import java.util.regex.Pattern;
 import org.conductoross.conductor.ai.mcp.MCPService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -43,7 +42,6 @@ import okhttp3.OkHttpClient;
  */
 @Component
 @Primary
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class CredentialAwareMcpService extends MCPService {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialAwareMcpService.class);

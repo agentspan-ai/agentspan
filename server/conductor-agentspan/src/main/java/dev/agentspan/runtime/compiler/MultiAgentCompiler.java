@@ -22,6 +22,7 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.service.PlanAndCompileTask;
+import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ModelParser.ParsedModel;
@@ -2663,7 +2664,8 @@ public class MultiAgentCompiler {
                             throw new IllegalArgumentException("plannerContext header '" + name
                                     + "' contains CR/LF — rejected to prevent HTTP response splitting");
                         }
-                        headers.put(name, CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("#{$1}"));
+                        String replacement = EmbeddedMode.isEmbedded() ? "\\${workflow.secrets.$1}" : "#{$1}";
+                        headers.put(name, CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll(replacement));
                     }
                 }
 

@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,7 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.GuardrailConfig;
 import dev.agentspan.runtime.model.ToolConfig;
+import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 
@@ -54,13 +56,29 @@ public class ToolCompiler {
      * The {@code #} prefix is invisible to Conductor's expression engine and is later
      * resolved by credential-aware task handlers.
      */
+    /** Matches a {@code ${IDENTIFIER}} credential placeholder. */
+    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
+
     private static Map<String, Object> escapeCredentialPlaceholders(Map<?, ?> headers) {
         Map<String, Object> escaped = new LinkedHashMap<>();
         for (Map.Entry<?, ?> e : headers.entrySet()) {
             String v = String.valueOf(e.getValue());
-            escaped.put(String.valueOf(e.getKey()), v.replace("${", "#{"));
+            escaped.put(String.valueOf(e.getKey()), rewriteCredentialPlaceholders(v));
         }
         return escaped;
+    }
+
+    /**
+     * Rewrite {@code ${NAME}} credential placeholders for the runtime that will resolve them.
+     * When embedded in a host (e.g. orkes-conductor), emit the host's native
+     * {@code ${workflow.secrets.NAME}} so the host resolves it at task-input binding. Standalone:
+     * escape to {@code #{NAME}} for AgentSpan's credential-aware HTTP/MCP task handlers.
+     */
+    private static String rewriteCredentialPlaceholders(String value) {
+        if (EmbeddedMode.isEmbedded()) {
+            return CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("\\${workflow.secrets.$1}");
+        }
+        return value.replace("${", "#{");
     }
 
     /**

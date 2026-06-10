@@ -9,13 +9,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -25,6 +22,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -48,6 +46,7 @@ import dev.agentspan.runtime.model.skill.SkillDetail;
 import dev.agentspan.runtime.model.skill.SkillFileContent;
 import dev.agentspan.runtime.model.skill.SkillFileEntry;
 import dev.agentspan.runtime.model.skill.SkillSummary;
+import dev.agentspan.runtime.spi.SkillMetadataDAO;
 import dev.agentspan.runtime.spi.SkillPackageStore;
 import dev.agentspan.runtime.spi.StoredSkillPackage;
 
@@ -88,27 +87,27 @@ public class SkillRegistryService {
             ".properties",
             ".csv");
 
-    private final Path storageRoot;
     private final long maxPackageBytes;
     private final long maxPreviewBytes;
     private final long maxUncompressedBytes;
     private final int maxFileCount;
     private final SkillPackageStore packageStore;
+    private final SkillMetadataDAO metadataDao;
 
     @Autowired
     public SkillRegistryService(
-            @Value("${agentspan.skills.storage.directory:${java.io.tmpdir}/agentspan/skills}") String storageDir,
             @Value("${agentspan.skills.max-package-bytes:52428800}") long maxPackageBytes,
             @Value("${agentspan.skills.max-preview-bytes:1048576}") long maxPreviewBytes,
             @Value("${agentspan.skills.max-uncompressed-bytes:209715200}") long maxUncompressedBytes,
             @Value("${agentspan.skills.max-file-count:2000}") int maxFileCount,
-            SkillPackageStore packageStore) {
-        this.storageRoot = Path.of(storageDir).toAbsolutePath().normalize();
+            SkillPackageStore packageStore,
+            SkillMetadataDAO metadataDao) {
         this.maxPackageBytes = maxPackageBytes;
         this.maxPreviewBytes = maxPreviewBytes;
         this.maxUncompressedBytes = maxUncompressedBytes;
         this.maxFileCount = maxFileCount;
         this.packageStore = packageStore;
+        this.metadataDao = metadataDao;
     }
 
     public synchronized SkillDetail register(String manifestJson, MultipartFile packageFile) {
@@ -139,11 +138,10 @@ public class SkillRegistryService {
 
         long now = Instant.now().toEpochMilli();
         String storageName = packageStoreName(ownerId, name);
-        Path versionDir = versionDir(ownerId, name, version);
-        Path metadataPath = metadataPath(ownerId, name, version);
 
-        if (Files.exists(metadataPath)) {
-            SkillDetail existing = readDetail(metadataPath);
+        Optional<SkillDetail> existingOpt = metadataDao.find(ownerId, name, version);
+        if (existingOpt.isPresent()) {
+            SkillDetail existing = existingOpt.get();
             enforceReadable(existing);
             if (!checksum.equals(existing.getChecksum())) {
                 throw new IllegalArgumentException(
@@ -155,14 +153,13 @@ public class SkillRegistryService {
                 existing.setStorageType(restored.storageType());
                 existing.setPackageSize(restored.size());
                 existing.setUpdatedAt(now);
-                writeDetail(metadataPath, existing);
+                metadataDao.save(existing, false);
             }
             return existing;
         }
 
         StoredSkillPackage stored = null;
         try {
-            Files.createDirectories(versionDir);
             stored = packageStore.store(storageName, version, checksum, bytes);
 
             SkillDetail detail = SkillDetail.builder()
@@ -182,14 +179,8 @@ public class SkillRegistryService {
                     .metadata(parsed.metadata())
                     .rawConfig(rawConfig)
                     .build();
-            writeDetail(metadataPath, detail);
-            Files.writeString(latestPath(ownerId, name), version, StandardCharsets.UTF_8);
+            metadataDao.save(detail, true);
             return detail;
-        } catch (IOException e) {
-            if (stored != null) {
-                packageStore.delete(stored.handle());
-            }
-            throw new IllegalStateException("Failed to store skill package: " + e.getMessage(), e);
         } catch (RuntimeException e) {
             if (stored != null) {
                 packageStore.delete(stored.handle());
@@ -199,31 +190,11 @@ public class SkillRegistryService {
     }
 
     public List<SkillSummary> list(boolean allVersions) {
-        Path ownerRoot = ownerRoot(currentUserId());
-        if (!Files.isDirectory(ownerRoot)) {
-            return List.of();
-        }
         List<SkillSummary> summaries = new ArrayList<>();
-        try (var skillDirs = Files.list(ownerRoot)) {
-            for (Path skillDir : skillDirs.filter(Files::isDirectory).toList()) {
-                if (allVersions) {
-                    try (var versions = Files.list(skillDir)) {
-                        for (Path versionPath :
-                                versions.filter(Files::isDirectory).toList()) {
-                            addSummary(summaries, versionPath.resolve("metadata.json"));
-                        }
-                    }
-                } else {
-                    Path latest = skillDir.resolve("latest");
-                    if (Files.exists(latest)) {
-                        String version =
-                                Files.readString(latest, StandardCharsets.UTF_8).trim();
-                        addSummary(summaries, skillDir.resolve(encoded(version)).resolve("metadata.json"));
-                    }
-                }
+        for (SkillDetail detail : metadataDao.list(currentUserId(), allVersions)) {
+            if (isReadable(detail)) {
+                addSummary(summaries, detail);
             }
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to list skills: " + e.getMessage(), e);
         }
         summaries.sort(Comparator.comparing(SkillSummary::getName).thenComparing(SkillSummary::getVersion));
         return summaries;
@@ -232,11 +203,9 @@ public class SkillRegistryService {
     public SkillDetail get(String name, String version) {
         String ownerId = currentUserId();
         String resolvedVersion = resolveVersion(ownerId, name, version);
-        Path metadataPath = metadataPath(ownerId, name, resolvedVersion);
-        if (!Files.exists(metadataPath)) {
-            throw new IllegalArgumentException("Skill not found: " + name + "@" + resolvedVersion);
-        }
-        SkillDetail detail = readDetail(metadataPath);
+        SkillDetail detail = metadataDao
+                .find(ownerId, name, resolvedVersion)
+                .orElseThrow(() -> new IllegalArgumentException("Skill not found: " + name + "@" + resolvedVersion));
         enforceReadable(detail);
         return detail;
     }
@@ -330,42 +299,14 @@ public class SkillRegistryService {
     public synchronized void delete(String name, String version) {
         String ownerId = currentUserId();
         String resolvedVersion = resolveVersion(ownerId, name, version);
-        Path dir = versionDir(ownerId, name, resolvedVersion);
-        if (!Files.exists(dir)) {
-            return;
-        }
-        Path metadataPath = metadataPath(ownerId, name, resolvedVersion);
-        SkillDetail detail = null;
-        if (Files.exists(metadataPath)) {
-            detail = readDetail(metadataPath);
+        metadataDao.find(ownerId, name, resolvedVersion).ifPresent(detail -> {
             enforceReadable(detail);
-        }
-        try (var paths = Files.walk(dir)) {
-            for (Path p : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(p);
-            }
-            if (detail != null) {
-                deletePackage(detail);
-            }
-            Path latest = latestPath(ownerId, name);
-            if (Files.exists(latest)
-                    && resolvedVersion.equals(
-                            Files.readString(latest, StandardCharsets.UTF_8).trim())) {
-                updateLatestAfterDelete(ownerId, name);
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to delete skill: " + e.getMessage(), e);
-        }
+            deletePackage(detail);
+        });
+        metadataDao.delete(ownerId, name, resolvedVersion);
     }
 
-    private void addSummary(List<SkillSummary> summaries, Path metadataPath) {
-        if (!Files.exists(metadataPath)) {
-            return;
-        }
-        SkillDetail detail = readDetail(metadataPath);
-        if (!isReadable(detail)) {
-            return;
-        }
+    private void addSummary(List<SkillSummary> summaries, SkillDetail detail) {
         Map<String, Object> raw = detail.getRawConfig() != null ? detail.getRawConfig() : Map.of();
         summaries.add(SkillSummary.builder()
                 .name(detail.getName())
@@ -389,34 +330,20 @@ public class SkillRegistryService {
             version = null;
         }
         if (version != null && !version.isBlank()) {
-            Path direct = metadataPath(ownerId, name, version);
-            if (Files.exists(direct)) {
+            if (metadataDao.find(ownerId, name, version).isPresent()) {
                 return version;
             }
-            Path skillRoot = skillRoot(ownerId, name);
-            if (Files.isDirectory(skillRoot)) {
-                try (var versions = Files.list(skillRoot)) {
-                    for (Path candidate : versions.filter(Files::isDirectory).toList()) {
-                        SkillDetail detail = readDetail(candidate.resolve("metadata.json"));
-                        if (detail.getChecksum() != null && detail.getChecksum().startsWith(version)) {
-                            return detail.getVersion();
-                        }
-                    }
-                } catch (IOException e) {
-                    throw new IllegalStateException("Failed to resolve skill version: " + e.getMessage(), e);
+            // Allow a checksum prefix in place of an exact version.
+            for (SkillDetail detail : metadataDao.listVersions(ownerId, name)) {
+                if (detail.getChecksum() != null && detail.getChecksum().startsWith(version)) {
+                    return detail.getVersion();
                 }
             }
             return version;
         }
-        Path latest = latestPath(ownerId, name);
-        if (!Files.exists(latest)) {
-            throw new IllegalArgumentException("Skill not found: " + name);
-        }
-        try {
-            return Files.readString(latest, StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read latest skill version: " + e.getMessage(), e);
-        }
+        return metadataDao
+                .latestVersion(ownerId, name)
+                .orElseThrow(() -> new IllegalArgumentException("Skill not found: " + name));
     }
 
     private Map<String, Object> parseManifest(String manifestJson) {
@@ -750,7 +677,9 @@ public class SkillRegistryService {
             SkillDetail refDetail;
             try {
                 String refVersion = resolveVersion(ownerId, refName, null);
-                refDetail = readDetail(metadataPath(ownerId, refName, refVersion));
+                refDetail = metadataDao
+                        .find(ownerId, refName, refVersion)
+                        .orElseThrow(() -> new IllegalArgumentException("Skill not found: " + refName));
             } catch (IllegalArgumentException e) {
                 continue;
             }
@@ -871,54 +800,28 @@ public class SkillRegistryService {
         return matcher.group(2).trim();
     }
 
-    private SkillDetail readDetail(Path metadataPath) {
-        try {
-            return MAPPER.readValue(metadataPath.toFile(), SkillDetail.class);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read skill metadata: " + e.getMessage(), e);
-        }
-    }
-
-    private void writeDetail(Path metadataPath, SkillDetail detail) {
-        try {
-            MAPPER.writerWithDefaultPrettyPrinter().writeValue(metadataPath.toFile(), detail);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to write skill metadata: " + e.getMessage(), e);
-        }
-    }
-
     private boolean packageExists(SkillDetail detail) {
         String handle = detail.getPackageFileHandleId();
-        if (handle != null && !handle.isBlank()) {
-            try {
-                if (packageStore.exists(handle)) {
-                    return true;
-                }
-            } catch (RuntimeException ignored) {
-                // Fall through to legacy package path lookup.
-            }
+        if (handle == null || handle.isBlank()) {
+            return false;
         }
-        return Files.exists(legacyPackagePath(detail.getOwnerId(), detail.getName(), detail.getVersion()));
+        try {
+            return packageStore.exists(handle);
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private byte[] packageBytes(SkillDetail detail) {
         String handle = detail.getPackageFileHandleId();
-        if (handle != null && !handle.isBlank()) {
-            try {
-                return packageStore.read(handle);
-            } catch (RuntimeException ignored) {
-                // Fall through to legacy package path lookup.
-            }
-        }
-        try {
-            return Files.readAllBytes(legacyPackagePath(detail.getOwnerId(), detail.getName(), detail.getVersion()));
-        } catch (IOException e) {
+        if (handle == null || handle.isBlank()) {
             throw new IllegalArgumentException(
                     "Skill package not found: " + detail.getName() + "@" + detail.getVersion());
         }
+        return packageStore.read(handle);
     }
 
-    private void deletePackage(SkillDetail detail) throws IOException {
+    private void deletePackage(SkillDetail detail) {
         String handle = detail.getPackageFileHandleId();
         if (handle != null && !handle.isBlank()) {
             try {
@@ -927,40 +830,6 @@ public class SkillRegistryService {
                 // Legacy records used synthetic handles before the package store existed.
             }
         }
-        Files.deleteIfExists(legacyPackagePath(detail.getOwnerId(), detail.getName(), detail.getVersion()));
-    }
-
-    private void updateLatestAfterDelete(String ownerId, String name) throws IOException {
-        Path skillRoot = skillRoot(ownerId, name);
-        if (!Files.isDirectory(skillRoot)) {
-            Files.deleteIfExists(latestPath(ownerId, name));
-            return;
-        }
-        List<SkillDetail> remaining = new ArrayList<>();
-        try (var versions = Files.list(skillRoot)) {
-            for (Path versionPath : versions.filter(Files::isDirectory).toList()) {
-                Path metadata = versionPath.resolve("metadata.json");
-                if (Files.exists(metadata)) {
-                    SkillDetail detail = readDetail(metadata);
-                    if (isReadable(detail)) {
-                        remaining.add(detail);
-                    }
-                }
-            }
-        }
-        if (remaining.isEmpty()) {
-            Files.deleteIfExists(latestPath(ownerId, name));
-            try (var children = Files.list(skillRoot)) {
-                if (children.findAny().isEmpty()) {
-                    Files.deleteIfExists(skillRoot);
-                }
-            }
-            return;
-        }
-        remaining.sort(Comparator.comparing(SkillDetail::getCreatedAt, Comparator.nullsFirst(Long::compareTo))
-                .thenComparing(SkillDetail::getVersion));
-        Files.writeString(
-                latestPath(ownerId, name), remaining.get(remaining.size() - 1).getVersion(), StandardCharsets.UTF_8);
     }
 
     private String currentUserId() {
@@ -994,36 +863,8 @@ public class SkillRegistryService {
         return normalized;
     }
 
-    private Path ownerRoot(String ownerId) {
-        return storageRoot.resolve("owners").resolve(encoded(ownerId));
-    }
-
-    private Path skillRoot(String ownerId, String name) {
-        return ownerRoot(ownerId).resolve(encoded(name));
-    }
-
-    private Path versionDir(String ownerId, String name, String version) {
-        return skillRoot(ownerId, name).resolve(encoded(version));
-    }
-
-    private Path metadataPath(String ownerId, String name, String version) {
-        return versionDir(ownerId, name, version).resolve("metadata.json");
-    }
-
-    private Path legacyPackagePath(String ownerId, String name, String version) {
-        return versionDir(ownerId, name, version).resolve("skill.zip");
-    }
-
-    private Path latestPath(String ownerId, String name) {
-        return skillRoot(ownerId, name).resolve("latest");
-    }
-
     private String packageStoreName(String ownerId, String name) {
         return ownerId + ":" + name;
-    }
-
-    private String encoded(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     private void validateSkillName(String name) {

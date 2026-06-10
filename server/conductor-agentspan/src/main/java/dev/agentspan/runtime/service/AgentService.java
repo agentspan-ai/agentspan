@@ -34,6 +34,7 @@ import com.netflix.conductor.common.run.WorkflowSummary;
 import com.netflix.conductor.core.exception.NotFoundException;
 import com.netflix.conductor.core.execution.StartWorkflowInput;
 import com.netflix.conductor.core.execution.WorkflowExecutor;
+import com.netflix.conductor.core.utils.IDGenerator;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.dao.MetadataDAO;
 import com.netflix.conductor.model.WorkflowModel;
@@ -73,6 +74,16 @@ public class AgentService {
 
     @Autowired(required = false)
     private SkillRegistryService skillRegistryService;
+
+    /**
+     * Conductor's configured ID generator. When embedded in a host that uses time-based IDs
+     * (e.g. orkes-conductor with {@code conductor.id.generator=time_based}), pre-allocated
+     * execution IDs must be v1 time-based UUIDs — the host derives a workflow's createTime from
+     * its ID and yields 0 for non-v1 (random) UUIDs. Falls back to a random UUID when unset
+     * (standalone tests / no Spring context).
+     */
+    @Autowired(required = false)
+    private IDGenerator idGenerator;
 
     /** Package-private constructor for testing with ExecutionTokenService */
     AgentService(
@@ -293,7 +304,10 @@ public class AgentService {
         // with NPE when it tries Map.of(..., null, ...) on the not-null
         // execution_id column. Passing this id to setWorkflowId on the start
         // input below makes Conductor adopt it instead of generating one.
-        String preallocatedExecutionId = UUID.randomUUID().toString();
+        // Use the host's configured ID generator (time-based when embedded in orkes) so the
+        // host can derive createTime from the ID; fall back to a random UUID outside Spring.
+        String preallocatedExecutionId =
+                idGenerator != null ? idGenerator.generate() : UUID.randomUUID().toString();
 
         // Mint execution token and embed in workflow variables for worker credential resolution
         if (executionTokenService != null) {
