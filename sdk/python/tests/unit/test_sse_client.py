@@ -93,8 +93,36 @@ class MockSSEHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass  # Client disconnected
 
+    def do_POST(self):
+        # Mint endpoint used by the auth-headers path: POST {server}/token
+        # with {"keyId", "keySecret"} -> {"token": <jwt>} (orkes contract).
+        if self.path.endswith("/token"):
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            self.server.mint_requests = getattr(self.server, "mint_requests", [])  # type: ignore[attr-defined]
+            self.server.mint_requests.append(body)  # type: ignore[attr-defined]
+            data = json.dumps({"token": MOCK_MINTED_JWT}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        self.send_error(404)
+
     def log_message(self, format, *args):
         pass  # Suppress request logs during tests
+
+
+def _mock_jwt() -> str:
+    import base64
+
+    header = base64.urlsafe_b64encode(b'{"alg":"HS256"}').rstrip(b"=").decode()
+    payload = base64.urlsafe_b64encode(b'{"exp":4102444800}').rstrip(b"=").decode()
+    return f"{header}.{payload}.sig"
+
+
+MOCK_MINTED_JWT = _mock_jwt()
 
 
 class MockSSEServer:
@@ -368,7 +396,11 @@ class TestStreamSSEErrors:
 
 
 class TestStreamSSEAuth:
-    def test_auth_headers_sent(self):
+    def test_auth_key_secret_mints_x_authorization(self):
+        """auth_key/auth_secret are exchanged for a JWT via POST /token (the
+        secured-host contract, e.g. orkes) and sent as X-Authorization."""
+        from agentspan.agents._internal.token_utils import _TOKEN_CACHE
+
         scenario = {
             "events": [
                 {"event": "done", "id": "1", "data": _java_event("done", output="ok")},
@@ -378,15 +410,22 @@ class TestStreamSSEAuth:
         server = MockSSEServer(scenario)
         url = server.start()
         try:
+            _TOKEN_CACHE.clear()
             rt = _make_runtime(url, auth_key="my-key", auth_secret="my-secret")
             events = list(rt._stream_sse("test-wf"))
             assert len(events) == 1
 
+            # The mint endpoint received the key/secret...
+            mints = getattr(server.server, "mint_requests", [])
+            assert mints and mints[0] == {"keyId": "my-key", "keySecret": "my-secret"}
+            # ...and the stream request carried the minted JWT.
             headers = server.received_headers
-            assert headers.get("X-Auth-Key") == "my-key"
-            assert headers.get("X-Auth-Secret") == "my-secret"
+            assert headers.get("X-Authorization") == MOCK_MINTED_JWT
+            assert "X-Auth-Key" not in headers
+            assert "X-Auth-Secret" not in headers
         finally:
             server.stop()
+            _TOKEN_CACHE.clear()
 
     def test_no_auth_headers_when_not_configured(self):
         scenario = {
@@ -402,6 +441,7 @@ class TestStreamSSEAuth:
             list(rt._stream_sse("test-wf"))
 
             headers = server.received_headers
+            assert "X-Authorization" not in headers
             assert "X-Auth-Key" not in headers
             assert "X-Auth-Secret" not in headers
         finally:

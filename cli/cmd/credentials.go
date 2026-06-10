@@ -6,7 +6,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/agentspan-ai/agentspan/cli/client"
-	"github.com/agentspan-ai/agentspan/cli/config"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +36,7 @@ var secretsSetCmd = &cobra.Command{
 }
 
 func runSecretsSet(name, value string) error {
-	cfg := config.Load()
+	cfg := getConfig()
 	c := client.New(cfg)
 	return c.SetCredential(name, value)
 }
@@ -58,7 +57,7 @@ var secretsListCmd = &cobra.Command{
 }
 
 func runSecretsList() (string, error) {
-	cfg := config.Load()
+	cfg := getConfig()
 	c := client.New(cfg)
 	secrets, err := c.ListCredentials()
 	if err != nil {
@@ -94,7 +93,7 @@ var secretsDeleteCmd = &cobra.Command{
 }
 
 func runSecretsDelete(name string) error {
-	cfg := config.Load()
+	cfg := getConfig()
 	return client.New(cfg).DeleteCredential(name)
 }
 

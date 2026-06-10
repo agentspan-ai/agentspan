@@ -148,6 +148,47 @@ async def _call_user_fn(fn, *args, **kwargs):
     return await asyncio.to_thread(fn, *args, **kwargs)
 
 
+def _resolve_loop_iteration(iteration: object) -> int:
+    """Resolve the current DO_WHILE loop iteration robustly across Conductor cores.
+
+    The compiler wires a worker's ``iteration`` input from the loop counter
+    reference ``${<agent>_loop.iteration}``. Conductor cores disagree on whether
+    that loop-output reference resolves for tasks executing *inside* the loop
+    body: the OSS core agentspan compiles against resolves it to the live integer,
+    but some embedding hosts' cores (e.g. orkes-conductor) leave it unresolved and
+    deliver ``None`` — which then crashes ``iteration >= max_retries`` comparisons.
+
+    The authoritative per-iteration value is always present on the Task object
+    (``task.iteration``), set identically by every core (1-based inside a loop,
+    0 outside). So: trust a valid integer input when present (preserves the OSS
+    path exactly, no regression), otherwise fall back to the live task iteration,
+    and finally to 0.
+    """
+    if isinstance(iteration, bool):
+        return 0
+    if isinstance(iteration, int):
+        return iteration
+    if isinstance(iteration, str) and iteration.strip().lstrip("-").isdigit():
+        return int(iteration.strip())
+    try:
+        from conductor.client.context.task_context import get_task_context
+
+        live = getattr(get_task_context().task, "iteration", None)
+        if isinstance(live, int) and not isinstance(live, bool):
+            return live
+    except Exception:
+        # No task context (e.g. unit-test direct call) or core without the field.
+        pass
+    return 0
+
+
+def _decode_jwt_exp(token: str) -> float:
+    """Best-effort decode of a JWT's `exp` (unix seconds); 0 if opaque/unavailable."""
+    from agentspan.agents._internal.token_utils import decode_jwt_exp
+
+    return decode_jwt_exp(token)
+
+
 def _normalize_handoff_target(task_ref: str) -> str:
     """Extract the actual agent name from a Conductor sub-workflow reference.
 
@@ -409,17 +450,33 @@ class AgentRuntime:
         base = self._config.server_url.rstrip("/")
         return f"{base}/agent{path}"
 
+    def _agent_api_token(self) -> "Optional[str]":
+        """Resolve the bearer token for agent runtime API calls (sent as X-Authorization).
+
+        Prefers an explicit ``api_key`` (already a token). Otherwise mints and caches a JWT
+        from ``auth_key``/``auth_secret`` via ``POST {server}/token`` — the orkes internal-key
+        (service-account) auth path, the same exchange the worker client and CLI use. Returns
+        ``None`` when no credentials are configured (anonymous / security-disabled servers).
+        """
+        from agentspan.agents._internal.token_utils import resolve_agent_api_token
+
+        return resolve_agent_api_token(
+            self._config.server_url,
+            api_key=self._config.api_key,
+            auth_key=self._config.auth_key,
+            auth_secret=self._config.auth_secret,
+        )
+
     def _agent_api_headers(self, content_type: str = "application/json") -> Dict[str, str]:
         """Build headers for agent runtime API requests."""
         headers: Dict[str, str] = {}
         if content_type:
             headers["Content-Type"] = content_type
-        if self._config.api_key:
-            headers["Authorization"] = f"Bearer {self._config.api_key}"
-        elif self._config.auth_key:
-            headers["X-Auth-Key"] = self._config.auth_key
-            if self._config.auth_secret:
-                headers["X-Auth-Secret"] = self._config.auth_secret
+        token = self._agent_api_token()
+        if token:
+            # orkes accepts X-Authorization (and Authorization: Bearer); the standalone
+            # anonymous server ignores it. X-Authorization matches the UI/CLI convention.
+            headers["X-Authorization"] = token
         return headers
 
     def _register_workflow_credentials(
@@ -709,11 +766,7 @@ class AgentRuntime:
         server_url = self._config.server_url.rstrip("/")
         url = f"{server_url}/agent/compile"
 
-        headers = {"Content-Type": "application/json"}
-        if self._config.auth_key:
-            headers["X-Auth-Key"] = self._config.auth_key
-        if self._config.auth_secret:
-            headers["X-Auth-Secret"] = self._config.auth_secret
+        headers = self._agent_api_headers()
 
         payload = {"agentConfig": config_json}
         response = requests.post(url, json=payload, headers=headers, timeout=30)
@@ -1340,6 +1393,7 @@ class AgentRuntime:
             async def combined_guardrail_worker(
                 content: object = None, iteration: int = 0
             ) -> object:
+                iteration = _resolve_loop_iteration(iteration)
                 if content is None:
                     content_str = ""
                 elif isinstance(content, str):
@@ -1420,6 +1474,7 @@ class AgentRuntime:
         g_name = guardrail.name
 
         async def guardrail_worker(content: object = None, iteration: int = 0) -> object:
+            iteration = _resolve_loop_iteration(iteration)
             if content is None:
                 content_str = ""
             elif isinstance(content, str):
@@ -1490,6 +1545,7 @@ class AgentRuntime:
         task_name = f"{agent_name}_stop_when"
 
         async def stop_when_worker(result="", iteration: int = 0, messages=None) -> object:
+            iteration = _resolve_loop_iteration(iteration)
             context = {"result": result, "messages": messages or [], "iteration": iteration}
             try:
                 should_stop = await _call_user_fn(stop_when_fn, context)
@@ -1583,6 +1639,7 @@ class AgentRuntime:
         task_name = f"{agent_name}_termination"
 
         async def termination_worker(result: str = "", iteration: int = 0) -> object:
+            iteration = _resolve_loop_iteration(iteration)
             context = {"result": result, "messages": [], "iteration": iteration}
             try:
                 outcome = await _call_user_fn(termination_cond.should_terminate, context)
@@ -2235,11 +2292,7 @@ class AgentRuntime:
         server_url = self._config.server_url.rstrip("/")
         url = f"{server_url}/agent/compile"
 
-        headers = {"Content-Type": "application/json"}
-        if self._config.auth_key:
-            headers["X-Auth-Key"] = self._config.auth_key
-        if self._config.auth_secret:
-            headers["X-Auth-Secret"] = self._config.auth_secret
+        headers = self._agent_api_headers()
 
         response = requests.post(url, json=payload, headers=headers, timeout=30)
         try:
@@ -3614,10 +3667,9 @@ class AgentRuntime:
         server_url = self._config.server_url.rstrip("/")
         url = f"{server_url}/agent/stream/{execution_id}"
         headers: Dict[str, str] = {"Accept": "text/event-stream"}
-        if self._config.auth_key:
-            headers["X-Auth-Key"] = self._config.auth_key
-        if self._config.auth_secret:
-            headers["X-Auth-Secret"] = self._config.auth_secret
+        token = self._agent_api_token()
+        if token:
+            headers["X-Authorization"] = token
 
         last_event_id: Optional[str] = None
         first_connect = True

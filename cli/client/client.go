@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentspan-ai/agentspan/cli/auth"
 	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
@@ -22,13 +23,60 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	apiKey     string
+	authToken  string // Auth0 JWT sent as X-Authorization (from ~/.agentspan/token)
 }
 
 func New(cfg *config.Config) *Client {
-	return &Client{
+	c := &Client{
 		baseURL:    strings.TrimRight(cfg.ServerURL, "/"),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		apiKey:     cfg.APIKey,
+	}
+	c.authToken = resolveAuthToken()
+	return c
+}
+
+// resolveAuthToken loads the stored login token, refreshing it via Auth0 if expired,
+// and returns the JWT to send as X-Authorization. Empty when not logged in.
+func resolveAuthToken() string {
+	t, err := config.LoadToken()
+	if err != nil || t == nil {
+		return ""
+	}
+	if t.Expired() {
+		switch {
+		case t.RefreshToken != "" && t.Auth0Domain != "" && t.ClientID != "":
+			// Auth0 device-flow token: refresh with the refresh token.
+			if nt, rerr := auth.Refresh(t.Auth0Domain, t.ClientID, t.RefreshToken); rerr == nil {
+				t.AccessToken = nt.AccessToken
+				if nt.IDToken != "" {
+					t.IDToken = nt.IDToken
+				}
+				if nt.RefreshToken != "" {
+					t.RefreshToken = nt.RefreshToken
+				}
+				t.ExpiresAt = time.Now().Add(time.Duration(nt.ExpiresIn) * time.Second).Unix()
+				_ = config.SaveToken(t)
+			}
+		case t.KeyID != "" && t.KeySecret != "" && t.ServerURL != "":
+			// orkes access-key token: re-mint via POST /api/token.
+			if tok, exp, merr := auth.MintOrkesToken(t.ServerURL, t.KeyID, t.KeySecret); merr == nil {
+				t.AccessToken = tok
+				t.ExpiresAt = exp
+				_ = config.SaveToken(t)
+			}
+		}
+	}
+	return t.Header()
+}
+
+// applyAuth attaches the auth header: X-Authorization (Auth0 JWT) when logged in,
+// else a legacy Authorization: Bearer from a configured API key. orkes accepts both.
+func (c *Client) applyAuth(req *http.Request) {
+	if c.authToken != "" {
+		req.Header.Set("X-Authorization", c.authToken)
+	} else if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
 }
 
@@ -49,9 +97,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
+	c.applyAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -93,9 +139,7 @@ func (c *Client) doMultipartRequest(path string, manifest []byte, packageBytes [
 		return nil, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
+	c.applyAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -196,9 +240,7 @@ func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
+	c.applyAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -578,9 +620,7 @@ func (c *Client) Stream(executionID string, lastEventID string, events chan<- SS
 		if lastEventID != "" {
 			req.Header.Set("Last-Event-ID", lastEventID)
 		}
-		if c.apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+c.apiKey)
-		}
+		c.applyAuth(req)
 
 		resp, err := streamClient.Do(req)
 		if err != nil {
@@ -645,34 +685,6 @@ func sseFieldValue(line, prefix string) string {
 
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
-// LoginRequest is the payload for POST /api/auth/login
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// LoginResponse carries the JWT returned by the server
-type LoginResponse struct {
-	Token string `json:"token"`
-}
-
-// Login authenticates with the server and returns a JWT.
-func (c *Client) Login(username, password string) (*LoginResponse, error) {
-	resp, err := c.doRequest("POST", "/api/auth/login", &LoginRequest{
-		Username: username,
-		Password: password,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var result LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode login response: %w", err)
-	}
-	return &result, nil
-}
-
 // ─── Credentials management API ───────────────────────────────────────────────────
 
 // CredentialMeta is the list-view for a stored credential (from GET /api/secrets/v2).
@@ -706,9 +718,7 @@ func (c *Client) SetCredential(name, value string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "text/plain")
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	}
+	c.applyAuth(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)

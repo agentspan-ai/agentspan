@@ -21,6 +21,7 @@ from dataclasses import is_dataclass, replace
 from typing import Any, Dict, List, Optional, Tuple
 
 from agentspan.agents.frameworks.serializer import WorkerInfo
+from agentspan.agents._internal.token_utils import agent_api_auth_headers
 
 logger = logging.getLogger("agentspan.agents.frameworks.claude_agent_sdk")
 
@@ -830,11 +831,7 @@ def _push_event_nonblocking(
             import requests
 
             url = f"{server_url}/agent/events/{execution_id}"
-            headers: Dict[str, str] = {}
-            if auth_key:
-                headers["X-Auth-Key"] = auth_key
-            if auth_secret:
-                headers["X-Auth-Secret"] = auth_secret
+            headers = agent_api_auth_headers(server_url, auth_key=auth_key, auth_secret=auth_secret)
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
             logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)
@@ -871,10 +868,9 @@ def _update_task_progress_nonblocking(
 
             url = f"{server_url}/tasks"
             headers: Dict[str, str] = {"Content-Type": "application/json"}
-            if auth_key:
-                headers["X-Auth-Key"] = auth_key
-            if auth_secret:
-                headers["X-Auth-Secret"] = auth_secret
+            headers.update(
+                agent_api_auth_headers(server_url, auth_key=auth_key, auth_secret=auth_secret)
+            )
             body = {
                 "taskId": task_id,
                 "workflowInstanceId": execution_id,
@@ -917,10 +913,9 @@ def _create_tracking_workflow(
 
         url = f"{server_url}/agent/execution"
         headers: Dict[str, str] = {"Content-Type": "application/json"}
-        if auth_key:
-            headers["X-Auth-Key"] = auth_key
-        if auth_secret:
-            headers["X-Auth-Secret"] = auth_secret
+        headers.update(
+            agent_api_auth_headers(server_url, auth_key=auth_key, auth_secret=auth_secret)
+        )
         body: Dict[str, Any] = {"workflowName": workflow_name, "input": input_data}
         if parent_workflow_id:
             body["parentWorkflowId"] = parent_workflow_id
@@ -959,10 +954,9 @@ def _inject_tool_task(
 
         url = f"{server_url}/agent/{execution_id}/tasks"
         headers: Dict[str, str] = {"Content-Type": "application/json"}
-        if auth_key:
-            headers["X-Auth-Key"] = auth_key
-        if auth_secret:
-            headers["X-Auth-Secret"] = auth_secret
+        headers.update(
+            agent_api_auth_headers(server_url, auth_key=auth_key, auth_secret=auth_secret)
+        )
         body: Dict[str, Any] = {
             "taskDefName": tool_name,
             "referenceTaskName": ref_name,
@@ -1003,10 +997,9 @@ def _complete_tool_task_nonblocking(
 
             url = f"{server_url}/agent/tasks/{execution_id}/{ref_name}/{status}"
             headers: Dict[str, str] = {"Content-Type": "application/json"}
-            if auth_key:
-                headers["X-Auth-Key"] = auth_key
-            if auth_secret:
-                headers["X-Auth-Secret"] = auth_secret
+            headers.update(
+                agent_api_auth_headers(server_url, auth_key=auth_key, auth_secret=auth_secret)
+            )
             requests.post(url, json=output_data, headers=headers, timeout=5)
         except Exception as exc:
             logger.debug(
@@ -1037,10 +1030,9 @@ def _complete_workflow_nonblocking(
 
             url = f"{server_url}/agent/execution/{workflow_execution_id}/complete"
             headers: Dict[str, str] = {"Content-Type": "application/json"}
-            if auth_key:
-                headers["X-Auth-Key"] = auth_key
-            if auth_secret:
-                headers["X-Auth-Secret"] = auth_secret
+            headers.update(
+                agent_api_auth_headers(server_url, auth_key=auth_key, auth_secret=auth_secret)
+            )
             requests.post(url, json=output_data or {}, headers=headers, timeout=5)
         except Exception as exc:
             logger.debug(

@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Tuple
 
 from agentspan.agents.frameworks.serializer import WorkerInfo
+from agentspan.agents._internal.token_utils import agent_api_auth_headers
 
 logger = logging.getLogger("agentspan.agents.frameworks.langgraph")
 
@@ -1780,11 +1781,7 @@ def _push_event_nonblocking(
             import requests
 
             url = f"{server_url}/agent/events/{execution_id}"
-            headers = {}
-            if auth_key:
-                headers["X-Auth-Key"] = auth_key
-            if auth_secret:
-                headers["X-Auth-Secret"] = auth_secret
+            headers = agent_api_auth_headers(server_url, auth_key=auth_key, auth_secret=auth_secret)
             requests.post(url, json=event, headers=headers, timeout=5)
         except Exception as exc:
             logger.debug("Event push failed (execution_id=%s): %s", execution_id, exc)

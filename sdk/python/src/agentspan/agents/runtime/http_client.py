@@ -20,6 +20,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
 
+from agentspan.agents._internal.token_utils import decode_jwt_exp
 from agentspan.agents.exceptions import _raise_api_error
 
 logger = logging.getLogger("agentspan.agents.runtime.http_client")
@@ -46,23 +47,43 @@ class AgentHttpClient:
         self._auth_key = auth_key
         self._auth_secret = auth_secret
         self._client: Optional[httpx.AsyncClient] = None
+        self._token: str = ""
+        self._token_exp: float = 0.0
 
-    def _base_headers(self) -> Dict[str, str]:
-        headers: Dict[str, str] = {}
+    async def _auth_headers(self) -> Dict[str, str]:
+        """``X-Authorization`` header for secured hosts (orkes); {} when anonymous.
+
+        An explicit api_key is already a token. Otherwise a JWT is minted from
+        auth_key/auth_secret via ``POST {server}/token`` and cached until ~expiry.
+        """
         if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        elif self._auth_key:
-            headers["X-Auth-Key"] = self._auth_key
-            if self._auth_secret:
-                headers["X-Auth-Secret"] = self._auth_secret
-        return headers
+            return {"X-Authorization": self._api_key}
+        if not self._auth_key or not self._auth_secret:
+            return {}
+
+        if self._token and (self._token_exp == 0.0 or time.time() < self._token_exp - 30):
+            return {"X-Authorization": self._token}
+
+        try:
+            client = await self._get_client()
+            resp = await client.post(
+                f"{self._server_url}/token",
+                json={"keyId": self._auth_key, "keySecret": self._auth_secret},
+            )
+            resp.raise_for_status()
+            token = resp.json().get("token") or ""
+        except Exception as e:  # pragma: no cover - network/credential failures
+            logger.warning("Failed to mint agent API token: %s", e)
+            return {}
+        if not token:
+            return {}
+        self._token = token
+        self._token_exp = decode_jwt_exp(token)
+        return {"X-Authorization": token}
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(30.0, connect=5.0),
-                headers=self._base_headers(),
-            )
+            self._client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0))
         return self._client
 
     def _url(self, path: str) -> str:
@@ -74,7 +95,7 @@ class AgentHttpClient:
         """POST /agent/start — start an agent execution."""
         client = await self._get_client()
         url = self._url("/start")
-        resp = await client.post(url, json=payload)
+        resp = await client.post(url, json=payload, headers=await self._auth_headers())
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -85,7 +106,7 @@ class AgentHttpClient:
         """POST /agent/deploy — deploy agent (compile + register, no execution)."""
         client = await self._get_client()
         url = self._url("/deploy")
-        resp = await client.post(url, json=payload)
+        resp = await client.post(url, json=payload, headers=await self._auth_headers())
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -96,7 +117,7 @@ class AgentHttpClient:
         """POST /agent/compile — compile agent config to agent def."""
         client = await self._get_client()
         url = self._url("/compile")
-        resp = await client.post(url, json=config_json)
+        resp = await client.post(url, json=config_json, headers=await self._auth_headers())
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -107,7 +128,7 @@ class AgentHttpClient:
         """GET /agent/{id}/status — fetch execution status."""
         client = await self._get_client()
         url = self._url(f"/{execution_id}/status")
-        resp = await client.get(url)
+        resp = await client.get(url, headers=await self._auth_headers())
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -118,7 +139,7 @@ class AgentHttpClient:
         """POST /agent/{id}/respond — complete a pending human task."""
         client = await self._get_client()
         url = self._url(f"/{execution_id}/respond")
-        resp = await client.post(url, json=body)
+        resp = await client.post(url, json=body, headers=await self._auth_headers())
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -128,7 +149,7 @@ class AgentHttpClient:
         """POST /agent/{id}/stop — graceful deterministic stop."""
         client = await self._get_client()
         url = self._url(f"/{execution_id}/stop")
-        resp = await client.post(url)
+        resp = await client.post(url, headers=await self._auth_headers())
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -138,7 +159,7 @@ class AgentHttpClient:
         """POST /agent/{id}/signal — inject persistent context."""
         client = await self._get_client()
         url = self._url(f"/{execution_id}/signal")
-        resp = await client.post(url, json={"message": message})
+        resp = await client.post(url, json={"message": message}, headers=await self._auth_headers())
         try:
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -152,7 +173,7 @@ class AgentHttpClient:
         server doesn't support SSE or sends only heartbeats.
         """
         url = f"{self._server_url}/agent/stream/{execution_id}"
-        headers = {**self._base_headers(), "Accept": "text/event-stream"}
+        headers = {**(await self._auth_headers()), "Accept": "text/event-stream"}
 
         last_event_id: Optional[str] = None
         first_connect = True

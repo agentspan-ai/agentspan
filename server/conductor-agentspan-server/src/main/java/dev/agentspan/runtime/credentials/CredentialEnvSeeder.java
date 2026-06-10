@@ -46,65 +46,11 @@ public class CredentialEnvSeeder implements ApplicationRunner {
 
     /**
      * Well-known provider environment variables to scan on startup.
-     * Sourced from the AI provider config in application.properties plus the
-     * additional providers listed in the UI quick-select.
      *
-     * <p>AGENTSPAN_MASTER_KEY is intentionally excluded — it is the encryption
-     * master key and must never be stored as a credential.</p>
+     * <p>Now sourced from the shared {@link KnownProviderEnvVars#NAMES} in the library so the
+     * standalone server and embedding hosts (e.g. orkes-conductor) seed an identical set.</p>
      */
-    static final List<String> KNOWN_ENV_VARS = List.of(
-            // Anthropic (Claude)
-            "ANTHROPIC_API_KEY",
-            "ANTHROPIC_BASE_URL",
-            // OpenAI (GPT-4, DALL-E, etc.)
-            "OPENAI_API_KEY",
-            "OPENAI_ORG_ID",
-            "OPENAI_BASE_URL",
-            // Google Gemini / AI Studio / Vertex AI
-            "GEMINI_API_KEY",
-            "GOOGLE_API_KEY",
-            "GOOGLE_CLOUD_PROJECT",
-            "GOOGLE_CLOUD_LOCATION",
-            // Azure OpenAI
-            "AZURE_OPENAI_API_KEY",
-            "AZURE_OPENAI_ENDPOINT",
-            "AZURE_OPENAI_BASE_URL",
-            "AZURE_OPENAI_DEPLOYMENT",
-            // Mistral AI
-            "MISTRAL_API_KEY",
-            "MISTRAL_BASE_URL",
-            // Cohere
-            "COHERE_API_KEY",
-            "COHERE_BASE_URL",
-            // xAI / Grok
-            "XAI_API_KEY",
-            "GROK_BASE_URL",
-            // Groq
-            "GROQ_API_KEY",
-            // Perplexity
-            "PERPLEXITY_API_KEY",
-            "PERPLEXITY_BASE_URL",
-            // HuggingFace
-            "HUGGINGFACE_API_KEY",
-            "HUGGINGFACE_API_TOKEN",
-            // Stability AI
-            "STABILITY_API_KEY",
-            // DeepSeek
-            "DEEPSEEK_API_KEY",
-            // Together AI
-            "TOGETHER_API_KEY",
-            // Replicate
-            "REPLICATE_API_TOKEN",
-            // GitHub CLI / API
-            "GH_TOKEN",
-            "GITHUB_TOKEN",
-            // AWS Bedrock
-            "AWS_ACCESS_KEY_ID",
-            "AWS_SECRET_ACCESS_KEY",
-            "AWS_REGION",
-            "BEDROCK_API_KEY",
-            // Ollama (local inference)
-            "OLLAMA_HOST");
+    static final List<String> KNOWN_ENV_VARS = KnownProviderEnvVars.NAMES;
 
     private final CredentialStoreProvider storeProvider;
     private final Function<String, String> envLookup;
