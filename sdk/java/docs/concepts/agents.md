@@ -84,6 +84,8 @@ public class Research {
 
 Dynamic instructions are also available directly on the builder, without the annotation: `Agent.builder().instructions(() -> "Today is " + LocalDate.now())` — the supplier is re-evaluated on each run submission, matching the Python SDK's callable instructions.
 
+**Discovery rules.** `@AgentDef` methods must be `public` (a non-public annotated method throws rather than being silently ignored) and cannot also carry `@Tool` or `@GuardrailDef`. Discovery walks the full type hierarchy — superclasses and interfaces (including `default` methods) — and the nearest annotated declaration wins. An unannotated override does *not* hide the agent: the ancestor's annotation is used and invocation dispatches to the override, so CGLIB-proxied Spring beans (`@Transactional` etc.) keep working. In Spring Boot apps, the auto-configured [`AgentCatalog`](../spring-boot.md) collects `@AgentDef` agents from every bean.
+
 ### Identity
 
 | Builder method | Type | Default | Description |

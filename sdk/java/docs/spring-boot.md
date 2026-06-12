@@ -65,6 +65,45 @@ public class ChatService {
 }
 ```
 
+## Declare agents on beans with @AgentDef
+
+Any Spring bean can declare agents with [`@AgentDef` methods](concepts/agents.md#agentdef-annotation). The auto-configured `AgentCatalog` collects them from every bean in the context:
+
+```java
+import org.conductoross.conductor.ai.annotations.AgentDef;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.spring.AgentCatalog;
+
+@Component
+public class SupportCrew {
+
+    @Tool(description = "Look up an order by id")
+    public String lookupOrder(String orderId) { ... }
+
+    @AgentDef(model = "openai/gpt-4o")          // lookupOrder attaches automatically
+    public String support() {
+        return "You handle support tickets.";
+    }
+}
+
+@Service
+public class TicketService {
+    private final AgentRuntime runtime;
+    private final AgentCatalog agents;
+
+    public TicketService(AgentRuntime runtime, AgentCatalog agents) {
+        this.runtime = runtime;
+        this.agents = agents;
+    }
+
+    public String answer(String ticket) {
+        return runtime.run(agents.get("support"), ticket).getOutput().toString();
+    }
+}
+```
+
+The catalog scans lazily on first access; only beans whose class declares `@AgentDef` methods are touched. Duplicate agent names across beans fail fast with both bean names in the error. Proxied beans (e.g. `@Transactional`) work — discovery looks through the proxy subclass to the annotated declaration, and invocation goes through the proxy.
+
 ## Beans provided
 
 | Bean type | Bean name | Condition |
@@ -72,6 +111,7 @@ public class ChatService {
 | `ApiClient` | `orkesConductorClient` | From `conductor-client-spring`; `@ConditionalOnMissingBean` |
 | `AgentConfig` | `agentspanConfig` | From `agentspan.*` properties; `@ConditionalOnMissingBean` |
 | `AgentRuntime` | `agentRuntime` | Wires `ApiClient` + `AgentConfig`; `@ConditionalOnMissingBean` |
+| `AgentCatalog` | `agentCatalog` | Collects `@AgentDef` agents from all beans; `@ConditionalOnMissingBean` |
 
 All beans are `@ConditionalOnMissingBean` — declare your own to override any of them.
 

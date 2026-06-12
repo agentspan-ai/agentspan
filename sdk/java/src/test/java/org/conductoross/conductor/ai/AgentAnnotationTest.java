@@ -9,11 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.conductoross.conductor.ai.annotations.AgentDef;
 import org.conductoross.conductor.ai.annotations.Tool;
 import org.conductoross.conductor.ai.enums.Strategy;
 import org.conductoross.conductor.ai.model.GuardrailResult;
+import org.conductoross.conductor.ai.model.PromptTemplate;
 import org.conductoross.conductor.ai.model.ToolDef;
 import org.junit.jupiter.api.Test;
 
@@ -193,9 +196,8 @@ class AgentAnnotationTest {
 
     static class PromptTemplateReturn {
         @AgentDef(model = "openai/gpt-4o")
-        public org.conductoross.conductor.ai.model.PromptTemplate templated() {
-            return new org.conductoross.conductor.ai.model.PromptTemplate(
-                    "customer-support", java.util.Map.of("tone", "friendly"));
+        public PromptTemplate templated() {
+            return new PromptTemplate("customer-support", Map.of("tone", "friendly"));
         }
     }
 
@@ -256,6 +258,43 @@ class AgentAnnotationTest {
         public String eager(Agent.Builder builder) {
             calls++;
             return "eager " + calls;
+        }
+    }
+
+    static class HiddenAgent {
+        @AgentDef(model = "openai/gpt-4o")
+        private void secret() {}
+    }
+
+    static class BaseBot {
+        @AgentDef(model = "openai/gpt-4o")
+        public String bot() {
+            return "base instructions";
+        }
+    }
+
+    /** Simulates a CGLIB-style proxy: overrides the annotated method without re-annotating. */
+    static class ProxyBot extends BaseBot {
+        @Override
+        public String bot() {
+            return "proxied instructions";
+        }
+    }
+
+    static class PlainChild extends BaseBot {}
+
+    interface BotDefs {
+        @AgentDef(model = "openai/gpt-4o", instructions = "From interface.")
+        default void ifaceBot() {}
+    }
+
+    static class ImplBot implements BotDefs {}
+
+    static class ToolAndAgent {
+        @Tool(description = "x")
+        @AgentDef(model = "openai/gpt-4o")
+        public String both() {
+            return "x";
         }
     }
 
@@ -484,7 +523,7 @@ class AgentAnnotationTest {
 
     @Test
     void supplierInstructionsOnBuilderAreReevaluatedPerAccess() {
-        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        AtomicInteger calls = new AtomicInteger();
         Agent agent = Agent.builder()
                 .name("lazy")
                 .model("openai/gpt-4o")
@@ -511,6 +550,45 @@ class AgentAnnotationTest {
         assertEquals("eager 1", agent.getInstructions());
         assertEquals("eager 1", agent.getInstructions());
         assertEquals(1, fixture.calls);
+    }
+
+    // ── Discovery: visibility, inheritance, proxies ──────────────────────
+
+    @Test
+    void nonPublicAgentDefMethodThrowsInsteadOfSilentIgnore() {
+        IllegalArgumentException e =
+                assertThrows(IllegalArgumentException.class, () -> Agent.fromInstance(new HiddenAgent()));
+        assertTrue(e.getMessage().contains("public"));
+        assertTrue(e.getMessage().contains("secret"));
+    }
+
+    @Test
+    void unannotatedOverrideStillDiscoveredWithVirtualDispatch() {
+        // a subclass (e.g. CGLIB proxy) overriding without re-annotating must not
+        // hide the agent, and invocation must dispatch to the override
+        Agent agent = Agent.fromInstance(new ProxyBot(), "bot");
+        assertEquals("proxied instructions", agent.getInstructions());
+    }
+
+    @Test
+    void inheritedAnnotatedMethodDiscovered() {
+        assertEquals(
+                "base instructions", Agent.fromInstance(new PlainChild(), "bot").getInstructions());
+        assertEquals(
+                "base instructions", Agent.fromInstance(new BaseBot(), "bot").getInstructions());
+    }
+
+    @Test
+    void interfaceDefaultMethodDiscovered() {
+        Agent agent = Agent.fromInstance(new ImplBot(), "ifaceBot");
+        assertEquals("From interface.", agent.getInstructions());
+    }
+
+    @Test
+    void agentDefCombinedWithToolThrows() {
+        IllegalArgumentException e =
+                assertThrows(IllegalArgumentException.class, () -> Agent.fromInstance(new ToolAndAgent()));
+        assertTrue(e.getMessage().contains("@Tool"));
     }
 
     @Test

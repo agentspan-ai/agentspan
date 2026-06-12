@@ -4,16 +4,21 @@
 package org.conductoross.conductor.ai.internal;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.conductoross.conductor.ai.Agent;
 import org.conductoross.conductor.ai.annotations.AgentDef;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.enums.Strategy;
 import org.conductoross.conductor.ai.model.GuardrailDef;
 import org.conductoross.conductor.ai.model.PromptTemplate;
 import org.conductoross.conductor.ai.model.ToolDef;
@@ -64,18 +69,55 @@ public final class AgentRegistry {
         return resolve(obj, methods, name, "", new ArrayDeque<>());
     }
 
-    /** Discover all {@code @AgentDef}-annotated methods, keyed by resolved agent name. */
+    /**
+     * Discover all {@code @AgentDef}-annotated methods, keyed by resolved agent name.
+     *
+     * <p>Walks the full type hierarchy (superclasses, then interfaces) rather than
+     * {@code getMethods()}, for two reasons:
+     * <ul>
+     *   <li>An unannotated override must not hide an annotated ancestor declaration —
+     *       a CGLIB-style proxy (e.g. a {@code @Transactional} Spring bean) overrides
+     *       every public method without copying annotations. The ancestor's annotated
+     *       {@link Method} is used; invocation still dispatches virtually, so the
+     *       override (proxy behavior) executes. Nearest annotated declaration wins.</li>
+     *   <li>A non-public annotated method is a user error and must fail loudly, not
+     *       be silently invisible.</li>
+     * </ul>
+     */
     private static Map<String, Method> agentMethods(Object obj) {
         Map<String, Method> methods = new LinkedHashMap<>();
-        for (Method method : obj.getClass().getMethods()) {
-            AgentDef ann = method.getAnnotation(AgentDef.class);
-            if (ann == null) continue;
-            String name = ann.name().isEmpty() ? method.getName() : ann.name();
-            Method previous = methods.put(name, method);
-            if (previous != null) {
-                throw new IllegalArgumentException("Duplicate @AgentDef name '" + name + "' on "
-                        + obj.getClass().getName() + " (methods " + previous.getName() + " and "
-                        + method.getName() + ")");
+        Set<String> claimedSignatures = new HashSet<>();
+        Deque<Class<?>> queue = new ArrayDeque<>();
+        Set<Class<?>> visited = new HashSet<>();
+        for (Class<?> c = obj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            queue.add(c);
+        }
+        while (!queue.isEmpty()) {
+            Class<?> type = queue.poll();
+            if (!visited.add(type)) continue;
+            queue.addAll(Arrays.asList(type.getInterfaces()));
+            for (Method method : type.getDeclaredMethods()) {
+                if (method.isSynthetic()) continue;
+                AgentDef ann = method.getAnnotation(AgentDef.class);
+                if (ann == null) continue;
+                String signature = method.getName() + Arrays.toString(method.getParameterTypes());
+                if (!claimedSignatures.add(signature)) continue; // nearer declaration already claimed it
+                if (!Modifier.isPublic(method.getModifiers())) {
+                    throw new IllegalArgumentException(
+                            "@AgentDef method " + method.getName() + " on " + type.getName() + " must be public");
+                }
+                if (method.isAnnotationPresent(Tool.class)
+                        || method.isAnnotationPresent(org.conductoross.conductor.ai.annotations.GuardrailDef.class)) {
+                    throw new IllegalArgumentException("Method " + method.getName() + " on " + type.getName()
+                            + " cannot combine @AgentDef with @Tool or @GuardrailDef");
+                }
+                String name = ann.name().isEmpty() ? method.getName() : ann.name();
+                Method previous = methods.put(name, method);
+                if (previous != null) {
+                    throw new IllegalArgumentException("Duplicate @AgentDef name '" + name + "' on "
+                            + obj.getClass().getName() + " (methods " + previous.getName() + " and "
+                            + method.getName() + ")");
+                }
             }
         }
         return methods;
@@ -257,7 +299,7 @@ public final class AgentRegistry {
         if (!Arrays.equals(ann.tools(), new String[] {"*"})) set.add("tools");
         if (!Arrays.equals(ann.guardrails(), new String[] {"*"})) set.add("guardrails");
         if (ann.agents().length > 0) set.add("agents");
-        if (ann.strategy() != org.conductoross.conductor.ai.enums.Strategy.HANDOFF) set.add("strategy");
+        if (ann.strategy() != Strategy.HANDOFF) set.add("strategy");
         if (ann.maxTurns() != 25) set.add("maxTurns");
         if (ann.maxTokens() != 0) set.add("maxTokens");
         if (!Double.isNaN(ann.temperature())) set.add("temperature");

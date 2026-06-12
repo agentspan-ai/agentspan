@@ -8,11 +8,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import org.conductoross.conductor.ai.enums.Strategy;
 import org.conductoross.conductor.ai.execution.CliConfig;
 import org.conductoross.conductor.ai.handoff.Handoff;
+import org.conductoross.conductor.ai.internal.AgentRegistry;
 import org.conductoross.conductor.ai.model.ConversationMemory;
 import org.conductoross.conductor.ai.model.GuardrailDef;
 import org.conductoross.conductor.ai.model.PrefillToolCall;
@@ -46,7 +48,7 @@ public class Agent {
     /** System prompt, held as a supplier so dynamic instructions are re-evaluated
      *  each time the config is serialized (every run submission) — matching the
      *  Python SDK, where callable instructions resolve at serialization time. */
-    private final java.util.function.Supplier<String> instructions;
+    private final Supplier<String> instructions;
 
     private final List<ToolDef> tools;
     private final List<Agent> agents;
@@ -446,7 +448,7 @@ public class Agent {
      * @return the resolved agents
      */
     public static List<Agent> fromInstance(Object instance) {
-        return org.conductoross.conductor.ai.internal.AgentRegistry.fromInstance(instance);
+        return AgentRegistry.fromInstance(instance);
     }
 
     /**
@@ -459,7 +461,7 @@ public class Agent {
      * @throws IllegalArgumentException if no agent with that name is defined on the object
      */
     public static Agent fromInstance(Object instance, String name) {
-        return org.conductoross.conductor.ai.internal.AgentRegistry.fromInstance(instance, name);
+        return AgentRegistry.fromInstance(instance, name);
     }
 
     @Override
@@ -482,7 +484,7 @@ public class Agent {
     public static class Builder {
         private String name;
         private String model;
-        private java.util.function.Supplier<String> instructions;
+        private Supplier<String> instructions;
         private List<ToolDef> tools;
         private List<Agent> agents;
         private Strategy strategy = Strategy.HANDOFF;
@@ -557,7 +559,7 @@ public class Agent {
          * Matches the Python SDK, where callable instructions resolve at
          * serialization time.
          */
-        public Builder instructions(java.util.function.Supplier<String> instructions) {
+        public Builder instructions(Supplier<String> instructions) {
             this.instructions = instructions;
             return this;
         }
