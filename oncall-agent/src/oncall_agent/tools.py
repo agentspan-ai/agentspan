@@ -50,19 +50,31 @@ def get_incident_details(execution_id: str) -> dict:
     """
     wf = _disp().get_execution(execution_id)
     issues = None
-    components: dict = {}
+    cluster_data = None
+    component_health: dict = {}
     for t in wf.get("tasks", []):
         ref, ttype = t.get("ref"), str(t.get("type") or "")
         if ref == "issues":
             issues = t.get("output")
-        if ttype.endswith("health_check"):
-            components[ref] = {"status": t.get("status"), "output": t.get("output")}
+        elif ref == "parse_conductor_cluster_data_ref":
+            # The load-bearing summary: redis.usage, redis.decider_queue_size
+            # (= running workflows), redis.indexer_queue_size, heap_memory, cpu, postgres.
+            out = t.get("output") or {}
+            cluster_data = out.get("result", out)
+        elif ttype.endswith("health_check"):
+            out = t.get("output")
+            component_health[ref] = {
+                "healthy": out.get("healthy") if isinstance(out, dict) else None,
+                "status": t.get("status"),
+            }
     return {
         "executionId": execution_id,
         "status": wf.get("status"),
         "context": _context(execution_id),
         "issues": issues,
-        "components": components,
+        # redis usage + queue sizes + heap/cpu/postgres — almost all you need, no SQL.
+        "clusterData": cluster_data,
+        "componentHealth": component_health,
     }
 
 

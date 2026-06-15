@@ -18,7 +18,9 @@ def triage_once(execution_id: str) -> str:
     from agentspan.agents import AgentRuntime
 
     from .agent import build_agent
+    from .runtime_compat import use_thread_workers_if_needed
 
+    use_thread_workers_if_needed()
     cfg = Config.from_env()
     agent = build_agent(cfg.model)
     prompt = (

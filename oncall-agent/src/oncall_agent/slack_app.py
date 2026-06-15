@@ -132,6 +132,9 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
 def run(cfg: Config | None = None, loop: bool = False, interval: int | None = None) -> None:
     cfg = cfg or Config.from_env()
     logging.basicConfig(level=logging.INFO)
+    from .runtime_compat import use_thread_workers_if_needed
+
+    use_thread_workers_if_needed()
     if not cfg.slack_alert_channel:
         raise SystemExit("SLACK_ALERT_CHANNEL is required (the channel id to poll).")
     interval = interval or cfg.poll_interval
