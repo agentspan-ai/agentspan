@@ -20,9 +20,27 @@ from conductor.client.configuration.configuration import Configuration
 from conductor.client.configuration.settings.authentication_settings import (
     AuthenticationSettings,
 )
+from conductor.client.http.models.start_workflow_request import StartWorkflowRequest
 from conductor.client.orkes_clients import OrkesClients
 
 _TERMINAL = {"COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT", "PAUSED"}
+
+# Orchestration tasks that run on ah5r-prod itself (orkes-saas workers), not in the
+# customer cluster — they must NOT be routed to the customer domain. Everything else
+# is wildcarded to the customer-cluster agent's domain (orgId#-#clusterName), which is
+# how the control plane routes agent-handler tasks.
+_CONTROL_PLANE_TASKS = (
+    "prepare_agent_handler",
+    "save_agent_handler_results",
+    "health_check_issues",
+    "cluster_metrics_ingestion",
+    "save_conductor_metrics",
+    "find_latest_conductor_metrics_records",
+    "certificates_expiration_summary",
+    "fetch_deployment_info",
+    "save_eks_version",
+    "HTTP",
+)
 
 
 def _trim(value: Any, max_len: int = 8000) -> Any:
@@ -51,15 +69,26 @@ class ConductorDispatcher:
         return self._summarize(self._wf.get_workflow(workflow_id, include_tasks=True))
 
     def get_context(self, execution_id: str) -> dict:
-        """Org / cluster / cloudEnvironmentTag read off a health_check execution input."""
+        """Org / cluster / cloudEnvironmentTag read off a health_check execution input.
+
+        ``cloudEnvironmentTag`` is not in the workflow input (it is produced by the
+        ``prepare_agent_handler`` task), but ``sql_conductor`` reads it from the input,
+        so derive it from the documented formula when absent:
+        ``c`` + organizationId[:5] + ``-`` + clusterName.
+        """
         wf = self._wf.get_workflow(execution_id, include_tasks=False)
         wf_input = getattr(wf, "input", None) or {}
+        org_id = wf_input.get("organizationId") or wf_input.get("customerId")
+        cluster_name = wf_input.get("clusterName")
+        cloud_env_tag = wf_input.get("cloudEnvironmentTag")
+        if not cloud_env_tag and org_id and cluster_name:
+            cloud_env_tag = f"c{org_id[:5]}-{cluster_name}"
         return {
-            "organizationId": wf_input.get("organizationId") or wf_input.get("customerId"),
+            "organizationId": org_id,
             "organizationName": wf_input.get("organizationName"),
             "clusterId": wf_input.get("clusterId"),
-            "clusterName": wf_input.get("clusterName"),
-            "cloudEnvironmentTag": wf_input.get("cloudEnvironmentTag"),
+            "clusterName": cluster_name,
+            "cloudEnvironmentTag": cloud_env_tag,
             "environment": wf_input.get("environment", "prod"),
         }
 
@@ -95,10 +124,21 @@ class ConductorDispatcher:
         for key, val in parameters.items():
             wf_input.setdefault(key, val)
 
-        correlation_id = f"{context.get('organizationId')}#-#{context.get('clusterName')}"
-        wf_id = self._wf.start_workflow_by_name(
-            workflow_name, wf_input, correlationId=correlation_id
+        # Route customer-cluster tasks to that cluster's agent domain; keep
+        # control-plane tasks on ah5r-prod (NO_DOMAIN). Without this the action
+        # task sits in the default queue and the in-cluster agent never polls it.
+        customer_domain = f"{context.get('organizationId')}#-#{context.get('clusterName')}"
+        task_to_domain = {"*": customer_domain}
+        for task_name in _CONTROL_PLANE_TASKS:
+            task_to_domain[task_name] = "NO_DOMAIN"
+
+        request = StartWorkflowRequest(
+            name=workflow_name,
+            input=wf_input,
+            correlation_id=customer_domain,
+            task_to_domain=task_to_domain,
         )
+        wf_id = self._wf.start_workflow(request)
         return self._poll(wf_id, timeout_s, poll_s)
 
     def _poll(self, wf_id: str, timeout_s: int, poll_s: int) -> dict:
