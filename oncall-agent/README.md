@@ -12,7 +12,7 @@ not by trusting the model.
 ## How it works
 
 ```
-Slack health-check alert  ──►  oncall-agent (Socket Mode listener)
+Slack health-check alert  ──►  oncall-agent (polls the channel, Web API)
         │  parse executionId from the alert URL
         ▼
    Agentspan agent (Claude) reasoning loop
@@ -43,16 +43,20 @@ You also need:
   `ANTHROPIC_API_KEY` set in its environment (it makes the Claude calls);
 - a **Conductor application** on ah5r-prod with workflow read + execute access — put its
   key/secret in `.env`;
-- a **Slack app** in Socket Mode (bot token `xoxb-…`, app token `xapp-…`) subscribed to
-  message events on the alert channel.
+- a **Slack app** with a bot token (`xoxb-…`) that has `channels:history` + `chat:write`,
+  added to the alert channel; set `SLACK_ALERT_CHANNEL` to that channel id. (Same Web API
+  approach as `sdk/python/examples/91_slack_autofix_agent.py` — no Socket Mode.)
 
 ## Run
 
 ```bash
-# Start the Slack listener
+# Poll the alert channel once
 python -m oncall_agent.main
 
-# Or triage a single execution id directly (no Slack needed — great for testing/replay)
+# Poll continuously (interval from ONCALL_POLL_INTERVAL, default 300s)
+python -m oncall_agent.main --loop
+
+# Triage a single execution id directly (no Slack needed — great for testing/replay)
 python -m oncall_agent.main triage 364b459a-689f-11f1-94b6-de01f12a4ed9
 ```
 

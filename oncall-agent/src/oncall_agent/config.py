@@ -23,10 +23,12 @@ class Config:
     conductor_key_id: str
     conductor_key_secret: str
 
-    # Slack (Socket Mode): bot token (xoxb-) + app-level token (xapp-).
+    # Slack Web API (polling, like examples/91_slack_autofix_agent.py): bot token
+    # (xoxb-) with channels:history + chat:write, and the alert channel id to poll.
     slack_bot_token: str
-    slack_app_token: str
-    slack_alert_channel: str | None  # restrict to one channel id, or None for any
+    slack_alert_channel: str | None
+    poll_interval: int  # seconds between polls in --loop mode
+    state_file: str  # tracks last processed / seen Slack message ts (dedup)
 
     # Agentspan server that runs the agent loop / LLM calls.
     agentspan_server_url: str
@@ -46,8 +48,11 @@ class Config:
             conductor_key_id=os.environ.get("CONDUCTOR_AUTH_KEY", ""),
             conductor_key_secret=os.environ.get("CONDUCTOR_AUTH_SECRET", ""),
             slack_bot_token=os.environ.get("SLACK_BOT_TOKEN", ""),
-            slack_app_token=os.environ.get("SLACK_APP_TOKEN", ""),
             slack_alert_channel=os.environ.get("SLACK_ALERT_CHANNEL") or None,
+            poll_interval=int(os.environ.get("ONCALL_POLL_INTERVAL", "300")),
+            state_file=os.environ.get(
+                "ONCALL_STATE_FILE", "/tmp/oncall_agent_state.json"
+            ),
             agentspan_server_url=os.environ.get(
                 "AGENTSPAN_SERVER_URL", "http://localhost:6767/api"
             ),

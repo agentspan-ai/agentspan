@@ -1,6 +1,6 @@
 # Third-party deps. Install the Agentspan SDK separately (editable from this repo):
 #   pip install -e ../sdk/python
 conductor-python==1.3.11
-slack-bolt>=1.18
+requests>=2.31
 python-dotenv>=1.0
 pytest>=8.0
