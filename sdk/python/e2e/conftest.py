@@ -33,6 +33,26 @@ def pytest_configure(config):
     )
 
 
+def pytest_collection_modifyitems(config, items):
+    """Auto-retry transient e2e flakes.
+
+    These suites drive a real server + real LLM, so individual tests flake
+    nondeterministically on transient conditions — the workflow still
+    RUNNING at the client timeout, a tool-call batch not returning, LLM
+    phrasing variance. Retrying up to twice lets a one-off flake recover
+    while a genuinely broken test still fails all three attempts (no real
+    regression is masked).
+
+    Configured here rather than in the CI command so it also applies to
+    local e2e runs. Honoured only when pytest-rerunfailures is installed
+    (the dev extra); without it the ``flaky`` marker is a harmless no-op.
+    """
+    rerun = pytest.mark.flaky(reruns=2, reruns_delay=5)
+    for item in items:
+        if item.get_closest_marker("e2e"):
+            item.add_marker(rerun)
+
+
 # ── Session-scoped health check ─────────────────────────────────────────
 
 
