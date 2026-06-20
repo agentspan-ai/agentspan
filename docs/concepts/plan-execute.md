@@ -350,6 +350,7 @@ result = runtime.run(harness, "ingest job", plan=plan)
 
 ### Parallel work + validation
 
+{% raw %}
 ```python
 plan = Plan(
     steps=[
@@ -368,6 +369,7 @@ plan = Plan(
     validation=[Validation("check_word_count", args={"path": "report.md", "min_words": 1000})],
 )
 ```
+{% endraw %}
 
 ## Planner context — ground the planner in your domain rules
 
