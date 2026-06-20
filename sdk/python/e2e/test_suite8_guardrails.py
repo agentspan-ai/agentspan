@@ -363,7 +363,7 @@ class TestSuite8Guardrails:
         assert g3["position"] == "output"
         assert g3["onFail"] == "retry"
         patterns = g3.get("patterns", [])
-        for pat in [r"\bpassword\b", r"\bsecret\b", r"\btoken\b"]:
+        for pat in [r"(?i)\bpassword\b", r"(?i)\bsecret\b", r"(?i)\btoken\b"]:
             assert pat in patterns, f"G3 missing pattern '{pat}'. Got: {patterns}"
 
         # ── Tool-level guardrails ─────────────────────────────────────
