@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "Agentspan SDK — durable, scalable, observable AI agents"
 readme = "README.md"
 license = {text = "MIT License"}
-requires-python = ">=3.10"
+# Upper bound: native deps (grpc via conductor-python, pydantic-core) often lack
+# wheels for the newest Python until well after release, so installs on e.g. 3.14
+# fall back to source builds and fail. Bump the ceiling once those wheels exist.
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "conductor-python>=1.3.11",
     "httpx>=0.24",
@@ -21,7 +24,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

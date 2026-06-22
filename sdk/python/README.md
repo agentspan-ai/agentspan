@@ -99,6 +99,18 @@ uv venv && source .venv/bin/activate
 uv pip install agentspan
 ```
 
+On **Windows** (PowerShell), activate the venv with the Windows path:
+
+```powershell
+uv venv
+.venv\Scripts\Activate.ps1
+uv pip install agentspan
+```
+
+Use **Python 3.10–3.13** (not 3.14 yet — some native dependencies don't ship 3.14
+wheels). The CLI works as both `agentspan <command>` and, if the Scripts directory
+isn't on `PATH`, `python -m agentspan <command>` (e.g. `python -m agentspan doctor`).
+
 ### Start the Server
 
 The SDK auto-starts the server when needed, but you can also start it manually (recommended):
