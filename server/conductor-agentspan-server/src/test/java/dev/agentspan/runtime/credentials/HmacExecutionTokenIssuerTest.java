@@ -4,7 +4,9 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -18,23 +20,25 @@ import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class ExecutionTokenServiceTest {
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
+
+class HmacExecutionTokenIssuerTest {
 
     private byte[] masterKey;
-    private ExecutionTokenService service;
+    private HmacExecutionTokenIssuer service;
 
     @BeforeEach
     void setUp() {
         masterKey = new byte[32];
         new SecureRandom().nextBytes(masterKey);
-        service = new ExecutionTokenService(masterKey);
+        service = new HmacExecutionTokenIssuer(() -> masterKey);
     }
 
     @Test
     void mintAndValidate_validToken_returnsPayload() {
         String token = service.mint("user-123", "wf-456", List.of("GITHUB_TOKEN"), 3600);
 
-        ExecutionTokenService.TokenPayload payload = service.validate(token);
+        ExecutionTokenIssuer.TokenPayload payload = service.validate(token);
 
         assertThat(payload.userId()).isEqualTo("user-123");
         assertThat(payload.executionId()).isEqualTo("wf-456");
@@ -62,7 +66,7 @@ class ExecutionTokenServiceTest {
         String token = signingInput + "." + sig;
 
         assertThatThrownBy(() -> service.validate(token))
-                .isInstanceOf(ExecutionTokenService.TokenExpiredException.class);
+                .isInstanceOf(ExecutionTokenIssuer.TokenExpiredException.class);
     }
 
     @Test
@@ -72,7 +76,7 @@ class ExecutionTokenServiceTest {
         String tampered = token.substring(0, token.length() - 1) + "X";
 
         assertThatThrownBy(() -> service.validate(tampered))
-                .isInstanceOf(ExecutionTokenService.TokenInvalidException.class);
+                .isInstanceOf(ExecutionTokenIssuer.TokenInvalidException.class);
     }
 
     @Test
@@ -86,25 +90,25 @@ class ExecutionTokenServiceTest {
         String tampered = parts[0] + "." + fakePayload + "." + parts[2];
 
         assertThatThrownBy(() -> service.validate(tampered))
-                .isInstanceOf(ExecutionTokenService.TokenInvalidException.class);
+                .isInstanceOf(ExecutionTokenIssuer.TokenInvalidException.class);
     }
 
     @Test
     void revoke_invalidatesToken() {
         String token = service.mint("user-1", "wf-1", List.of(), 3600);
-        ExecutionTokenService.TokenPayload payload = service.validate(token);
+        ExecutionTokenIssuer.TokenPayload payload = service.validate(token);
 
         service.revoke(payload.jti(), payload.exp());
 
         assertThatThrownBy(() -> service.validate(token))
-                .isInstanceOf(ExecutionTokenService.TokenRevokedException.class);
+                .isInstanceOf(ExecutionTokenIssuer.TokenRevokedException.class);
     }
 
     @Test
     void mint_usesMaxTtl_forLongRunningExecution() {
         // execution_timeout=6000 → exp should be ~6000s from now, not 1h
         String token = service.mint("u", "wf", List.of(), 6000);
-        ExecutionTokenService.TokenPayload payload = service.validate(token);
+        ExecutionTokenIssuer.TokenPayload payload = service.validate(token);
 
         long ttl = payload.exp() - Instant.now().getEpochSecond();
         assertThat(ttl).isGreaterThan(5000); // roughly 6000s
@@ -114,10 +118,10 @@ class ExecutionTokenServiceTest {
     void validate_sameKey_succeeds() throws Exception {
         byte[] key = new byte[32];
         new SecureRandom().nextBytes(key);
-        ExecutionTokenService svc = new ExecutionTokenService(key);
-        ExecutionTokenService otherSvc = new ExecutionTokenService(key); // same key
-        String token = otherSvc.mint("u", "wf", List.of(), 3600);
+        HmacExecutionTokenIssuer issuer = new HmacExecutionTokenIssuer(() -> key);
+        HmacExecutionTokenIssuer otherIssuer = new HmacExecutionTokenIssuer(() -> key); // same key
+        String token = otherIssuer.mint("u", "wf", List.of(), 3600);
         // This should pass (same key)
-        assertThatCode(() -> svc.validate(token)).doesNotThrowAnyException();
+        assertThatCode(() -> issuer.validate(token)).doesNotThrowAnyException();
     }
 }

@@ -19,6 +19,8 @@ import org.springframework.stereotype.Component;
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
+
 import io.modelcontextprotocol.spec.McpSchema;
 import okhttp3.OkHttpClient;
 
@@ -47,15 +49,15 @@ public class CredentialAwareMcpService extends MCPService {
     private static final Logger log = LoggerFactory.getLogger(CredentialAwareMcpService.class);
     private static final Pattern PLACEHOLDER = Pattern.compile("#\\{([\\w.]+)}");
 
-    private final ExecutionTokenService tokenService;
+    private final ExecutionTokenIssuer tokenIssuer;
     private final CredentialResolutionService resolutionService;
 
     public CredentialAwareMcpService(
             OkHttpClient conductorAiHttpClient,
-            ExecutionTokenService tokenService,
+            ExecutionTokenIssuer tokenIssuer,
             CredentialResolutionService resolutionService) {
         super(conductorAiHttpClient);
-        this.tokenService = tokenService;
+        this.tokenIssuer = tokenIssuer;
         this.resolutionService = resolutionService;
     }
 
@@ -141,7 +143,7 @@ public class CredentialAwareMcpService extends MCPService {
         }
         if (token == null) return null;
         try {
-            return tokenService.validate(token).userId();
+            return tokenIssuer.validate(token).userId();
         } catch (Exception e) {
             log.warn("Failed to validate token for MCP header resolution: {}", e.getMessage());
             return null;

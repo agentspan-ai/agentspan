@@ -18,7 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.netflix.conductor.model.WorkflowModel;
 
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.credentials.HmacExecutionTokenIssuer;
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
 
 @ExtendWith(MockitoExtension.class)
 class AgentEventListenerTokenRevocationTest {
@@ -26,21 +27,21 @@ class AgentEventListenerTokenRevocationTest {
     @Mock
     private AgentStreamRegistry streamRegistry;
 
-    private ExecutionTokenService tokenService;
+    private ExecutionTokenIssuer tokenIssuer;
     private AgentEventListener listener;
 
     @BeforeEach
     void setUp() {
         byte[] key = new byte[32];
         new SecureRandom().nextBytes(key);
-        tokenService = spy(new ExecutionTokenService(key));
-        listener = new AgentEventListener(streamRegistry, tokenService);
+        tokenIssuer = spy(new HmacExecutionTokenIssuer(() -> key));
+        listener = new AgentEventListener(streamRegistry, tokenIssuer);
     }
 
     @Test
     void onWorkflowTerminated_revokesExecutionToken() {
-        String token = tokenService.mint("u1", "wf-1", List.of(), 3600);
-        ExecutionTokenService.TokenPayload payload = tokenService.validate(token);
+        String token = tokenIssuer.mint("u1", "wf-1", List.of(), 3600);
+        ExecutionTokenIssuer.TokenPayload payload = tokenIssuer.validate(token);
 
         WorkflowModel workflow = new WorkflowModel();
         workflow.setWorkflowId("wf-1");
@@ -49,13 +50,13 @@ class AgentEventListenerTokenRevocationTest {
 
         listener.onWorkflowTerminatedIfEnabled(workflow);
 
-        verify(tokenService).revoke(payload.jti(), payload.exp());
+        verify(tokenIssuer).revoke(payload.jti(), payload.exp());
     }
 
     @Test
     void onWorkflowCompleted_revokesExecutionToken() {
-        String token = tokenService.mint("u1", "wf-2", List.of(), 3600);
-        ExecutionTokenService.TokenPayload payload = tokenService.validate(token);
+        String token = tokenIssuer.mint("u1", "wf-2", List.of(), 3600);
+        ExecutionTokenIssuer.TokenPayload payload = tokenIssuer.validate(token);
 
         WorkflowModel workflow = new WorkflowModel();
         workflow.setWorkflowId("wf-2");
@@ -65,6 +66,6 @@ class AgentEventListenerTokenRevocationTest {
 
         listener.onWorkflowCompletedIfEnabled(workflow);
 
-        verify(tokenService).revoke(payload.jti(), payload.exp());
+        verify(tokenIssuer).revoke(payload.jti(), payload.exp());
     }
 }

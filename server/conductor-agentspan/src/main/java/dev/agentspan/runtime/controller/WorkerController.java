@@ -18,8 +18,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.credentials.ResolveRequest;
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
 
 import lombok.RequiredArgsConstructor;
 
@@ -48,7 +48,7 @@ public class WorkerController {
     private static final Logger log = LoggerFactory.getLogger(WorkerController.class);
 
     private final CredentialResolutionService resolutionService;
-    private final ExecutionTokenService tokenService;
+    private final ExecutionTokenIssuer tokenIssuer;
 
     /** Per-token fixed-window rate limiter (jti+minute → count). */
     private final ConcurrentHashMap<String, RateLimitBucket> rateLimitMap = new ConcurrentHashMap<>();
@@ -73,14 +73,14 @@ public class WorkerController {
             return ResponseEntity.ok(Map.of());
         }
 
-        ExecutionTokenService.TokenPayload payload;
+        ExecutionTokenIssuer.TokenPayload payload;
         try {
-            payload = tokenService.validate(request.getToken());
-        } catch (ExecutionTokenService.TokenExpiredException e) {
+            payload = tokenIssuer.validate(request.getToken());
+        } catch (ExecutionTokenIssuer.TokenExpiredException e) {
             return ResponseEntity.status(401).body(Map.of("error", "Token expired"));
-        } catch (ExecutionTokenService.TokenRevokedException e) {
+        } catch (ExecutionTokenIssuer.TokenRevokedException e) {
             return ResponseEntity.status(401).body(Map.of("error", "Token revoked"));
-        } catch (ExecutionTokenService.TokenInvalidException e) {
+        } catch (ExecutionTokenIssuer.TokenInvalidException e) {
             return ResponseEntity.status(401).body(Map.of("error", "Token invalid"));
         }
 

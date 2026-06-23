@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 
 import dev.agentspan.runtime.model.credentials.CredentialMeta;
 import dev.agentspan.runtime.spi.CredentialStoreProvider;
+import dev.agentspan.runtime.spi.MasterKeyProvider;
 
 /**
  * AES-256-GCM encrypted credential store backed by the credential SQLite/Postgres DB.
@@ -31,7 +32,7 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * <p>Encryption format: [12-byte IV][ciphertext+16-byte GCM tag]
  * All concatenated into a single BLOB stored in credentials_store.encrypted_value.</p>
  *
- * <p>The master key is the 32-byte key from {@code MasterKeyConfig#credentialMasterKey()}.</p>
+ * <p>The 32-byte master key is sourced from the active {@link MasterKeyProvider}.</p>
  */
 @Component
 public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvider {
@@ -46,10 +47,9 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
     private final byte[] masterKey;
 
     public EncryptedDbCredentialStoreProvider(
-            @Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc,
-            @Qualifier("credentialMasterKey") byte[] masterKey) {
+            @Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc, MasterKeyProvider masterKeyProvider) {
         this.jdbc = jdbc;
-        this.masterKey = masterKey;
+        this.masterKey = masterKeyProvider.getMasterKey();
     }
 
     @Override

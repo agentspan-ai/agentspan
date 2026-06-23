@@ -15,31 +15,49 @@ import java.util.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
+
+import dev.agentspan.runtime.spi.MasterKeyProvider;
 
 /**
- * Loads or generates the AES-256-GCM master key used by EncryptedDbCredentialStoreProvider.
+ * OSS file/env implementation of {@link MasterKeyProvider}.
  *
  * <p>Key sourcing rules:</p>
  * <ul>
  *   <li>If {@code AGENTSPAN_MASTER_KEY} env var is set → decode and use it</li>
  *   <li>If unset → auto-generate, persist to ~/.agentspan/master.key, warn</li>
  * </ul>
+ *
+ * <p>This is the standalone-server default. An embedding host (e.g. orkes-conductor) can source
+ * the key from AWS KMS, HashiCorp Vault, Azure Key Vault or GCP KMS by contributing its own
+ * {@link MasterKeyProvider} bean in place of this one.</p>
  */
-@Configuration
-public class MasterKeyConfig {
+@Component
+public class FileEnvMasterKeyProvider implements MasterKeyProvider {
 
-    private static final Logger log = LoggerFactory.getLogger(MasterKeyConfig.class);
+    private static final Logger log = LoggerFactory.getLogger(FileEnvMasterKeyProvider.class);
     private static final int KEY_BYTES = 32; // 256-bit
 
-    @Value("${AGENTSPAN_MASTER_KEY:#{null}}")
-    private String masterKeyBase64;
+    private final String masterKeyBase64;
+    private volatile byte[] cached;
 
-    @Bean("credentialMasterKey")
-    public byte[] credentialMasterKey() {
-        Path homeDir = Paths.get(System.getProperty("user.home"));
-        return loadOrGenerate(masterKeyBase64, homeDir);
+    public FileEnvMasterKeyProvider(@Value("${AGENTSPAN_MASTER_KEY:#{null}}") String masterKeyBase64) {
+        this.masterKeyBase64 = masterKeyBase64;
+    }
+
+    @Override
+    public byte[] getMasterKey() {
+        byte[] result = cached;
+        if (result == null) {
+            synchronized (this) {
+                result = cached;
+                if (result == null) {
+                    result = loadOrGenerate(masterKeyBase64, Paths.get(System.getProperty("user.home")));
+                    cached = result;
+                }
+            }
+        }
+        return result;
     }
 
     /**

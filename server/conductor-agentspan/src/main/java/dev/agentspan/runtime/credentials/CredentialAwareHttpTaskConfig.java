@@ -12,6 +12,8 @@ import org.springframework.context.annotation.Primary;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
 
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
+
 /**
  * Registers {@link CredentialAwareHttpTask} as the primary HTTP system task,
  * overriding Conductor's default HttpTask.
@@ -35,8 +37,8 @@ public class CredentialAwareHttpTaskConfig {
     public CredentialAwareHttpTask credentialAwareHttpTask(
             RestTemplateProvider restTemplateProvider,
             ObjectMapper objectMapper,
-            ExecutionTokenService tokenService,
+            ExecutionTokenIssuer tokenIssuer,
             CredentialResolutionService resolutionService) {
-        return new CredentialAwareHttpTask(restTemplateProvider, objectMapper, tokenService, resolutionService);
+        return new CredentialAwareHttpTask(restTemplateProvider, objectMapper, tokenIssuer, resolutionService);
     }
 }

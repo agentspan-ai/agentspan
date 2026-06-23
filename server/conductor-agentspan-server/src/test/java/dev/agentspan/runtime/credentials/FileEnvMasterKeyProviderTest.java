@@ -8,10 +8,14 @@ import java.util.Base64;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class MasterKeyConfigTest {
+class FileEnvMasterKeyProviderTest {
 
     @TempDir
     Path tempDir;
+
+    private FileEnvMasterKeyProvider newProvider() {
+        return new FileEnvMasterKeyProvider(null);
+    }
 
     @Test
     void loadKey_fromBase64String_returns32ByteKey() {
@@ -19,8 +23,7 @@ class MasterKeyConfigTest {
         new java.security.SecureRandom().nextBytes(raw);
         String b64 = Base64.getEncoder().encodeToString(raw);
 
-        MasterKeyConfig config = new MasterKeyConfig();
-        byte[] key = config.loadOrGenerate(b64, tempDir);
+        byte[] key = newProvider().loadOrGenerate(b64, tempDir);
 
         assertThat(key).hasSize(32);
         assertThat(key).isEqualTo(raw);
@@ -28,8 +31,7 @@ class MasterKeyConfigTest {
 
     @Test
     void loadKey_autoGen_onLocalhost_writesFileAndWarns() {
-        MasterKeyConfig config = new MasterKeyConfig();
-        byte[] key = config.loadOrGenerate(null, tempDir);
+        byte[] key = newProvider().loadOrGenerate(null, tempDir);
 
         assertThat(key).hasSize(32);
         // Key file is written to tempDir/.agentspan/master.key
@@ -38,17 +40,16 @@ class MasterKeyConfigTest {
 
     @Test
     void loadKey_autoGen_subsequentCall_returnsSameKey() {
-        MasterKeyConfig config = new MasterKeyConfig();
-        byte[] key1 = config.loadOrGenerate(null, tempDir);
-        byte[] key2 = config.loadOrGenerate(null, tempDir);
+        FileEnvMasterKeyProvider provider = newProvider();
+        byte[] key1 = provider.loadOrGenerate(null, tempDir);
+        byte[] key2 = provider.loadOrGenerate(null, tempDir);
 
         assertThat(key1).isEqualTo(key2);
     }
 
     @Test
     void loadKey_missingKey_autoGenerates() {
-        MasterKeyConfig config = new MasterKeyConfig();
-        byte[] key = config.loadOrGenerate(null, tempDir);
+        byte[] key = newProvider().loadOrGenerate(null, tempDir);
 
         assertThat(key).hasSize(32);
         assertThat(tempDir.resolve(".agentspan/master.key")).exists();
@@ -56,9 +57,7 @@ class MasterKeyConfigTest {
 
     @Test
     void loadKey_invalidBase64_throws() {
-        MasterKeyConfig config = new MasterKeyConfig();
-
-        assertThatThrownBy(() -> config.loadOrGenerate("not-valid-base64!!!", tempDir))
+        assertThatThrownBy(() -> newProvider().loadOrGenerate("not-valid-base64!!!", tempDir))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -67,10 +66,23 @@ class MasterKeyConfigTest {
         // 16 bytes = 128-bit, not valid for AES-256
         byte[] short16 = new byte[16];
         String b64 = Base64.getEncoder().encodeToString(short16);
-        MasterKeyConfig config = new MasterKeyConfig();
 
-        assertThatThrownBy(() -> config.loadOrGenerate(b64, tempDir))
+        assertThatThrownBy(() -> newProvider().loadOrGenerate(b64, tempDir))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("32 bytes");
+    }
+
+    @Test
+    void getMasterKey_memoizesAcrossCalls() {
+        byte[] raw = new byte[32];
+        new java.security.SecureRandom().nextBytes(raw);
+        FileEnvMasterKeyProvider provider =
+                new FileEnvMasterKeyProvider(Base64.getEncoder().encodeToString(raw));
+
+        byte[] first = provider.getMasterKey();
+        byte[] second = provider.getMasterKey();
+
+        assertThat(first).isEqualTo(raw);
+        assertThat(second).isSameAs(first);
     }
 }

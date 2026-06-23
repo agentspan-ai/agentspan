@@ -24,7 +24,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import dev.agentspan.runtime.context.*;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.credentials.HmacExecutionTokenIssuer;
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
 
 @ExtendWith(MockitoExtension.class)
 class AgentServiceTokenTest {
@@ -57,13 +58,13 @@ class AgentServiceTokenTest {
     private dev.agentspan.runtime.util.ProviderValidator providerValidator;
 
     private AgentService agentService;
-    private ExecutionTokenService tokenService;
+    private ExecutionTokenIssuer tokenIssuer;
 
     @BeforeEach
     void setUp() {
         byte[] key = new byte[32];
         new SecureRandom().nextBytes(key);
-        tokenService = new ExecutionTokenService(key);
+        tokenIssuer = new HmacExecutionTokenIssuer(() -> key);
 
         agentService = new AgentService(
                 agentCompiler,
@@ -75,7 +76,7 @@ class AgentServiceTokenTest {
                 streamRegistry,
                 executionService,
                 providerValidator,
-                tokenService);
+                tokenIssuer);
 
         RequestContextHolder.set(RequestContext.builder()
                 .requestId("r1")
@@ -123,7 +124,7 @@ class AgentServiceTokenTest {
         assertThat(ctx).containsKey("execution_token");
 
         String executionToken = (String) ctx.get("execution_token");
-        ExecutionTokenService.TokenPayload payload = tokenService.validate(executionToken);
+        ExecutionTokenIssuer.TokenPayload payload = tokenIssuer.validate(executionToken);
         assertThat(payload.userId()).isEqualTo("user-999");
         assertThat(payload.declaredNames()).containsExactlyInAnyOrder("AGENT_LEVEL", "REQUEST_LEVEL");
         assertThat(input.get("credentials")).isEqualTo(List.of("REQUEST_LEVEL"));

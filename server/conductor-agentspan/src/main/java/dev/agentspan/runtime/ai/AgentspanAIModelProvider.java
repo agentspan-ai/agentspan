@@ -30,7 +30,7 @@ import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
 import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
 
 import okhttp3.OkHttpClient;
 
@@ -77,18 +77,18 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             Map.entry("azureopenai", "AZURE_OPENAI_BASE_URL"));
 
     private final CredentialResolutionService resolutionService;
-    private final ExecutionTokenService tokenService;
+    private final ExecutionTokenIssuer tokenIssuer;
 
     public AgentspanAIModelProvider(
             List<ModelConfiguration<? extends AIModel>> modelConfigurations,
             Environment env,
             OkHttpClient conductorAiHttpClient,
             CredentialResolutionService resolutionService,
-            ExecutionTokenService tokenService) {
+            ExecutionTokenIssuer tokenIssuer) {
         super(modelConfigurations, env);
         this.conductorAiHttpClient = conductorAiHttpClient;
         this.resolutionService = resolutionService;
-        this.tokenService = tokenService;
+        this.tokenIssuer = tokenIssuer;
         log.info("AgentspanAIModelProvider initialized (per-user credential resolution enabled)");
     }
 
@@ -183,7 +183,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             }
             if (token == null) return null;
 
-            return tokenService.validate(token).userId();
+            return tokenIssuer.validate(token).userId();
         } catch (Exception e) {
             return null;
         }

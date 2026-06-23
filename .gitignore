@@ -3,6 +3,8 @@
 
 .DS_Store
 .idea/
+.vscode/
+.claude/
 __pycache__/
 sdk/python/.coverage
 sdk/python/.env

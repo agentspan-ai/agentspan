@@ -19,9 +19,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.credentials.ResolveRequest;
 import dev.agentspan.runtime.spi.CredentialStoreProvider;
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
 
 /**
  * Audit gaps C + F — full-stack {@code POST /api/workers/secrets} integration.
@@ -30,7 +30,7 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * good for controller wiring but blind to the user-scoping behavior of the
  * real store. This test wires the real Spring beans (real
  * {@code CredentialResolutionService}, real {@code EncryptedDbCredentialStoreProvider},
- * real {@code ExecutionTokenService}) and exercises the integration boundary.</p>
+ * real {@code ExecutionTokenIssuer}) and exercises the integration boundary.</p>
  *
  * <p><strong>Gap C:</strong> two users, same secret name, different values.
  * Each user's execution token must return only its OWN value when the worker
@@ -53,7 +53,7 @@ class WorkerCredentialsIntegrationTest {
     private CredentialStoreProvider store;
 
     @Autowired
-    private ExecutionTokenService tokenService;
+    private ExecutionTokenIssuer tokenIssuer;
 
     // Use a non-seeded name so the CredentialEnvSeeder doesn't accidentally
     // populate it for the anonymous user (and pollute the test).
@@ -85,8 +85,8 @@ class WorkerCredentialsIntegrationTest {
     @Test
     @SuppressWarnings("unchecked")
     void resolve_eachUserGetsOnlyTheirOwnValue() {
-        String tokenA = tokenService.mint(USER_A, "wf-A", List.of(NAME), 3600);
-        String tokenB = tokenService.mint(USER_B, "wf-B", List.of(NAME), 3600);
+        String tokenA = tokenIssuer.mint(USER_A, "wf-A", List.of(NAME), 3600);
+        String tokenB = tokenIssuer.mint(USER_B, "wf-B", List.of(NAME), 3600);
 
         // User A's token
         ResolveRequest reqA = new ResolveRequest();
@@ -116,7 +116,7 @@ class WorkerCredentialsIntegrationTest {
         // User A's token declares a name that doesn't exist for user A.
         // (User B has it stored, but A's token must NOT reach B's storage.)
         store.delete(USER_A, NAME);
-        String tokenA = tokenService.mint(USER_A, "wf-AX", List.of(NAME), 3600);
+        String tokenA = tokenIssuer.mint(USER_A, "wf-AX", List.of(NAME), 3600);
 
         ResolveRequest req = new ResolveRequest();
         req.setToken(tokenA);
@@ -137,7 +137,7 @@ class WorkerCredentialsIntegrationTest {
     @Test
     @SuppressWarnings("unchecked")
     void resolve_sameTokenSeesUpdatedValueAfterRotation() {
-        String token = tokenService.mint(USER_A, "wf-rot", List.of(NAME), 3600);
+        String token = tokenIssuer.mint(USER_A, "wf-rot", List.of(NAME), 3600);
 
         ResolveRequest req = new ResolveRequest();
         req.setToken(token);
@@ -165,7 +165,7 @@ class WorkerCredentialsIntegrationTest {
         // Edge case: credential is deleted between mint and resolve. The token is
         // still valid (it doesn't lock the value, only declared names), but
         // the response simply omits the unresolvable name.
-        String token = tokenService.mint(USER_A, "wf-del", List.of(NAME), 3600);
+        String token = tokenIssuer.mint(USER_A, "wf-del", List.of(NAME), 3600);
         store.delete(USER_A, NAME);
 
         ResolveRequest req = new ResolveRequest();
@@ -187,7 +187,7 @@ class WorkerCredentialsIntegrationTest {
         // every agent that doesn't declare credentials — the common case) must
         // NOT permit resolving arbitrary credential names. The defense-in-depth
         // claim of declared-name binding requires this.
-        String token = tokenService.mint(USER_A, "wf-empty", List.of(), 3600);
+        String token = tokenIssuer.mint(USER_A, "wf-empty", List.of(), 3600);
 
         ResolveRequest req = new ResolveRequest();
         req.setToken(token);
@@ -207,7 +207,7 @@ class WorkerCredentialsIntegrationTest {
         // Even though A's user_id is authoritative (so cross-user leak wouldn't
         // happen anyway), the binding-check should reject the name itself
         // before any user-scoped resolve is attempted.
-        String token = tokenService.mint(USER_A, "wf-empty2", List.of(), 3600);
+        String token = tokenIssuer.mint(USER_A, "wf-empty2", List.of(), 3600);
 
         ResolveRequest req = new ResolveRequest();
         req.setToken(token);

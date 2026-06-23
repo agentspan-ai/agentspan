@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.env.Environment;
 
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
 
 import okhttp3.OkHttpClient;
 
@@ -23,19 +23,19 @@ class AgentspanAIModelProviderTest {
     private static final String ANON_USER = "00000000-0000-0000-0000-000000000000";
 
     private CredentialResolutionService credentialService;
-    private ExecutionTokenService tokenService;
+    private ExecutionTokenIssuer tokenIssuer;
     private OkHttpClient httpClient;
     private AgentspanAIModelProvider provider;
 
     @BeforeEach
     void setUp() {
         credentialService = mock(CredentialResolutionService.class);
-        tokenService = mock(ExecutionTokenService.class);
+        tokenIssuer = mock(ExecutionTokenIssuer.class);
         httpClient = new OkHttpClient();
         Environment env = mock(Environment.class);
         when(env.getProperty(anyString(), anyString())).thenAnswer(i -> i.getArgument(1));
 
-        provider = new AgentspanAIModelProvider(List.of(), env, httpClient, credentialService, tokenService);
+        provider = new AgentspanAIModelProvider(List.of(), env, httpClient, credentialService, tokenIssuer);
     }
 
     @Test

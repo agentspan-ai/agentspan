@@ -19,6 +19,8 @@ import com.netflix.conductor.model.WorkflowModel;
 import com.netflix.conductor.tasks.http.HttpTask;
 import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
 
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
+
 /**
  * Extends Conductor's HttpTask to resolve credential placeholders in HTTP
  * headers before execution.  Placeholders arrive as {@code #{NAME}} because
@@ -35,16 +37,16 @@ public class CredentialAwareHttpTask extends HttpTask {
     private static final Logger log = LoggerFactory.getLogger(CredentialAwareHttpTask.class);
     private static final Pattern PLACEHOLDER = Pattern.compile("#\\{([\\w.]+)}");
 
-    private final ExecutionTokenService tokenService;
+    private final ExecutionTokenIssuer tokenIssuer;
     private final CredentialResolutionService resolutionService;
 
     public CredentialAwareHttpTask(
             RestTemplateProvider restTemplateProvider,
             ObjectMapper objectMapper,
-            ExecutionTokenService tokenService,
+            ExecutionTokenIssuer tokenIssuer,
             CredentialResolutionService resolutionService) {
         super(restTemplateProvider, objectMapper);
-        this.tokenService = tokenService;
+        this.tokenIssuer = tokenIssuer;
         this.resolutionService = resolutionService;
     }
 
@@ -109,7 +111,7 @@ public class CredentialAwareHttpTask extends HttpTask {
         }
         if (token == null) return null;
         try {
-            return tokenService.validate(token).userId();
+            return tokenIssuer.validate(token).userId();
         } catch (Exception e) {
             log.warn("Failed to validate token for header resolution: {}", e.getMessage());
             return null;

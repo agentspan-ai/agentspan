@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
 
 @ControllerAdvice
 public class AgentExceptionHandler {
@@ -36,9 +36,9 @@ public class AgentExceptionHandler {
     }
 
     @ExceptionHandler({
-        ExecutionTokenService.TokenInvalidException.class,
-        ExecutionTokenService.TokenExpiredException.class,
-        ExecutionTokenService.TokenRevokedException.class
+        ExecutionTokenIssuer.TokenInvalidException.class,
+        ExecutionTokenIssuer.TokenExpiredException.class,
+        ExecutionTokenIssuer.TokenRevokedException.class
     })
     public ResponseEntity<Map<String, Object>> handleTokenError(RuntimeException ex) {
         Map<String, Object> body = new LinkedHashMap<>();

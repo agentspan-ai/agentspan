@@ -14,26 +14,29 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
+import dev.agentspan.runtime.spi.MasterKeyProvider;
+
 /**
- * Mints and validates execution tokens for worker credential resolution.
+ * OSS HMAC-SHA256 implementation of {@link ExecutionTokenIssuer}.
  *
  * <p>Token format: base64url(header).base64url(payload).base64url(hmacSignature)
  * Signed with HMAC-SHA256 using the server master key.</p>
  *
  * <p>jti deny-list: in-memory ConcurrentHashMap (jti → expiryEpochSecond).
  * Self-pruning via scheduled cleanup. In OSS, the deny-list is lost on restart
- * (bounded risk: tokens expire with workflow TTL).</p>
+ * (bounded risk: tokens expire with workflow TTL). An embedding host can supply a durable
+ * revocation store by contributing its own {@link ExecutionTokenIssuer} bean.</p>
  */
 @Service
-public class ExecutionTokenService {
+public class HmacExecutionTokenIssuer implements ExecutionTokenIssuer {
 
-    private static final Logger log = LoggerFactory.getLogger(ExecutionTokenService.class);
+    private static final Logger log = LoggerFactory.getLogger(HmacExecutionTokenIssuer.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final long ONE_HOUR_SECONDS = 3600;
     private static final String SCOPE = "credentials";
@@ -44,19 +47,11 @@ public class ExecutionTokenService {
     private final byte[] masterKey;
     private final ConcurrentHashMap<String, Long> denyList = new ConcurrentHashMap<>();
 
-    public ExecutionTokenService(@Qualifier("credentialMasterKey") byte[] masterKey) {
-        this.masterKey = masterKey;
+    public HmacExecutionTokenIssuer(MasterKeyProvider masterKeyProvider) {
+        this.masterKey = masterKeyProvider.getMasterKey();
     }
 
-    /**
-     * Mint a new execution token.
-     *
-     * @param userId         the authenticated user's ID (or username for login tokens)
-     * @param executionId    the execution ID (or "login" for login tokens)
-     * @param declaredNames  credential names declared by the agent (bounds resolution)
-     * @param executionTimeoutSeconds execution timeout; TTL = max(3600, executionTimeoutSeconds)
-     * @return signed token string
-     */
+    @Override
     public String mint(String userId, String executionId, List<String> declaredNames, long executionTimeoutSeconds) {
         long now = Instant.now().getEpochSecond();
         long ttl = Math.max(ONE_HOUR_SECONDS, executionTimeoutSeconds);
@@ -84,13 +79,7 @@ public class ExecutionTokenService {
         }
     }
 
-    /**
-     * Validate a token and return its payload.
-     *
-     * @throws TokenExpiredException  if exp is in the past
-     * @throws TokenRevokedException  if jti is in the deny-list
-     * @throws TokenInvalidException  if signature or structure is invalid
-     */
+    @Override
     @SuppressWarnings("unchecked")
     public TokenPayload validate(String token) {
         String[] parts = token.split("\\.");
@@ -126,13 +115,7 @@ public class ExecutionTokenService {
         return new TokenPayload(jti, (String) claims.get("sub"), (String) claims.get("wid"), exp, names);
     }
 
-    /**
-     * Revoke a token by adding its jti to the deny-list.
-     * Called when an execution is cancelled or terminated.
-     *
-     * @param jti the unique token ID
-     * @param exp the token's expiry epoch second (for self-pruning)
-     */
+    @Override
     public void revoke(String jti, long exp) {
         denyList.put(jti, exp);
         log.info("Execution token revoked: jti={}", jti);
@@ -175,27 +158,5 @@ public class ExecutionTokenService {
             diff |= a.charAt(i) ^ b.charAt(i);
         }
         return diff == 0;
-    }
-
-    // ── Value types ───────────────────────────────────────────────────
-
-    public record TokenPayload(String jti, String userId, String executionId, long exp, List<String> declaredNames) {}
-
-    public static class TokenInvalidException extends RuntimeException {
-        public TokenInvalidException(String msg) {
-            super(msg);
-        }
-    }
-
-    public static class TokenExpiredException extends RuntimeException {
-        public TokenExpiredException(String msg) {
-            super(msg);
-        }
-    }
-
-    public static class TokenRevokedException extends RuntimeException {
-        public TokenRevokedException(String msg) {
-            super(msg);
-        }
     }
 }

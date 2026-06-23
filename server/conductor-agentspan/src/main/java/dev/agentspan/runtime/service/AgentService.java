@@ -45,9 +45,9 @@ import com.netflix.conductor.service.WorkflowService;
 import dev.agentspan.runtime.compiler.AgentCompiler;
 import dev.agentspan.runtime.compiler.MultiAgentCompiler;
 import dev.agentspan.runtime.context.RequestContextHolder;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
+import dev.agentspan.runtime.spi.ExecutionTokenIssuer;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ProviderValidator;
 
@@ -71,7 +71,7 @@ public class AgentService {
     private final ProviderValidator providerValidator;
 
     @Autowired(required = false)
-    private ExecutionTokenService executionTokenService;
+    private ExecutionTokenIssuer executionTokenIssuer;
 
     @Autowired(required = false)
     private SkillRegistryService skillRegistryService;
@@ -96,7 +96,7 @@ public class AgentService {
     @Autowired(required = false)
     private MetadataService metadataService;
 
-    /** Package-private constructor for testing with ExecutionTokenService */
+    /** Package-private constructor for testing with ExecutionTokenIssuer */
     AgentService(
             AgentCompiler agentCompiler,
             NormalizerRegistry normalizerRegistry,
@@ -107,7 +107,7 @@ public class AgentService {
             AgentStreamRegistry streamRegistry,
             ExecutionService executionService,
             ProviderValidator providerValidator,
-            ExecutionTokenService executionTokenService) {
+            ExecutionTokenIssuer executionTokenIssuer) {
         this.agentCompiler = agentCompiler;
         this.normalizerRegistry = normalizerRegistry;
         this.executionDAO = executionDAO;
@@ -117,7 +117,7 @@ public class AgentService {
         this.streamRegistry = streamRegistry;
         this.executionService = executionService;
         this.providerValidator = providerValidator;
-        this.executionTokenService = executionTokenService;
+        this.executionTokenIssuer = executionTokenIssuer;
     }
 
     /**
@@ -334,7 +334,7 @@ public class AgentService {
                 idGenerator != null ? idGenerator.generate() : UUID.randomUUID().toString();
 
         // Mint execution token and embed in workflow variables for worker credential resolution
-        if (executionTokenService != null) {
+        if (executionTokenIssuer != null) {
             try {
                 long timeoutSeconds = config.getTimeoutSeconds() > 0 ? config.getTimeoutSeconds() : 0;
                 List<String> declaredNames = extractDeclaredCredentials(config);
@@ -350,7 +350,7 @@ public class AgentService {
                 }
                 String currentUserId = principal;
                 if (currentUserId != null) {
-                    String token = executionTokenService.mint(
+                    String token = executionTokenIssuer.mint(
                             currentUserId, preallocatedExecutionId, declaredNames, timeoutSeconds);
                     Map<String, Object> agentCtx = new LinkedHashMap<>();
                     agentCtx.put("execution_token", token);
