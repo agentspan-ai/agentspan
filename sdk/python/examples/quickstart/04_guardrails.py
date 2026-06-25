@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guardrails — block responses containing email addresses."""
 
-from agentspan.agents import Agent, AgentRuntime, RegexGuardrail
+from conductor.ai.agents import Agent, AgentRuntime, RegexGuardrail
 
 agent = Agent(
     name="safe_bot",

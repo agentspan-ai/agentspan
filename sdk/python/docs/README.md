@@ -5,7 +5,7 @@ your agent into a Conductor workflow that runs on a server — with automatic re
 durable state, human-in-the-loop pauses, streaming, and scheduling.
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="greeter", model="openai/gpt-4o-mini",
               instructions="You are a friendly assistant.")
@@ -25,14 +25,14 @@ with AgentRuntime() as runtime:
 
 ## Import surface
 
-Everything public is importable from `agentspan.agents`:
+Everything public is importable from `conductor.ai.agents`:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool, agent
+from conductor.ai.agents import Agent, AgentRuntime, tool, agent
 ```
 
 A small OpenAI-Agents-compatible shim is also exposed at the top level:
 
 ```python
-from agentspan import Runner, function_tool   # drop-in for `agents.Runner`
+from conductor.ai import Runner, function_tool   # drop-in for `agents.Runner`
 ```

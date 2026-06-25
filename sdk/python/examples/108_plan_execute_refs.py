@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import os
 
-from agentspan.agents import AgentRuntime, Op, Plan, Ref, Step, plan_execute, tool
+from conductor.ai.agents import AgentRuntime, Op, Plan, Ref, Step, plan_execute, tool
 
 
 @tool

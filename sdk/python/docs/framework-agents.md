@@ -20,11 +20,11 @@ Agentspan `Runner` with an Agentspan `Agent`.
 
 ### Drop-in `Runner`
 
-Change one import — `from agentspan import Runner` instead of `from agents import
+Change one import — `from conductor.ai import Runner` instead of `from agents import
 Runner` — and run your existing OpenAI-Agents agent on Agentspan:
 
 ```python
-from agentspan import Runner            # the one line that changes
+from conductor.ai import Runner            # the one line that changes
 from agents import Agent, function_tool
 
 @function_tool
@@ -54,7 +54,7 @@ compatibility and ignored.)
 
 ```python
 import asyncio
-from agentspan import Runner
+from conductor.ai import Runner
 from agents import Agent
 
 agent = Agent(name="Assistant", instructions="You only respond in haikus.")
@@ -62,14 +62,14 @@ result = asyncio.run(Runner.run(agent, "Tell me about recursion."))
 print(result.final_output)
 ```
 
-`from agentspan import function_tool` is an alias of `@tool` for source compatibility.
+`from conductor.ai import function_tool` is an alias of `@tool` for source compatibility.
 
 ## LangChain
 
 Build a LangChain agent, then hand it to `runtime.run(...)`:
 
 ```python
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 from langchain.agents import create_agent
 from langchain_core.tools import tool as lc_tool
 
@@ -86,7 +86,7 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-Agentspan also provides a thin wrapper, `agentspan.agents.langchain.create_agent`,
+Agentspan also provides a thin wrapper, `conductor.ai.agents.langchain.create_agent`,
 that captures the model, tools, and system prompt up front so they compile to native
 server-side model + tool tasks (rather than running the whole agent in one opaque
 worker).
@@ -101,7 +101,7 @@ import math
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 @tool
 def calculate(expression: str) -> str:
@@ -121,7 +121,7 @@ graph-structure compilation (nodes/edges become tasks), then passthrough. To mar
 node as requiring human input, decorate it with `human_task`:
 
 ```python
-from agentspan.agents.frameworks.langgraph import human_task
+from conductor.ai.agents.frameworks.langgraph import human_task
 
 @human_task(prompt="Review and approve before continuing.")
 def approval_node(state): ...
@@ -133,7 +133,7 @@ Run a Claude Agent SDK / Claude Code agent. The simplest path is an Agentspan `A
 configured with `ClaudeCode`:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, ClaudeCode
+from conductor.ai.agents import Agent, AgentRuntime, ClaudeCode
 
 fixer = Agent(
     name="claude_code_fixer",

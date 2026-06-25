@@ -33,7 +33,7 @@ plumbing (not an LLM) to assert deterministic HTTP targeting.
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     EventType,
     GuardrailResult,
@@ -42,7 +42,7 @@ from agentspan.agents import (
     guardrail,
     tool,
 )
-from agentspan.agents.result import AgentEvent, AgentHandle, AgentStream
+from conductor.ai.agents.result import AgentEvent, AgentHandle, AgentStream
 
 pytestmark = [pytest.mark.e2e]
 
@@ -101,7 +101,7 @@ class TestEventTargetedHITL:
         This is the mechanism that lets a WAITING event from a sub-execution
         carry the sub-execution id (not the top-level stream id).
         """
-        from agentspan.agents.runtime.runtime import AgentRuntime as RT
+        from conductor.ai.agents.runtime.runtime import AgentRuntime as RT
 
         sse_event = {
             "event": "waiting",
@@ -119,7 +119,7 @@ class TestEventTargetedHITL:
 
     def test_sse_event_falls_back_to_stream_id(self):
         """When the server omits executionId, fall back to the stream id."""
-        from agentspan.agents.runtime.runtime import AgentRuntime as RT
+        from conductor.ai.agents.runtime.runtime import AgentRuntime as RT
 
         sse_event = {"event": "thinking", "id": "1", "data": {"type": "thinking"}}
         ev = RT._sse_to_agent_event(sse_event, self.TOP_LEVEL)

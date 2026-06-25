@@ -5,8 +5,8 @@
 
 import pytest
 
-from agentspan.agents.ocg import OCG_SYSTEM_PROMPT, ocg_agent, ocg_tools
-from agentspan.agents.tool import ToolDef
+from conductor.ai.agents.ocg import OCG_SYSTEM_PROMPT, ocg_agent, ocg_tools
+from conductor.ai.agents.tool import ToolDef
 
 ALL_TOOL_NAMES = {
     "ocg_query",
@@ -110,7 +110,7 @@ class TestOcgTools:
 
 class TestOcgAgent:
     def test_returns_plain_agent(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = ocg_agent(model="openai/gpt-4o-mini", url=URL)
         assert isinstance(agent, Agent)
@@ -147,7 +147,7 @@ class TestOcgAgent:
             credential="OCG_US_KEY",
         )
         assert agent.name == "ocg_us"
-        from agentspan.agents.tool import get_tool_def
+        from conductor.ai.agents.tool import get_tool_def
 
         tool_defs = [get_tool_def(t) for t in agent.tools]
         assert len(tool_defs) == 6
@@ -161,8 +161,8 @@ class TestOcgAgent:
         assert len(agent.tools) == 3
 
     def test_exported_from_agents_package(self):
-        from agentspan.agents import ocg_agent as exported_agent
-        from agentspan.agents import ocg_tools as exported_tools
+        from conductor.ai.agents import ocg_agent as exported_agent
+        from conductor.ai.agents import ocg_tools as exported_tools
 
         assert exported_agent is ocg_agent
         assert exported_tools is ocg_tools
@@ -172,9 +172,9 @@ class TestOcgWireFormat:
     def test_serializes_with_instance_config(self):
         """The serialized agent_tool child must carry each OCG tool's
         toolType + config so ToolCompiler can bake the instance binding."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.config_serializer import AgentConfigSerializer
-        from agentspan.agents.tool import agent_tool
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
+        from conductor.ai.agents.tool import agent_tool
 
         retriever = ocg_agent(
             name="ocg_us",

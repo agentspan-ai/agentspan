@@ -86,7 +86,7 @@ import tempfile
 
 from settings import settings
 
-from agentspan.agents import Agent, AgentRuntime, Strategy, tool
+from conductor.ai.agents import Agent, AgentRuntime, Strategy, tool
 
 # ── Demo repo setup ───────────────────────────────────────────────────────────
 

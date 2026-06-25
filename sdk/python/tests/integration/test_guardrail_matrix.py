@@ -24,7 +24,7 @@ from typing import List, Optional
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     Guardrail,
     GuardrailResult,

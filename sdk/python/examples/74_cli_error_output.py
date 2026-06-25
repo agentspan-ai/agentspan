@@ -11,7 +11,7 @@ Requirements:
   - AGENTSPAN_LLM_MODEL   (e.g. openai/gpt-4o-mini)
 """
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 MODEL = "openai/gpt-4o-mini"
 

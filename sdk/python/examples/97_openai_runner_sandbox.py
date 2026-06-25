@@ -10,11 +10,11 @@ Before (runs directly against OpenAI):
     from agents import Runner
 
 After (runs on Agentspan — durable, observable, scalable):
-    from agentspan import Runner
+    from conductor.ai import Runner
 
 The diff:
     -from agents import Runner
-    +from agentspan import Runner
+    +from conductor.ai import Runner
 
 Sandbox agents run code in an isolated Docker environment. The model can
 inspect a workspace (files, directories) using a shell tool. With AgentspanRunner:
@@ -68,7 +68,7 @@ except ImportError:
 
 # ── Only this line changes ──────────────────────────────────────────────────
 # from agents import Runner          # ← original (runs directly on OpenAI)
-from agentspan import Runner         # ← agentspan (runs on Agentspan)
+from conductor.ai import Runner         # ← agentspan (runs on Agentspan)
 # ───────────────────────────────────────────────────────────────────────────
 
 DEFAULT_QUESTION = "Summarize this project in 2 sentences."

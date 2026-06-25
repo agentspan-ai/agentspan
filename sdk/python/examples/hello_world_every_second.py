@@ -17,8 +17,8 @@ import uuid
 
 import requests
 
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.schedule import Schedule
 
 SERVER = "http://localhost:6767/api"
 MODEL = os.environ.get("AGENTSPAN_MODEL", "openai/gpt-4o-mini")

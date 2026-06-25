@@ -11,7 +11,7 @@ Setup:
     python split-the-brain.py
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
 
 
 # ── Specialists ──────────────────────────────────────────────────────

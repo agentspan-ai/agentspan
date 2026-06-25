@@ -41,7 +41,7 @@ import time
 
 import requests
 
-from agentspan.agents import AgentRuntime, plan_execute, tool
+from conductor.ai.agents import AgentRuntime, plan_execute, tool
 
 SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
 BASE = SERVER_URL.rstrip("/").replace("/api", "")
@@ -736,7 +736,7 @@ def main(argv: list[str]) -> None:
         model=MODEL,
     )
 
-    from agentspan.agents.config_serializer import AgentConfigSerializer
+    from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
     ac = AgentConfigSerializer().serialize(harness)
     tool_defs = ac.get("tools", [])

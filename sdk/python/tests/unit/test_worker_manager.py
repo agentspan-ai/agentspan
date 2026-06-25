@@ -5,7 +5,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from agentspan.agents.runtime.worker_manager import WorkerManager, _SchemaRegistryFilter
+from conductor.ai.agents.runtime.worker_manager import WorkerManager, _SchemaRegistryFilter
 
 
 class TestWorkerManagerInit:

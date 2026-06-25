@@ -21,11 +21,11 @@ Run with:
 
 import pytest
 
-from agentspan.agents import Agent, Strategy, tool
-from agentspan.agents.result import AgentEvent, EventType
-from agentspan.agents.runtime.config import AgentConfig
-from agentspan.agents.runtime.runtime import AgentRuntime
-from agentspan.agents.testing import (
+from conductor.ai.agents import Agent, Strategy, tool
+from conductor.ai.agents.result import AgentEvent, EventType
+from conductor.ai.agents.runtime.config import AgentConfig
+from conductor.ai.agents.runtime.runtime import AgentRuntime
+from conductor.ai.agents.testing import (
     CorrectnessEval,
     EvalCase,
     assert_handoff_to,
@@ -384,7 +384,7 @@ class TestRoundRobinLive:
         assert_handoff_to(result, "pessimist")
 
         # Verify alternation — no agent runs twice in a row
-        from agentspan.agents.testing.strategy_validators import (
+        from conductor.ai.agents.testing.strategy_validators import (
             _get_handoff_targets,
         )
         targets = _get_handoff_targets(result)

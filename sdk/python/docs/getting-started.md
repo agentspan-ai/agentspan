@@ -5,7 +5,7 @@
 The package is named `agentspan` (see `pyproject.toml`). This project uses `uv`.
 
 ```bash
-uv add agentspan
+uv add conductor-ai-sdk
 ```
 
 Point the SDK at a running Agentspan server (defaults to `http://localhost:6767/api`):
@@ -18,7 +18,7 @@ export OPENAI_API_KEY=sk-...        # whichever provider your model uses
 Write `hello.py`:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(
     name="greeter",

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Agent with tools — define a tool function, agent calls it."""
 
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 
 @tool

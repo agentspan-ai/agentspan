@@ -30,12 +30,12 @@ def custom_graph():
 
 class TestCustomStateGraph:
     def test_detect_framework(self, custom_graph):
-        from agentspan.agents.frameworks.serializer import detect_framework
+        from conductor.ai.agents.frameworks.serializer import detect_framework
         assert detect_framework(custom_graph) == "langgraph"
 
     def test_worker_extracts_non_messages_output_as_json(self, custom_graph):
         """When state has no messages key, output is JSON of the state dict."""
-        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+        from conductor.ai.agents.frameworks.langgraph import make_langgraph_worker
         import json
 
         stream_chunks = [
@@ -49,7 +49,7 @@ class TestCustomStateGraph:
         task.input_data = {"prompt": "hello", "session_id": ""}
 
         with patch.object(custom_graph, "stream", return_value=iter(stream_chunks)):
-            with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
+            with patch("conductor.ai.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
                     custom_graph, "custom_graph", "http://localhost:8080", "k", "s"
                 )
@@ -67,9 +67,9 @@ class TestCustomStateGraph:
         This is the regression from issue #39.  Without the isinstance(a, Agent)
         guard, the inner _collect() raises AttributeError on a.instructions.
         """
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.runtime.runtime import AgentRuntime
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         # Build a native Agent whose sub-agents list contains a CompiledStateGraph
         wrapper = Agent(name="wrapper", instructions="test", model="openai/gpt-4o-mini")
@@ -87,7 +87,7 @@ class TestCustomStateGraph:
 
     def test_worker_uses_first_required_string_property_as_input_key(self, custom_graph):
         """Non-messages graph: input key = first required string property."""
-        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+        from conductor.ai.agents.frameworks.langgraph import make_langgraph_worker
 
         stream_chunks = [
             ("updates", {"process": {"answer": "done"}}),
@@ -100,7 +100,7 @@ class TestCustomStateGraph:
         task.input_data = {"prompt": "test prompt", "session_id": ""}
 
         with patch.object(custom_graph, "stream", return_value=iter(stream_chunks)) as mock_stream:
-            with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
+            with patch("conductor.ai.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
                     custom_graph, "custom_graph", "http://localhost:8080", "k", "s"
                 )

@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from agentspan.agents.tool import ToolDef, get_tool_def, get_tool_defs, http_tool, mcp_tool, tool
+from conductor.ai.agents.tool import ToolDef, get_tool_def, get_tool_defs, http_tool, mcp_tool, tool
 
 
 def _make_task(input_data=None, workflow_instance_id="test-wf-001", task_id="test-task-001"):
@@ -117,21 +117,21 @@ class TestRetryPolicyResolver:
     """Test _resolve_retry_logic helper."""
 
     def test_all_lowercase_names(self):
-        from agentspan.agents.runtime.runtime import _resolve_retry_logic
+        from conductor.ai.agents.runtime.runtime import _resolve_retry_logic
 
         assert _resolve_retry_logic("fixed") == "FIXED"
         assert _resolve_retry_logic("linear_backoff") == "LINEAR_BACKOFF"
         assert _resolve_retry_logic("exponential_backoff") == "EXPONENTIAL_BACKOFF"
 
     def test_uppercase_passthrough(self):
-        from agentspan.agents.runtime.runtime import _resolve_retry_logic
+        from conductor.ai.agents.runtime.runtime import _resolve_retry_logic
 
         assert _resolve_retry_logic("FIXED") == "FIXED"
         assert _resolve_retry_logic("LINEAR_BACKOFF") == "LINEAR_BACKOFF"
         assert _resolve_retry_logic("EXPONENTIAL_BACKOFF") == "EXPONENTIAL_BACKOFF"
 
     def test_case_insensitive(self):
-        from agentspan.agents.runtime.runtime import _resolve_retry_logic
+        from conductor.ai.agents.runtime.runtime import _resolve_retry_logic
 
         assert _resolve_retry_logic("Fixed") == "FIXED"
         assert _resolve_retry_logic("Linear_Backoff") == "LINEAR_BACKOFF"
@@ -139,7 +139,7 @@ class TestRetryPolicyResolver:
     def test_invalid_raises(self):
         import pytest
 
-        from agentspan.agents.runtime.runtime import _resolve_retry_logic
+        from conductor.ai.agents.runtime.runtime import _resolve_retry_logic
 
         with pytest.raises(ValueError, match="Invalid retry_policy"):
             _resolve_retry_logic("invalid_policy")
@@ -272,7 +272,7 @@ class TestWorkerTaskDetection:
 
         with (
             mock.patch(
-                "agentspan.agents.tool._decorated_functions",
+                "conductor.ai.agents.tool._decorated_functions",
                 registry,
                 create=True,
             ),
@@ -351,7 +351,7 @@ class TestWorkerTaskDetection:
         """If conductor-python is not installed, should fall through to TypeError."""
         import importlib
 
-        tool_module = importlib.import_module("agentspan.agents.tool")
+        tool_module = importlib.import_module("conductor.ai.agents.tool")
 
         def some_func(x: str) -> str:
             return x
@@ -422,7 +422,7 @@ class TestExternalTool:
 
     def test_external_with_guardrails(self):
         """external=True works with guardrails."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=True),
@@ -481,7 +481,7 @@ class TestPEP563Annotations:
 
     def test_make_tool_worker_resolves_string_annotations(self):
         """make_tool_worker resolves PEP 563 string annotations to real types."""
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         def my_tool(query: str, count: int = 5) -> dict:
             """A test tool."""
@@ -501,7 +501,7 @@ class TestPEP563Annotations:
         """The wrapper function returned by make_tool_worker still executes correctly."""
         from conductor.client.http.models.task import Task
 
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         def adder(a: int, b: int) -> int:
             """Add two numbers."""
@@ -527,7 +527,7 @@ class TestToolEdgeCases:
 
     def test_needs_context_with_non_tool_context_param(self):
         """A function with a 'context' param that's not ToolContext still triggers."""
-        from agentspan.agents.runtime._dispatch import _needs_context
+        from conductor.ai.agents.runtime._dispatch import _needs_context
 
         def my_func(context: str) -> str:
             return context
@@ -536,7 +536,7 @@ class TestToolEdgeCases:
         assert _needs_context(my_func) is True
 
     def test_needs_context_no_context_param(self):
-        from agentspan.agents.runtime._dispatch import _needs_context
+        from conductor.ai.agents.runtime._dispatch import _needs_context
 
         def my_func(x: str) -> str:
             return x
@@ -553,7 +553,7 @@ class TestToolEdgeCases:
         """make_tool_worker handles type hint resolution failure gracefully."""
         from conductor.client.http.models.task import Task
 
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         def my_tool(x: str) -> str:
             return x
@@ -575,8 +575,8 @@ class TestAgentToolRetryConfig:
     """Test agent_tool() retry and resilience parameters."""
 
     def test_default_config_has_no_retry_overrides(self):
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.tool import agent_tool
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.tool import agent_tool
 
         worker = Agent(name="w", model="openai/gpt-4o")
         td = agent_tool(worker)
@@ -585,8 +585,8 @@ class TestAgentToolRetryConfig:
         assert "optional" not in td.config
 
     def test_retry_count_passed(self):
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.tool import agent_tool
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.tool import agent_tool
 
         worker = Agent(name="w", model="openai/gpt-4o")
         td = agent_tool(worker, retry_count=5, retry_delay_seconds=10)
@@ -594,16 +594,16 @@ class TestAgentToolRetryConfig:
         assert td.config["retryDelaySeconds"] == 10
 
     def test_optional_false_for_fail_fast(self):
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.tool import agent_tool
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.tool import agent_tool
 
         worker = Agent(name="w", model="openai/gpt-4o")
         td = agent_tool(worker, optional=False)
         assert td.config["optional"] is False
 
     def test_zero_retries(self):
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.tool import agent_tool
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.tool import agent_tool
 
         worker = Agent(name="w", model="openai/gpt-4o")
         td = agent_tool(worker, retry_count=0)
@@ -618,8 +618,8 @@ class TestDispatchFixThenCheck:
 
     def test_fix_then_check_uses_fixed_content(self):
         """When first guardrail fixes output, second guardrail checks the fixed version."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         def fix_guardrail(content: str) -> GuardrailResult:
             if "bad" in content:
@@ -652,8 +652,8 @@ class TestDispatchFixThenCheck:
 
     def test_fix_returns_fixed_output(self):
         """A single fix guardrail returns the fixed output."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         def fix_it(content: str) -> GuardrailResult:
             return GuardrailResult(passed=False, message="fixing", fixed_output="FIXED")
@@ -671,7 +671,7 @@ class TestCircuitBreaker:
 
     def test_tool_disabled_after_threshold(self):
         """Tool raises after N consecutive failures."""
-        from agentspan.agents.runtime._dispatch import (
+        from conductor.ai.agents.runtime._dispatch import (
             _CIRCUIT_BREAKER_THRESHOLD,
             _tool_error_counts,
             make_tool_worker,
@@ -693,7 +693,7 @@ class TestCircuitBreaker:
 
     def test_tool_works_below_threshold(self):
         """Tool works normally when error count is below threshold."""
-        from agentspan.agents.runtime._dispatch import (
+        from conductor.ai.agents.runtime._dispatch import (
             _CIRCUIT_BREAKER_THRESHOLD,
             _tool_error_counts,
             make_tool_worker,
@@ -713,7 +713,7 @@ class TestCircuitBreaker:
 
     def test_error_increments_count(self):
         """Tool failure increments error count."""
-        from agentspan.agents.runtime._dispatch import (
+        from conductor.ai.agents.runtime._dispatch import (
             _tool_error_counts,
             make_tool_worker,
         )
@@ -739,8 +739,8 @@ class TestInputGuardrailDispatch:
 
     def test_input_guardrail_blocks_execution(self):
         """An input guardrail failure blocks tool execution."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         call_count = 0
 
@@ -763,8 +763,8 @@ class TestInputGuardrailDispatch:
 
     def test_input_guardrail_allows_when_passing(self):
         """An input guardrail that passes allows tool execution."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         def my_tool(x: str) -> str:
             return f"processed_{x}"
@@ -781,8 +781,8 @@ class TestInputGuardrailDispatch:
 
     def test_output_guardrail_raise_raises(self):
         """An output guardrail with on_fail='raise' raises ValueError."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         def my_tool() -> str:
             return "bad output"
@@ -803,7 +803,7 @@ class TestCircuitBreakerReset:
 
     def test_reset_circuit_breaker_clears_specific_tool(self):
         """reset_circuit_breaker clears error count for one tool."""
-        from agentspan.agents.runtime._dispatch import (
+        from conductor.ai.agents.runtime._dispatch import (
             _tool_error_counts,
             reset_circuit_breaker,
         )
@@ -818,7 +818,7 @@ class TestCircuitBreakerReset:
 
     def test_reset_all_circuit_breakers(self):
         """reset_all_circuit_breakers clears all error counts."""
-        from agentspan.agents.runtime._dispatch import (
+        from conductor.ai.agents.runtime._dispatch import (
             _tool_error_counts,
             reset_all_circuit_breakers,
         )
@@ -830,7 +830,7 @@ class TestCircuitBreakerReset:
 
     def test_reset_nonexistent_tool_is_noop(self):
         """Resetting a tool that has no error count does nothing."""
-        from agentspan.agents.runtime._dispatch import reset_circuit_breaker
+        from conductor.ai.agents.runtime._dispatch import reset_circuit_breaker
 
         # Should not raise
         reset_circuit_breaker("nonexistent_tool_xyz")

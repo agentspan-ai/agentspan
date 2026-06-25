@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agentspan.agents.schedule import (
+from conductor.ai.agents.schedule import (
     InvalidCronExpression,
     Schedule,
     ScheduleInfo,
@@ -27,14 +27,14 @@ from agentspan.agents.schedule import (
     ScheduleNotFound,
     schedules,
 )
-from agentspan.agents.schedule.client import (
+from conductor.ai.agents.schedule.client import (
     ScheduleClient,
     _check_unique_names,
     _from_workflow_schedule,
     _to_save_request,
     _translate,
 )
-from agentspan.agents.schedule.schedule import _prefix, _unprefix
+from conductor.ai.agents.schedule.schedule import _prefix, _unprefix
 
 # ── Schedule dataclass ──────────────────────────────────────────────
 

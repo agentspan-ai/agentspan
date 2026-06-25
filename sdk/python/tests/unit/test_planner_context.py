@@ -23,8 +23,8 @@ from __future__ import annotations
 
 import pytest
 
-from agentspan.agents import Agent, Context, Strategy, plan_execute, tool
-from agentspan.agents.config_serializer import AgentConfigSerializer
+from conductor.ai.agents import Agent, Context, Strategy, plan_execute, tool
+from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
 
 @tool

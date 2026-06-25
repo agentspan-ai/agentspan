@@ -50,7 +50,7 @@ import os
 import sys
 import tempfile
 
-from agentspan.agents import AgentRuntime, Generate, Op, Plan, Step, plan_execute, tool
+from conductor.ai.agents import AgentRuntime, Generate, Op, Plan, Step, plan_execute, tool
 
 # ── Configuration ────────────────────────────────────────────────
 WORK_DIR = os.path.join(tempfile.gettempdir(), "plan-execute-replan")

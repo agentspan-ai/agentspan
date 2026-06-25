@@ -20,7 +20,7 @@ from typing import List
 from agents import Agent, ModelSettings
 from pydantic import BaseModel
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

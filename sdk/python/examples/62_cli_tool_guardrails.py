@@ -30,7 +30,7 @@ Requirements:
 
 from settings import settings
 
-from agentspan.agents import Agent, AgentRuntime, CliConfig, OnFail, RegexGuardrail
+from conductor.ai.agents import Agent, AgentRuntime, CliConfig, OnFail, RegexGuardrail
 
 # ── Guardrails ────────────────────────────────────────────────────────
 

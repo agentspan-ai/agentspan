@@ -6,7 +6,7 @@ OnFail, Position, @guardrail decorator, and external guardrails."""
 
 import pytest
 
-from agentspan.agents.guardrail import (
+from conductor.ai.agents.guardrail import (
     Guardrail,
     GuardrailResult,
     LLMGuardrail,
@@ -640,25 +640,25 @@ class TestBackwardCompatibility:
 
 
 class TestPublicImports:
-    """Test that new symbols are importable from agentspan.agents."""
+    """Test that new symbols are importable from conductor.ai.agents."""
 
     def test_import_guardrail_decorator(self):
-        from agentspan.agents import guardrail as g
+        from conductor.ai.agents import guardrail as g
 
         assert callable(g)
 
     def test_import_on_fail(self):
-        from agentspan.agents import OnFail
+        from conductor.ai.agents import OnFail
 
         assert OnFail.RETRY == "retry"
 
     def test_import_position(self):
-        from agentspan.agents import Position
+        from conductor.ai.agents import Position
 
         assert Position.OUTPUT == "output"
 
     def test_import_guardrail_def(self):
-        from agentspan.agents import GuardrailDef
+        from conductor.ai.agents import GuardrailDef
 
         assert GuardrailDef is not None
 
@@ -995,7 +995,7 @@ class TestLLMGuardrailImportError:
         """LLMGuardrail._evaluate returns passed=False when litellm unavailable."""
         from unittest.mock import patch
 
-        from agentspan.agents.guardrail import LLMGuardrail
+        from conductor.ai.agents.guardrail import LLMGuardrail
 
         guard = LLMGuardrail(
             model="openai/gpt-4o",

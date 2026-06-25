@@ -1,6 +1,6 @@
 # API reference
 
-The public surface, importable from `agentspan.agents` unless noted. This is a
+The public surface, importable from `conductor.ai.agents` unless noted. This is a
 reference; for usage see [Writing agents](writing-agents.md), [Framework
 agents](framework-agents.md), and [Advanced](advanced.md).
 
@@ -132,7 +132,7 @@ agent_stateful=False)` (used internally by the runtime).
 - `wait_for_message_tool(name, description, batch_size=1, blocking=True)`
 - `agent_tool(agent, name=None, description=None, retry_count=None, retry_delay_seconds=None, optional=None)`
 
-OCG (from `agentspan.agents.ocg`):
+OCG (from `conductor.ai.agents.ocg`):
 `ocg_agent(*, model, url, name="ocg_agent", credential=None, instructions=None,
 max_turns=10, query=True, entities=True, memory=True) -> Agent`;
 `ocg_tools(*, url, credential=None, query=True, entities=True, memory=True) ->
@@ -179,7 +179,7 @@ For `strategy="swarm"`, in `handoffs=[...]`. All carry `target`.
 
 ## TextGate
 
-From `agentspan.agents.gate`: `TextGate(text, case_sensitive=True)` — stop a `>>`
+From `conductor.ai.agents.gate`: `TextGate(text, case_sensitive=True)` — stop a `>>`
 pipeline after this agent when its output contains `text`. Compiled server-side.
 
 ## Schedules

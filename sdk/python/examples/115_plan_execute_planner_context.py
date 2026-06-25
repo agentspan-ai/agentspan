@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import os
 
-from agentspan.agents import Agent, AgentRuntime, Context, Strategy, tool
+from conductor.ai.agents import Agent, AgentRuntime, Context, Strategy, tool
 
 # ── Onboarding tools (deterministic, no external calls) ────────────────
 

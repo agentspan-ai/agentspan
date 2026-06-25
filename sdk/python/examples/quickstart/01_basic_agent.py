@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Basic agent — the simplest possible agentspan example."""
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(
     name="greeter",

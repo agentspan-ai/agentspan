@@ -21,7 +21,7 @@ Requirements:
 
 from settings import settings
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentRuntime,
     CredentialNotFoundError,

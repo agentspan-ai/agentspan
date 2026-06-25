@@ -19,7 +19,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     OnTextMention,
     Strategy,

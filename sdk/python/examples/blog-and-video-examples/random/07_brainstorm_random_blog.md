@@ -70,7 +70,7 @@ In **random**, there is no order. Agent A might speak three times. Agent C might
 Three agents with deliberately different thinking styles:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
 
 
 creative = Agent(

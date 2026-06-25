@@ -15,7 +15,7 @@ Requirements:
 
 import time
 
-from agentspan.agents import Agent, AgentRuntime, CallbackHandler, tool
+from conductor.ai.agents import Agent, AgentRuntime, CallbackHandler, tool
 from settings import settings
 
 

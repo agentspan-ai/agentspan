@@ -47,7 +47,7 @@ Docker gotcha:
           $(python -c "import mcp.server.transport_security as m; print(m.__file__)")
 """
 
-from agentspan.agents import Agent, AgentRuntime, mcp_tool
+from conductor.ai.agents import Agent, AgentRuntime, mcp_tool
 from settings import settings
 
 # Create MCP tool — Conductor discovers tools from mcp-testkit at runtime

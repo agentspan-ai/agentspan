@@ -28,7 +28,7 @@ def _make_task(prompt="Hello", session_id="", execution_id="wf-123", cwd=""):
 
 class TestSerializeClaudeAgentSdk:
     def test_returns_single_worker_with_func_none(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
+        from conductor.ai.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
 
         options = _make_options()
         raw_config, workers = serialize_claude_agent_sdk(options)
@@ -37,7 +37,7 @@ class TestSerializeClaudeAgentSdk:
         assert workers[0].func is None
 
     def test_raw_config_has_name_and_worker_name(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
+        from conductor.ai.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
 
         options = _make_options()
         raw_config, workers = serialize_claude_agent_sdk(options)
@@ -46,7 +46,7 @@ class TestSerializeClaudeAgentSdk:
         assert raw_config["_worker_name"] == raw_config["name"]
 
     def test_worker_has_prompt_input_schema(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
+        from conductor.ai.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
 
         options = _make_options()
         _, workers = serialize_claude_agent_sdk(options)
@@ -57,7 +57,7 @@ class TestSerializeClaudeAgentSdk:
         assert "session_id" in schema["properties"]
 
     def test_default_name_when_no_system_prompt(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
+        from conductor.ai.agents.frameworks.claude_agent_sdk import serialize_claude_agent_sdk
 
         options = _make_options(system_prompt=None)
         raw_config, _ = serialize_claude_agent_sdk(options)
@@ -67,15 +67,15 @@ class TestSerializeClaudeAgentSdk:
 
 class TestMakeClaudeAgentSdkWorker:
     def test_worker_returns_completed_on_success(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
+        from conductor.ai.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
 
         options = _make_options()
         task = _make_task(prompt="Review the code")
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
         ):
             mock_asyncio.run.return_value = ("The code looks good", None)
             worker_fn = make_claude_agent_sdk_worker(
@@ -87,15 +87,15 @@ class TestMakeClaudeAgentSdkWorker:
         assert result.output_data["result"] == "The code looks good"
 
     def test_worker_returns_failed_on_exception(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
+        from conductor.ai.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
 
         options = _make_options()
         task = _make_task()
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
         ):
             mock_asyncio.run.side_effect = RuntimeError("SDK error")
             worker_fn = make_claude_agent_sdk_worker(
@@ -107,15 +107,15 @@ class TestMakeClaudeAgentSdkWorker:
         assert "SDK error" in result.reason_for_incompletion
 
     def test_worker_includes_metadata_in_output(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
+        from conductor.ai.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
 
         options = _make_options()
         task = _make_task()
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
         ):
             mock_asyncio.run.return_value = ("result", {"input_tokens": 100})
             worker_fn = make_claude_agent_sdk_worker(
@@ -130,15 +130,15 @@ class TestMakeClaudeAgentSdkWorker:
         assert result.output_data["token_usage"] == {"input_tokens": 100}
 
     def test_worker_sends_initial_progress_update(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
+        from conductor.ai.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
 
         options = _make_options()
         task = _make_task()
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking") as mock_progress,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking") as mock_progress,
         ):
             mock_asyncio.run.return_value = ("done", None)
             worker_fn = make_claude_agent_sdk_worker(
@@ -153,15 +153,15 @@ class TestMakeClaudeAgentSdkWorker:
         assert first_call[0][1] == "wf-123"  # execution_id
 
     def test_worker_uses_cwd_from_task_input(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
+        from conductor.ai.agents.frameworks.claude_agent_sdk import make_claude_agent_sdk_worker
 
         options = _make_options()
         task = _make_task(cwd="/tmp/project")
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk.asyncio") as mock_asyncio,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
         ):
             mock_asyncio.run.return_value = ("done", None)
             worker_fn = make_claude_agent_sdk_worker(
@@ -191,7 +191,7 @@ class TestAgentspanHooks:
         }
 
     def test_build_hooks_returns_dict_with_expected_keys(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
         hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
@@ -205,13 +205,13 @@ class TestAgentspanHooks:
         assert "Stop" in hooks
 
     def test_pre_tool_use_hook_increments_metadata(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -229,7 +229,7 @@ class TestAgentspanHooks:
         assert result == {}
 
     def test_hooks_push_events(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         pushed = []
         metadata = self._make_metadata()
@@ -239,10 +239,10 @@ class TestAgentspanHooks:
 
         with (
             patch(
-                "agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
+                "conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
                 side_effect=capture_push,
             ),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -260,7 +260,7 @@ class TestAgentspanHooks:
         assert pushed[0]["toolUseId"] == "tu-3"
 
     def test_post_tool_use_hook_pushes_event(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         pushed = []
         metadata = self._make_metadata()
@@ -270,11 +270,11 @@ class TestAgentspanHooks:
 
         with (
             patch(
-                "agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
+                "conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
                 side_effect=capture_push,
             ),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             post_hook = hooks["PostToolUse"][0].hooks[0]
@@ -292,14 +292,14 @@ class TestAgentspanHooks:
         assert pushed[0]["toolUseId"] == "tu-5"
 
     def test_post_tool_use_hook_tracks_last_output(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -329,16 +329,16 @@ class TestAgentspanHooks:
     def test_post_tool_use_hook_throttles_progress_updates(self):
         import time as time_mod
 
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
         # Pretend the last progress update was just now
         metadata["last_progress_time"] = time_mod.monotonic()
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking") as mock_progress,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking") as mock_progress,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             post_hook = hooks["PostToolUse"][0].hooks[0]
@@ -349,16 +349,16 @@ class TestAgentspanHooks:
         assert mock_progress.call_count == 0
 
     def test_post_tool_use_hook_sends_progress_after_interval(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
         # Pretend the last progress update was long ago
         metadata["last_progress_time"] = 0.0
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking") as mock_progress,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking") as mock_progress,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             post_hook = hooks["PostToolUse"][0].hooks[0]
@@ -369,14 +369,14 @@ class TestAgentspanHooks:
         assert mock_progress.call_args[0][1] == "wf-1"  # execution_id
 
     def test_post_tool_use_failure_hook_tracks_errors(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -404,7 +404,7 @@ class TestAgentspanHooks:
 
     def test_agent_tool_deferred_to_subagent_start(self):
         """PreToolUse(Agent) does NOT inject a SIMPLE task — it defers to SubagentStart."""
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
         inject_calls = []
@@ -414,9 +414,9 @@ class TestAgentspanHooks:
             return True
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._create_tracking_workflow", return_value="sub-exec-42"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._inject_tool_task", side_effect=capture_inject),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._create_tracking_workflow", return_value="sub-exec-42"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._inject_tool_task", side_effect=capture_inject),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -440,17 +440,17 @@ class TestAgentspanHooks:
 
     def test_full_subagent_lifecycle(self):
         """Full lifecycle: PreToolUse(Agent) → SubagentStart → SubagentStop → PostToolUse(Agent)."""
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
 
         with (
-            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._create_tracking_workflow", return_value="sub-exec-42"),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
-            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking") as mock_complete,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_workflow_nonblocking") as mock_complete_wf,
-            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._create_tracking_workflow", return_value="sub-exec-42"),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking") as mock_complete,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._complete_workflow_nonblocking") as mock_complete_wf,
+            patch("conductor.ai.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -478,7 +478,7 @@ class TestAgentspanHooks:
         assert mock_complete_wf.call_args[0][0] == "sub-exec-42"
 
     def test_stop_hook_pushes_agent_stop_event(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         pushed = []
         metadata = self._make_metadata()
@@ -487,7 +487,7 @@ class TestAgentspanHooks:
             pushed.append(event)
 
         with patch(
-            "agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
+            "conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
             side_effect=capture_push,
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
@@ -498,12 +498,12 @@ class TestAgentspanHooks:
         assert pushed[0]["type"] == "agent_stop"
 
     def test_hooks_are_defensive(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
 
         with patch(
-            "agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
+            "conductor.ai.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
             side_effect=RuntimeError("network down"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
@@ -522,7 +522,7 @@ class TestAgentspanHooks:
 
 class TestMergeHooks:
     def test_merge_with_no_user_hooks(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _merge_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _merge_hooks
         from claude_code_sdk.types import HookMatcher as SdkHookMatcher
 
         options = _make_options()
@@ -535,7 +535,7 @@ class TestMergeHooks:
         assert len(result_hooks["PreToolUse"]) == 1
 
     def test_merge_preserves_user_hooks_first(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _merge_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _merge_hooks
         from claude_code_sdk.types import HookMatcher as SdkHookMatcher
 
         options = _make_options()
@@ -553,7 +553,7 @@ class TestMergeHooks:
         assert result_hooks["PreToolUse"][1] is agentspan_matcher
 
     def test_merge_combines_different_events(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _merge_hooks
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _merge_hooks
         from claude_code_sdk.types import HookMatcher as SdkHookMatcher
 
         options = _make_options()
@@ -589,7 +589,7 @@ class TestRunQuery:
         return mock_sdk
 
     def test_run_query_collects_assistant_text(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _run_query
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _run_query
 
         text_block = MagicMock()
         text_block.text = "Hello world"
@@ -607,7 +607,7 @@ class TestRunQuery:
         mock_sdk.ResultMessage = type(result_msg)
 
         with patch(
-            "agentspan.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk
+            "conductor.ai.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk
         ):
             output, usage = asyncio.run(_run_query("test prompt", MagicMock()))
 
@@ -615,7 +615,7 @@ class TestRunQuery:
         assert usage == {"input_tokens": 50}
 
     def test_run_query_falls_back_to_collected_text(self):
-        from agentspan.agents.frameworks.claude_agent_sdk import _run_query
+        from conductor.ai.agents.frameworks.claude_agent_sdk import _run_query
 
         text_block = MagicMock()
         text_block.text = "Collected text"
@@ -633,7 +633,7 @@ class TestRunQuery:
         mock_sdk.ResultMessage = type(result_msg)
 
         with patch(
-            "agentspan.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk
+            "conductor.ai.agents.frameworks.claude_agent_sdk._import_sdk", return_value=mock_sdk
         ):
             output, usage = asyncio.run(_run_query("test prompt", MagicMock()))
 
@@ -642,7 +642,7 @@ class TestRunQuery:
 
 class TestClaudeCodeConfig:
     def test_claude_code_model_resolution(self):
-        from agentspan.agents.claude_code import resolve_claude_code_model
+        from conductor.ai.agents.claude_code import resolve_claude_code_model
 
         assert resolve_claude_code_model("opus") == "claude-opus-4-6"
         assert resolve_claude_code_model("sonnet") == "claude-sonnet-4-6"
@@ -651,20 +651,20 @@ class TestClaudeCodeConfig:
         assert resolve_claude_code_model("claude-opus-4-6") == "claude-opus-4-6"
 
     def test_claude_code_to_model_string(self):
-        from agentspan.agents.claude_code import ClaudeCode
+        from conductor.ai.agents.claude_code import ClaudeCode
 
         assert ClaudeCode("opus").to_model_string() == "claude-code/opus"
         assert ClaudeCode().to_model_string() == "claude-code"
 
     def test_agent_with_claude_code_model_string(self):
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         agent = Agent(name="test", model="claude-code/opus", instructions="test", tools=["Read"])
         assert agent.is_claude_code
         assert agent.model == "claude-code/opus"
 
     def test_agent_with_claude_code_config(self):
-        from agentspan.agents import Agent, ClaudeCode
+        from conductor.ai.agents import Agent, ClaudeCode
 
         agent = Agent(name="test", model=ClaudeCode("opus"), instructions="test", tools=["Read"])
         assert agent.is_claude_code
@@ -674,7 +674,7 @@ class TestClaudeCodeConfig:
     def test_agent_claude_code_rejects_callable_tools(self):
         import pytest
 
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         def my_tool():
             pass
@@ -683,7 +683,7 @@ class TestClaudeCodeConfig:
             Agent(name="test", model="claude-code", instructions="test", tools=[my_tool])
 
     def test_agent_claude_code_allows_string_tools(self):
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         agent = Agent(
             name="test", model="claude-code", instructions="test", tools=["Read", "Edit", "Bash"]
@@ -693,22 +693,22 @@ class TestClaudeCodeConfig:
     def test_detect_framework_returns_none_for_claude_code_agent(self):
         """Agent(model='claude-code/...') is a native Agent — the server handles
         claude-code routing during execution, not the framework detection path."""
-        from agentspan.agents import Agent
-        from agentspan.agents.frameworks.serializer import detect_framework
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.frameworks.serializer import detect_framework
 
         agent = Agent(name="test", model="claude-code/opus", instructions="test", tools=["Read"])
         assert detect_framework(agent) is None
 
     def test_detect_framework_returns_none_for_normal_agent(self):
-        from agentspan.agents import Agent
-        from agentspan.agents.frameworks.serializer import detect_framework
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.frameworks.serializer import detect_framework
 
         agent = Agent(name="test", model="openai/gpt-4o", instructions="test")
         assert detect_framework(agent) is None
 
     def test_agent_to_claude_code_options(self):
-        from agentspan.agents import Agent, ClaudeCode
-        from agentspan.agents.frameworks.claude_agent_sdk import agent_to_claude_code_options
+        from conductor.ai.agents import Agent, ClaudeCode
+        from conductor.ai.agents.frameworks.claude_agent_sdk import agent_to_claude_code_options
 
         agent = Agent(
             name="reviewer",
@@ -728,8 +728,8 @@ class TestClaudeCodeConfig:
     def test_claude_code_agent_goes_through_native_path(self):
         """Agent(model='claude-code/...') uses the native serialization path,
         not the framework serializer. The server handles passthrough compilation."""
-        from agentspan.agents import Agent
-        from agentspan.agents.frameworks.serializer import detect_framework
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.frameworks.serializer import detect_framework
 
         agent = Agent(name="test", model="claude-code/opus", instructions="test", tools=["Read"])
         # Native agents return None from detect_framework
@@ -738,16 +738,16 @@ class TestClaudeCodeConfig:
         assert agent.is_claude_code
 
     def test_agent_is_not_external_when_claude_code(self):
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         agent = Agent(name="test", model="claude-code", instructions="test")
         assert not agent.external
         assert agent.is_claude_code
 
     def test_agent_decorator_with_claude_code_model(self):
-        from agentspan.agents import agent as agent_decorator
-        from agentspan.agents.agent import _resolve_agent
-        from agentspan.agents.claude_code import ClaudeCode
+        from conductor.ai.agents import agent as agent_decorator
+        from conductor.ai.agents.agent import _resolve_agent
+        from conductor.ai.agents.claude_code import ClaudeCode
 
         @agent_decorator(model=ClaudeCode("opus"), tools=["Read"])
         def reviewer():
@@ -758,8 +758,8 @@ class TestClaudeCodeConfig:
         assert resolved.model == "claude-code/opus"
 
     def test_config_serializer_emits_passthrough_for_claude_code(self):
-        from agentspan.agents import Agent
-        from agentspan.agents.config_serializer import AgentConfigSerializer
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
         agent = Agent(
             name="reviewer",
@@ -777,8 +777,8 @@ class TestClaudeCodeConfig:
         assert config["tools"][0]["toolType"] == "worker"
 
     def test_config_serializer_parent_with_claude_code_sub_agent(self):
-        from agentspan.agents import Agent
-        from agentspan.agents.config_serializer import AgentConfigSerializer
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
         sub = Agent(
             name="reviewer",

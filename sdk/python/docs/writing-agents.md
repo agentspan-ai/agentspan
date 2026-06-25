@@ -25,7 +25,7 @@ Two equivalent ways: the `Agent` class, or the `@agent` decorator.
 ### The `Agent` class
 
 ```python
-from agentspan.agents import Agent
+from conductor.ai.agents import Agent
 
 agent = Agent(
     name="greeter",                       # required; [a-zA-Z_][a-zA-Z0-9_-]*
@@ -49,7 +49,7 @@ Common constructor arguments: `name`, `model`, `instructions`, `tools`, `agents`
 The docstring becomes the instructions. The decorated function stays callable.
 
 ```python
-from agentspan.agents import agent, tool
+from conductor.ai.agents import agent, tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -79,7 +79,7 @@ def planner():
     return f"You are a planner. Follow these rules:\n{rules}"
 
 # Named server-side template
-from agentspan.agents import Agent, PromptTemplate
+from conductor.ai.agents import Agent, PromptTemplate
 Agent(name="t", model="openai/gpt-4o",
       instructions=PromptTemplate(name="support_prompt",
                                   variables={"tier": "${workflow.input.user_tier}"}))
@@ -94,7 +94,7 @@ Decorate a plain function with `@tool`. Type hints and the docstring generate th
 tool's JSON schema. Tools run as durable Conductor worker tasks.
 
 ```python
-from agentspan.agents import tool
+from conductor.ai.agents import tool
 
 @tool
 def calculate(expression: str) -> dict:
@@ -120,7 +120,7 @@ A tool can receive execution context by declaring a `ToolContext` parameter; too
 without it are unchanged.
 
 ```python
-from agentspan.agents import tool, ToolContext
+from conductor.ai.agents import tool, ToolContext
 
 @tool
 def remember(note: str, context: ToolContext) -> str:
@@ -136,7 +136,7 @@ registers tool functions as Conductor workers; you normally never touch it direc
 the runtime does it for you when you `run`/`serve`/`deploy`.
 
 ```python
-from agentspan.agents.tool import get_tool_def, get_tool_defs
+from conductor.ai.agents.tool import get_tool_def, get_tool_defs
 defs = get_tool_defs([calculate, send_email])
 print(defs[0].name, defs[0].input_schema)
 ```
@@ -162,7 +162,7 @@ need no worker process. Add them to `tools=[...]`.
 | `agent_tool(agent, name=None, description=None, retry_count=None, retry_delay_seconds=None, optional=None)` | Call another `Agent` as a tool (sub-workflow) |
 
 ```python
-from agentspan.agents import Agent, http_tool, mcp_tool, agent_tool
+from conductor.ai.agents import Agent, http_tool, mcp_tool, agent_tool
 
 weather = http_tool(
     name="weather", description="Current weather",
@@ -189,8 +189,8 @@ tools compile to plain HTTP tasks. `ocg_tools(...)` returns the raw `ToolDef`s i
 want to assemble your own retriever.
 
 ```python
-from agentspan.agents import Agent, agent_tool
-from agentspan.agents.ocg import ocg_agent
+from conductor.ai.agents import Agent, agent_tool
+from conductor.ai.agents.ocg import ocg_agent
 
 retriever = ocg_agent(model="openai/gpt-4o-mini",
                       url="https://ocg.example.com", credential="OCG_KEY")
@@ -219,7 +219,7 @@ Pass sub-agents via `agents=[...]` and pick a `strategy`. Strategy values
 | `PLAN_EXECUTE` | A planner emits a JSON plan that is executed deterministically — see [Advanced](advanced.md#plans-and-plan_execute) |
 
 ```python
-from agentspan.agents import Agent, Strategy
+from conductor.ai.agents import Agent, Strategy
 
 billing = Agent(name="billing", model="openai/gpt-4o", instructions="Billing.")
 tech    = Agent(name="technical", model="openai/gpt-4o", instructions="Tech support.")
@@ -247,8 +247,8 @@ With `strategy="swarm"`, declare `handoffs=[...]` rules that transfer control be
 agents after a tool call or after the LLM speaks.
 
 ```python
-from agentspan.agents import Agent
-from agentspan.agents.handoff import OnTextMention, OnToolResult, OnCondition
+from conductor.ai.agents import Agent
+from conductor.ai.agents.handoff import OnTextMention, OnToolResult, OnCondition
 
 refund = Agent(name="refund", model="openai/gpt-4o", instructions="Process refunds.")
 
@@ -274,7 +274,7 @@ LLM call. Decorate a `(str) -> GuardrailResult` function, or use the prebuilt
 `RegexGuardrail` / `LLMGuardrail`.
 
 ```python
-from agentspan.agents import Agent, guardrail, GuardrailResult, RegexGuardrail, LLMGuardrail, Guardrail
+from conductor.ai.agents import Agent, guardrail, GuardrailResult, RegexGuardrail, LLMGuardrail, Guardrail
 
 @guardrail
 def no_pii(content: str) -> GuardrailResult:
@@ -306,7 +306,7 @@ the LLM and it tries again; `"human"` (output only) pauses for a human;
 and `|` (any).
 
 ```python
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent, TextMentionTermination, MaxMessageTermination,
     TokenUsageTermination, StopMessageTermination,
 )
@@ -326,7 +326,7 @@ agent = Agent(name="loop", model="openai/gpt-4o", termination=stop)
 compiled server-side (no worker round-trip):
 
 ```python
-from agentspan.agents.gate import TextGate
+from conductor.ai.agents.gate import TextGate
 stage = Agent(name="triage", model="openai/gpt-4o", gate=TextGate("ESCALATE"))
 ```
 
@@ -337,7 +337,7 @@ arguments from the server and returns `None` to continue or a non-empty `dict` t
 short-circuit (e.g. override the LLM response). Multiple handlers chain in list order.
 
 ```python
-from agentspan.agents import Agent, CallbackHandler
+from conductor.ai.agents import Agent, CallbackHandler
 
 class Logger(CallbackHandler):
     def on_model_start(self, **kwargs):
@@ -362,7 +362,7 @@ human approval (`@tool(approval_required=True)`) or input (`human_tool`), the st
 emits a `WAITING` event and the workflow pauses.
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, EventType, tool
+from conductor.ai.agents import Agent, AgentRuntime, EventType, tool
 
 @tool(approval_required=True)
 def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
@@ -411,7 +411,7 @@ Run an agent on a cron schedule. Define `Schedule`s and attach them at deploy ti
 manage them through the schedule client.
 
 ```python
-from agentspan.agents import AgentRuntime, Schedule
+from conductor.ai.agents import AgentRuntime, Schedule
 
 nightly = Schedule(name="nightly", cron="0 0 * * *", timezone="UTC",
                    input={"prompt": "Summarize today's tickets."})
@@ -434,7 +434,7 @@ guardrails on one class. `@tool` and `@guardrail` methods on the same instance a
 auto-attached (bound to `self`).
 
 ```python
-from agentspan.agents import Agent, agent, tool
+from conductor.ai.agents import Agent, agent, tool
 
 class Support:
     def __init__(self, db):

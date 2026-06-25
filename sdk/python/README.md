@@ -32,7 +32,7 @@
 Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -96,7 +96,7 @@ Your agent code compiles to a durable, server-side execution. The server manages
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install agentspan
+uv pip install conductor-ai-sdk
 ```
 
 ### Start the Server
@@ -133,7 +133,7 @@ cp .env.example .env
 ### Hello World
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="hello", model="openai/gpt-4o")
 
@@ -145,7 +145,7 @@ with AgentRuntime() as runtime:
 ### Add Tools
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> dict:
@@ -173,7 +173,7 @@ with AgentRuntime() as runtime:
 
 ```python
 from pydantic import BaseModel
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 class WeatherReport(BaseModel):
     city: str
@@ -197,7 +197,7 @@ with AgentRuntime() as runtime:
 ### Multi-Agent Handoffs
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def check_balance(account_id: str) -> dict:
@@ -224,7 +224,7 @@ with AgentRuntime() as runtime:
 ### Pipeline Composition
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 researcher = Agent(name="researcher", model="openai/gpt-4o",
                    instructions="Research the topic and provide key facts.")
@@ -243,7 +243,7 @@ with AgentRuntime() as runtime:
 ### Parallel Agents
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 market = Agent(name="market", model="openai/gpt-4o",
                instructions="Analyze market size, growth, key players.")
@@ -261,7 +261,7 @@ with AgentRuntime() as runtime:
 ### Human-in-the-Loop (Durable)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool(approval_required=True)
 def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
@@ -283,7 +283,7 @@ with AgentRuntime() as runtime:
 ### Guardrails
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, Guardrail, GuardrailResult, OnFail, guardrail
+from conductor.ai.agents import Agent, AgentRuntime, Guardrail, GuardrailResult, OnFail, guardrail
 
 @guardrail
 def word_limit(content: str) -> GuardrailResult:
@@ -305,7 +305,7 @@ with AgentRuntime() as runtime:
 ### Streaming
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="writer", model="openai/gpt-4o")
 
@@ -322,7 +322,7 @@ with AgentRuntime() as runtime:
 ### Server-Side Tools (No Workers Needed)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, http_tool, mcp_tool
+from conductor.ai.agents import Agent, AgentRuntime, http_tool, mcp_tool
 
 weather_api = http_tool(
     name="get_weather", description="Get weather for a city",
@@ -342,8 +342,8 @@ with AgentRuntime() as runtime:
 ### Code Execution
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.code_executor import DockerCodeExecutor
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.code_executor import DockerCodeExecutor
 
 executor = DockerCodeExecutor(image="python:3.12-slim", timeout=30)
 agent = Agent(
@@ -360,7 +360,7 @@ with AgentRuntime() as runtime:
 ### Shared State (Tool Context)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool, ToolContext
+from conductor.ai.agents import Agent, AgentRuntime, tool, ToolContext
 
 @tool
 def add_item(item: str, context: ToolContext) -> str:
@@ -393,7 +393,7 @@ Hook into agent, model, and tool lifecycle events with `CallbackHandler` classes
 
 ```python
 import time
-from agentspan.agents import Agent, AgentRuntime, CallbackHandler
+from conductor.ai.agents import Agent, AgentRuntime, CallbackHandler
 
 class TimingHandler(CallbackHandler):
     def on_agent_start(self, **kwargs):

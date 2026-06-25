@@ -56,7 +56,7 @@ from kitchen_sink_helpers import (
 from pydantic import BaseModel
 from settings import settings
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     # Core
     Agent,
     AgentConfig,
@@ -586,7 +586,7 @@ external_publisher = Agent(
     instructions="Publish to the CMS platform.",
 )
 
-from agentspan.agents.gate import TextGate
+from conductor.ai.agents.gate import TextGate
 
 publishing_pipeline = Agent(
     name="publishing_pipeline",

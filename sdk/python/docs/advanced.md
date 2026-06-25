@@ -15,7 +15,7 @@
 cleanly. Config comes from `AgentConfig.from_env()` by default, or pass overrides.
 
 ```python
-from agentspan.agents import AgentRuntime, AgentConfig
+from conductor.ai.agents import AgentRuntime, AgentConfig
 
 # From env (AGENTSPAN_SERVER_URL etc.)
 with AgentRuntime() as runtime:
@@ -43,7 +43,7 @@ auth fields (`api_key`, or `auth_key`/`auth_secret`).
 For one-off scripts, top-level functions use a shared singleton runtime:
 
 ```python
-import agentspan.agents as ag
+import conductor.ai.agents as ag
 
 ag.configure(server_url="https://prod:6767/api", auto_start_server=False)  # before first run
 result = ag.run(agent, "Hello!")
@@ -137,7 +137,7 @@ Pydantic is only needed when you use this feature.
 
 ```python
 from pydantic import BaseModel
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 class WeatherReport(BaseModel):
     city: str
@@ -166,7 +166,7 @@ tool with `credentials=[...]`. Inside the tool, read the injected value with
 `get_secret(name)`.
 
 ```python
-from agentspan.agents import tool, get_secret
+from conductor.ai.agents import tool, get_secret
 
 @tool(credentials=["OPENAI_API_KEY"])
 def call_openai(prompt: str) -> str:
@@ -195,7 +195,7 @@ executed deterministically against a fixed tool set. Build the harness with the
 `plan_execute` helper, or the `Agent` named-slot API.
 
 ```python
-from agentspan.agents import plan_execute
+from conductor.ai.agents import plan_execute
 
 harness = plan_execute(
     "report_builder",
@@ -209,7 +209,7 @@ result = runtime.run(harness, "Write a report on Rust adoption.")
 Or directly:
 
 ```python
-from agentspan.agents import Agent, Strategy
+from conductor.ai.agents import Agent, Strategy
 
 planner = Agent(name="rb_planner", model="openai/gpt-4o", instructions="Plan it.")
 harness = Agent(name="report_builder", strategy=Strategy.PLAN_EXECUTE,
@@ -224,7 +224,7 @@ parent (the canonical executable tools); `fallback=` is optional.
 Build a deterministic plan in Python with the typed builders and pass it to `run`:
 
 ```python
-from agentspan.agents.plans import Plan, Step, Op, Generate, Validation, Ref
+from conductor.ai.agents.plans import Plan, Step, Op, Generate, Validation, Ref
 
 plan = Plan(
     steps=[
@@ -254,7 +254,7 @@ Ground the planner with reference documents via `planner_context=` — inline te
 URL fetched at planner-run time:
 
 ```python
-from agentspan.agents.plans import Context
+from conductor.ai.agents.plans import Context
 
 harness = plan_execute(
     "kyc", tools=[...],
@@ -271,7 +271,7 @@ harness = plan_execute(
 Attach cron schedules at deploy time, or manage them through the schedule client.
 
 ```python
-from agentspan.agents import Schedule
+from conductor.ai.agents import Schedule
 
 nightly = Schedule(name="nightly", cron="0 0 * * *", timezone="UTC",
                    input={"prompt": "Daily summary."})
@@ -290,7 +290,7 @@ print(sc.preview_next("0 0 * * *", n=5))       # next 5 fire times (epoch ms)
 Load an agentskills.io skill directory (with a `SKILL.md`) as an `Agent`:
 
 ```python
-from agentspan.agents import skill, load_skills
+from conductor.ai.agents import skill, load_skills
 
 researcher = skill("./skills/deep-research", model="openai/gpt-4o",
                    params={"rounds": 3})

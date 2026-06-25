@@ -19,7 +19,7 @@ import time
 import pytest
 import requests
 
-from agentspan.agents import Agent, api_tool, http_tool
+from conductor.ai.agents import Agent, api_tool, http_tool
 
 pytestmark = [
     pytest.mark.e2e,

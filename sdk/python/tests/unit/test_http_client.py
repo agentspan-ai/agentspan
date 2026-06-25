@@ -10,7 +10,7 @@ import json
 import httpx
 import pytest
 
-from agentspan.agents.runtime.http_client import (
+from conductor.ai.agents.runtime.http_client import (
     AgentClient,
     AgentHttpClient,
 )
@@ -115,7 +115,7 @@ async def test_respond():
 @pytest.mark.asyncio
 async def test_http_error_raises():
     """Non-2xx responses raise AgentAPIError (wrapping httpx.HTTPStatusError)."""
-    from agentspan.agents.exceptions import AgentAPIError
+    from conductor.ai.agents.exceptions import AgentAPIError
 
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="Internal Server Error")

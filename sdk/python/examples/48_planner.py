@@ -15,7 +15,7 @@ Requirements:
 
 from settings import settings
 
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 
 @tool

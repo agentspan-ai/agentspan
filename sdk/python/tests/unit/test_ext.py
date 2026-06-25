@@ -5,7 +5,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from agentspan.agents.ext import GPTAssistantAgent
+from conductor.ai.agents.ext import GPTAssistantAgent
 
 
 class TestGPTAssistantAgent:
@@ -38,7 +38,7 @@ class TestGPTAssistantAgent:
 
     def test_run_assistant_missing_api_key(self):
         agent = GPTAssistantAgent(name="test")
-        with patch("agentspan.agents.ext.GPTAssistantAgent._run_assistant") as mock_run:
+        with patch("conductor.ai.agents.ext.GPTAssistantAgent._run_assistant") as mock_run:
             # Use the actual implementation but mock the openai import
             mock_openai = MagicMock()
             with patch.dict("sys.modules", {"openai": mock_openai}):

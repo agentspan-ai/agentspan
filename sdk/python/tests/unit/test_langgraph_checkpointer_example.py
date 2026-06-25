@@ -26,7 +26,7 @@ def graph_with_checkpointer():
 class TestCheckpointerSupport:
     def test_session_id_is_passed_as_thread_id(self, graph_with_checkpointer):
         from langchain_core.messages import AIMessage
-        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+        from conductor.ai.agents.frameworks.langgraph import make_langgraph_worker
 
         ai_msg = AIMessage(content="Hello!", tool_calls=[])
         stream_chunks = [
@@ -40,7 +40,7 @@ class TestCheckpointerSupport:
         task.input_data = {"prompt": "Hi", "session_id": "user-session-abc"}
 
         with patch.object(graph_with_checkpointer, "stream", return_value=iter(stream_chunks)) as mock_stream:
-            with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
+            with patch("conductor.ai.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
                     graph_with_checkpointer, "memory_graph", "http://localhost:8080", "k", "s"
                 )
@@ -51,7 +51,7 @@ class TestCheckpointerSupport:
 
     def test_empty_session_id_passes_no_config(self, graph_with_checkpointer):
         from langchain_core.messages import AIMessage
-        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+        from conductor.ai.agents.frameworks.langgraph import make_langgraph_worker
 
         ai_msg = AIMessage(content="Hello!", tool_calls=[])
         stream_chunks = [
@@ -65,7 +65,7 @@ class TestCheckpointerSupport:
         task.input_data = {"prompt": "Hi", "session_id": ""}
 
         with patch.object(graph_with_checkpointer, "stream", return_value=iter(stream_chunks)) as mock_stream:
-            with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
+            with patch("conductor.ai.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
                     graph_with_checkpointer, "memory_graph", "http://localhost:8080", "k", "s"
                 )
@@ -76,7 +76,7 @@ class TestCheckpointerSupport:
         assert "configurable" not in config_arg
 
     def test_checkpointer_error_returns_failed_result(self, graph_with_checkpointer):
-        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+        from conductor.ai.agents.frameworks.langgraph import make_langgraph_worker
 
         graph_with_checkpointer.stream = MagicMock(
             side_effect=ValueError("No checkpointer configured")
@@ -87,7 +87,7 @@ class TestCheckpointerSupport:
         task.workflow_instance_id = "wf-err"
         task.input_data = {"prompt": "Hi", "session_id": "s-1"}
 
-        with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
+        with patch("conductor.ai.agents.frameworks.langgraph._push_event_nonblocking"):
             worker_fn = make_langgraph_worker(
                 graph_with_checkpointer, "memory_graph", "http://localhost:8080", "k", "s"
             )

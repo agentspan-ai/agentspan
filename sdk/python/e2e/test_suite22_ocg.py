@@ -20,8 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from agentspan.agents import Agent, agent_tool
-from agentspan.agents.ocg import ocg_agent
+from conductor.ai.agents import Agent, agent_tool
+from conductor.ai.agents.ocg import ocg_agent
 
 pytestmark = [
     pytest.mark.e2e,

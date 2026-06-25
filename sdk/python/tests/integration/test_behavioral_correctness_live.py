@@ -25,11 +25,11 @@ import re
 
 import pytest
 
-from agentspan.agents import Agent, Strategy, tool
-from agentspan.agents.result import EventType
-from agentspan.agents.runtime.config import AgentConfig
-from agentspan.agents.runtime.runtime import AgentRuntime
-from agentspan.agents.testing import (
+from conductor.ai.agents import Agent, Strategy, tool
+from conductor.ai.agents.result import EventType
+from conductor.ai.agents.runtime.config import AgentConfig
+from conductor.ai.agents.runtime.runtime import AgentRuntime
+from conductor.ai.agents.testing import (
     assert_handoff_to,
     assert_no_errors,
     assert_output_contains,
@@ -38,7 +38,7 @@ from agentspan.agents.testing import (
     expect,
     validate_strategy,
 )
-from agentspan.agents.testing.strategy_validators import _get_handoff_targets
+from conductor.ai.agents.testing.strategy_validators import _get_handoff_targets
 
 
 # ── Mark all tests as integration ──────────────────────────────────────

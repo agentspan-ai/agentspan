@@ -49,9 +49,9 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import Agent, AgentRuntime, plan_execute, tool
-from agentspan.agents.plans import Op, Plan, Step
-from agentspan.agents.tool import ToolDef, agent_tool
+from conductor.ai.agents import Agent, AgentRuntime, plan_execute, tool
+from conductor.ai.agents.plans import Op, Plan, Step
+from conductor.ai.agents.tool import ToolDef, agent_tool
 
 pytestmark = pytest.mark.integration
 

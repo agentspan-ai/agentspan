@@ -26,7 +26,7 @@ import tempfile
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     OnFail,
     Position,
@@ -964,7 +964,7 @@ class TestPlanAndCompileValidation:
 #     skips the planner LLM's output entirely (PAC's extract_json reads
 #     ``workflow.input.static_plan`` as Case 0).
 
-from agentspan.agents import Plan, Step, Op, Validation, plan_execute
+from conductor.ai.agents import Plan, Step, Op, Validation, plan_execute
 
 
 @tool

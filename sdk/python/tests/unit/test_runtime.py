@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentspan.agents.agent import Agent
-from agentspan.agents.result import AgentStatus, EventType
+from conductor.ai.agents.agent import Agent
+from conductor.ai.agents.result import AgentStatus, EventType
 
 
 def _mock_requests_post(response_json=None, status_code=200):
@@ -60,9 +60,9 @@ class TestExtractOutput:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -98,9 +98,9 @@ class TestExtractHandoffResult:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -134,9 +134,9 @@ class TestExtractMessages:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -214,15 +214,15 @@ class TestSingletonRuntime:
     """Test that run.py uses a singleton runtime."""
 
     def test_singleton_returns_same_instance(self):
-        import agentspan.agents.run as run_module
-        from agentspan.agents.run import _get_default_runtime
+        import conductor.ai.agents.run as run_module
+        from conductor.ai.agents.run import _get_default_runtime
 
         # Reset singleton
         run_module._default_runtime = None
 
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                with patch("agentspan.agents.runtime.server.ensure_server_running"):
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                with patch("conductor.ai.agents.runtime.server.ensure_server_running"):
                     rt1 = _get_default_runtime()
                     rt2 = _get_default_runtime()
                     assert rt1 is rt2
@@ -248,8 +248,8 @@ class TestAgentRuntimeInit:
 
         try:
             with patch("conductor.client.orkes_clients.OrkesClients"):
-                with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                    from agentspan.agents.runtime.runtime import AgentRuntime
+                with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                    from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                     rt = AgentRuntime()
                     assert rt._config.server_url == "http://env-server/api"
@@ -265,8 +265,8 @@ class TestAgentRuntimeInit:
     def test_explicit_params(self):
         """AgentRuntime(server_url=..., api_key=..., api_secret=...) uses explicit values."""
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 rt = AgentRuntime(
                     server_url="http://explicit/api",
@@ -280,9 +280,9 @@ class TestAgentRuntimeInit:
     def test_config_object(self):
         """AgentRuntime(config=AgentConfig(...)) uses the config object."""
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 cfg = AgentConfig(
                     server_url="http://config/api",
@@ -297,9 +297,9 @@ class TestAgentRuntimeInit:
     def test_explicit_overrides_config(self):
         """Explicit params take precedence over config object values."""
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 cfg = AgentConfig(
                     server_url="http://config/api",
@@ -315,9 +315,9 @@ class TestAgentRuntimeInit:
     def test_config_preserves_tuning_knobs(self):
         """Tuning knobs from config are preserved when using explicit connection params."""
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 cfg = AgentConfig(
                     server_url="http://config/api",
@@ -332,7 +332,7 @@ class TestAgentConfig:
     """Test AgentConfig dataclass loads from env via from_env()."""
 
     def test_defaults(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         config = AgentConfig()
         assert config.server_url == "http://localhost:6767/api"
@@ -342,7 +342,7 @@ class TestAgentConfig:
     def test_env_override(self):
         from unittest.mock import patch
 
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         with patch.dict(
             "os.environ", {"AGENTSPAN_SERVER_URL": "http://custom:9090/api"}, clear=True
@@ -351,7 +351,7 @@ class TestAgentConfig:
             assert config.server_url == "http://custom:9090/api"
 
     def test_custom_retry_count(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         config = AgentConfig(llm_retry_count=5)
         assert config.llm_retry_count == 5
@@ -363,9 +363,9 @@ class TestCorrelationId:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -414,9 +414,9 @@ class TestRuntimeRespond:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -448,9 +448,9 @@ class TestMediaParameter:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -531,9 +531,9 @@ class TestRuntimeLifecycle:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -576,9 +576,9 @@ class TestRuntimeLifecycle:
 
     def test_context_manager(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 rt = AgentRuntime(config=config)
@@ -600,9 +600,9 @@ class TestHasWorkerTools:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -612,7 +612,7 @@ class TestHasWorkerTools:
         assert runtime._has_worker_tools(agent) is False
 
     def test_with_worker_tool(self, runtime):
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.tool import tool
 
         @tool
         def my_tool(x: str) -> str:
@@ -623,21 +623,21 @@ class TestHasWorkerTools:
         assert runtime._has_worker_tools(agent) is True
 
     def test_with_http_only(self, runtime):
-        from agentspan.agents.tool import http_tool
+        from conductor.ai.agents.tool import http_tool
 
         ht = http_tool(name="api", description="Call API", url="http://example.com", method="GET")
         agent = Agent(name="http_agent", model="openai/gpt-4o", tools=[ht])
         assert runtime._has_worker_tools(agent) is False
 
     def test_with_guardrails(self, runtime):
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(func=lambda c: GuardrailResult(passed=True))
         agent = Agent(name="guarded", model="openai/gpt-4o", guardrails=[guard])
         assert runtime._has_worker_tools(agent) is True
 
     def test_recursive_subagent(self, runtime):
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.tool import tool
 
         @tool
         def inner_tool(x: str) -> str:
@@ -661,21 +661,21 @@ class TestHasStatefulTools:
 
     def test_string_tools_do_not_raise(self):
         """Agents with string tool lists must not raise TypeError."""
-        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from conductor.ai.agents.runtime.runtime import _has_stateful_tools
 
         agent = Agent(name="cc", model="claude-code/sonnet", tools=["Read", "Glob", "Grep"])
         # Must not raise, must return False (strings are never stateful)
         assert _has_stateful_tools(agent) is False
 
     def test_no_tools_returns_false(self):
-        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from conductor.ai.agents.runtime.runtime import _has_stateful_tools
 
         agent = Agent(name="plain", model="openai/gpt-4o")
         assert _has_stateful_tools(agent) is False
 
     def test_tool_def_stateful_true_returns_true(self):
-        from agentspan.agents.runtime.runtime import _has_stateful_tools
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.runtime.runtime import _has_stateful_tools
+        from conductor.ai.agents.tool import tool
 
         @tool(stateful=True)
         def stateful_tool(x: str) -> str:
@@ -686,8 +686,8 @@ class TestHasStatefulTools:
         assert _has_stateful_tools(agent) is True
 
     def test_tool_def_stateful_false_returns_false(self):
-        from agentspan.agents.runtime.runtime import _has_stateful_tools
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.runtime.runtime import _has_stateful_tools
+        from conductor.ai.agents.tool import tool
 
         @tool
         def plain_tool(x: str) -> str:
@@ -699,8 +699,8 @@ class TestHasStatefulTools:
 
     def test_mixed_strings_and_tool_defs_not_stateful(self):
         """A mix of strings and non-stateful @tool functions returns False."""
-        from agentspan.agents.runtime.runtime import _has_stateful_tools
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.runtime.runtime import _has_stateful_tools
+        from conductor.ai.agents.tool import tool
 
         @tool
         def helper(x: str) -> str:
@@ -712,7 +712,7 @@ class TestHasStatefulTools:
 
     def test_sub_agent_with_string_tools_does_not_raise(self):
         """String tools in sub-agents must also not raise."""
-        from agentspan.agents.runtime.runtime import _has_stateful_tools
+        from conductor.ai.agents.runtime.runtime import _has_stateful_tools
 
         sub = Agent(name="sub_cc", model="claude-code/sonnet", tools=["Bash", "Write"])
         parent = Agent(name="parent", model="openai/gpt-4o", agents=[sub])
@@ -723,7 +723,7 @@ class TestStatefulWorkerDomains:
     """Stateful workers must use the execution's real task domain."""
 
     def test_resolve_worker_domain_prefers_server_domain(self):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         rt._extract_domain = lambda execution_id: "original-domain"
@@ -731,7 +731,7 @@ class TestStatefulWorkerDomains:
         assert rt._resolve_worker_domain("wf-1", "fresh-domain") == "original-domain"
 
     def test_resolve_worker_domain_falls_back_to_generated_run_id(self):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         rt._extract_domain = lambda execution_id: None
@@ -739,7 +739,7 @@ class TestStatefulWorkerDomains:
         assert rt._resolve_worker_domain("wf-1", "fresh-domain") == "fresh-domain"
 
     def test_resolve_worker_domain_returns_none_for_stateless_execution(self):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         rt._extract_domain = lambda execution_id: "should-not-be-used"
@@ -750,7 +750,7 @@ class TestStatefulWorkerDomains:
         """Same task name under a new domain still needs a new polling process."""
         from types import SimpleNamespace
 
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         class FakeWorkerManager:
             def __init__(self):
@@ -796,9 +796,9 @@ class TestExtractTokenUsage:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -861,9 +861,9 @@ class TestExtractToolCalls:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -901,9 +901,9 @@ class TestGetStatus:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -990,9 +990,9 @@ class TestRuntimePlan:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1038,9 +1038,9 @@ class TestRuntimeRunGuardrails:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1058,7 +1058,7 @@ class TestRuntimeRunGuardrails:
         )
 
     def test_input_guardrail_raises(self, runtime):
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=False, message="Bad input"),
@@ -1072,7 +1072,7 @@ class TestRuntimeRunGuardrails:
             runtime.run(agent, "bad prompt")
 
     def test_input_guardrail_passes(self, runtime):
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=True),
@@ -1091,7 +1091,7 @@ class TestRuntimeRunGuardrails:
         Guardrail behavior (fix, retry, raise) happens inside the Conductor
         DoWhile loop, not client-side.  The runtime runs the workflow once.
         """
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=False, message="PII", fixed_output="REDACTED"),
@@ -1108,7 +1108,7 @@ class TestRuntimeRunGuardrails:
 
     def test_output_guardrail_compiled_raise_returns_failed(self, runtime):
         """Output guardrail raise terminates workflow with FAILED status."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=False, message="unsafe"),
@@ -1125,7 +1125,7 @@ class TestRuntimeRunGuardrails:
 
     def test_output_guardrail_retry_compiled_single_execution(self, runtime):
         """Output guardrail retry happens inside workflow (single execution)."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=False, message="bad"),
@@ -1143,8 +1143,8 @@ class TestRuntimeRunGuardrails:
 
     def test_run_with_compiled_output_guardrails(self, runtime):
         """Agent with tools + output guardrails uses compiled path (single execution)."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.tool import tool
 
         @tool
         def my_tool(x: str) -> str:
@@ -1171,8 +1171,8 @@ class TestRuntimeRunGuardrails:
 
     def test_run_compiled_guardrail_failed_workflow(self, runtime):
         """Compiled guardrail path handles FAILED workflow status."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.tool import tool
 
         @tool
         def my_tool(x: str) -> str:
@@ -1197,7 +1197,7 @@ class TestRuntimeRunGuardrails:
 
     def test_input_guardrail_fix_modifies_prompt(self, runtime):
         """Input guardrail with on_fail='fix' replaces the prompt."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         def sanitize_input(content):
             if "DROP TABLE" in content:
@@ -1222,7 +1222,7 @@ class TestRuntimeRunGuardrails:
 
     def test_input_guardrail_retry_treated_as_raise(self, runtime):
         """Input guardrail with on_fail='retry' raises (retry not meaningful for input)."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=False, message="bad"),
@@ -1237,7 +1237,7 @@ class TestRuntimeRunGuardrails:
 
     def test_input_guardrail_in_start(self, runtime):
         """Input guardrails also run in start() (async mode)."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=False, message="Blocked"),
@@ -1259,9 +1259,9 @@ class TestExecutionInputValidation:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1304,9 +1304,9 @@ class TestRunPopulatesToolCalls:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1436,9 +1436,9 @@ class TestHasWorkerTools:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 rt = AgentRuntime(config=config)
@@ -1446,7 +1446,7 @@ class TestHasWorkerTools:
 
     def test_regex_guardrail_only_no_workers(self, runtime):
         """RegexGuardrail compiles to InlineTask — no workers needed."""
-        from agentspan.agents.guardrail import RegexGuardrail
+        from conductor.ai.agents.guardrail import RegexGuardrail
 
         agent = Agent(
             name="test",
@@ -1457,7 +1457,7 @@ class TestHasWorkerTools:
 
     def test_external_guardrail_only_no_workers(self, runtime):
         """External guardrails compile to SimpleTask — no local workers needed."""
-        from agentspan.agents.guardrail import Guardrail
+        from conductor.ai.agents.guardrail import Guardrail
 
         agent = Agent(
             name="test",
@@ -1468,7 +1468,7 @@ class TestHasWorkerTools:
 
     def test_custom_guardrail_needs_workers(self, runtime):
         """Custom function guardrails compile to worker tasks — workers needed."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult
 
         agent = Agent(
             name="test",
@@ -1484,7 +1484,7 @@ class TestHasWorkerTools:
 
     def test_llm_guardrail_no_workers(self, runtime):
         """LLMGuardrail compiles to server-side LlmChatComplete — no workers needed."""
-        from agentspan.agents.guardrail import LLMGuardrail
+        from conductor.ai.agents.guardrail import LLMGuardrail
 
         agent = Agent(
             name="test",
@@ -1495,7 +1495,7 @@ class TestHasWorkerTools:
 
     def test_mixed_regex_and_custom_needs_workers(self, runtime):
         """Mix of regex + custom guardrails — needs workers for the custom one."""
-        from agentspan.agents.guardrail import Guardrail, GuardrailResult, RegexGuardrail
+        from conductor.ai.agents.guardrail import Guardrail, GuardrailResult, RegexGuardrail
 
         agent = Agent(
             name="test",
@@ -1522,9 +1522,9 @@ class TestRuntimeStream:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1706,9 +1706,9 @@ class TestExtractStructuredOutput:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1777,9 +1777,9 @@ class TestExtractTokenUsageEdgeCases:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1803,9 +1803,9 @@ class TestGetStatusEdgeCases:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1837,15 +1837,15 @@ class TestHasWorkerToolsEdgeCases:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
 
     def test_with_handoffs(self, runtime):
-        from agentspan.agents.handoff import OnTextMention
+        from conductor.ai.agents.handoff import OnTextMention
 
         handoff = OnTextMention(target=Agent(name="sub", model="openai/gpt-4o"), text="help")
         agent = Agent(name="parent", model="openai/gpt-4o", handoffs=[handoff])
@@ -1872,9 +1872,9 @@ class TestStartViaServer:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
@@ -1967,9 +1967,9 @@ class TestStartFrameworkViaServer:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
@@ -2009,16 +2009,16 @@ class TestFrameworkCredentials:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
 
     def test_run_framework_registers_and_clears_workflow_credentials(self, runtime):
         """Framework run() exposes request credentials to extracted tools for the run lifetime."""
-        from agentspan.agents.runtime._dispatch import (
+        from conductor.ai.agents.runtime._dispatch import (
             _workflow_credentials,
             _workflow_credentials_lock,
         )
@@ -2036,10 +2036,10 @@ class TestFrameworkCredentials:
             )
 
         with patch(
-            "agentspan.agents.frameworks.serializer.detect_framework", return_value="openai"
+            "conductor.ai.agents.frameworks.serializer.detect_framework", return_value="openai"
         ):
             with patch(
-                "agentspan.agents.frameworks.serializer.serialize_agent",
+                "conductor.ai.agents.frameworks.serializer.serialize_agent",
                 return_value=({"name": "fw_agent"}, []),
             ):
                 with patch.object(
@@ -2069,14 +2069,14 @@ class TestPollStatusUntilComplete:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
 
-    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    @patch("conductor.ai.agents.runtime.runtime.time.sleep", return_value=None)
     def test_returns_on_completed(self, mock_sleep, runtime):
         """Returns immediately when workflow is COMPLETED."""
         completed = AgentStatus(
@@ -2093,7 +2093,7 @@ class TestPollStatusUntilComplete:
         assert result.status == "COMPLETED"
         mock_sleep.assert_not_called()
 
-    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    @patch("conductor.ai.agents.runtime.runtime.time.sleep", return_value=None)
     def test_returns_on_failed(self, mock_sleep, runtime):
         """Returns immediately when workflow is FAILED."""
         failed = AgentStatus(
@@ -2108,7 +2108,7 @@ class TestPollStatusUntilComplete:
         assert result.status == "FAILED"
         assert result.is_complete is True
 
-    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    @patch("conductor.ai.agents.runtime.runtime.time.sleep", return_value=None)
     def test_returns_on_terminated(self, mock_sleep, runtime):
         """Returns when workflow is TERMINATED."""
         terminated = AgentStatus(
@@ -2121,7 +2121,7 @@ class TestPollStatusUntilComplete:
         result = runtime._poll_status_until_complete("wf-1")
         assert result.status == "TERMINATED"
 
-    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    @patch("conductor.ai.agents.runtime.runtime.time.sleep", return_value=None)
     def test_polls_until_complete(self, mock_sleep, runtime):
         """Polls multiple times until workflow reaches terminal state."""
         running = AgentStatus(
@@ -2147,7 +2147,7 @@ class TestPollStatusUntilComplete:
         assert runtime.get_status.call_count == 3
         assert mock_sleep.call_count == 2  # slept twice while RUNNING
 
-    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    @patch("conductor.ai.agents.runtime.runtime.time.sleep", return_value=None)
     def test_timeout_returns_current_state(self, mock_sleep, runtime):
         """When poll times out, returns current workflow state."""
         running = AgentStatus(
@@ -2164,7 +2164,7 @@ class TestPollStatusUntilComplete:
         assert runtime.get_status.call_count >= 5
         assert result.status == "RUNNING"  # returned incomplete
 
-    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    @patch("conductor.ai.agents.runtime.runtime.time.sleep", return_value=None)
     def test_returns_on_timed_out_status(self, mock_sleep, runtime):
         """TIMED_OUT is a terminal state."""
         timed_out = AgentStatus(
@@ -2188,15 +2188,15 @@ class TestResolvePrompt:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients") as MockClients:
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
                 mock_clients = MagicMock()
                 MockClients.return_value = mock_clients
 
                 mock_prompt_client = MagicMock()
                 mock_clients.get_prompt_client.return_value = mock_prompt_client
 
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 rt = AgentRuntime(config=config)
@@ -2214,7 +2214,7 @@ class TestResolvePrompt:
 
     def test_template_resolved(self, runtime):
         """PromptTemplate fetches and substitutes variables."""
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         rt, mock_prompt = runtime
 
@@ -2231,7 +2231,7 @@ class TestResolvePrompt:
 
     def test_template_not_found_raises(self, runtime):
         """Missing template raises ValueError."""
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         rt, mock_prompt = runtime
         mock_prompt.get_prompt.return_value = None
@@ -2241,7 +2241,7 @@ class TestResolvePrompt:
 
     def test_template_no_variables(self, runtime):
         """Template with no variables returns template text as-is."""
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         rt, mock_prompt = runtime
 
@@ -2254,7 +2254,7 @@ class TestResolvePrompt:
 
     def test_prompt_client_lazy_init(self, runtime):
         """Prompt client is lazily initialized on first template use."""
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         rt, mock_prompt = runtime
         assert rt._prompt_client_instance is None
@@ -2273,15 +2273,15 @@ class TestAssociateTemplatesWithModels:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients") as MockClients:
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
                 mock_clients = MagicMock()
                 MockClients.return_value = mock_clients
 
                 mock_prompt_client = MagicMock()
                 mock_clients.get_prompt_client.return_value = mock_prompt_client
 
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 rt = AgentRuntime(config=config)
@@ -2289,7 +2289,7 @@ class TestAssociateTemplatesWithModels:
 
     def test_associates_template_with_model(self, runtime):
         """Template is re-saved with model association."""
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         rt, mock_prompt = runtime
 
@@ -2312,7 +2312,7 @@ class TestAssociateTemplatesWithModels:
 
     def test_skips_already_associated(self, runtime):
         """Does not re-save if model is already associated."""
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         rt, mock_prompt = runtime
 
@@ -2341,7 +2341,7 @@ class TestAssociateTemplatesWithModels:
 
     def test_walks_agent_tree(self, runtime):
         """Templates from sub-agents are also associated."""
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         rt, mock_prompt = runtime
 
@@ -2370,7 +2370,7 @@ class TestAssociateTemplatesWithModels:
 
     def test_handles_exception_gracefully(self, runtime):
         """Exceptions during association are logged, not raised."""
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         rt, mock_prompt = runtime
         mock_prompt.get_prompt.side_effect = Exception("Connection error")
@@ -2390,30 +2390,30 @@ class TestDeriveFinishReason:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients") as MockClients:
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
                 mock_clients = MagicMock()
                 MockClients.return_value = mock_clients
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
 
     def test_rejected_finish_reason(self, runtime):
         """COMPLETED with finishReason=rejected maps to FinishReason.REJECTED."""
-        from agentspan.agents.result import FinishReason
+        from conductor.ai.agents.result import FinishReason
 
         result = runtime._derive_finish_reason("COMPLETED", {"finishReason": "rejected"})
         assert result == FinishReason.REJECTED
 
     def test_stop_finish_reason(self, runtime):
-        from agentspan.agents.result import FinishReason
+        from conductor.ai.agents.result import FinishReason
 
         result = runtime._derive_finish_reason("COMPLETED", {"finishReason": "STOP"})
         assert result == FinishReason.STOP
 
     def test_length_finish_reason(self, runtime):
-        from agentspan.agents.result import FinishReason
+        from conductor.ai.agents.result import FinishReason
 
         result = runtime._derive_finish_reason("COMPLETED", {"finishReason": "LENGTH"})
         assert result == FinishReason.LENGTH
@@ -2425,11 +2425,11 @@ class TestNormalizeOutput:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients") as MockClients:
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
                 mock_clients = MagicMock()
                 MockClients.return_value = mock_clients
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -2465,11 +2465,11 @@ class TestExtractSubResults:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients") as MockClients:
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
                 mock_clients = MagicMock()
                 MockClients.return_value = mock_clients
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -2490,7 +2490,7 @@ class TestInjectSessionMemory:
     """Test _inject_session_memory static method."""
 
     def test_injects_messages_into_empty_memory(self):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         agent = Agent(name="test", model="openai/gpt-4o")
         prior = [{"role": "user", "message": "Hi"}, {"role": "assistant", "message": "Hello"}]
@@ -2503,8 +2503,8 @@ class TestInjectSessionMemory:
         assert result.memory.messages[0]["message"] == "Hi"
 
     def test_prepends_to_existing_memory(self):
-        from agentspan.agents.memory import ConversationMemory
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.memory import ConversationMemory
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         existing_messages = [{"role": "system", "message": "You are helpful"}]
         agent = Agent(
@@ -2533,7 +2533,7 @@ class TestRequiredToolsAgent:
         assert agent.required_tools == ["submit_filing"]
 
     def test_required_tools_serialized(self):
-        from agentspan.agents.config_serializer import AgentConfigSerializer
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
         agent = Agent(name="test", model="openai/gpt-4o", required_tools=["submit", "approve"])
         serializer = AgentConfigSerializer()
@@ -2541,7 +2541,7 @@ class TestRequiredToolsAgent:
         assert config["requiredTools"] == ["submit", "approve"]
 
     def test_required_tools_not_serialized_when_empty(self):
-        from agentspan.agents.config_serializer import AgentConfigSerializer
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
         agent = Agent(name="test", model="openai/gpt-4o")
         serializer = AgentConfigSerializer()
@@ -2554,61 +2554,61 @@ class TestNormalizeHandoffTarget:
 
     def test_indexed_handoff(self):
         """Standard handoff: {parent}_handoff_{idx}_{child}."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("support_handoff_0_billing") == "billing"
 
     def test_indexed_agent(self):
         """Round-robin/swarm: {parent}_agent_{idx}_{child}."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("panel_agent_1_expert") == "expert"
 
     def test_indexed_step(self):
         """Sequential: {parent}_step_{idx}_{child}."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("pipeline_step_0_researcher") == "researcher"
 
     def test_indexed_parallel(self):
         """Parallel: {parent}_parallel_{idx}_{child}."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("analysis_parallel_0_pros_analyst") == "pros_analyst"
 
     def test_no_index_handoff(self):
         """Handoff without index: {parent}_handoff_{child}."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("test_handoff_agent_b") == "agent_b"
 
     def test_no_index_transfer(self):
         """Transfer without index: {parent}_transfer_{child}."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("test_transfer_agent_b") == "agent_b"
 
     def test_trailing_turn_counter(self):
         """Strips trailing __N turn counter."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("0_billing__1") == "billing"
 
     def test_round_robin_with_turn_counter(self):
         """Round-robin with trailing turn counter."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("debate_round_robin_1_optimist__1") == "optimist"
 
     def test_leading_digit_prefix(self):
         """Fallback: strips leading digit_ prefix."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("0_billing") == "billing"
 
     def test_already_clean(self):
         """Already clean name returned as-is."""
-        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
         assert _normalize_handoff_target("billing") == "billing"
 
@@ -2619,9 +2619,9 @@ class TestTimeoutParameter:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
@@ -2648,7 +2648,7 @@ class TestTimeoutParameter:
         payload = mock_post.call_args[1]["json"]
         assert "timeoutSeconds" not in payload
 
-    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    @patch("conductor.ai.agents.runtime.runtime.time.sleep", return_value=None)
     def test_poll_uses_agent_timeout_seconds(self, mock_sleep, runtime):
         """Agent(timeout_seconds=60) + run() → polling uses 60s."""
         running = AgentStatus(
@@ -2665,7 +2665,7 @@ class TestTimeoutParameter:
         assert runtime.get_status.call_count >= 3
         assert runtime.get_status.call_count <= 4
 
-    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    @patch("conductor.ai.agents.runtime.runtime.time.sleep", return_value=None)
     def test_poll_defaults_to_300s_without_timeout(self, mock_sleep, runtime):
         """Polling defaults to 300s when no timeout is specified."""
         completed = AgentStatus(
@@ -2687,9 +2687,9 @@ class TestUnrecognizedKwargs:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
@@ -2701,7 +2701,7 @@ class TestUnrecognizedKwargs:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         # Patch the framework detection to return None (native agent)
-        with patch("agentspan.agents.frameworks.serializer.detect_framework", return_value=None):
+        with patch("conductor.ai.agents.frameworks.serializer.detect_framework", return_value=None):
             with patch.object(runtime, "_prepare_workers"):
                 with patch.object(runtime, "_start_via_server", return_value=("wf-1", None, [])):
                     with patch.object(runtime, "_poll_status_until_complete") as mock_poll:
@@ -2714,7 +2714,7 @@ class TestUnrecognizedKwargs:
                         with patch.object(runtime, "_workflow_client") as mock_wf:
                             mock_wf.get_workflow.side_effect = Exception("skip")
                             with caplog.at_level(
-                                logging.WARNING, logger="agentspan.agents.runtime"
+                                logging.WARNING, logger="conductor.ai.agents.runtime"
                             ):
                                 runtime.run(agent, "hello", foo=1)
 
@@ -2727,9 +2727,9 @@ class TestExceptionWrapping:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -2738,7 +2738,7 @@ class TestExceptionWrapping:
         """get_status with a 404 response raises AgentNotFoundError."""
         import requests
 
-        from agentspan.agents.exceptions import AgentNotFoundError
+        from conductor.ai.agents.exceptions import AgentNotFoundError
 
         mock_resp = MagicMock()
         mock_resp.status_code = 404
@@ -2754,7 +2754,7 @@ class TestExceptionWrapping:
         """get_status with a 500 response raises AgentAPIError (not AgentNotFoundError)."""
         import requests
 
-        from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError
+        from conductor.ai.agents.exceptions import AgentAPIError, AgentNotFoundError
 
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -2771,7 +2771,7 @@ class TestExceptionWrapping:
         """respond() wraps HTTPError in AgentAPIError."""
         import requests
 
-        from agentspan.agents.exceptions import AgentAPIError
+        from conductor.ai.agents.exceptions import AgentAPIError
 
         mock_resp = MagicMock()
         mock_resp.status_code = 400
@@ -2790,16 +2790,16 @@ class TestSSEFallbackWarnsOnce:
     @pytest.fixture()
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
-            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.config import AgentConfig
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+                from conductor.ai.agents.runtime.config import AgentConfig
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
 
     def test_sse_fallback_logs_once(self, runtime, caplog):
         """SSE fallback message should be logged only on the first failure."""
-        from agentspan.agents.runtime.http_client import SSEUnavailableError
+        from conductor.ai.agents.runtime.http_client import SSEUnavailableError
 
         call_count = 0
 
@@ -2811,7 +2811,7 @@ class TestSSEFallbackWarnsOnce:
 
         with patch.object(runtime, "_stream_sse", side_effect=mock_stream_sse):
             with patch.object(runtime, "_stream_polling", side_effect=mock_stream_polling):
-                with caplog.at_level(logging.INFO, logger="agentspan.agents.runtime"):
+                with caplog.at_level(logging.INFO, logger="conductor.ai.agents.runtime"):
                     # First call — should log
                     list(runtime._stream_workflow("wf-1"))
                     # Second call — should NOT log again
@@ -2830,7 +2830,7 @@ class TestHandoffIndexing:
 
     def test_name_to_idx_is_parent_inclusive(self):
         """Parent should be '0'; sub-agents should be '1', '2', etc."""
-        from agentspan.agents import Strategy
+        from conductor.ai.agents import Strategy
 
         parent = Agent(
             name="parent",

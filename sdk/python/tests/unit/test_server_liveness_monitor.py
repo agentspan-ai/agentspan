@@ -7,7 +7,7 @@ import threading
 import time
 from unittest.mock import MagicMock
 
-from agentspan.agents.runtime._liveness import (
+from conductor.ai.agents.runtime._liveness import (
     ServerLivenessMonitor,
     WorkerStallError,
 )

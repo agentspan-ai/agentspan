@@ -5,8 +5,8 @@
 
 import pytest
 
-from agentspan.agents._internal.model_parser import ParsedModel, parse_model
-from agentspan.agents._internal.schema_utils import schema_from_function
+from conductor.ai.agents._internal.model_parser import ParsedModel, parse_model
+from conductor.ai.agents._internal.schema_utils import schema_from_function
 
 
 class TestModelParser:

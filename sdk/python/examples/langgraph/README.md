@@ -126,7 +126,7 @@ uv run python examples/langgraph/01_hello_world.py
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 

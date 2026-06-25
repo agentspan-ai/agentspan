@@ -27,9 +27,9 @@ import uuid
 import pytest
 import requests
 
-from agentspan.agents import Agent
-from agentspan.agents.result import Status
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents import Agent
+from conductor.ai.agents.result import Status
+from conductor.ai.agents.schedule import Schedule
 
 pytestmark = [pytest.mark.e2e]
 

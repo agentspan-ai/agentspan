@@ -24,7 +24,7 @@ from typing import List
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentEvent,
     AgentStream,

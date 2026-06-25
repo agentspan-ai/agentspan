@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Multi-agent — sequential pipeline with two agents."""
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 researcher = Agent(
     name="researcher",

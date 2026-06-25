@@ -21,7 +21,7 @@ from typing import Optional
 from langchain_core.tools import tool
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 

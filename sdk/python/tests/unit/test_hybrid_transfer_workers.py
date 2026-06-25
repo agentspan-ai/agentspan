@@ -14,15 +14,15 @@ import asyncio
 import pytest
 from unittest.mock import patch
 
-from agentspan.agents.agent import Agent
-from agentspan.agents.tool import tool
+from conductor.ai.agents.agent import Agent
+from conductor.ai.agents.tool import tool
 
 
 class TestGetRequiredWorkerNamesHybrid:
     """_collect_worker_names must include transfer tool names for hybrid agents."""
 
     def _call(self, agent):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         # Pass required_workers=None to exercise the fallback detection path
@@ -90,7 +90,7 @@ class TestRegisterHybridTransferWorkers:
             Agent(name="writer", model="openai/gpt-4o"),
         ]
 
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
 
@@ -118,7 +118,7 @@ class TestRegisterHybridTransferWorkers:
         mgr = Agent(name="manager", model="openai/gpt-4o", tools=[run])
         mgr.agents = [Agent(name="researcher", model="openai/gpt-4o")]
 
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         captured_fn = {}
@@ -156,8 +156,8 @@ class TestRegisterHybridTransferWorkers:
         mgr = Agent(name="manager", model="openai/gpt-4o", tools=[fetch])
         mgr.agents = [Agent(name="researcher", model="openai/gpt-4o")]
 
-        from agentspan.agents.runtime.runtime import AgentRuntime
-        from agentspan.agents.runtime.tool_registry import ToolRegistry
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.tool_registry import ToolRegistry
 
         rt = AgentRuntime.__new__(AgentRuntime)
 

@@ -36,17 +36,17 @@ def react_graph():
 
 class TestLangGraphReActDetection:
     def test_detect_framework_returns_langgraph(self, react_graph):
-        from agentspan.agents.frameworks.serializer import detect_framework
+        from conductor.ai.agents.frameworks.serializer import detect_framework
         assert detect_framework(react_graph) == "langgraph"
 
     def test_serialize_returns_single_worker(self, react_graph):
-        from agentspan.agents.frameworks.langgraph import serialize_langgraph
+        from conductor.ai.agents.frameworks.langgraph import serialize_langgraph
         raw_config, workers = serialize_langgraph(react_graph)
         assert len(workers) == 1
 
     def test_worker_invocation_extracts_ai_message_output(self, react_graph):
         from langchain_core.messages import HumanMessage, AIMessage
-        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+        from conductor.ai.agents.frameworks.langgraph import make_langgraph_worker
 
         # Patch the graph's stream to return controlled output
         final_ai_msg = AIMessage(content="The capital is Paris.", tool_calls=[])
@@ -65,7 +65,7 @@ class TestLangGraphReActDetection:
         task.input_data = {"prompt": "What is the capital of France?", "session_id": ""}
 
         with patch.object(react_graph, "stream", return_value=iter(stream_chunks)):
-            with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
+            with patch("conductor.ai.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
                     react_graph, "react_agent", "http://localhost:8080", "key", "secret"
                 )
@@ -77,7 +77,7 @@ class TestLangGraphReActDetection:
     def test_worker_uses_messages_input_format(self, react_graph):
         """create_react_agent graphs use messages-based state."""
         from langchain_core.messages import HumanMessage, AIMessage
-        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+        from conductor.ai.agents.frameworks.langgraph import make_langgraph_worker
 
         final_msg = AIMessage(content="Done.", tool_calls=[])
         stream_chunks = [
@@ -91,7 +91,7 @@ class TestLangGraphReActDetection:
         task.input_data = {"prompt": "Hello", "session_id": ""}
 
         with patch.object(react_graph, "stream", return_value=iter(stream_chunks)) as mock_stream:
-            with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
+            with patch("conductor.ai.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
                     react_graph, "react_agent", "http://localhost:8080", "key", "secret"
                 )

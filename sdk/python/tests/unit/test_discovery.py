@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for agentspan.agents.runtime.discovery."""
+"""Tests for conductor.ai.agents.runtime.discovery."""
 
 import sys
 import types
@@ -9,8 +9,8 @@ import types
 import pytest
 from unittest.mock import patch
 
-from agentspan.agents.agent import Agent
-from agentspan.agents.runtime.discovery import discover_agents, _scan_module
+from conductor.ai.agents.agent import Agent
+from conductor.ai.agents.runtime.discovery import discover_agents, _scan_module
 
 
 class TestScanModule:

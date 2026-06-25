@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentEvent,
     AgentRuntime,

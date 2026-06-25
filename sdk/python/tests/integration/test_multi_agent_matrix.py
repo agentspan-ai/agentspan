@@ -25,15 +25,15 @@ from typing import List, Optional
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     Strategy,
     agent_tool,
     tool,
 )
-from agentspan.agents.gate import TextGate
-from agentspan.agents.handoff import OnTextMention
-from agentspan.agents.result import AgentResult
+from conductor.ai.agents.gate import TextGate
+from conductor.ai.agents.handoff import OnTextMention
+from conductor.ai.agents.result import AgentResult
 
 
 pytestmark = pytest.mark.integration
