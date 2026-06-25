@@ -17,6 +17,7 @@ import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
+import dev.agentspan.runtime.credentials.AgentspanMintTokenTask;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
@@ -196,6 +197,45 @@ public class AgentCompiler {
                 log.debug("Could not stamp agentDef for agent '{}': {}", config.getName(), e.getMessage());
             }
             wf.setMetadata(metadata);
+        }
+
+        // Inject the execution-token mint task as the FIRST task of every agent
+        // workflow (root AND recursively-compiled sub-workflows). It guarantees an
+        // execution token lives in workflow.variables.__agentspan_ctx__ regardless
+        // of HOW the workflow was started: the SDK /agent/start path embeds one in
+        // the workflow input and the task passes it through; inbound-webhook / UI /
+        // schedule starts go through Conductor core WITHOUT one and the task mints
+        // it (from the identity + declared-name allow-list stamped on the def). The
+        // variable is persisted via executionDAOFacade.updateWorkflow — the same
+        // durable channel SET_VARIABLE uses — so it survives every decide() reload
+        // on every core (unlike a status-listener mutation, which orkes-conductor
+        // does not persist). Downstream tasks read ${workflow.variables.__agentspan_ctx__}.
+        //
+        // Excluded paths (framework passthrough, graph structures) carry no
+        // credentialed tool tasks of their own and receive the ctx via their
+        // SUB_WORKFLOW input mapping, so they intentionally keep reading input.
+        if (wf.getTasks() != null
+                && !isFrameworkPassthrough(config)
+                && !isGraphStructure(config)) {
+            boolean alreadyMinted = !wf.getTasks().isEmpty()
+                    && AgentspanMintTokenTask.TASK_TYPE.equals(wf.getTasks().get(0).getType());
+            if (!alreadyMinted) {
+                WorkflowTask mint = new WorkflowTask();
+                mint.setType(AgentspanMintTokenTask.TASK_TYPE);
+                mint.setTaskReferenceName(toRef(config.getName()) + "_mint_token");
+                Map<String, Object> mintInputs = new LinkedHashMap<>();
+                // Read from input: the SDK /agent/start path and SUB_WORKFLOW input
+                // mappings deliver an existing token here; absent (webhook/UI), the
+                // task mints a fresh one.
+                mintInputs.put(
+                        AgentspanMintTokenTask.CTX_KEY, "${workflow.input.__agentspan_ctx__}");
+                mint.setInputParameters(mintInputs);
+                // Rebuild into a mutable list: some compile paths set an immutable
+                // task list (List.of(...)), which would reject an in-place add(0,...).
+                List<WorkflowTask> withMint = new ArrayList<>(wf.getTasks());
+                withMint.add(0, mint);
+                wf.setTasks(withMint);
+            }
         }
 
         // Ensure every task has a name (Conductor requires it for execution)
@@ -1004,7 +1044,7 @@ public class AgentCompiler {
         inputs.put("media", mediaRef);
         inputs.put("session_id", "${workflow.input.session_id}");
         // Forward execution token to sub-workflows for credential resolution
-        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+        inputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
         // Pass context to sub-workflow for pipeline state
         if (contextRef != null) {
             inputs.put("context", contextRef);
@@ -1118,7 +1158,7 @@ public class AgentCompiler {
             task.setType("SIMPLE");
 
             Map<String, Object> inputs = new LinkedHashMap<>(ptc.getArguments());
-            inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            inputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             task.setInputParameters(inputs);
 
             tasks.add(task);
@@ -1341,7 +1381,7 @@ public class AgentCompiler {
         }
 
         // Forward execution token so per-user credential resolution works in worker threads
-        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+        inputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
 
         llm.setInputParameters(inputs);
         return llm;
@@ -1845,7 +1885,7 @@ public class AgentCompiler {
             // Pass subgraph input from prep output + execution token
             Map<String, Object> subInputs = new LinkedHashMap<>();
             subInputs.put("state", "${" + prepRef + ".output.subgraph_input}");
-            subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            subInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             subTask.setInputParameters(subInputs);
             defaultTasks.add(subTask);
 

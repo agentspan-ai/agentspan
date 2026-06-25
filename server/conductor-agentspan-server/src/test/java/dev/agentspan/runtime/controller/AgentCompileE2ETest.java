@@ -180,9 +180,10 @@ class AgentCompileE2ETest {
         assertThat(wf.get("version").asInt()).isEqualTo(1);
 
         List<Map<String, Object>> tasks = getTasks(resp);
-        // Simple agent = single LLM_CHAT_COMPLETE task
-        assertThat(tasks).hasSize(1);
-        assertThat(tasks.get(0).get("type")).isEqualTo("LLM_CHAT_COMPLETE");
+        // Simple agent = execution-token mint task + single LLM_CHAT_COMPLETE task
+        assertThat(tasks).hasSize(2);
+        assertThat(tasks.get(0).get("type")).isEqualTo("AGENTSPAN_MINT_TOKEN");
+        assertThat(tasks.get(1).get("type")).isEqualTo("LLM_CHAT_COMPLETE");
     }
 
     @Test
@@ -191,8 +192,10 @@ class AgentCompileE2ETest {
         JsonNode resp = postCompile(request(config));
 
         List<Map<String, Object>> tasks = getTasks(resp);
+        // tasks.get(0) is the AGENTSPAN_MINT_TOKEN task; the LLM task follows it.
         @SuppressWarnings("unchecked")
-        Map<String, Object> inputs = (Map<String, Object>) tasks.get(0).get("inputParameters");
+        Map<String, Object> inputs =
+                (Map<String, Object>) findTaskByType(tasks, "LLM_CHAT_COMPLETE").get("inputParameters");
         assertThat(inputs.get("llmProvider")).isEqualTo("anthropic");
         assertThat(inputs.get("model")).isEqualTo("claude-sonnet-4-20250514");
     }
@@ -1795,9 +1798,10 @@ class AgentCompileE2ETest {
         assertThat(wf.get("name").asText()).isEqualTo("test_vercel_agent");
 
         List<Map<String, Object>> tasks = getTasks(resp);
-        // Real extraction: simple agent = single LLM_CHAT_COMPLETE task (not passthrough _fw_task)
-        assertThat(tasks).hasSize(1);
-        assertThat(tasks.get(0).get("type")).isEqualTo("LLM_CHAT_COMPLETE");
+        // Real extraction: mint task + single LLM_CHAT_COMPLETE task (not passthrough _fw_task)
+        assertThat(tasks).hasSize(2);
+        assertThat(tasks.get(0).get("type")).isEqualTo("AGENTSPAN_MINT_TOKEN");
+        assertThat(tasks.get(1).get("type")).isEqualTo("LLM_CHAT_COMPLETE");
     }
 
     @Test

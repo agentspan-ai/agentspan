@@ -407,7 +407,7 @@ public class ToolCompiler {
         enrichInput.put("expression", script);
         enrichInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
-        enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
+        enrichInput.put("agentspanCtx", "${workflow.variables.__agentspan_ctx__}");
         enrichInput.put("userPrompt", "${workflow.input.prompt}");
         enrichTask.setInputParameters(enrichInput);
 
@@ -715,7 +715,7 @@ public class ToolCompiler {
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
-            listInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            listInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -874,7 +874,7 @@ public class ToolCompiler {
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
             // Forward execution token so CredentialAwareHttpTask can resolve #{NAME} headers
-            fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            fetchInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -1031,7 +1031,7 @@ public class ToolCompiler {
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
-            listInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            listInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -1080,7 +1080,7 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
-            fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+            fetchInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -1560,7 +1560,7 @@ public class ToolCompiler {
             enrichInput.put("apiConfig", apiConfigRef);
         }
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
-        enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
+        enrichInput.put("agentspanCtx", "${workflow.variables.__agentspan_ctx__}");
         enrichInput.put("userPrompt", "${workflow.input.prompt}");
         enrichTask.setInputParameters(enrichInput);
 
