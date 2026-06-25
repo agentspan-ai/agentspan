@@ -224,6 +224,9 @@ from agentspan.agents.tool import (
     wait_for_message_tool,
 )
 
+# OCG (Open Context Graph) retrieval sub-agent
+from agentspan.agents.ocg import OCG_SYSTEM_PROMPT, ocg_agent, ocg_tools
+
 # openai-agents name alias — ``from agentspan.agents import function_tool``
 function_tool = tool
 
@@ -255,6 +258,10 @@ __all__ = [
     "agent_tool",
     "api_tool",
     "http_tool",
+    # OCG retrieval sub-agent
+    "OCG_SYSTEM_PROMPT",
+    "ocg_agent",
+    "ocg_tools",
     "human_tool",
     "mcp_tool",
     "wait_for_message_tool",

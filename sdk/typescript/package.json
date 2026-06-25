@@ -46,6 +46,10 @@
     "@io-orkes/conductor-javascript": "^3.0.3",
     "dotenv": "^16.0.0"
   },
+  "overrides": {
+    "undici": "^7.28.0",
+    "ws": "^8.21.0"
+  },
   "peerDependencies": {
     "@langchain/core": ">=0.2.0",
     "@langchain/langgraph": ">=0.2.0",
@@ -95,6 +99,16 @@
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "ws": "^8.21.0",
+    "@langchain/langgraph": {
+      "uuid": "^11.1.1"
+    },
+    "@langchain/langgraph-checkpoint": {
+      "uuid": "^11.1.1"
+    }
   },
   "lint-staged": {
     "*.ts": [

@@ -334,4 +334,128 @@ class ToolCompilerTest {
         assertThat(router.getType()).isEqualTo("SWITCH");
         assertThat(router.getDecisionCases()).containsKey("tool_call");
     }
+
+    // ── selfDescribing marker (OrkesLLM contract) ────────────────────────
+
+    @Test
+    void testCompileToolSpecs_everySpecIsSelfDescribing() {
+        // Every AgentSpan-compiled tool spec is complete (name + description +
+        // inputSchema inline), so every spec must carry the selfDescribing
+        // marker that tells OrkesLLM to skip integration resolution.
+        List<ToolConfig> tools = List.of(
+                ToolConfig.builder()
+                        .name("search")
+                        .description("Search")
+                        .toolType("worker")
+                        .build(),
+                ToolConfig.builder()
+                        .name("fetch")
+                        .description("Fetch")
+                        .toolType("http")
+                        .config(Map.of("url", "https://example.com"))
+                        .build(),
+                ToolConfig.builder()
+                        .name("github")
+                        .description("GitHub MCP")
+                        .toolType("mcp")
+                        .config(Map.of("server_url", "http://localhost:3001/mcp"))
+                        .build(),
+                ToolConfig.builder()
+                        .name("helper")
+                        .description("Sub-agent")
+                        .toolType("agent_tool")
+                        .config(Map.of("workflowName", "helper_wf"))
+                        .build());
+
+        List<Map<String, Object>> specs = new ToolCompiler().compileToolSpecs(tools);
+
+        assertThat(specs).hasSize(4);
+        for (Map<String, Object> spec : specs) {
+            assertThat(spec.get("selfDescribing"))
+                    .as("spec '%s' must be marked selfDescribing", spec.get("name"))
+                    .isEqualTo(Boolean.TRUE);
+            // The marker must ALSO ride configParams: conductor-ai's ToolSpec
+            // has no selfDescribing field, so the top-level key is dropped at
+            // deserialization — configParams is a Map<String,Object> that
+            // survives, letting OrkesLLM read it without a conductor-oss
+            // release.
+            assertThat(spec.get("configParams"))
+                    .as("spec '%s' must carry the marker in configParams", spec.get("name"))
+                    .isInstanceOfSatisfying(Map.class, cp -> assertThat(cp.get("selfDescribing"))
+                            .isEqualTo(Boolean.TRUE));
+        }
+    }
+
+    @Test
+    void testCompileToolSpecs_markerMergesIntoExistingConfigParams() {
+        // MCP tools already populate configParams (mcpServer/headers) — the
+        // marker must merge in, not clobber them.
+        ToolConfig mcp = ToolConfig.builder()
+                .name("github")
+                .description("GitHub MCP")
+                .toolType("mcp")
+                .config(Map.of("server_url", "http://localhost:3001/mcp"))
+                .build();
+
+        Map<String, Object> spec =
+                new ToolCompiler().compileToolSpecs(List.of(mcp)).get(0);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cp = (Map<String, Object>) spec.get("configParams");
+        assertThat(cp.get("mcpServer")).isEqualTo("http://localhost:3001/mcp");
+        assertThat(cp.get("selfDescribing")).isEqualTo(Boolean.TRUE);
+    }
+
+    // ── HTTP path templating (used by OCG tools, generally available) ────
+
+    @Test
+    void testBuildEnrichTask_httpPathTemplate() {
+        // An http tool may declare a pathTemplate + queryParams: the enrich
+        // script builds the URI from the LLM's arguments at dispatch time
+        // (URL-encoded), consumed args are excluded from the body, and
+        // ${NAME} header placeholders are escaped for the credential
+        // resolver. This is how OCG tools compile — plain HTTP tasks.
+        ToolConfig tool = ToolConfig.builder()
+                .name("ocg_get_entity")
+                .description("Fetch one entity")
+                .toolType("http")
+                .config(Map.of(
+                        "url", "https://us.ocg.example.com",
+                        "method", "GET",
+                        "pathTemplate", "/api/v1/entities/{entity_id}",
+                        "queryParams", List.of("depth", "limit"),
+                        "headers", Map.of("Authorization", "Bearer ${OCG_US_KEY}")))
+                .build();
+
+        Object[] result = new ToolCompiler().buildEnrichTask("agent", "agent_llm", List.of(tool), "");
+        String script = (String) ((WorkflowTask) result[0]).getInputParameters().get("expression");
+
+        assertThat(script).contains("\"url\":\"https://us.ocg.example.com\"");
+        assertThat(script).contains("\"pathTemplate\":\"/api/v1/entities/{entity_id}\"");
+        assertThat(script).contains("\"queryParams\":[\"depth\",\"limit\"]");
+        // Standalone mode: ${OCG_US_KEY} escaped to #{OCG_US_KEY} so
+        // Conductor's parameter binding doesn't consume it.
+        assertThat(script).contains("Bearer #{OCG_US_KEY}");
+        // The templating machinery itself must be in the script.
+        assertThat(script).contains("pathTemplate");
+        assertThat(script).contains("encodeURIComponent");
+    }
+
+    @Test
+    void testBuildEnrichTask_plainHttpToolUnchanged() {
+        // http tools without templating keys keep the existing static-uri,
+        // args-as-body shape — no behavior change for the established path.
+        ToolConfig tool = ToolConfig.builder()
+                .name("weather")
+                .description("Get weather")
+                .toolType("http")
+                .config(Map.of("url", "https://api.weather.com", "method", "POST"))
+                .build();
+
+        Object[] result = new ToolCompiler().buildEnrichTask("agent", "agent_llm", List.of(tool), "");
+        String script = (String) ((WorkflowTask) result[0]).getInputParameters().get("expression");
+
+        assertThat(script).contains("\"url\":\"https://api.weather.com\"");
+        assertThat(script).doesNotContain("\"weather\":{\"pathTemplate\"");
+    }
 }

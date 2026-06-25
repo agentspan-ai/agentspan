@@ -79,6 +79,7 @@ Agent.builder()
     .name(String)                          // required
     .model(String)                         // required
     .instructions(String)
+    .instructions(Supplier<String>)        // dynamic — re-evaluated on each run submission
     .instructionsTemplate(PromptTemplate)
     .introduction(String)
     .metadata(Map<String,Object>)
@@ -158,6 +159,49 @@ Agent.builder()
     .frameworkConfig(Map<String,Object>)
 
     .build()
+```
+
+---
+
+## @AgentDef annotation
+
+Declarative alternative to the builder — annotate a method to define an agent
+(see [Agents](concepts/agents.md#agentdef-annotation) for attribute details):
+
+```java
+import org.conductoross.conductor.ai.annotations.AgentDef;
+
+public class Weather {
+    @Tool(name = "get_weather", description = "Get weather for a city")
+    public String getWeather(String city) { return "Sunny, 72F in " + city; }
+
+    @AgentDef(model = "openai/gpt-4o")     // @Tool methods attach automatically
+    public String weatherbot() {
+        // returned String = instructions; no-arg form is lazy — re-evaluated per run
+        return "You are a weather assistant. Today is " + LocalDate.now() + ".";
+    }
+
+    @AgentDef(model = "openai/gpt-4o")     // optional Agent.Builder param = full builder API
+    public void researcher(Agent.Builder builder) {
+        builder.termination(new MaxMessageTermination(10));
+    }
+
+    @AgentDef                              // return Agent (or Agent.Builder) = full factory
+    public Agent reviewer() {
+        return Agent.builder().name("reviewer").model("openai/gpt-4o")
+                .instructions("Review the draft.").build();
+    }
+
+    @AgentDef(model = "openai/gpt-4o")     // return PromptTemplate = server-side template
+    public PromptTemplate support() {
+        return new PromptTemplate("customer-support", Map.of("tone", "friendly"));
+    }
+}
+```
+
+```java
+List<Agent> agents = Agent.fromInstance(instance);          // resolve all @AgentDef methods
+Agent agent       = Agent.fromInstance(instance, "name");   // resolve one by name
 ```
 
 ---

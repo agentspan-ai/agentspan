@@ -206,7 +206,7 @@ def _assert_tool_in_agent_def(
 # ── LLM Judge ──────────────────────────────────────────────────────────
 
 
-JUDGE_MODEL = os.environ.get("AGENTSPAN_JUDGE_MODEL", "claude-sonnet-4-20250514")
+JUDGE_MODEL = os.environ.get("AGENTSPAN_JUDGE_MODEL", "claude-sonnet-4-6")
 
 JUDGE_SYSTEM_PROMPT = """\
 You are a strict validation judge for a workflow compilation system.

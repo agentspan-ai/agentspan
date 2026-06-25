@@ -155,6 +155,12 @@ export interface AgentEvent {
   executionId?: string;
   guardrailName?: string;
   timestamp?: number;
+  /**
+   * Tools awaiting human approval. Present on `waiting` events (and carried
+   * straight through from the SSE payload). Mirrors {@link AgentStatus.pendingTool}
+   * so the gate can be read off the event without a `getStatus()` round-trip.
+   */
+  pendingTool?: PendingTool;
 }
 
 /**
@@ -170,7 +176,32 @@ export interface AgentStatus {
   reason?: string;
   currentTask?: string;
   messages: unknown[];
-  pendingTool?: { name: string; args: Record<string, unknown> };
+  pendingTool?: PendingTool;
+}
+
+/**
+ * A single tool call awaiting human approval. The {@link PendingTool} on a
+ * `waiting` event carries an array of these — one HUMAN task gates the
+ * whole batch with a single `{approved, reason}` verdict, so iterate
+ * `toolCalls` to see every tool covered by the gate.
+ */
+export interface PendingToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * Payload on a `waiting` SSE event. The legacy singular `tool_name` /
+ * `parameters` keys are always null (the underlying gate is per-batch,
+ * not per-tool) — read `toolCalls` for the real list.
+ */
+export interface PendingTool {
+  taskRefName: string;
+  toolCalls?: PendingToolCall[];
+  tool_name?: string | null;
+  parameters?: Record<string, unknown> | null;
+  response_schema?: unknown;
+  response_ui_schema?: unknown;
 }
 
 /**

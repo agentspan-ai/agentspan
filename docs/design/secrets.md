@@ -294,6 +294,7 @@ Key properties:
 - **Literal substring replace** (not regex) — safe for values containing metacharacters.
 - **JSON-aware** — values containing `"`, `\`, newlines, or other characters that JSON serialization escapes are still masked because the masker matches against unescaped text-node values, not the wire payload.
 - **Best effort.** If anything fails (parse error, no user context, no disclosures), the body passes through unchanged. Masking should never block a response.
+- **AgentSpan-owned paths only by default.** The advice always masks AgentSpan's own `/api/agent/*` reads. The raw Conductor `/api/workflow/{id}` read is host-owned, so masking it is **opt-in** via `agentspan.credentials.mask-workflow-reads=true` (default `false`) — this keeps the library from mutating an embedding host's workflow responses just by being on the classpath.
 - **Bounded retention.** `secret_disclosures` rows are pruned hourly by `SecretDisclosureService.pruneScheduled` with a default 30-day retention (configurable via `agentspan.secrets.disclosure-retention-days`). Older execution payloads remain readable but will not be masked — by design: a 30-day-old disclosed token should have been rotated anyway.
 
 What this does **not** cover:

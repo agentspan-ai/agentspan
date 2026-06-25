@@ -29,6 +29,7 @@ Agentspan is a durable runtime for AI agents. Execution state lives server-side,
 
 - [Deployment overview](deployment.md) - Local development, Docker, Helm, and Orkes Cloud.
 - [Self-hosting](self-hosting.md) - Run Agentspan in your own environment.
+- [OCG Sub-Agent integration](ocg-agent-flow.md) - Declare a retrieval sub-agent over the Open Context Graph from the SDK (`ocg_agent(url=..., credential=...)`).
 
 ## Examples
 

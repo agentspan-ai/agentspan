@@ -5,6 +5,7 @@ import org.conductoross.conductor.ai.AgentRuntime;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 
 import io.orkes.conductor.client.ApiClient;
@@ -45,5 +46,11 @@ public class AgentAutoConfiguration {
     @ConditionalOnMissingBean
     public AgentRuntime agentRuntime(ApiClient conductorClient, AgentConfig agentConfig) {
         return new AgentRuntime(conductorClient, agentConfig);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AgentCatalog agentCatalog(ApplicationContext context) {
+        return new AgentCatalog(context);
     }
 }

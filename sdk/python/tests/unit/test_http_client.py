@@ -17,18 +17,15 @@ from agentspan.agents.runtime.http_client import (
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-def _make_client(handler) -> AgentHttpClient:
-    """Create an AgentHttpClient backed by a mock transport."""
-    client = AgentHttpClient(
-        server_url="http://test-server/api",
-        auth_key="key1",
-        auth_secret="secret1",
-    )
-    # Override the lazy client with a mock-transport client that includes base headers
-    client._client = httpx.AsyncClient(
-        transport=httpx.MockTransport(handler),
-        headers=client._base_headers(),
-    )
+def _make_client(handler, **auth) -> AgentHttpClient:
+    """Create an AgentHttpClient backed by a mock transport.
+
+    Anonymous by default — pass api_key/auth_key/auth_secret to exercise auth.
+    """
+    client = AgentHttpClient(server_url="http://test-server/api", **auth)
+    # Override the lazy client with a mock-transport client. Auth headers are
+    # attached per-request by _auth_headers(), not as client defaults.
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return client
 
 
@@ -109,20 +106,6 @@ async def test_respond():
 
 
 @pytest.mark.asyncio
-async def test_auth_headers():
-    """Auth headers are sent with every request."""
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers.get("x-auth-key") == "key1"
-        assert request.headers.get("x-auth-secret") == "secret1"
-        return httpx.Response(200, json={"executionId": "wf-1"})
-
-    client = _make_client(handler)
-    await client.start_agent({"prompt": "test"})
-    await client.close()
-
-
-@pytest.mark.asyncio
 async def test_http_error_raises():
     """Non-2xx responses raise AgentAPIError (wrapping httpx.HTTPStatusError)."""
     from agentspan.agents.exceptions import AgentAPIError
@@ -178,79 +161,88 @@ async def test_close_idempotent():
     await client.close()  # should not raise
 
 
-# ── api_key Bearer auth (fix #4) ─────────────────────────────────────
-
-
-def _make_client_with_api_key(handler) -> AgentHttpClient:
-    """Create an AgentHttpClient with api_key (Bearer auth)."""
-    client = AgentHttpClient(
-        server_url="http://test-server/api",
-        api_key="my-bearer-token",
-    )
-    client._client = httpx.AsyncClient(
-        transport=httpx.MockTransport(handler),
-        headers=client._base_headers(),
-    )
-    return client
+# ── Auth: X-Authorization via api_key or minted token (orkes hosts) ──────
 
 
 @pytest.mark.asyncio
-async def test_api_key_sends_bearer_auth():
-    """api_key should produce Authorization: Bearer header."""
+async def test_anonymous_sends_no_auth_header():
+    """No api_key and no auth_key/secret → no X-Authorization header."""
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers.get("authorization") == "Bearer my-bearer-token"
-        # Should NOT have X-Auth-Key when api_key is used
-        assert "x-auth-key" not in request.headers
+        assert "x-authorization" not in request.headers
         return httpx.Response(200, json={"executionId": "wf-1"})
 
-    client = _make_client_with_api_key(handler)
+    client = _make_client(handler)
     await client.start_agent({"prompt": "test"})
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_api_key_sends_x_authorization():
+    """An explicit api_key is already a token — sent directly, no /token call."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path != "/api/token", "api_key must not mint a token"
+        assert request.headers.get("x-authorization") == "my-api-token"
+        return httpx.Response(200, json={"executionId": "wf-1"})
+
+    client = _make_client(handler, api_key="my-api-token")
+    await client.start_agent({"prompt": "test"})
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_auth_key_mints_token_and_caches_it():
+    """auth_key/auth_secret mint a JWT via POST /token, cached across requests."""
+    token_calls = {"count": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/token":
+            token_calls["count"] += 1
+            body = json.loads(request.content)
+            assert body == {"keyId": "key1", "keySecret": "secret1"}
+            return httpx.Response(200, json={"token": "minted-token"})
+        assert request.headers.get("x-authorization") == "minted-token"
+        return httpx.Response(200, json={"executionId": "wf-1"})
+
+    client = _make_client(handler, auth_key="key1", auth_secret="secret1")
+    await client.start_agent({"prompt": "one"})
+    await client.start_agent({"prompt": "two"})
+    # opaque token → exp unknown → cached until rejected; minted exactly once
+    assert token_calls["count"] == 1
     await client.close()
 
 
 @pytest.mark.asyncio
 async def test_api_key_takes_precedence_over_auth_key():
-    """When both api_key and auth_key are set, api_key (Bearer) wins."""
+    """When both api_key and auth_key are set, api_key wins and no token is minted."""
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers.get("authorization") == "Bearer my-api-key"
-        assert "x-auth-key" not in request.headers
+        assert request.url.path != "/api/token", "api_key must not mint a token"
+        assert request.headers.get("x-authorization") == "my-api-key"
         return httpx.Response(200, json={"executionId": "wf-1"})
 
-    client = AgentHttpClient(
-        server_url="http://test-server/api",
+    client = _make_client(
+        handler,
         api_key="my-api-key",
         auth_key="my-auth-key",
         auth_secret="my-auth-secret",
-    )
-    client._client = httpx.AsyncClient(
-        transport=httpx.MockTransport(handler),
-        headers=client._base_headers(),
     )
     await client.start_agent({"prompt": "test"})
     await client.close()
 
 
 @pytest.mark.asyncio
-async def test_legacy_auth_key_still_works():
-    """When api_key is empty, auth_key/auth_secret headers are sent."""
+async def test_token_mint_failure_degrades_to_anonymous():
+    """A failing /token endpoint logs a warning and the request proceeds unauthenticated."""
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers.get("x-auth-key") == "legacy-key"
-        assert request.headers.get("x-auth-secret") == "legacy-secret"
-        assert "authorization" not in request.headers
+        if request.url.path == "/api/token":
+            return httpx.Response(503, text="token service down")
+        assert "x-authorization" not in request.headers
         return httpx.Response(200, json={"executionId": "wf-1"})
 
-    client = AgentHttpClient(
-        server_url="http://test-server/api",
-        api_key="",
-        auth_key="legacy-key",
-        auth_secret="legacy-secret",
-    )
-    client._client = httpx.AsyncClient(
-        transport=httpx.MockTransport(handler),
-        headers=client._base_headers(),
-    )
-    await client.start_agent({"prompt": "test"})
+    client = _make_client(handler, auth_key="key1", auth_secret="secret1")
+    result = await client.start_agent({"prompt": "test"})
+    assert result["executionId"] == "wf-1"
     await client.close()

@@ -40,12 +40,22 @@ class EnrichToolsScriptTest {
         graalCtx.close();
     }
 
-    @SuppressWarnings("unchecked")
     private List<Map<String, Object>> enrich(String knownNamesJson, String toolCallsJson) throws Exception {
         // All optional config maps are empty so every name falls through to the
         // generic SIMPLE-or-unknown branch. That's the path the harness uses.
-        String script =
-                JavaScriptBuilder.enrichToolsScript("{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", knownNamesJson);
+        return enrichWithConfigs("{}", "{}", knownNamesJson, toolCallsJson);
+    }
+
+    private List<Map<String, Object>> enrichWithAgentTools(
+            String agentToolJson, String knownNamesJson, String toolCallsJson) throws Exception {
+        return enrichWithConfigs("{}", agentToolJson, knownNamesJson, toolCallsJson);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> enrichWithConfigs(
+            String httpJson, String agentToolJson, String knownNamesJson, String toolCallsJson) throws Exception {
+        String script = JavaScriptBuilder.enrichToolsScript(
+                httpJson, "{}", "{}", agentToolJson, "{}", "{}", "{}", "{}", knownNamesJson);
         // Wrap so the script's IIFE return is captured AND we get a JSON string
         // back — Graal's Value.toString() is JS source, not JSON.
         String wrapped = "var $ = {"
@@ -163,6 +173,29 @@ class EnrichToolsScriptTest {
     }
 
     @Test
+    void agentToolDispatchInjectsTodayDateInput() throws Exception {
+        // Sub-agents whose prompts anchor relative dates ("recent", "last
+        // week") reference ${workflow.input.__today__}. The dispatch script
+        // runs per execution, so the date it injects is the actual current
+        // date — unlike anything computed at compile/boot time, which
+        // drifts on a long-running server.
+        String agentTools = "{\"helper_agent\": {\"workflowName\": \"_helper_agent\"}}";
+        String known = "{\"helper_agent\": true}";
+        String toolCalls = "[{\"name\": \"helper_agent\", \"taskReferenceName\": \"c1\","
+                + " \"inputParameters\": {\"request\": \"find recent alerts\"}}]";
+
+        List<Map<String, Object>> tasks = enrichWithAgentTools(agentTools, known, toolCalls);
+        assertThat(tasks).hasSize(1);
+        Map<String, Object> t = tasks.get(0);
+        assertThat(t.get("type")).isEqualTo("SUB_WORKFLOW");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> ip = (Map<String, Object>) t.get("inputParameters");
+        assertThat((String) ip.get("__today__"))
+                .as("dispatch must inject today's UTC date as __today__ sub-workflow input")
+                .matches("\\d{4}-\\d{2}-\\d{2}");
+    }
+
+    @Test
     void mixedKnownAndUnknownInOneTurn() throws Exception {
         String known = "{\"shell\": true}";
         String toolCalls = "["
@@ -173,5 +206,50 @@ class EnrichToolsScriptTest {
         assertThat(tasks).hasSize(2);
         assertThat(tasks.get(0).get("type")).isEqualTo("SIMPLE");
         assertThat(tasks.get(1).get("type")).isEqualTo("INLINE");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void httpPathTemplateBuildsUriAndPrunesBody() throws Exception {
+        // OCG-style tool: GET with a path param and query params. The script
+        // must URL-encode args into the URI and drop consumed args from the
+        // body.
+        String httpCfg = "{\"ocg_get_entity\": {"
+                + "\"url\": \"https://us.ocg.example.com\","
+                + "\"method\": \"GET\","
+                + "\"pathTemplate\": \"/api/v1/entities/{entity_id}\","
+                + "\"queryParams\": [\"depth\", \"limit\"],"
+                + "\"headers\": {\"Authorization\": \"Bearer #{OCG_US_KEY}\"}}}";
+        String toolCalls = "[{\"name\": \"ocg_get_entity\", \"taskReferenceName\": \"call_1\","
+                + " \"inputParameters\": {\"entity_id\": \"entity_01/AB C\", \"depth\": 2}}]";
+
+        List<Map<String, Object>> tasks = enrichWithConfigs(httpCfg, "{}", "{\"ocg_get_entity\": true}", toolCalls);
+
+        assertThat(tasks).hasSize(1);
+        Map<String, Object> task = tasks.get(0);
+        assertThat(task.get("type")).isEqualTo("HTTP");
+        Map<String, Object> req =
+                (Map<String, Object>) ((Map<String, Object>) task.get("inputParameters")).get("http_request");
+        assertThat(req.get("uri")).isEqualTo("https://us.ocg.example.com/api/v1/entities/entity_01%2FAB%20C?depth=2");
+        assertThat(req.get("method")).isEqualTo("GET");
+        assertThat((Map<String, Object>) req.get("headers")).containsEntry("Authorization", "Bearer #{OCG_US_KEY}");
+        // entity_id and depth were consumed; limit was never supplied.
+        assertThat((Map<String, Object>) req.get("body")).isEmpty();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void httpWithoutTemplateKeepsArgsAsBody() throws Exception {
+        // Established http_tool shape: static uri, all args as body.
+        String httpCfg = "{\"weather\": {\"url\": \"https://api.weather.com\", \"method\": \"POST\"}}";
+        String toolCalls = "[{\"name\": \"weather\", \"taskReferenceName\": \"call_1\","
+                + " \"inputParameters\": {\"city\": \"SF\"}}]";
+
+        List<Map<String, Object>> tasks = enrichWithConfigs(httpCfg, "{}", "{\"weather\": true}", toolCalls);
+
+        Map<String, Object> req =
+                (Map<String, Object>) ((Map<String, Object>) tasks.get(0).get("inputParameters")).get("http_request");
+        assertThat(req.get("uri")).isEqualTo("https://api.weather.com");
+        assertThat((Map<String, Object>) req.get("body")).containsEntry("city", "SF");
     }
 }

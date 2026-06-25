@@ -141,7 +141,6 @@ public class AgentService {
                 def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
-        stampCredentialContext(metadata, config);
         def.setMetadata(metadata);
 
         Set<String> workerNames = collectSimpleTaskNames(def);
@@ -228,7 +227,6 @@ public class AgentService {
                 def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
-        stampCredentialContext(metadata, config);
         def.setMetadata(metadata);
 
         // 2. Register workflow definition (upsert)
@@ -277,7 +275,6 @@ public class AgentService {
                 def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
-        stampCredentialContext(metadata, config);
         def.setMetadata(metadata);
 
         // 2. Register workflow definition (upsert)
@@ -299,7 +296,8 @@ public class AgentService {
         // impersonates it during decide so sub-workflows inherit attribution, and its
         // workers' poll-time secret substitution REQUIRES it (tasks of workflows without
         // createdBy fail to poll). Stock Conductor simply records the value.
-        String principal = RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse(null);
+        String principal =
+                RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse(null);
         if (principal != null) {
             startReq.setCreatedBy(principal);
         }
@@ -766,32 +764,6 @@ public class AgentService {
                 agentDef.put("skillRef", request.getSkillRef());
             }
             metadata.put("agentDef", agentDef);
-        }
-    }
-
-    /**
-     * Stamp the credential-resolution context onto the WorkflowDef metadata so a
-     * workflow started WITHOUT a pre-minted execution token (inbound webhook, UI,
-     * schedule — any path that bypasses {@link #start}) can still mint one.
-     *
-     * <p>{@code agentspan_credential_user} is the deploying principal: the agent
-     * runs with ITS deployer's stored credentials regardless of who triggered it.
-     * {@code agentspan_declared_credentials} bounds what that minted token may
-     * resolve, mirroring the allow-list {@link #start} mints against. The mint
-     * itself happens at runtime in {@code AgentEventListener.onWorkflowStarted}.</p>
-     */
-    private void stampCredentialContext(Map<String, Object> metadata, AgentConfig config) {
-        try {
-            metadata.put("agentspan_declared_credentials", extractDeclaredCredentials(config));
-            RequestContextHolder.get()
-                    .map(ctx -> ctx.getUserId())
-                    .filter(uid -> uid != null && !uid.isEmpty())
-                    .ifPresent(uid -> metadata.put("agentspan_credential_user", uid));
-        } catch (Exception e) {
-            log.warn(
-                    "Failed to stamp credential context for agent '{}': {}",
-                    config.getName(),
-                    e.getMessage());
         }
     }
 
@@ -1321,6 +1293,11 @@ public class AgentService {
                 if (task.getInputData() != null) {
                     pendingTool.put("tool_name", task.getInputData().get("tool_name"));
                     pendingTool.put("parameters", task.getInputData().get("parameters"));
+                    List<Map<String, Object>> toolCalls =
+                            AgentHumanTask.extractToolCalls(task.getInputData().get("tool_calls"));
+                    if (toolCalls != null) {
+                        pendingTool.put("toolCalls", toolCalls);
+                    }
                     if (task.getInputData().get("response_schema") != null) {
                         pendingTool.put("response_schema", task.getInputData().get("response_schema"));
                     }

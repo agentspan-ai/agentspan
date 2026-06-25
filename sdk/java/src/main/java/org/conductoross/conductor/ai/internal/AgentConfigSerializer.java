@@ -72,8 +72,11 @@ public class AgentConfigSerializer {
                 map.put("model", agent.getModel());
             }
             // OpenAI uses `instructions`; ADK uses `instruction` (singular).
-            if (agent.getInstructions() != null && !agent.getInstructions().isEmpty()) {
-                map.put("google_adk".equals(fw) ? "instruction" : "instructions", agent.getInstructions());
+            // Resolve once: dynamic instructions are supplier-backed and must not
+            // be re-evaluated within a single serialization.
+            String fwInstructions = agent.getInstructions();
+            if (fwInstructions != null && !fwInstructions.isEmpty()) {
+                map.put("google_adk".equals(fw) ? "instruction" : "instructions", fwInstructions);
             }
             // Tools: framework normalizers (OpenAINormalizer, GoogleADKNormalizer)
             // expect the worker_ref shape `{_worker_ref, description, parameters}`
@@ -170,8 +173,13 @@ public class AgentConfigSerializer {
                 tmpl.put("version", pt.getVersion());
             }
             agentMap.put("instructions", tmpl);
-        } else if (agent.getInstructions() != null && !agent.getInstructions().isEmpty()) {
-            agentMap.put("instructions", agent.getInstructions());
+        } else {
+            // Resolve once: dynamic instructions are supplier-backed and must not
+            // be re-evaluated within a single serialization.
+            String instructions = agent.getInstructions();
+            if (instructions != null && !instructions.isEmpty()) {
+                agentMap.put("instructions", instructions);
+            }
         }
 
         // Tools

@@ -252,6 +252,71 @@ github = mcp_tool(
 )
 ```
 
+### ocg_agent() / ocg_tools() — OCG Retrieval Sub-Agent
+
+OCG (Open Context Graph) is a retrieval engine over a knowledge graph of
+entities (messages, channels, people, code). The SDK is the canonical — and
+only — home of the OCG integration: the tools compile to plain Conductor
+HTTP tasks (path-templated), so no OCG-specific code exists server-side.
+OCG is **opt-in per agent**: nothing is auto-injected.
+
+```python
+from agentspan.agents import Agent, agent_tool
+from agentspan.agents.ocg import ocg_agent
+
+retriever = ocg_agent(model="openai/gpt-4o-mini",
+                      url="https://ocg.example.com", credential="OCG_KEY")
+main = Agent(
+    name="support",
+    model="openai/gpt-4o",
+    tools=[agent_tool(retriever)],   # main agent delegates retrieval
+    instructions="...",
+)
+```
+
+Multi-instance (data residency / multi-tenancy) — bind each retriever to its
+own OCG instance:
+
+```python
+us = ocg_agent(name="ocg_us", model="openai/gpt-4o-mini",
+               url="https://us.ocg.example.com", credential="OCG_US_KEY")
+ca = ocg_agent(name="ocg_canada", model="openai/gpt-4o-mini",
+               url="https://ca.ocg.example.com", credential="OCG_CA_KEY")
+
+router = Agent(name="na_support", model="openai/gpt-4o",
+               tools=[agent_tool(us), agent_tool(ca)], instructions="...")
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `model` | str | required | LLM for the retrieval agent's own turns |
+| `name` | str | `"ocg_agent"` | **Must be distinct per OCG instance** — child workflows are registered by agent name |
+| `url` | str | required | OCG instance base URL — every retriever binds its own instance; there is no server-side default |
+| `credential` | str | None | Credential-store entry holding the OCG bearer token. Resolved server-side at execution — the secret never appears in Python code or serialized configs. Requires `url` |
+| `instructions` | str | canned `OCG_SYSTEM_PROMPT` | Override the retrieval prompt |
+| `max_turns` | int | 10 | Retrieval loop budget |
+| `query` / `entities` / `memory` | bool | True | Tool subset switches |
+
+For a fully custom retrieval agent, take the raw tools instead:
+
+```python
+from agentspan.agents.ocg import ocg_tools
+
+my_retriever = Agent(
+    name="retriever",
+    model="anthropic/claude-haiku-4-5",
+    instructions="My custom retrieval prompt...",
+    tools=ocg_tools(url="https://us.ocg.example.com",
+                    credential="OCG_US_KEY",
+                    memory=False),          # retrieval-only subset
+)
+```
+
+Non-SDK clients (raw REST, UI) can inline the equivalent agent JSON: an
+`agent_tool` whose `agentConfig` carries `tools` entries with
+`toolType: "ocg_query"` … `"ocg_memory_delete"` and (optionally)
+`config: {"url": ..., "credential": ...}` per tool.
+
 ### Mixing Tool Types
 
 Agents can use Python tools, HTTP tools, and MCP tools together:

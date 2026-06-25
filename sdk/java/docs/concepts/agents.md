@@ -14,6 +14,78 @@ Agent agent = Agent.builder()
 
 Every field below is optional.
 
+### @AgentDef annotation
+
+Instead of the builder, a method can be annotated with `@AgentDef` (the Java counterpart of the Python SDK's `@agent` decorator). The method body returns the instructions; `@Tool` and `@GuardrailDef` methods on the same object are attached automatically.
+
+```java
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.annotations.AgentDef;
+import org.conductoross.conductor.ai.annotations.Tool;
+
+public class Weather {
+    @Tool(name = "get_weather", description = "Get weather for a city")
+    public String getWeather(String city) { return "Sunny, 72F in " + city; }
+
+    @AgentDef(model = "openai/gpt-4o")
+    public String weatherbot() {
+        return "You are a weather assistant.";
+    }
+}
+
+Agent agent = Agent.fromInstance(new Weather(), "weatherbot");
+```
+
+| Attribute | Default | Description |
+|---|---|---|
+| `name` | method name | Agent name. |
+| `model` | `""` | `"provider/model"`. When empty and used as a sub-agent, inherits the parent's model. |
+| `instructions` | `""` | Static system prompt. A non-empty `String` returned by the method wins over this attribute. |
+| `tools` | `{"*"}` | Names of `@Tool` methods on the same object. `{"*"}` = all, `{}` = none. |
+| `guardrails` | `{"*"}` | Names of `@GuardrailDef` methods on the same object. Same wildcard rules. |
+| `agents` | `{}` | Names of other `@AgentDef` methods on the same object, used as sub-agents. |
+| `strategy` | `HANDOFF` | Multi-agent strategy. |
+| `maxTurns` | `25` | Maximum agent loop iterations. |
+| `maxTokens` | unset | LLM `max_tokens` (`0` = unset). |
+| `temperature` | unset | Sampling temperature (`NaN` = unset). |
+| `credentials` | `{}` | Agent-level credential names. |
+| `contextWindowBudget` | unset | Proactive condensation threshold (`0` = unset). |
+
+**Method contract.** The return type declares what the method provides:
+
+| Return type | Meaning |
+|---|---|
+| `void` | Nothing — the annotation attributes alone define the agent. |
+| `String` | Dynamic instructions. A no-arg method is **lazy**: re-invoked on every run submission (when the config is serialized), so the prompt can reflect current state. A non-empty result wins over the `instructions` attribute. |
+| `PromptTemplate` | Server-side instructions template (`instructionsTemplate`); invoked once. |
+| `Agent.Builder` | The definition itself — the returned builder is built. |
+| `Agent` | The definition itself, returned as-is (full factory, CrewAI-style). |
+
+The method may take no parameters, or a single `Agent.Builder` parameter — the escape hatch to the full builder API. The builder arrives pre-populated from the annotation and the discovered tools/guardrails/sub-agents; the method body can then apply anything the builder supports, including sub-agents defined in other classes. Builder-param methods are invoked exactly once (a customizer must not be replayed per run):
+
+```java
+public class Research {
+    @AgentDef(model = "openai/gpt-4o", instructions = "You are a researcher.")
+    public void researcher(Agent.Builder builder) {
+        builder.termination(new MaxMessageTermination(10))
+               .agents(Agent.fromInstance(new Editing(), "editor"));
+    }
+
+    // full factory — annotation is a discovery marker; attributes other than name are rejected
+    @AgentDef
+    public Agent reviewer() {
+        return Agent.builder().name("reviewer").model("openai/gpt-4o")
+                .instructions("Review the draft.").build();
+    }
+}
+```
+
+`Agent.fromInstance(obj)` resolves all `@AgentDef` methods on an object; `Agent.fromInstance(obj, "name")` resolves one. For factory methods the lookup name is still the annotation `name`/method name, while the agent keeps the name the factory set.
+
+Dynamic instructions are also available directly on the builder, without the annotation: `Agent.builder().instructions(() -> "Today is " + LocalDate.now())` — the supplier is re-evaluated on each run submission, matching the Python SDK's callable instructions.
+
+**Discovery rules.** `@AgentDef` methods must be `public` (a non-public annotated method throws rather than being silently ignored) and cannot also carry `@Tool` or `@GuardrailDef`. Discovery walks the full type hierarchy — superclasses and interfaces (including `default` methods) — and the nearest annotated declaration wins. An unannotated override does *not* hide the agent: the ancestor's annotation is used and invocation dispatches to the override, so CGLIB-proxied Spring beans (`@Transactional` etc.) keep working. In Spring Boot apps, the auto-configured [`AgentCatalog`](../spring-boot.md) collects `@AgentDef` agents from every bean.
+
 ### Identity
 
 | Builder method | Type | Default | Description |

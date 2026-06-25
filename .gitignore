@@ -1,3 +1,6 @@
+# OCG smoke test local venv
+/e2e/ocg/venv/
+
 .DS_Store
 .idea/
 __pycache__/
