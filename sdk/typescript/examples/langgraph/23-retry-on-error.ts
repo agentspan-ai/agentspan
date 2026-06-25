@@ -102,14 +102,13 @@ function formatOutput(state: State): Partial<State> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(RetryState);
-builder.addNode('api_call', retryWrapper);
-builder.addNode('format', formatOutput);
-builder.addEdge(START, 'api_call');
-builder.addEdge('api_call', 'format');
-builder.addEdge('format', END);
-
-const graph = builder.compile({ name: "retry_agent" });
+const graph = new StateGraph(RetryState)
+  .addNode('api_call', retryWrapper)
+  .addNode('format', formatOutput)
+  .addEdge(START, 'api_call')
+  .addEdge('api_call', 'format')
+  .addEdge('format', END)
+  .compile({ name: "retry_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

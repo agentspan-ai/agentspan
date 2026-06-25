@@ -17,9 +17,11 @@ agent = Agent(
     ],
 )
 
+prompt = "How do I contact support?"
+
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        result = rt.run(agent, "How do I contact support?")
+        result = rt.run(agent, prompt)
         result.print_result()
 
         # Production pattern:

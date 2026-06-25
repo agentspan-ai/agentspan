@@ -105,25 +105,23 @@ async function handleGeneral(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(SupportState);
-builder.addNode('greet', greet);
-builder.addNode('classify', classify);
-builder.addNode('billing', handleBilling);
-builder.addNode('technical', handleTechnical);
-builder.addNode('general', handleGeneral);
-
-builder.addEdge(START, 'greet');
-builder.addEdge('greet', 'classify');
-builder.addConditionalEdges('classify', routeCategory, {
-  billing: 'billing',
-  technical: 'technical',
-  general: 'general',
-});
-builder.addEdge('billing', END);
-builder.addEdge('technical', END);
-builder.addEdge('general', END);
-
-const graph = builder.compile({ name: "customer_support" });
+const graph = new StateGraph(SupportState)
+  .addNode('greet', greet)
+  .addNode('classify', classify)
+  .addNode('billing', handleBilling)
+  .addNode('technical', handleTechnical)
+  .addNode('general', handleGeneral)
+  .addEdge(START, 'greet')
+  .addEdge('greet', 'classify')
+  .addConditionalEdges('classify', routeCategory, {
+    billing: 'billing',
+    technical: 'technical',
+    general: 'general',
+  })
+  .addEdge('billing', END)
+  .addEdge('technical', END)
+  .addEdge('general', END)
+  .compile({ name: "customer_support" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

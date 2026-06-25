@@ -49,7 +49,6 @@ const checkGithubAuth = tool(
     name: 'check_github_auth',
     description: 'Check if GitHub authentication is available.',
     inputSchema: { type: 'object', properties: {} },
-    isolated: false,
     credentials: ['GITHUB_TOKEN'],
   },
 );

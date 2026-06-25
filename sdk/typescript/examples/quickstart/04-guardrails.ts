@@ -13,6 +13,7 @@ export const agent = new Agent({
     new RegexGuardrail({
       name: 'no_emails',
       patterns: ['[\\w.+-]+@[\\w-]+\\.[\\w.-]+'],
+      mode: 'block',
       message: 'Remove email addresses from your response.',
       onFail: 'retry',
     }),

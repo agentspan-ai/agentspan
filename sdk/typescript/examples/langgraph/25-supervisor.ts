@@ -101,24 +101,22 @@ function route(state: State): string {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(SupervisorState);
-builder.addNode('supervisor', supervisor);
-builder.addNode('researcher', researcher);
-builder.addNode('writer', writer);
-builder.addNode('editor', editor);
-
-builder.addEdge(START, 'supervisor');
-builder.addConditionalEdges('supervisor', route, {
-  researcher: 'researcher',
-  writer: 'writer',
-  editor: 'editor',
-  FINISH: END,
-});
-builder.addEdge('researcher', 'supervisor');
-builder.addEdge('writer', 'supervisor');
-builder.addEdge('editor', 'supervisor');
-
-const graph = builder.compile({ name: "supervisor_multiagent" });
+const graph = new StateGraph(SupervisorState)
+  .addNode('supervisor', supervisor)
+  .addNode('researcher', researcher)
+  .addNode('writer', writer)
+  .addNode('editor', editor)
+  .addEdge(START, 'supervisor')
+  .addConditionalEdges('supervisor', route, {
+    researcher: 'researcher',
+    writer: 'writer',
+    editor: 'editor',
+    FINISH: END,
+  })
+  .addEdge('researcher', 'supervisor')
+  .addEdge('writer', 'supervisor')
+  .addEdge('editor', 'supervisor')
+  .compile({ name: "supervisor_multiagent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

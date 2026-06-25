@@ -18,7 +18,7 @@ import { llmModel } from './settings';
 
 const addItem = tool(
   async (args: { item: string }, context?: ToolContext) => {
-    const items: string[] = context?.state?.shopping_list ?? [];
+    const items = (context?.state?.shopping_list as string[] | undefined) ?? [];
     items.push(args.item);
     if (context?.state) {
       context.state.shopping_list = items;
@@ -40,7 +40,7 @@ const addItem = tool(
 
 const getList = tool(
   async (_args: Record<string, never>, context?: ToolContext) => {
-    const items: string[] = context?.state?.shopping_list ?? [];
+    const items = (context?.state?.shopping_list as string[] | undefined) ?? [];
     return { items, total_items: items.length };
   },
   {

@@ -665,8 +665,8 @@ function dump_47() {
     tools: [getFacts],
     callbacks: [
       {
-        onModelStart: () => {},
-        onModelEnd: () => {},
+        onModelStart: async (_agentName: string, _messages: unknown[]) => {},
+        onModelEnd: async (_agentName: string, _response: unknown) => {},
       },
     ],
   });

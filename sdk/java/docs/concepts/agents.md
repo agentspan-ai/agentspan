@@ -175,9 +175,9 @@ Agent agent = Agent.builder()
     .credentials("GITHUB_TOKEN", "JIRA_API_KEY")
     .build();
 
-// In the tool:
+// In the tool — read the resolved secret off the injected ToolContext:
 public String createIssue(String title, ToolContext ctx) {
-    String token = Credentials.get("GITHUB_TOKEN");
+    String token = ctx.getCredential("GITHUB_TOKEN");
     // ...
 }
 ```
@@ -212,6 +212,9 @@ Agent agent = Agent.builder()
     })
     .build();
 ```
+
+For composable, reusable hooks — including `onToolStart`/`onToolEnd` and agent-level
+start/end — use a `CallbackHandler`. See [Callbacks](callbacks.md).
 
 ### Fallback
 

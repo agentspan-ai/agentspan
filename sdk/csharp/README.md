@@ -2,19 +2,23 @@
 
 The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
 
-- **Target**: .NET 8
-- **Dependencies**: BCL only (`System.Text.Json`, `System.Net.Http`) — no external packages
+- **Target**: .NET 10
+- **Dependencies**: `conductor-csharp` (worker polling / Conductor client) and `Newtonsoft.Json`; agent I/O uses `System.Text.Json`
 
 ## Quick Start
 
 ### 1. Prerequisites
 
-- .NET 8 SDK (`dotnet --version` should show `8.x.x`)
+- .NET 10 SDK (`dotnet --version` should show `10.x.x`)
 - Agentspan server running (default: `http://localhost:6767`)
 
-### 2. Reference the library
+### 2. Add the package
 
-In your `.csproj`:
+```bash
+dotnet add package Agentspan
+```
+
+Or, for in-repo / unpublished use, reference the project directly in your `.csproj`:
 
 ```xml
 <ItemGroup>

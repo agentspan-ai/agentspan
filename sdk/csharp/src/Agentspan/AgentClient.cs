@@ -6,20 +6,93 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Agentspan.Scheduling;
 
 namespace Agentspan;
 
-internal sealed class AgentHttpClient : IDisposable
+/// <summary>
+/// Control-plane client for the Agentspan <c>/agent/*</c> API (compile, deploy,
+/// start, status, respond, stream) plus convenience entry points to <b>run</b> and
+/// <b>schedule</b> agents.
+///
+/// <para><b>Run is control-plane only:</b> <see cref="RunAsync(Agent, string, string?, IEnumerable{string}?, Plans.Plan?, CancellationToken)"/>
+/// starts the agent and polls to a result — it does NOT register or poll local tool
+/// workers. Agents that use local <c>[Tool]</c> functions must run through
+/// <see cref="AgentRuntime"/>, which owns worker orchestration. For LLM-only agents,
+/// remote tools (HTTP/MCP), or pre-deployed workflows, this client suffices.</para>
+/// </summary>
+public sealed class AgentClient : IDisposable
 {
     private readonly HttpClient _client;
     private readonly string _baseUrl;
+    private Schedules? _schedules;
 
-    public AgentHttpClient(string serverUrl, string? authKey = null, string? authSecret = null)
+    public AgentClient(string serverUrl, string? authKey = null, string? authSecret = null)
     {
         _baseUrl = serverUrl.TrimEnd('/');
-        _client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        if (authKey    is not null) _client.DefaultRequestHeaders.Add("X-Auth-Key", authKey);
-        if (authSecret is not null) _client.DefaultRequestHeaders.Add("X-Auth-Secret", authSecret);
+        // Auth is attached per-request by AgentAuthHandler: it mints/caches a JWT
+        // from key+secret (or passes an explicit key token through) and sends
+        // X-Authorization — matching the Python/TS SDKs and working against
+        // Orkes-secured servers. No credentials → no header (OSS anonymous).
+        var handler = new AgentAuthHandler(_baseUrl, authKey, authSecret)
+        {
+            InnerHandler = new HttpClientHandler(),
+        };
+        _client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
+    }
+
+    // ── Run / start / deploy / schedule (agent-level, control-plane) ──────────
+
+    /// <summary>
+    /// Compile + register + start an agent, then poll to a result.
+    /// Control-plane only — does NOT register local tool workers (use
+    /// <see cref="AgentRuntime.RunAsync"/> for agents with local <c>[Tool]</c> functions).
+    /// </summary>
+    public async Task<AgentResult> RunAsync(
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null, Plans.Plan? plan = null, CancellationToken ct = default)
+    {
+        var handle = await StartAsync(agent, prompt, sessionId, media, plan, ct);
+        return await handle.WaitAsync(ct);
+    }
+
+    /// <summary>Compile + register + start an agent; returns a handle. No local workers.</summary>
+    public async Task<AgentHandle> StartAsync(
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null, Plans.Plan? plan = null, CancellationToken ct = default)
+    {
+        var payload = AgentConfigSerializer.Serialize(agent, prompt, sessionId ?? "", media);
+        if (plan is not null) payload["static_plan"] = plan.ToJson();
+        var executionId = await StartAsync(payload, ct);
+        return new AgentHandle(executionId, this);
+    }
+
+    /// <summary>Compile + register one or more agents on the server (no execution).</summary>
+    public async Task<DeploymentInfo[]> DeployAsync(params Agent[] agents)
+    {
+        var results = new DeploymentInfo[agents.Length];
+        for (int i = 0; i < agents.Length; i++)
+        {
+            var cfg = AgentConfigSerializer.SerializeAgent(agents[i]);
+            var registeredName = await DeployAsync(cfg);
+            results[i] = new DeploymentInfo(RegisteredName: registeredName, AgentName: agents[i].Name);
+        }
+        return results;
+    }
+
+    /// <summary>Cron-schedule lifecycle API (save/list/pause/resume/delete/runNow/preview/reconcile).</summary>
+    public Schedules Schedules => _schedules ??= new Schedules(_client, _baseUrl);
+
+    /// <summary>
+    /// Deploy an agent and reconcile its cron schedules declaratively (upsert these,
+    /// prune any others for the agent). Pass an empty list to purge all schedules.
+    /// </summary>
+    public async Task<DeploymentInfo> ScheduleAsync(
+        Agent agent, IEnumerable<Schedule> schedules, CancellationToken ct = default)
+    {
+        var info = (await DeployAsync(agent))[0];
+        await Schedules.ReconcileAsync(agent.Name, schedules, ct);
+        return info;
     }
 
     // ── Agent API ───────────────────────────────────────────

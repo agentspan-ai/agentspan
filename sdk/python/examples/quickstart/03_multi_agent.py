@@ -16,10 +16,14 @@ writer = Agent(
 )
 
 pipeline = researcher >> writer
+# Exposed as `agent` so aggregate runners (e.g. quickstart/run_all.py) can pick it up.
+agent = pipeline
+
+prompt = "Quantum computing"
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        result = rt.run(pipeline, "Quantum computing")
+        result = rt.run(pipeline, prompt)
         result.print_result()
 
         # Production pattern:

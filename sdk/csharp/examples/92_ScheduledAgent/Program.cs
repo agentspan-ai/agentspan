@@ -62,7 +62,8 @@ if (infos.Count < 2)
 }
 
 var weekdayName = infos.First(s => s.ShortName == "weekday-9am").Name;
-var fridayName  = infos.First(s => s.ShortName == "friday-5pm").Name;
+var fridayInfo  = infos.First(s => s.ShortName == "friday-5pm");
+var fridayName  = fridayInfo.Name;
 
 // 3. Pause the weekday schedule.
 await runtime.Schedules.PauseAsync(weekdayName, reason: "rate-limit cooldown demo");
@@ -75,7 +76,7 @@ var afterResume = await runtime.Schedules.GetAsync(weekdayName);
 Console.WriteLine($"✓ Resumed '{weekdayName}': Paused={afterResume.Paused}");
 
 // 5. Ad-hoc run of the friday schedule.
-var execId = await runtime.Schedules.RunNowAsync(fridayName);
+var execId = await runtime.Schedules.RunNowAsync(fridayInfo);
 Console.WriteLine($"\n✓ RunNow '{fridayName}' → execution id: {execId}");
 
 // 6. Preview next 5 fire times for the weekday cron.

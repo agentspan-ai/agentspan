@@ -28,11 +28,11 @@ function makeSpecialist(systemPrompt: string) {
     return { messages: [response] };
   }
 
-  const b = new StateGraph(MessagesAnnotation);
-  b.addNode('specialist', node);
-  b.addEdge(START, 'specialist');
-  b.addEdge('specialist', END);
-  return b.compile();
+  return new StateGraph(MessagesAnnotation)
+    .addNode('specialist', node)
+    .addEdge(START, 'specialist')
+    .addEdge('specialist', END)
+    .compile();
 }
 
 const mathGraph = makeSpecialist(

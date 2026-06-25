@@ -17,9 +17,11 @@ agent = Agent(
     tools=[get_weather],
 )
 
+prompt = "What's the weather in Tokyo?"
+
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        result = rt.run(agent, "What's the weather in Tokyo?")
+        result = rt.run(agent, prompt)
         result.print_result()
 
         # Production pattern:

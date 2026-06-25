@@ -71,8 +71,11 @@ internal static class AgentConfigSerializer
 
         var cfg = new JsonObject { ["name"] = agent.Name };
 
+        // Resolve dynamic instructions (InstructionsFn) at serialize time — matches Python/Java.
+        var resolvedInstructions = agent.ResolveInstructions();
+
         if (agent.Model            is not null) cfg["model"]            = agent.Model;
-        if (agent.Instructions     is not null) cfg["instructions"]     = agent.Instructions;
+        if (resolvedInstructions   is not null) cfg["instructions"]     = resolvedInstructions;
         if (agent.MaxTurns         .HasValue)   cfg["maxTurns"]         = agent.MaxTurns.Value;
         if (agent.MaxTokens        .HasValue)   cfg["maxTokens"]        = agent.MaxTokens.Value;
         if (agent.Temperature      .HasValue)   cfg["temperature"]      = agent.Temperature.Value;
@@ -265,12 +268,53 @@ internal static class AgentConfigSerializer
         if (agent.Metadata is not null)
             cfg["metadata"] = JsonNode.Parse(JsonSerializer.Serialize(agent.Metadata, AgentspanJson.Options))!;
 
-        // Lifecycle callbacks — emit position + taskName pairs
+        // Condition-based handoffs (SWARM triggers)
+        if (agent.Handoffs.Count > 0)
+        {
+            var handoffs = new JsonArray();
+            foreach (var h in agent.Handoffs) handoffs.Add(SerializeHandoff(h, agent.Name));
+            cfg["handoffs"] = handoffs;
+        }
+
+        // Gate — stop a sequential pipeline when output contains the sentinel text
+        if (agent.Gate is not null)
+        {
+            cfg["gate"] = new JsonObject
+            {
+                ["type"]          = "text_contains",
+                ["text"]          = agent.Gate.Text,
+                ["caseSensitive"] = agent.Gate.CaseSensitive,
+            };
+        }
+
+        // Lifecycle callbacks — emit one {position, taskName} entry per active position.
+        // Sources: the function-typed callbacks AND the CallbackHandler list (a handler
+        // contributes a position only if it overrides that hook). Positions are emitted
+        // at most once, in server order.
         var callbackArr = new JsonArray();
-        if (agent.BeforeModelCallback is not null)
-            callbackArr.Add(new JsonObject { ["position"] = "before_model", ["taskName"] = $"{agent.Name}_before_model" });
-        if (agent.AfterModelCallback is not null)
-            callbackArr.Add(new JsonObject { ["position"] = "after_model",  ["taskName"] = $"{agent.Name}_after_model" });
+        var seenPositions = new HashSet<string>(StringComparer.Ordinal);
+
+        void AddCallback(string position)
+        {
+            if (seenPositions.Add(position))
+                callbackArr.Add(new JsonObject
+                {
+                    ["position"] = position,
+                    ["taskName"] = $"{agent.Name}_{position}",
+                });
+        }
+
+        if (agent.BeforeAgentCallback is not null) AddCallback("before_agent");
+        if (agent.AfterAgentCallback  is not null) AddCallback("after_agent");
+        if (agent.BeforeModelCallback is not null) AddCallback("before_model");
+        if (agent.AfterModelCallback  is not null) AddCallback("after_model");
+        if (agent.BeforeToolCallback  is not null) AddCallback("before_tool");
+        if (agent.AfterToolCallback   is not null) AddCallback("after_tool");
+
+        foreach (var (position, method) in CallbackHandler.Positions)
+            if (agent.Callbacks.Any(h => h.Overrides(method)))
+                AddCallback(position);
+
         if (callbackArr.Count > 0)
             cfg["callbacks"] = callbackArr;
 
@@ -285,9 +329,10 @@ internal static class AgentConfigSerializer
         if (!string.IsNullOrEmpty(agent.Model)) map["model"] = agent.Model;
 
         // OpenAI uses `instructions`; ADK uses `instruction` (singular).
-        if (!string.IsNullOrEmpty(agent.Instructions))
+        var fwInstructions = agent.ResolveInstructions();
+        if (!string.IsNullOrEmpty(fwInstructions))
         {
-            map[fw == "google_adk" ? "instruction" : "instructions"] = agent.Instructions;
+            map[fw == "google_adk" ? "instruction" : "instructions"] = fwInstructions;
         }
 
         // Framework normalizers expect the `_worker_ref` shape:
@@ -480,6 +525,31 @@ internal static class AgentConfigSerializer
         var arr = new JsonArray();
         foreach (var c in conditions) arr.Add(SerializeTermination(c));
         return arr;
+    }
+
+    private static JsonObject SerializeHandoff(Handoff h, string agentName)
+    {
+        var hMap = new JsonObject { ["target"] = h.Target };
+        switch (h)
+        {
+            case OnTextMention otm:
+                hMap["type"] = "on_text_mention";
+                hMap["text"] = otm.Text;
+                break;
+            case OnToolResult otr:
+                hMap["type"]     = "on_tool_result";
+                hMap["toolName"] = otr.ToolName;
+                if (otr.ResultContains is not null) hMap["resultContains"] = otr.ResultContains;
+                break;
+            case OnCondition:
+                hMap["type"]     = "on_condition";
+                hMap["taskName"] = $"{agentName}_handoff_{h.Target}";
+                break;
+            default:
+                hMap["type"] = "unknown";
+                break;
+        }
+        return hMap;
     }
 
     private static JsonObject SerializeGuardrail(GuardrailDef g) => new()

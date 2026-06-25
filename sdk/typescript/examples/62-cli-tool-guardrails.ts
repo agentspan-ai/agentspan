@@ -52,8 +52,9 @@ export const opsAgent = new Agent({
     enabled: true,
     allowedCommands: ['ls', 'cat', 'df', 'du', 'git', 'ps', 'uname', 'wc'],
     timeout: 15,
-    guardrails: [blockDestructive.toGuardrailDef(), reviewSudo.toGuardrailDef()],
   },
+  // Guardrails are declared at the agent level; they gate the CLI tool's input.
+  guardrails: [blockDestructive, reviewSudo],
 });
 
 // -- Run ---------------------------------------------------------------------

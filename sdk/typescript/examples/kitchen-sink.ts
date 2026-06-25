@@ -11,7 +11,7 @@
  *   - HITL (approve, reject, feedback, human_tool)
  *   - Memory (conversation + semantic)
  *   - Code execution (local, docker, jupyter, serverless)
- *   - Credentials (all isolation modes, CredentialFile)
+ *   - Credentials (tool-declared via credentials: string[], getCredential())
  *   - Streaming (sync), termination, handoffs, callbacks
  *   - Structured output, prompt templates, agent chaining, gate conditions
  *   - Extended thinking, planner mode, required_tools, include_contents
@@ -126,7 +126,6 @@ import {
 import type {
   GuardrailResult,
   ToolContext,
-  CredentialFile,
   CodeExecutionConfig,
   CliConfig,
   AgentResult,
@@ -212,9 +211,8 @@ const intakeRouter = new Agent({
 // STAGE 2: Research Team
 // Features: #4 Parallel, #76 scatter_gather, #10 native tool,
 //   #11 http_tool, #12 mcp_tool, #89 api_tool, #18 ToolContext,
-//   #19 tool credentials, #21 external tool, #52 isolated creds,
-//   #53 in-process creds, #55 HTTP header creds, #56 MCP creds,
-//   CredentialFile
+//   #19 tool credentials, #21 external tool,
+//   #53 in-process creds, #55 HTTP header creds, #56 MCP creds
 // ═══════════════════════════════════════════════════════════════════════
 
 // -- Native tool with ToolContext + file-based credentials (#10, #18, #19, #52) --
@@ -239,7 +237,7 @@ const researchDatabase = tool(
       },
       required: ['query'],
     },
-    credentials: [{ envVar: 'RESEARCH_API_KEY' } as CredentialFile],
+    credentials: ['RESEARCH_API_KEY'],
   },
 );
 
@@ -264,7 +262,6 @@ const analyzeTrends = tool(
       },
       required: ['topic'],
     },
-    isolated: false,
     credentials: ['ANALYTICS_KEY'],
   },
 );

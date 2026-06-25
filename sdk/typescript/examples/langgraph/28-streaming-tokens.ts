@@ -45,11 +45,11 @@ async function generate(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(StreamState);
-builder.addNode('generate', generate);
-builder.addEdge(START, 'generate');
-builder.addEdge('generate', END);
-const graph = builder.compile({ name: "streaming_agent" });
+const graph = new StateGraph(StreamState)
+  .addNode('generate', generate)
+  .addEdge(START, 'generate')
+  .addEdge('generate', END)
+  .compile({ name: "streaming_agent" });
 
 // Add agentspan metadata for graph-structure extraction.
 // Do NOT set tools on StateGraphs — only model + framework.

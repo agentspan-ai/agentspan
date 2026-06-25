@@ -99,7 +99,8 @@ export type ToolType =
   | "generate_video"
   | "generate_pdf"
   | "rag_search"
-  | "rag_index";
+  | "rag_index"
+  | "pull_workflow_messages";
 
 /**
  * Supported framework identifiers for auto-detection.

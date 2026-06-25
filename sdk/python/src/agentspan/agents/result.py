@@ -225,6 +225,34 @@ class AgentStatus:
     pending_tool: Optional[Dict[str, Any]] = None
 
 
+# ── HITL targeting helper ──────────────────────────────────────────────
+
+
+def _target_execution_id(default_execution_id: str, event: Optional["AgentEvent"]) -> str:
+    """Resolve which execution a HITL response should target.
+
+    Returns *default_execution_id* (the top-level execution) when *event*
+    is ``None``.  Otherwise returns the ``execution_id`` carried on the
+    streamed event so the response reaches the sub-execution that is
+    actually waiting (HANDOFF / SEQUENTIAL / PARALLEL put the HUMAN task
+    in a sub-execution).
+
+    Raises:
+        ValueError: If *event* carries no ``execution_id`` — responding to
+            an empty id would silently hit the wrong endpoint.
+    """
+    if event is None:
+        return default_execution_id
+    exec_id = getattr(event, "execution_id", "")
+    if not exec_id:
+        raise ValueError(
+            "Cannot target HITL response: the provided event has no execution_id. "
+            "Use the WAITING event yielded by the stream, which carries the "
+            "sub-execution id."
+        )
+    return exec_id
+
+
 # ── AgentHandle (returned by start()) ──────────────────────────────────
 
 
@@ -270,21 +298,46 @@ class AgentHandle:
 
     # ── Human-in-the-loop ───────────────────────────────────────────
 
-    def respond(self, output: dict) -> None:
-        """Complete a pending human task with arbitrary output."""
-        self._runtime.respond(self.execution_id, output)
+    def respond(self, output: dict, *, event: Optional["AgentEvent"] = None) -> None:
+        """Complete a pending human task with arbitrary output.
 
-    def approve(self) -> None:
-        """Approve a pending tool call that requires human approval."""
-        self.respond({"approved": True})
+        By default this targets the top-level execution.  Pass *event* (a
+        streamed :class:`AgentEvent`, typically the ``WAITING`` event) to
+        target the execution the event was emitted from instead.  Under
+        HANDOFF / SEQUENTIAL / PARALLEL strategies the pending HUMAN task
+        lives in a sub-execution, so the top-level execution is the wrong
+        target — pass the ``WAITING`` event so the response reaches the
+        sub-execution that is actually waiting.
 
-    def reject(self, reason: str = "") -> None:
-        """Reject a pending tool call with an optional reason."""
-        self.respond({"approved": False, "reason": reason})
+        Posts to ``/api/agent/{execution_id}/respond``.
+        """
+        self._runtime.respond(_target_execution_id(self.execution_id, event), output)
 
-    def send(self, message: str) -> None:
-        """Send a message to a waiting agent (multi-turn conversation)."""
-        self.respond({"message": message})
+    def approve(self, *, event: Optional["AgentEvent"] = None) -> None:
+        """Approve a pending tool call that requires human approval.
+
+        Pass *event* (the streamed ``WAITING`` event) to approve the
+        sub-execution the event came from rather than the top-level
+        execution.  See :meth:`respond` for why this matters.
+        """
+        self.respond({"approved": True}, event=event)
+
+    def reject(self, reason: str = "", *, event: Optional["AgentEvent"] = None) -> None:
+        """Reject a pending tool call with an optional reason.
+
+        Pass *event* (the streamed ``WAITING`` event) to reject the
+        sub-execution the event came from rather than the top-level
+        execution.
+        """
+        self.respond({"approved": False, "reason": reason}, event=event)
+
+    def send(self, message: str, *, event: Optional["AgentEvent"] = None) -> None:
+        """Send a message to a waiting agent (multi-turn conversation).
+
+        Pass *event* (the streamed ``WAITING`` event) to target the
+        sub-execution the event came from.
+        """
+        self.respond({"message": message}, event=event)
 
     # ── Execution control ───────────────────────────────────────────
 
@@ -334,21 +387,21 @@ class AgentHandle:
         """Async version of :meth:`get_status`."""
         return await self._runtime.get_status_async(self.execution_id)
 
-    async def respond_async(self, output: dict) -> None:
+    async def respond_async(self, output: dict, *, event: Optional["AgentEvent"] = None) -> None:
         """Async version of :meth:`respond`."""
-        await self._runtime.respond_async(self.execution_id, output)
+        await self._runtime.respond_async(_target_execution_id(self.execution_id, event), output)
 
-    async def approve_async(self) -> None:
+    async def approve_async(self, *, event: Optional["AgentEvent"] = None) -> None:
         """Async version of :meth:`approve`."""
-        await self.respond_async({"approved": True})
+        await self.respond_async({"approved": True}, event=event)
 
-    async def reject_async(self, reason: str = "") -> None:
+    async def reject_async(self, reason: str = "", *, event: Optional["AgentEvent"] = None) -> None:
         """Async version of :meth:`reject`."""
-        await self.respond_async({"approved": False, "reason": reason})
+        await self.respond_async({"approved": False, "reason": reason}, event=event)
 
-    async def send_async(self, message: str) -> None:
+    async def send_async(self, message: str, *, event: Optional["AgentEvent"] = None) -> None:
         """Async version of :meth:`send`."""
-        await self.respond_async({"message": message})
+        await self.respond_async({"message": message}, event=event)
 
     async def pause_async(self) -> None:
         """Async version of :meth:`pause`."""
@@ -816,21 +869,39 @@ class AgentStream:
 
     # ── HITL convenience (delegates to handle) ────────────────────
 
-    def respond(self, output: dict) -> None:
-        """Complete a pending human task with arbitrary output."""
-        self.handle.respond(output)
+    def respond(self, output: dict, *, event: Optional["AgentEvent"] = None) -> None:
+        """Complete a pending human task with arbitrary output.
 
-    def approve(self) -> None:
-        """Approve a pending tool call that requires human approval."""
-        self.handle.approve()
+        Pass *event* (the streamed ``WAITING`` event) to target the
+        sub-execution it was emitted from instead of the top-level
+        execution.  Required for HANDOFF / SEQUENTIAL / PARALLEL where the
+        HUMAN task lives in a sub-execution.
+        """
+        self.handle.respond(output, event=event)
 
-    def reject(self, reason: str = "") -> None:
-        """Reject a pending tool call with an optional reason."""
-        self.handle.reject(reason)
+    def approve(self, *, event: Optional["AgentEvent"] = None) -> None:
+        """Approve a pending tool call that requires human approval.
 
-    def send(self, message: str) -> None:
-        """Send a message to a waiting agent (multi-turn conversation)."""
-        self.handle.send(message)
+        Pass *event* (the streamed ``WAITING`` event) to approve the
+        sub-execution it was emitted from.
+        """
+        self.handle.approve(event=event)
+
+    def reject(self, reason: str = "", *, event: Optional["AgentEvent"] = None) -> None:
+        """Reject a pending tool call with an optional reason.
+
+        Pass *event* (the streamed ``WAITING`` event) to reject the
+        sub-execution it was emitted from.
+        """
+        self.handle.reject(reason, event=event)
+
+    def send(self, message: str, *, event: Optional["AgentEvent"] = None) -> None:
+        """Send a message to a waiting agent (multi-turn conversation).
+
+        Pass *event* (the streamed ``WAITING`` event) to target the
+        sub-execution it was emitted from.
+        """
+        self.handle.send(message, event=event)
 
     @property
     def execution_id(self) -> str:
@@ -1006,21 +1077,26 @@ class AsyncAgentStream:
 
     # ── Async HITL convenience (delegates to handle) ─────────────
 
-    async def respond(self, output: dict) -> None:
-        """Complete a pending human task with arbitrary output."""
-        await self.handle.respond_async(output)
+    async def respond(self, output: dict, *, event: Optional["AgentEvent"] = None) -> None:
+        """Complete a pending human task with arbitrary output.
 
-    async def approve(self) -> None:
+        Pass *event* (the streamed ``WAITING`` event) to target the
+        sub-execution it was emitted from instead of the top-level
+        execution.
+        """
+        await self.handle.respond_async(output, event=event)
+
+    async def approve(self, *, event: Optional["AgentEvent"] = None) -> None:
         """Approve a pending tool call that requires human approval."""
-        await self.handle.approve_async()
+        await self.handle.approve_async(event=event)
 
-    async def reject(self, reason: str = "") -> None:
+    async def reject(self, reason: str = "", *, event: Optional["AgentEvent"] = None) -> None:
         """Reject a pending tool call with an optional reason."""
-        await self.handle.reject_async(reason)
+        await self.handle.reject_async(reason, event=event)
 
-    async def send(self, message: str) -> None:
+    async def send(self, message: str, *, event: Optional["AgentEvent"] = None) -> None:
         """Send a message to a waiting agent (multi-turn conversation)."""
-        await self.handle.send_async(message)
+        await self.handle.send_async(message, event=event)
 
     @property
     def execution_id(self) -> str:

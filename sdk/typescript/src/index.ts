@@ -62,6 +62,7 @@ export type {
   PdfToolOptions,
   SearchToolOptions,
   IndexToolOptions,
+  WaitForMessageToolOptions,
 } from "./tool.js";
 export {
   tool,
@@ -79,6 +80,7 @@ export {
   pdfTool,
   searchTool,
   indexTool,
+  waitForMessageTool,
   Tool,
   toolsFrom,
 } from "./tool.js";
@@ -142,6 +144,12 @@ export {
   serve,
   shutdown,
 } from "./runtime.js";
+
+// ── Control-plane / Workflow clients ────────────────────
+export type { ClientHandle } from "./agent-client.js";
+export { AgentClient, decodeJwtExp } from "./agent-client.js";
+export type { WorkflowExecution, WorkflowTokenUsage } from "./workflow-client.js";
+export { WorkflowClient } from "./workflow-client.js";
 
 // ── Scheduling ──────────────────────────────────────────
 export {

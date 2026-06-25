@@ -92,15 +92,13 @@ async function generateAnswer(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(QAState);
-builder.addNode('retrieve', retrieveContext);
-builder.addNode('generate', generateAnswer);
-
-builder.addEdge(START, 'retrieve');
-builder.addEdge('retrieve', 'generate');
-builder.addEdge('generate', END);
-
-const graph = builder.compile({ name: "qa_agent" });
+const graph = new StateGraph(QAState)
+  .addNode('retrieve', retrieveContext)
+  .addNode('generate', generateAnswer)
+  .addEdge(START, 'retrieve')
+  .addEdge('retrieve', 'generate')
+  .addEdge('generate', END)
+  .compile({ name: "qa_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

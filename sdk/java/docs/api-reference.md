@@ -278,15 +278,77 @@ McpTool.builder().name(String).description(String).serverUrl(String).build()
 
 // Human
 HumanTool.create(String name, String description)
+HumanTool.create(String name, String description, Map<String,Object> inputSchema)
 
 // PDF
+PdfTool.create()                                          // name "generate_pdf"
 PdfTool.create(String name, String description)
+PdfTool.create(String name, String description, Map<String,Object> inputSchema)
 
-// Wait for message
+// Wait for an external message before continuing
 WaitForMessageTool.create(String name, String description)
+WaitForMessageTool.create(String name, String description, int batchSize, boolean blocking)
 
-// Image / media
+// Image / audio / video / PDF generation
 MediaTools.imageTool(String name, String description, String provider, String model)
+MediaTools.audioTool(String name, String description, String provider, String model)
+MediaTools.videoTool(String name, String description, String provider, String model)
+MediaTools.pdfTool()
+// (each media factory also has a trailing Map<String,Object> inputSchema overload)
+
+// RAG — search and index against a vector DB
+RagTools.searchTool(String name, String description, String vectorDb, String index,
+                    String embedProvider, String embedModel, int maxResults)
+RagTools.indexTool(String name, String description, String vectorDb, String index,
+                   String embedProvider, String embedModel)
+// (both have a String namespace overload before the last arg)
+```
+
+---
+
+## Guardrails
+
+```java
+RegexGuardrail.builder()
+    .name(String).position(Position).onFail(OnFail).maxRetries(int)
+    .patterns(String...).mode(String).message(String).build()      // → GuardrailDef
+
+LLMGuardrail.builder()
+    .name(String).position(Position).onFail(OnFail).maxRetries(int)
+    .model(String).policy(String).maxTokens(int).build()           // → GuardrailDef
+
+GuardrailDef.builder()
+    .name(String).position(Position).onFail(OnFail).maxRetries(int)
+    .func(Function<String,GuardrailResult>).build()                // → GuardrailDef
+
+Guardrail.of(String name, Function<String,GuardrailResult> func)   // → GuardrailDef.Builder
+Guardrail.external(String name)                                    // → GuardrailDef.Builder
+
+// GuardrailResult (return value of a custom func)
+GuardrailResult.pass()
+GuardrailResult.fail(String message)
+GuardrailResult.fix(String fixedOutput)
+
+// Enums
+Position.INPUT | Position.OUTPUT
+OnFail.RAISE | OnFail.RETRY | OnFail.FIX | OnFail.HUMAN
+```
+
+---
+
+## Callbacks
+
+```java
+// Composable handler — override only the hooks you need (all take/return Map<String,Object>)
+class MyHandler extends CallbackHandler {
+    Map<String,Object> onAgentStart(Map<String,Object> kwargs)
+    Map<String,Object> onAgentEnd(Map<String,Object> kwargs)
+    Map<String,Object> onModelStart(Map<String,Object> kwargs)
+    Map<String,Object> onModelEnd(Map<String,Object> kwargs)
+    Map<String,Object> onToolStart(Map<String,Object> kwargs)
+    Map<String,Object> onToolEnd(Map<String,Object> kwargs)
+}
+Agent.builder().callbacks(new MyHandler())
 ```
 
 ---
@@ -299,10 +361,12 @@ StopMessageTermination.of(String stopMessage)
 TextMentionTermination.of(String text)
 TextMentionTermination.of(String text, boolean caseSensitive)
 TokenUsageTermination.ofTotal(int maxTokens)
+TokenUsageTermination.ofPrompt(int maxTokens)
+TokenUsageTermination.ofCompletion(int maxTokens)
 
 // Compose
-condition.and(TerminationCondition other)   // both must be true
-condition.or(TerminationCondition other)    // either must be true
+condition.and(TerminationCondition other)   // stop only when both say stop
+condition.or(TerminationCondition other)    // stop when either says stop
 ```
 
 ---
@@ -351,14 +415,28 @@ Schedule.builder()
 
 ## Credentials
 
-```java
-// In a @Tool method (ToolContext required as last param):
-String value = Credentials.get("SECRET_NAME");
-String value = Credentials.getOrNull("SECRET_NAME");  // null if not found
+Declare which secrets a tool needs, then read them off the injected `ToolContext`.
+There is no static `Credentials` accessor — Java cannot mutate `System.getenv()` at
+runtime, so values are passed per-call on the context.
 
-// Store via CLI:
-// agentspan secrets set SECRET_NAME value
+```java
+@Tool(name = "fetch_issue", description = "...", credentials = {"GITHUB_TOKEN"})
+public String fetchIssue(String repo, ToolContext ctx) {
+    String token  = ctx.getCredential("GITHUB_TOKEN");        // throws if unresolved
+    String maybe  = ctx.getCredentialOrNull("GITHUB_TOKEN");  // null if unresolved
+    Map<String,String> all = ctx.getCredentials();            // immutable snapshot
+    // ...
+}
+
+// Or declare at the agent level (applies to all of the agent's tools):
+Agent.builder().credentials("GITHUB_TOKEN", "JIRA_API_KEY")...
+
+// Store the secret once via the CLI:
+// agentspan secrets set GITHUB_TOKEN ghp_xxxxx
 ```
+
+`ToolContext` also exposes `getSessionId()`, `getExecutionId()`, `getTaskId()`, and a
+mutable `getState()` map that persists across tool calls within one execution.
 
 ---
 
@@ -390,7 +468,14 @@ OpenAIAgent.builder()
 // Google ADK
 Agent AdkBridge.toAgentspan(BaseAgent adkAgent)
 Agent.Builder AdkBridge.agentBuilder(BaseAgent adkAgent)
+
+// LangChain4j ChatModel
+Agent.Builder LangChainBridge.agentBuilder(String name, ChatModel model, String systemPrompt, Object... tools)
 ```
+
+`AgentRuntime` also accepts native framework objects **directly** (drop-in) on `run`/`start`/
+`stream`/`deploy`/`serve`/`plan`/`resume`: a native ADK `BaseAgent`, a LangChain4j `ChatModel`,
+or a LangGraph4j `AgentExecutor.Builder` (the latter two take trailing `@Tool` POJOs).
 
 ---
 

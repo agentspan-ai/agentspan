@@ -146,29 +146,27 @@ function routeAfterPayment(state: State): string {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(OrderState);
-builder.addNode('validate', validateOrder);
-builder.addNode('payment', paymentProcessing);
-builder.addNode('prepare', prepareShipment);
-builder.addNode('ship', shipOrder);
-builder.addNode('deliver', deliverOrder);
-builder.addNode('summarize', generateSummary);
-
-builder.addEdge(START, 'validate');
-builder.addConditionalEdges('validate', routeAfterValidation, {
-  payment: 'payment',
-  done: 'summarize',
-});
-builder.addConditionalEdges('payment', routeAfterPayment, {
-  prepare: 'prepare',
-  done: 'summarize',
-});
-builder.addEdge('prepare', 'ship');
-builder.addEdge('ship', 'deliver');
-builder.addEdge('deliver', 'summarize');
-builder.addEdge('summarize', END);
-
-const graph = builder.compile({ name: "order_state_machine" });
+const graph = new StateGraph(OrderState)
+  .addNode('validate', validateOrder)
+  .addNode('payment', paymentProcessing)
+  .addNode('prepare', prepareShipment)
+  .addNode('ship', shipOrder)
+  .addNode('deliver', deliverOrder)
+  .addNode('summarize', generateSummary)
+  .addEdge(START, 'validate')
+  .addConditionalEdges('validate', routeAfterValidation, {
+    payment: 'payment',
+    done: 'summarize',
+  })
+  .addConditionalEdges('payment', routeAfterPayment, {
+    prepare: 'prepare',
+    done: 'summarize',
+  })
+  .addEdge('prepare', 'ship')
+  .addEdge('ship', 'deliver')
+  .addEdge('deliver', 'summarize')
+  .addEdge('summarize', END)
+  .compile({ name: "order_state_machine" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

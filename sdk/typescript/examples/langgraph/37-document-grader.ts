@@ -147,17 +147,15 @@ async function generateAnswer(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(GraderState);
-builder.addNode('retrieve', retrieveAll);
-builder.addNode('grade', gradeDocuments);
-builder.addNode('generate', generateAnswer);
-
-builder.addEdge(START, 'retrieve');
-builder.addEdge('retrieve', 'grade');
-builder.addEdge('grade', 'generate');
-builder.addEdge('generate', END);
-
-const graph = builder.compile({ name: "document_grader_agent" });
+const graph = new StateGraph(GraderState)
+  .addNode('retrieve', retrieveAll)
+  .addNode('grade', gradeDocuments)
+  .addNode('generate', generateAnswer)
+  .addEdge(START, 'retrieve')
+  .addEdge('retrieve', 'grade')
+  .addEdge('grade', 'generate')
+  .addEdge('generate', END)
+  .compile({ name: "document_grader_agent" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

@@ -34,8 +34,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  credentialDelete(CRED_A);
-  credentialDelete(CRED_B);
+  await credentialDelete(CRED_A);
+  await credentialDelete(CRED_B);
   await runtime.shutdown();
 });
 
@@ -99,8 +99,8 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     const agent = makeAgent();
 
     // ── Step 1: Clean slate ──────────────────────────────────────
-    credentialDelete(CRED_A);
-    credentialDelete(CRED_B);
+    await credentialDelete(CRED_A);
+    await credentialDelete(CRED_B);
 
     // ── Step 2: No credentials — paid tools should fail ──────────
     const result1 = await runtime.run(agent, 'Call all three tools.', {
@@ -159,8 +159,8 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     await new Promise((r) => setTimeout(r, 2000)); // drain old workers
     runtime = new AgentRuntime();
 
-    credentialSet(CRED_A, 'secret-aaa-value');
-    credentialSet(CRED_B, 'secret-bbb-value');
+    await credentialSet(CRED_A, 'secret-aaa-value');
+    await credentialSet(CRED_B, 'secret-bbb-value');
 
     const result2 = await runtime.run(agent, 'Call all three tools.', {
       timeout: TIMEOUT,
@@ -197,8 +197,8 @@ describe('Suite 2: Tool Calling / Credential Lifecycle', { timeout: 300_000 }, (
     await new Promise((r) => setTimeout(r, 2000));
     runtime = new AgentRuntime();
 
-    credentialSet(CRED_A, 'newval-xxx-updated');
-    credentialSet(CRED_B, 'newval-yyy-updated');
+    await credentialSet(CRED_A, 'newval-xxx-updated');
+    await credentialSet(CRED_B, 'newval-yyy-updated');
 
     const result3 = await runtime.run(agent, 'Call all three tools.', {
       timeout: TIMEOUT,

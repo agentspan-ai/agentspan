@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for the async AgentHttpClient."""
+"""Tests for the async AgentClient (formerly AgentHttpClient)."""
 
 from __future__ import annotations
 
@@ -11,18 +11,25 @@ import httpx
 import pytest
 
 from agentspan.agents.runtime.http_client import (
+    AgentClient,
     AgentHttpClient,
 )
+
+
+def test_agent_http_client_is_backward_compat_alias():
+    """The old name must still resolve to the renamed class."""
+    assert AgentHttpClient is AgentClient
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-def _make_client(handler, **auth) -> AgentHttpClient:
-    """Create an AgentHttpClient backed by a mock transport.
+def _make_client(handler, **auth) -> AgentClient:
+    """Create an AgentClient backed by a mock transport.
 
     Anonymous by default — pass api_key/auth_key/auth_secret to exercise auth.
     """
-    client = AgentHttpClient(server_url="http://test-server/api", **auth)
+    client = AgentClient(server_url="http://test-server/api", **auth)
     # Override the lazy client with a mock-transport client. Auth headers are
     # attached per-request by _auth_headers(), not as client defaults.
     client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -138,7 +145,7 @@ async def test_parse_sse_async():
             yield line
 
     events = []
-    async for event in AgentHttpClient._parse_sse_async(lines()):
+    async for event in AgentClient._parse_sse_async(lines()):
         events.append(event)
 
     assert events[0] == {"_heartbeat": True}

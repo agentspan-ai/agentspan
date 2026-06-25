@@ -34,7 +34,7 @@ async function main() {
   try {
     const result = await runtime.run(agent, prompt);
     result.printResult();
-    const output = result.output ?? '';
+    const output = String(result.output ?? '');
 
     // Verify the agent saw the error output
     const saw = output.includes('No such file or directory') || output.includes('nonexistent');

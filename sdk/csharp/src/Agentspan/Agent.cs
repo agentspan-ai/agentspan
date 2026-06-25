@@ -25,11 +25,23 @@ public enum Strategy
 /// <summary>
 /// The single orchestration primitive — an LLM + tools, or a multi-agent system.
 /// </summary>
-public sealed class Agent
+public sealed partial class Agent
 {
     public string Name { get; }
     public string? Model { get; set; }
     public string? Instructions { get; set; }
+
+    /// <summary>
+    /// Dynamic instructions: a supplier re-evaluated every time the agent config is
+    /// serialized (i.e. on each run submission), so the prompt can reflect current
+    /// state (date, feature flags, fetched context). Takes precedence over
+    /// <see cref="Instructions"/>. Mirrors the Python/Java callable-instructions feature.
+    /// </summary>
+    public Func<string>? InstructionsFn { get; set; }
+
+    /// <summary>Resolve the effective instructions: <see cref="InstructionsFn"/> if set, else <see cref="Instructions"/>.</summary>
+    internal string? ResolveInstructions() => InstructionsFn is not null ? InstructionsFn() : Instructions;
+
     public PromptTemplate? PromptTemplateInstructions { get; set; }
     public List<ToolDef> Tools { get; set; } = [];
     public List<Agent> Agents { get; set; } = [];
@@ -96,6 +108,35 @@ public sealed class Agent
     public Func<List<JsonElement>?, Dictionary<string, object>?>? BeforeModelCallback { get; set; }
     /// <summary>Called after each LLM invocation. Receives the LLM result; return empty dict to keep, non-empty to override.</summary>
     public Func<string?, Dictionary<string, object>?>? AfterModelCallback { get; set; }
+
+    /// <summary>Called before the agent's entire execution (before any LLM calls). Non-empty return overrides.</summary>
+    public Func<Dictionary<string, JsonElement>, Dictionary<string, object>?>? BeforeAgentCallback { get; set; }
+    /// <summary>Called after the agent's entire execution. Non-empty return overrides.</summary>
+    public Func<Dictionary<string, JsonElement>, Dictionary<string, object>?>? AfterAgentCallback { get; set; }
+    /// <summary>Called before each tool execution. Non-empty return overrides.</summary>
+    public Func<Dictionary<string, JsonElement>, Dictionary<string, object>?>? BeforeToolCallback { get; set; }
+    /// <summary>Called after each tool execution. Non-empty return overrides.</summary>
+    public Func<Dictionary<string, JsonElement>, Dictionary<string, object>?>? AfterToolCallback { get; set; }
+
+    /// <summary>
+    /// Composable lifecycle handlers. Each handler's overridden hooks register at
+    /// their position (before/after agent, model, tool); handlers run in list order
+    /// and the first non-empty return short-circuits. See <see cref="CallbackHandler"/>.
+    /// </summary>
+    public List<CallbackHandler> Callbacks { get; set; } = [];
+
+    /// <summary>
+    /// SWARM handoff triggers — rules that transfer control to another agent based on
+    /// text mentions, tool results, or a custom predicate. See <see cref="Handoff"/>.
+    /// </summary>
+    public List<Handoff> Handoffs { get; set; } = [];
+
+    /// <summary>
+    /// Stop a sequential pipeline after this agent if its output contains the gate's
+    /// sentinel text. Only meaningful inside a sequential pipeline (<c>a &gt;&gt; b</c>).
+    /// </summary>
+    public TextGate? Gate { get; set; }
+
     public List<string>? RequiredTools { get; set; }
     public string? Introduction { get; set; }
     public Dictionary<string, object>? Metadata { get; set; }
@@ -257,6 +298,18 @@ public sealed class AgentBuilder
     public AgentBuilder WithRequiredTools(params string[] tools)    { _agent.RequiredTools = [.. tools]; return this; }
     public AgentBuilder WithIntroduction(string intro)              { _agent.Introduction = intro; return this; }
     public AgentBuilder WithMetadata(Dictionary<string, object> m)  { _agent.Metadata = m; return this; }
+    /// <summary>Dynamic instructions re-evaluated at each serialization. See <see cref="Agent.InstructionsFn"/>.</summary>
+    public AgentBuilder WithInstructions(Func<string> instructions) { _agent.InstructionsFn = instructions; return this; }
+    /// <summary>SWARM handoff triggers (<see cref="OnTextMention"/>, <see cref="OnToolResult"/>, <see cref="OnCondition"/>).</summary>
+    public AgentBuilder WithHandoffs(params Handoff[] handoffs)      { _agent.Handoffs.AddRange(handoffs); return this; }
+    /// <summary>Stop a sequential pipeline after this agent when its output contains the gate text.</summary>
+    public AgentBuilder WithGate(TextGate gate)                     { _agent.Gate = gate; return this; }
+    /// <summary>Composable lifecycle callback handlers (run in list order).</summary>
+    public AgentBuilder WithCallbacks(params CallbackHandler[] callbacks) { _agent.Callbacks.AddRange(callbacks); return this; }
+    public AgentBuilder WithBeforeAgentCallback(Func<Dictionary<string, JsonElement>, Dictionary<string, object>?> cb) { _agent.BeforeAgentCallback = cb; return this; }
+    public AgentBuilder WithAfterAgentCallback(Func<Dictionary<string, JsonElement>, Dictionary<string, object>?> cb)  { _agent.AfterAgentCallback = cb; return this; }
+    public AgentBuilder WithBeforeToolCallback(Func<Dictionary<string, JsonElement>, Dictionary<string, object>?> cb)  { _agent.BeforeToolCallback = cb; return this; }
+    public AgentBuilder WithAfterToolCallback(Func<Dictionary<string, JsonElement>, Dictionary<string, object>?> cb)   { _agent.AfterToolCallback = cb; return this; }
 
     public Agent Build()
     {

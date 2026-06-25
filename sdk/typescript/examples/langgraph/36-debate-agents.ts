@@ -121,17 +121,15 @@ function continueOrJudge(state: State): string {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(DebateState);
-builder.addNode('pro', agentPro);
-builder.addNode('con', agentCon);
-builder.addNode('judge', judge);
-
-builder.addEdge(START, 'pro');
-builder.addConditionalEdges('con', continueOrJudge, { judge: 'judge', con: 'pro' });
-builder.addEdge('pro', 'con');
-builder.addEdge('judge', END);
-
-const graph = builder.compile({ name: "debate_agents" });
+const graph = new StateGraph(DebateState)
+  .addNode('pro', agentPro)
+  .addNode('con', agentCon)
+  .addNode('judge', judge)
+  .addEdge(START, 'pro')
+  .addConditionalEdges('con', continueOrJudge, { judge: 'judge', con: 'pro' })
+  .addEdge('pro', 'con')
+  .addEdge('judge', END)
+  .compile({ name: "debate_agents" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

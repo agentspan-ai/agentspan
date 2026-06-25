@@ -110,19 +110,17 @@ async function generateReport(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(PipelineState);
-builder.addNode('load', loadData);
-builder.addNode('clean', cleanData);
-builder.addNode('analyze', analyzeData);
-builder.addNode('report_node', generateReport);
-
-builder.addEdge(START, 'load');
-builder.addEdge('load', 'clean');
-builder.addEdge('clean', 'analyze');
-builder.addEdge('analyze', 'report_node');
-builder.addEdge('report_node', END);
-
-const graph = builder.compile({ name: "data_pipeline" });
+const graph = new StateGraph(PipelineState)
+  .addNode('load', loadData)
+  .addNode('clean', cleanData)
+  .addNode('analyze', analyzeData)
+  .addNode('report_node', generateReport)
+  .addEdge(START, 'load')
+  .addEdge('load', 'clean')
+  .addEdge('clean', 'analyze')
+  .addEdge('analyze', 'report_node')
+  .addEdge('report_node', END)
+  .compile({ name: "data_pipeline" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

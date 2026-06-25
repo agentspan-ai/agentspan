@@ -46,7 +46,6 @@ const checkGithubToken = tool(
     name: 'check_github_token',
     description: 'Check if GitHub token is available in the environment.',
     inputSchema: { type: 'object', properties: {} },
-    isolated: false,
     credentials: ['GITHUB_TOKEN'],
   },
 );

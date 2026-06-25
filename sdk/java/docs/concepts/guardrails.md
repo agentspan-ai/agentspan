@@ -2,11 +2,13 @@
 
 Guardrails validate or modify agent input and output. They run before the agent sees a message (`INPUT`) or after the agent produces a response (`OUTPUT`).
 
-There are three kinds, each with its own builder — all produce a `GuardrailDef`:
+There are several kinds, each producing a `GuardrailDef`:
 
 - `RegexGuardrail.builder()` — pattern matching (`guardrailType="regex"`)
 - `LLMGuardrail.builder()` — LLM-judged policy (`guardrailType="llm"`)
 - `GuardrailDef.builder().func(...)` — a custom Java function (`guardrailType="custom"`)
+- `Guardrail.of(name, func)` — shorthand builder for a custom Java function
+- `Guardrail.external(name)` — reference an existing Conductor worker as a guardrail
 
 ## Quick example
 
@@ -99,6 +101,7 @@ GuardrailDef.builder()
 | `onFail(OnFail)` | all | `RAISE` | Action when the guardrail fails. |
 | `maxRetries(int)` | all | `3` | Retry budget when `onFail == RETRY`. |
 | `patterns(String...)` / `patterns(List<String>)` | `RegexGuardrail` | — | Regex patterns to match. |
+| `mode(String)` | `RegexGuardrail` | `"block"` | `"block"` fails on a match; `"allow"` fails when nothing matches. |
 | `message(String)` | `RegexGuardrail` | — | Custom failure message. |
 | `model(String)` | `LLMGuardrail` | — | Judge model, `"provider/model"`. |
 | `policy(String)` | `LLMGuardrail` | — | Policy the content must satisfy. |
@@ -117,7 +120,7 @@ GuardrailDef.builder()
 |---|---|
 | `OnFail.RAISE` | Terminate the agent run with an error (default) |
 | `OnFail.RETRY` | Re-run the LLM turn, up to `maxRetries` times |
-| `OnFail.FIX` | Ask the LLM to rewrite the output to pass the guardrail |
+| `OnFail.FIX` | Replace the output with the guardrail's fixed output (custom guardrails return it via `GuardrailResult.fix(...)`); falls back to `RAISE` if none is provided |
 | `OnFail.HUMAN` | Pause for human review (HITL) |
 
 ## GuardrailResult

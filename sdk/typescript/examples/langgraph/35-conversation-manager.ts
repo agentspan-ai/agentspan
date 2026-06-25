@@ -108,14 +108,13 @@ async function respond(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(ConversationState);
-builder.addNode('summarize', maybeSummarize);
-builder.addNode('respond', respond);
-builder.addEdge(START, 'summarize');
-builder.addEdge('summarize', 'respond');
-builder.addEdge('respond', END);
-
-const graph = builder.compile({ name: "conversation_manager" });
+const graph = new StateGraph(ConversationState)
+  .addNode('summarize', maybeSummarize)
+  .addNode('respond', respond)
+  .addEdge(START, 'summarize')
+  .addEdge('summarize', 'respond')
+  .addEdge('respond', END)
+  .compile({ name: "conversation_manager" });
 
 (graph as any)._agentspan = {
   model: 'openai/gpt-4o-mini',

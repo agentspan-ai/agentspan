@@ -255,6 +255,230 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
     raise TypeError(f"Expected an Agent or @agent-decorated function, got {type(obj).__name__}")
 
 
+# ── from_instance resolution helpers ────────────────────────────────────
+
+
+def _discover_agent_methods(instance: Any) -> Dict[str, Callable[..., Any]]:
+    """Discover ``@agent``-decorated methods on *instance*, keyed by agent name.
+
+    Walks the instance's attributes (which includes inherited methods) and
+    collects bound methods whose underlying function carries an
+    ``_agent_def``.  The key is the resolved agent name (``AgentDef.name``,
+    i.e. the decorator's ``name=`` or the method name).
+
+    Raises:
+        ValueError: On duplicate resolved agent names.
+    """
+    import inspect as _inspect
+
+    methods: Dict[str, Callable[..., Any]] = {}
+    seen_funcs: set = set()
+    for attr_name in dir(instance):
+        if attr_name.startswith("__"):
+            continue
+        try:
+            member = getattr(instance, attr_name)
+        except Exception:
+            continue
+        if not callable(member):
+            continue
+        ad = getattr(member, "_agent_def", None)
+        if ad is None:
+            continue
+        # Deduplicate: dir() can surface the same callable under aliases.
+        underlying = getattr(member, "__func__", member)
+        if id(underlying) in seen_funcs:
+            continue
+        seen_funcs.add(id(underlying))
+        if not _inspect.ismethod(member):
+            # A class attribute that is a plain @agent function (unbound) —
+            # skip; from_instance operates on bound methods of the instance.
+            continue
+        agent_name = ad.name
+        if agent_name in methods:
+            raise ValueError(
+                f"Duplicate @agent name {agent_name!r} on {type(instance).__name__!r}. "
+                "Each @agent method must resolve to a unique name."
+            )
+        methods[agent_name] = member
+    return methods
+
+
+def _discover_instance_tools(instance: Any) -> List[Any]:
+    """Discover ``@tool`` methods on *instance* as instance-bound tools.
+
+    Each returned tool is a fresh :class:`ToolDef` copied from the method's
+    ``_tool_def`` but with ``func`` rebound to the instance, so the worker
+    invokes it as a method (``self`` is supplied) rather than calling the
+    unbound class function.
+    """
+    import dataclasses as _dc
+
+    tools: List[Any] = []
+    seen: set = set()
+    for attr_name in dir(instance):
+        if attr_name.startswith("__"):
+            continue
+        try:
+            member = getattr(instance, attr_name)
+        except Exception:
+            continue
+        td = getattr(member, "_tool_def", None)
+        if td is None:
+            continue
+        underlying = getattr(member, "__func__", member)
+        if id(underlying) in seen:
+            continue
+        seen.add(id(underlying))
+        # Rebind func to the bound method so the worker passes ``self``.
+        bound = _dc.replace(td, func=member)
+        tools.append(bound)
+    return tools
+
+
+def _discover_instance_guardrails(instance: Any) -> List[Any]:
+    """Discover ``@guardrail`` methods on *instance* as instance-bound guardrails."""
+    from agentspan.agents.guardrail import Guardrail
+
+    guardrails: List[Any] = []
+    seen: set = set()
+    for attr_name in dir(instance):
+        if attr_name.startswith("__"):
+            continue
+        try:
+            member = getattr(instance, attr_name)
+        except Exception:
+            continue
+        gd = getattr(member, "_guardrail_def", None)
+        if gd is None:
+            continue
+        underlying = getattr(member, "__func__", member)
+        if id(underlying) in seen:
+            continue
+        seen.add(id(underlying))
+        # Bind the guardrail func to the instance so the check runs as a method.
+        guardrails.append(Guardrail(func=member, name=gd.name))
+    return guardrails
+
+
+def _select_named(
+    requested: List[Any],
+    discovered: Dict[str, Any],
+    agent_name: str,
+    instance: Any,
+    kind: str,
+) -> List[Any]:
+    """Resolve an explicit tools/guardrails list that may mix names and objects.
+
+    String entries are looked up by name in *discovered* (the instance's
+    decorated members); non-string entries (already-resolved objects) pass
+    through unchanged.  An unknown name raises with the available names.
+    """
+    out: List[Any] = []
+    for entry in requested:
+        if isinstance(entry, str):
+            if entry not in discovered:
+                raise ValueError(
+                    f"No {kind} method named {entry!r} on {type(instance).__name__!r} "
+                    f"(referenced by @agent {agent_name!r}). "
+                    f"Available: {sorted(discovered)}"
+                )
+            out.append(discovered[entry])
+        else:
+            out.append(entry)
+    return out
+
+
+def _resolve_instance_agent(
+    instance: Any,
+    methods: Dict[str, Callable[..., Any]],
+    name: str,
+    parent_model: str,
+    stack: List[str],
+) -> "Agent":
+    """Resolve one ``@agent`` method on *instance* into an :class:`Agent`.
+
+    Recurses for sub-agents declared by name.  Mirrors the Java
+    ``AgentRegistry.resolve`` semantics.
+    """
+    if name in stack:
+        cycle = " -> ".join(stack + [name])
+        raise ValueError(f"Cyclic @agent sub-agent reference: {cycle}")
+    stack = stack + [name]
+
+    method = methods[name]
+    ad: AgentDef = method._agent_def  # type: ignore[attr-defined]
+    model = ad.model or parent_model
+
+    # Method body: None -> attrs only; str -> dynamic instructions;
+    # Agent -> factory (returned as-is).
+    body_result = method()
+    if isinstance(body_result, Agent):
+        return body_result
+
+    if isinstance(body_result, str) and body_result:
+        instructions: Any = body_result
+    else:
+        # Fall back to the docstring (decorator default).
+        instructions = inspect_getdoc(method) or ""
+
+    # Tools: explicit list on the decorator wins; otherwise attach ALL
+    # @tool methods discovered on the instance. String entries in an
+    # explicit list are resolved by name against the instance's @tool
+    # methods (so a class can declare ``tools=["lookup"]`` by method name).
+    if ad.tools:
+        from agentspan.agents.tool import get_tool_def
+
+        discovered_tools = {get_tool_def(t).name: t for t in _discover_instance_tools(instance)}
+        tools = _select_named(ad.tools, discovered_tools, name, instance, "@tool")
+    else:
+        tools = _discover_instance_tools(instance)
+
+    # Guardrails: explicit list wins; otherwise attach ALL @guardrail methods.
+    if ad.guardrails:
+        discovered_grs = {g.name: g for g in _discover_instance_guardrails(instance)}
+        guardrails = _select_named(ad.guardrails, discovered_grs, name, instance, "@guardrail")
+    else:
+        guardrails = _discover_instance_guardrails(instance)
+
+    # Sub-agents: resolve string entries by name against sibling @agent
+    # methods; pass Agent / @agent-function entries through unchanged.
+    sub_agents: List[Any] = []
+    for entry in ad.agents:
+        if isinstance(entry, str):
+            if entry not in methods:
+                raise ValueError(
+                    f"Sub-agent {entry!r} referenced by @agent {name!r} not found on "
+                    f"{type(instance).__name__!r}. Available: {sorted(methods)}"
+                )
+            sub_agents.append(_resolve_instance_agent(instance, methods, entry, model, stack))
+        else:
+            sub_agents.append(entry)
+
+    return Agent(
+        name=ad.name,
+        model=model,
+        instructions=instructions,
+        tools=tools,
+        guardrails=guardrails,
+        agents=sub_agents,
+        strategy=ad.strategy,
+        max_turns=ad.max_turns,
+        max_tokens=ad.max_tokens,
+        temperature=ad.temperature,
+        metadata=ad.metadata,
+        credentials=ad.credentials or None,
+        context_window_budget=ad.context_window_budget,
+    )
+
+
+def inspect_getdoc(obj: Any) -> Optional[str]:
+    """Return the cleaned docstring of *obj* (thin wrapper over inspect.getdoc)."""
+    import inspect as _inspect
+
+    return _inspect.getdoc(obj)
+
+
 class Agent:
     """An AI agent backed by a durable Conductor workflow.
 
@@ -632,8 +856,6 @@ class Agent:
         # dispatch layer can resolve them per-tool (the dispatch only
         # looks at tool_def.credentials, not agent-level credentials).
         if self.credentials:
-            from agentspan.agents.tool import get_tool_def
-
             for t in self.tools:
                 td = getattr(t, "_tool_def", None)
                 if td is not None and not td.credentials and td.tool_type in ("cli", "code"):
@@ -699,6 +921,62 @@ class Agent:
         instead of compiling the agent inline.
         """
         return not self.model
+
+    # ── Instance-method resolution ──────────────────────────────────────
+
+    @classmethod
+    def from_instance(cls, instance: Any, name: Optional[str] = None) -> Any:
+        """Resolve ``@agent``-decorated **methods** on an object into Agents.
+
+        Mirrors the Java SDK's ``Agent.fromInstance``.  An object can group
+        several agents, their tools, and their guardrails as methods on a
+        single class — handy for dependency injection and stateful
+        collaborators.
+
+        - ``Agent.from_instance(instance)`` returns ``list[Agent]`` — one per
+          ``@agent``-decorated method on the instance.
+        - ``Agent.from_instance(instance, name)`` returns a single
+          :class:`Agent` (the one whose resolved name matches *name*).
+
+        Resolution rules (matching the Java reference):
+
+        - **Tools / guardrails:** by default every ``@tool`` /
+          ``@guardrail`` method on the same instance is attached to each
+          agent, bound to the instance so the worker calls them as methods.
+          If the ``@agent`` declares an explicit ``tools=`` / ``guardrails=``
+          list, only those are attached.
+        - **Sub-agents:** entries in the ``@agent``'s ``agents=`` list that
+          are plain strings are resolved by name against the other ``@agent``
+          methods on the instance (recursively).  Cyclic references raise.
+        - **Model inheritance:** a sub-agent with no ``model`` inherits its
+          parent's model at resolution time.
+        - **Method body:** returning ``None`` uses the decorator attributes
+          only; returning a ``str`` provides dynamic instructions (overriding
+          the docstring); returning an :class:`Agent` makes the method a
+          factory whose returned agent is used as-is.
+
+        Raises:
+            ValueError: If *name* is given but no ``@agent`` method resolves
+                to that name, or on duplicate / cyclic agent names.
+        """
+        methods = _discover_agent_methods(instance)
+        if not methods:
+            raise ValueError(
+                f"No @agent-decorated methods found on {type(instance).__name__!r}. "
+                "Decorate one or more methods with @agent."
+            )
+
+        if name is not None:
+            if name not in methods:
+                raise ValueError(
+                    f"No @agent method resolving to name {name!r} on "
+                    f"{type(instance).__name__!r}. Available: {sorted(methods)}"
+                )
+            return _resolve_instance_agent(instance, methods, name, "", [])
+
+        return [
+            _resolve_instance_agent(instance, methods, agent_name, "", []) for agent_name in methods
+        ]
 
     # ── Chaining shorthand ──────────────────────────────────────────────
 

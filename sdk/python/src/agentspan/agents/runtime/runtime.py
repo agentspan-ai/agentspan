@@ -36,7 +36,7 @@ from agentspan.agents.result import (
     FinishReason,
     TokenUsage,
 )
-from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailableError
+from agentspan.agents.runtime.http_client import AgentClient, SSEUnavailableError
 
 logger = logging.getLogger("agentspan.agents.runtime")
 
@@ -412,13 +412,12 @@ class AgentRuntime:
             getattr(logging, self._config.log_level.upper(), logging.INFO)
         )
 
-        # Async HTTP client for agent API endpoints
-        self._http = AgentHttpClient(
-            server_url=self._config.server_url,
-            api_key=self._config.api_key or "",
-            auth_key=self._config.auth_key or "",
-            auth_secret=self._config.auth_secret or "",
-        )
+        # Control-plane client for the agent API. Bound to this runtime so it
+        # shares the runtime's Conductor clients and schedule surface. It is
+        # both the async HTTP client (compile/start/status/respond/stream) and
+        # the control-plane run/deploy/schedule entry point exposed via
+        # :attr:`client`.
+        self._http = AgentClient(runtime=self)
 
         logger.info("AgentRuntime initialized (server=%s)", self._config.server_url)
 
@@ -493,7 +492,9 @@ class AgentRuntime:
         with _workflow_credentials_lock:
             _workflow_credentials[execution_id] = list(credentials)
 
-    def _clear_workflow_credentials(self, execution_id: str, credentials: Optional[List[str]]) -> None:
+    def _clear_workflow_credentials(
+        self, execution_id: str, credentials: Optional[List[str]]
+    ) -> None:
         """Clear request-scoped credential names after execution completion."""
         if not credentials:
             return
@@ -2338,8 +2339,7 @@ class AgentRuntime:
 
         if schedules is not _SCHEDULES_UNSET and len(all_agents) != 1:
             raise ValueError(
-                "deploy(..., schedules=...) requires exactly one agent; "
-                f"got {len(all_agents)}"
+                f"deploy(..., schedules=...) requires exactly one agent; got {len(all_agents)}"
             )
 
         results = []
@@ -2396,8 +2396,24 @@ class AgentRuntime:
 
         return results
 
+    @property
+    def client(self) -> Any:
+        """The control-plane :class:`AgentClient` for this runtime.
+
+        Exposes ``run``/``run_async``, ``start``/``start_async``, ``deploy``,
+        ``schedule``, the schedule lifecycle (:attr:`AgentClient.schedules`),
+        and the raw ``/agent/*`` endpoints. **Control-plane only** — its
+        ``run`` does NOT manage local tool workers (use :meth:`run` on the
+        runtime for agents with local ``@tool`` functions).
+        """
+        return self._http
+
     def schedules_client(self) -> Any:
-        """Return a lazily-constructed :class:`ScheduleClient` for this runtime."""
+        """Return the shared :class:`ScheduleClient` for this runtime.
+
+        Delegates to :attr:`client` so the runtime and the control-plane
+        client expose the *same* schedule surface (one instance, not two).
+        """
         if self._schedule_client_instance is None:
             from agentspan.agents.schedule.client import ScheduleClient
 

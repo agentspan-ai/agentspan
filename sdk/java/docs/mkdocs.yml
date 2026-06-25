@@ -38,22 +38,29 @@ markdown_extensions:
 nav:
   - Overview: index.md
   - Getting Started: getting-started.md
-  - Core Concepts:
+  - Writing Agents:
       - Agents: concepts/agents.md
-      - Agent Field Reference: agent-structure.md
-      - Agent JSON Schema: agent-schema.md
       - Tools: concepts/tools.md
       - Multi-Agent: concepts/multi-agent.md
       - Guardrails: concepts/guardrails.md
       - Termination: concepts/termination.md
+      - Callbacks: concepts/callbacks.md
+      - Streaming & Human-in-the-Loop: concepts/streaming-hitl.md
+      - Stateful Agents: concepts/stateful.md
+      - Structured Output: concepts/structured-output.md
       - Scheduling: concepts/scheduling.md
       - Skills: concepts/skills.md
   - Frameworks:
-      - LangChain4j: frameworks/langchain4j.md
       - OpenAI Agents SDK: frameworks/openai.md
       - Google ADK: frameworks/google-adk.md
-  - Spring Boot: spring-boot.md
+      - LangChain4j: frameworks/langchain4j.md
+      - LangGraph4j: frameworks/langgraph4j.md
+  - Operating Agents:
+      - Deploy · Serve · Run · Plan: concepts/deploy-serve-run.md
+      - Spring Boot: spring-boot.md
+      - Agent Field Reference: agent-structure.md
+      - Agent JSON Schema: agent-schema.md
   - API Reference:
+      - Public API summary: api-reference.md
       - AgentRuntime: agent-runtime-api.md
       - AgentClient (internal): agent-client-api.md
-      - Public API summary: api-reference.md

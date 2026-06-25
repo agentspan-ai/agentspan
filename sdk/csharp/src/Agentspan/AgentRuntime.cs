@@ -20,15 +20,21 @@ namespace Agentspan;
 /// </example>
 public sealed class AgentRuntime : IAsyncDisposable, IDisposable
 {
-    private readonly AgentHttpClient _http;
+    private readonly AgentClient _http;
     private readonly Configuration _conductorConfig;
-    private readonly string _serverUrl;
-    private readonly System.Net.Http.HttpClient _schedulerHttp;
-    private Schedules? _schedules;
+    private readonly int _workerPollIntervalMs;
+    private readonly int _workerThreadCount;
     private WorkerManager? _workers;
 
-    /// <summary>Cron-schedule lifecycle API.</summary>
-    public Schedules Schedules => _schedules ??= new Schedules(_schedulerHttp, _serverUrl);
+    /// <summary>
+    /// The control-plane <see cref="AgentClient"/> backing this runtime — exposes
+    /// control-plane <c>run</c>/<c>start</c>/<c>deploy</c>/<c>schedule</c> directly
+    /// (without local tool-worker orchestration, which the runtime owns).
+    /// </summary>
+    public AgentClient Client => _http;
+
+    /// <summary>Cron-schedule lifecycle API (delegates to <see cref="Client"/>).</summary>
+    public Schedules Schedules => _http.Schedules;
 
     public AgentRuntime(AgentRuntimeOptions? options = null)
     {
@@ -38,11 +44,13 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         var authKey    = options?.AuthKey    ?? Environment.GetEnvironmentVariable("AGENTSPAN_AUTH_KEY");
         var authSecret = options?.AuthSecret ?? Environment.GetEnvironmentVariable("AGENTSPAN_AUTH_SECRET");
 
-        _http = new AgentHttpClient(serverUrl, authKey, authSecret);
-        _serverUrl = serverUrl;
-        _schedulerHttp = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        if (!string.IsNullOrEmpty(authKey)) _schedulerHttp.DefaultRequestHeaders.Add("X-Auth-Key", authKey);
-        if (!string.IsNullOrEmpty(authSecret)) _schedulerHttp.DefaultRequestHeaders.Add("X-Auth-Secret", authSecret);
+        _http = new AgentClient(serverUrl, authKey, authSecret);
+
+        // Worker-runner tuning from environment (poll interval ms, thread count).
+        // Connection/auth is owned by the conductor client above; this is purely
+        // how the local worker poll loops behave. Mirrors Java's AgentConfig.fromEnv().
+        _workerPollIntervalMs = ParseEnvInt("AGENTSPAN_WORKER_POLL_INTERVAL", 100, min: 1);
+        _workerThreadCount    = ParseEnvInt("AGENTSPAN_WORKER_THREADS", 1, min: 1);
 
         // Build conductor-csharp Configuration for worker polling.
         // AuthenticationSettings is left null for OSS Conductor (no token exchange needed).
@@ -52,6 +60,21 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         if (!string.IsNullOrEmpty(authKey) && !string.IsNullOrEmpty(authSecret))
             _conductorConfig.AuthenticationSettings = new OrkesAuthenticationSettings(authKey, authSecret);
     }
+
+    /// <summary>Worker poll interval in ms (env <c>AGENTSPAN_WORKER_POLL_INTERVAL</c>, default 100).</summary>
+    public int WorkerPollIntervalMs => _workerPollIntervalMs;
+
+    /// <summary>Worker thread count per task type (env <c>AGENTSPAN_WORKER_THREADS</c>, default 1).</summary>
+    public int WorkerThreadCount => _workerThreadCount;
+
+    private static int ParseEnvInt(string key, int defaultValue, int min)
+    {
+        var raw = Environment.GetEnvironmentVariable(key);
+        return int.TryParse(raw, out var v) && v >= min ? v : defaultValue;
+    }
+
+    private WorkerManager NewWorkerManager()
+        => new(_http, _conductorConfig, _workerPollIntervalMs, _workerThreadCount);
 
     // ── Deploy / Serve ────────────────────────────────────────
 
@@ -108,7 +131,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     /// </summary>
     public async Task ServeAsync(CancellationToken ct = default, params Agent[] agents)
     {
-        _workers ??= new WorkerManager(_http, _conductorConfig);
+        _workers ??= NewWorkerManager();
         foreach (var agent in agents)
             _workers.RegisterAgentTools(agent);
         _workers.Start();
@@ -230,7 +253,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     {
         var domain = await ExtractDomainAsync(executionId, ct);
 
-        _workers ??= new WorkerManager(_http, _conductorConfig);
+        _workers ??= NewWorkerManager();
         _workers.RegisterAgentTools(agent, domain);
         _workers.Start();
 
@@ -312,6 +335,29 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     public void Respond(string executionId, object response)
         => RespondAsync(executionId, response).GetAwaiter().GetResult();
 
+    // ── Event-targeted HITL (streaming) ──────────────────────
+    // StreamAsync yields AgentEvents that carry the emitting executionId. Under
+    // multi-agent strategies the HUMAN task lives in a sub-execution, so respond
+    // to the WAITING event's executionId rather than the root. Mirrors Java's
+    // AgentStream.approve(event)/reject(event).
+
+    /// <summary>Approve the HITL task that emitted the given WAITING event.</summary>
+    public async Task ApproveAsync(AgentEvent waitingEvent, string? comment = null, CancellationToken ct = default)
+        => await _http.RespondAsync(EventExecId(waitingEvent),
+            comment is null ? new { approved = true } : new { approved = true, reason = comment }, ct);
+
+    /// <summary>Reject the HITL task that emitted the given WAITING event.</summary>
+    public async Task RejectAsync(AgentEvent waitingEvent, string reason, CancellationToken ct = default)
+        => await _http.RespondAsync(EventExecId(waitingEvent), new { approved = false, reason }, ct);
+
+    /// <summary>Send an arbitrary structured response to the execution that emitted the given event.</summary>
+    public async Task RespondAsync(AgentEvent waitingEvent, object response, CancellationToken ct = default)
+        => await _http.RespondAsync(EventExecId(waitingEvent), response, ct);
+
+    private static string EventExecId(AgentEvent e)
+        => e.ExecutionId ?? throw new InvalidOperationException(
+            "Event has no executionId to target — use the runtime's executionId-based RespondAsync instead.");
+
     // ── Internal ─────────────────────────────────────────────
 
     private async Task<AgentHandle> StartInternalAsync(
@@ -327,7 +373,7 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
         var runId = HasStatefulTools(agent) ? Guid.NewGuid().ToString("N") : null;
 
         // Fresh worker manager per run
-        _workers ??= new WorkerManager(_http, _conductorConfig);
+        _workers ??= NewWorkerManager();
         _workers.RegisterAgentTools(agent, runId);
         _workers.Start();
 
@@ -369,7 +415,6 @@ public sealed class AgentRuntime : IAsyncDisposable, IDisposable
     {
         await StopWorkersAsync();
         _http.Dispose();
-        _schedulerHttp.Dispose();
     }
 
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();

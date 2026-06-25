@@ -89,20 +89,18 @@ async function recoverFromError(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(RecoveryState);
-builder.addNode('fetch', fetchData);
-builder.addNode('process', processData);
-builder.addNode('recover', recoverFromError);
-
-builder.addEdge(START, 'fetch');
-builder.addConditionalEdges('fetch', shouldRecover, {
-  process: 'process',
-  recover: 'recover',
-});
-builder.addEdge('process', END);
-builder.addEdge('recover', END);
-
-const graph = builder.compile({ name: "error_recovery_agent" });
+const graph = new StateGraph(RecoveryState)
+  .addNode('fetch', fetchData)
+  .addNode('process', processData)
+  .addNode('recover', recoverFromError)
+  .addEdge(START, 'fetch')
+  .addConditionalEdges('fetch', shouldRecover, {
+    process: 'process',
+    recover: 'recover',
+  })
+  .addEdge('process', END)
+  .addEdge('recover', END)
+  .compile({ name: "error_recovery_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {

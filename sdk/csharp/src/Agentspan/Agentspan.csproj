@@ -30,6 +30,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Allow the e2e/test assembly to exercise internal types (e.g. AgentAuthHandler). -->
+    <InternalsVisibleTo Include="AgentspanE2eTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- System.Text.Json and System.Threading.Channels are in-box on .NET 10 -->
     <!-- conductor-csharp brings Newtonsoft.Json + Microsoft.Extensions.Logging.Abstractions transitively -->
     <PackageReference Include="conductor-csharp" Version="1.1.4" />

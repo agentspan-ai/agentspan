@@ -78,22 +78,21 @@ function handleNeutral(_state: State): Partial<State> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(SentimentState);
-builder.addNode('classify', classify);
-builder.addNode('positive', handlePositive);
-builder.addNode('negative', handleNegative);
-builder.addNode('neutral', handleNeutral);
-builder.addEdge(START, 'classify');
-builder.addConditionalEdges('classify', routeSentiment, {
-  positive: 'positive',
-  negative: 'negative',
-  neutral: 'neutral',
-});
-builder.addEdge('positive', END);
-builder.addEdge('negative', END);
-builder.addEdge('neutral', END);
-
-const graph = builder.compile({ name: "sentiment_router" });
+const graph = new StateGraph(SentimentState)
+  .addNode('classify', classify)
+  .addNode('positive', handlePositive)
+  .addNode('negative', handleNegative)
+  .addNode('neutral', handleNeutral)
+  .addEdge(START, 'classify')
+  .addConditionalEdges('classify', routeSentiment, {
+    positive: 'positive',
+    negative: 'negative',
+    neutral: 'neutral',
+  })
+  .addEdge('positive', END)
+  .addEdge('negative', END)
+  .addEdge('neutral', END)
+  .compile({ name: "sentiment_router" });
 
 // Add agentspan metadata for extraction (no LLM in this pipeline example)
 (graph as any)._agentspan = {

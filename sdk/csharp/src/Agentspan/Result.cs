@@ -219,10 +219,10 @@ public record AgentStatus
 public sealed class AgentHandle
 {
     private readonly string _executionId;
-    private readonly AgentHttpClient _http;
+    private readonly AgentClient _http;
     private readonly string? _runId;
 
-    internal AgentHandle(string executionId, AgentHttpClient http, string? runId = null)
+    internal AgentHandle(string executionId, AgentClient http, string? runId = null)
     {
         _executionId = executionId;
         _http = http;
@@ -284,8 +284,61 @@ public sealed class AgentHandle
     public async Task ApproveAsync(CancellationToken cancellationToken = default)
         => await _http.RespondAsync(_executionId, new { approved = true }, cancellationToken);
 
+    /// <summary>Approve the waiting HITL task with a comment reason.</summary>
+    public async Task ApproveAsync(string comment, CancellationToken cancellationToken = default)
+        => await _http.RespondAsync(_executionId, new { approved = true, reason = comment }, cancellationToken);
+
     public async Task RejectAsync(string? reason = null, CancellationToken cancellationToken = default)
         => await _http.RespondAsync(_executionId, new { approved = false, reason }, cancellationToken);
+
+    // ── Event-targeted HITL ──────────────────────────────────
+    // Under HANDOFF/SEQUENTIAL/PARALLEL strategies the HUMAN task lives in a
+    // sub-execution. Pass the WAITING event so the response targets that event's
+    // executionId rather than the root. Mirrors Java's AgentStream.approve(event).
+
+    /// <summary>Approve the HITL task that emitted the given WAITING event (targets its sub-execution).</summary>
+    public async Task ApproveAsync(AgentEvent waitingEvent, string? comment = null, CancellationToken cancellationToken = default)
+        => await _http.RespondAsync(EventExecId(waitingEvent),
+            comment is null ? new { approved = true } : new { approved = true, reason = comment }, cancellationToken);
+
+    /// <summary>Reject the HITL task that emitted the given WAITING event (targets its sub-execution).</summary>
+    public async Task RejectAsync(AgentEvent waitingEvent, string reason, CancellationToken cancellationToken = default)
+        => await _http.RespondAsync(EventExecId(waitingEvent), new { approved = false, reason }, cancellationToken);
+
+    /// <summary>Send an arbitrary structured response to the execution that emitted the given event.</summary>
+    public async Task RespondAsync(AgentEvent waitingEvent, object response, CancellationToken cancellationToken = default)
+        => await _http.RespondAsync(EventExecId(waitingEvent), response, cancellationToken);
+
+    private string EventExecId(AgentEvent e) => e.ExecutionId ?? _executionId;
+
+    // ── Waiting helpers ──────────────────────────────────────
+
+    /// <summary>True if the execution is currently paused for human input. Swallows transient errors.</summary>
+    public async Task<bool> IsWaitingAsync(CancellationToken cancellationToken = default)
+    {
+        try { return (await GetStatusAsync(cancellationToken)).IsWaiting; }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Poll until the execution pauses for human input (returns true) or reaches a
+    /// terminal state (returns false). Returns false on timeout.
+    /// </summary>
+    public async Task<bool> WaitUntilWaitingAsync(
+        TimeSpan timeout, TimeSpan? pollInterval = null, CancellationToken cancellationToken = default)
+    {
+        var poll = pollInterval ?? TimeSpan.FromMilliseconds(500);
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline && !cancellationToken.IsCancellationRequested)
+        {
+            var status = await GetStatusAsync(cancellationToken);
+            if (status.IsWaiting) return true;
+            if (status.IsComplete) return false;
+            if (status.StatusValue is "COMPLETED" or "FAILED" or "TERMINATED" or "TIMED_OUT") return false;
+            await Task.Delay(poll, cancellationToken);
+        }
+        return false;
+    }
 
     /// <summary>
     /// Gracefully stop the agent execution. Sets _stop_requested to true — the

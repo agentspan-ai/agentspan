@@ -21,22 +21,24 @@ namespace Agentspan;
 internal sealed class WorkerPollLoop : IAsyncDisposable
 {
     private readonly TaskResourceApi _taskClient;
-    private readonly AgentHttpClient _http;
+    private readonly AgentClient _http;
     private readonly string _taskName;
     private readonly string? _domain;
     private readonly Func<Dictionary<string, JsonElement>, ToolContext?, System.Threading.Tasks.Task<object?>> _handler;
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger _logger;
     private readonly int _pollIntervalMs;
+    private readonly int _threadCount;
     private readonly string[] _credentialNames;
-    private System.Threading.Tasks.Task? _pollTask;
+    private readonly List<System.Threading.Tasks.Task> _pollTasks = [];
 
     internal WorkerPollLoop(
         TaskResourceApi taskClient,
-        AgentHttpClient http,
+        AgentClient http,
         string taskName,
         Func<Dictionary<string, JsonElement>, ToolContext?, System.Threading.Tasks.Task<object?>> handler,
         int pollIntervalMs = 100,
+        int threadCount = 1,
         ILogger? logger = null,
         string[]? credentialNames = null,
         string? domain = null)
@@ -46,7 +48,8 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
         _taskName        = taskName;
         _domain          = domain;
         _handler         = handler;
-        _pollIntervalMs  = pollIntervalMs;
+        _pollIntervalMs  = pollIntervalMs > 0 ? pollIntervalMs : 100;
+        _threadCount     = threadCount > 0 ? threadCount : 1;
         _logger          = logger ?? NullLogger.Instance;
         _credentialNames = credentialNames ?? [];
     }
@@ -54,7 +57,10 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
     public void Start()
     {
         var ct = _cts.Token;
-        _pollTask = System.Threading.Tasks.Task.Run(() => PollLoopAsync(ct), ct);
+        // Spawn `_threadCount` concurrent poll loops so a slow handler on one
+        // thread doesn't stall sibling tasks of the same type.
+        for (int i = 0; i < _threadCount; i++)
+            _pollTasks.Add(System.Threading.Tasks.Task.Run(() => PollLoopAsync(ct), ct));
     }
 
     private async System.Threading.Tasks.Task PollLoopAsync(CancellationToken ct)
@@ -252,7 +258,9 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _cts.Cancel();
-        try { if (_pollTask is not null) await _pollTask; } catch (OperationCanceledException) { }
+        try { await System.Threading.Tasks.Task.WhenAll(_pollTasks); }
+        catch (OperationCanceledException) { }
+        catch { /* individual poll loops log their own errors */ }
         _cts.Dispose();
     }
 }
@@ -264,14 +272,19 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
 /// </summary>
 internal sealed class WorkerManager : IAsyncDisposable
 {
-    private readonly AgentHttpClient _http;
+    private readonly AgentClient _http;
     private readonly TaskResourceApi _taskClient;
     private readonly List<WorkerPollLoop> _workers = [];
+    private readonly int _pollIntervalMs;
+    private readonly int _threadCount;
 
-    public WorkerManager(AgentHttpClient http, Configuration conductorConfig)
+    public WorkerManager(AgentClient http, Configuration conductorConfig,
+        int pollIntervalMs = 100, int threadCount = 1)
     {
-        _http       = http;
-        _taskClient = new TaskResourceApi(conductorConfig);
+        _http           = http;
+        _taskClient     = new TaskResourceApi(conductorConfig);
+        _pollIntervalMs = pollIntervalMs > 0 ? pollIntervalMs : 100;
+        _threadCount    = threadCount > 0 ? threadCount : 1;
     }
 
     private WorkerPollLoop NewLoop(
@@ -280,6 +293,7 @@ internal sealed class WorkerManager : IAsyncDisposable
         string[]? credentialNames = null,
         string? domain = null)
         => new(_taskClient, _http, taskName, handler,
+               pollIntervalMs: _pollIntervalMs, threadCount: _threadCount,
                credentialNames: credentialNames, domain: domain);
 
     public void RegisterTools(IEnumerable<ToolDef> tools, string? domain = null)
@@ -520,9 +534,15 @@ internal sealed class WorkerManager : IAsyncDisposable
 
     private void RegisterCallbacks(Agent agent, string? domain = null)
     {
+        // before_model / after_model keep their bespoke argument signatures
+        // (messages list / llm_result string). Track them so the generic
+        // position loop below doesn't double-register the same task name.
+        var registered = new HashSet<string>(StringComparer.Ordinal);
+
         if (agent.BeforeModelCallback is not null)
         {
             var cb = agent.BeforeModelCallback;
+            registered.Add("before_model");
             _workers.Add(NewLoop($"{agent.Name}_before_model", (args, _) =>
             {
                 List<JsonElement>? messages = null;
@@ -536,6 +556,7 @@ internal sealed class WorkerManager : IAsyncDisposable
         if (agent.AfterModelCallback is not null)
         {
             var cb = agent.AfterModelCallback;
+            registered.Add("after_model");
             _workers.Add(NewLoop($"{agent.Name}_after_model", (args, _) =>
             {
                 string? llmResult = args.TryGetValue("llm_result", out var resEl) && resEl.ValueKind == JsonValueKind.String
@@ -543,6 +564,49 @@ internal sealed class WorkerManager : IAsyncDisposable
                     : null;
                 var result = cb(llmResult);
                 return System.Threading.Tasks.Task.FromResult<object?>(result ?? new Dictionary<string, object>());
+            }, domain: domain));
+        }
+
+        // Generic kwargs-based callbacks: the agent/tool function callbacks plus
+        // any CallbackHandler that overrides a hook. Multiple delegates can target
+        // one position (run in order, first non-empty return short-circuits).
+        var byPosition =
+            new Dictionary<string, List<Func<Dictionary<string, JsonElement>, Dictionary<string, object>?>>>(
+                StringComparer.Ordinal);
+
+        void Add(string position, Func<Dictionary<string, JsonElement>, Dictionary<string, object>?>? fn)
+        {
+            if (fn is null) return;
+            if (!byPosition.TryGetValue(position, out var list)) byPosition[position] = list = [];
+            list.Add(fn);
+        }
+
+        Add("before_agent", agent.BeforeAgentCallback);
+        Add("after_agent",  agent.AfterAgentCallback);
+        Add("before_tool",  agent.BeforeToolCallback);
+        Add("after_tool",   agent.AfterToolCallback);
+
+        foreach (var (position, method) in CallbackHandler.Positions)
+            foreach (var handler in agent.Callbacks)
+                if (handler.Overrides(method))
+                {
+                    var h = handler;
+                    var m = method;
+                    Add(position, kwargs => h.Invoke(m, kwargs));
+                }
+
+        foreach (var (position, delegates) in byPosition)
+        {
+            if (registered.Contains(position)) continue;
+            var fns = delegates;
+            _workers.Add(NewLoop($"{agent.Name}_{position}", (args, _) =>
+            {
+                foreach (var fn in fns)
+                {
+                    var r = fn(args);
+                    if (r is { Count: > 0 }) return System.Threading.Tasks.Task.FromResult<object?>(r);
+                }
+                return System.Threading.Tasks.Task.FromResult<object?>(new Dictionary<string, object>());
             }, domain: domain));
         }
     }
@@ -612,12 +676,15 @@ internal sealed class WorkerManager : IAsyncDisposable
             val.ValueKind == JsonValueKind.True ||
             (val.ValueKind == JsonValueKind.String && val.GetString()?.Trim().ToLower() == "true");
 
+        var handoffConditions = agent.Handoffs;
+
         _workers.Add(NewLoop($"{agent.Name}_handoff_check", (args, _) =>
         {
             var activeAgent = args.TryGetValue("active_agent", out var ae) ? ae.GetString() ?? "0" : "0";
             var isTransfer  = args.TryGetValue("is_transfer",  out var it) && IsTransferTruthy(it);
             var transferTo  = args.TryGetValue("transfer_to",  out var tt) ? tt.GetString() ?? "" : "";
 
+            // Priority 1: explicit transfer tool was called.
             if (isTransfer && !string.IsNullOrEmpty(transferTo) && IsAllowed(activeAgent, transferTo))
             {
                 var targetIdx = nameToIdx.TryGetValue(transferTo, out var ti) ? ti : activeAgent;
@@ -627,6 +694,31 @@ internal sealed class WorkerManager : IAsyncDisposable
                         ["active_agent"] = targetIdx,
                         ["handoff"]      = true,
                     });
+            }
+
+            // Priority 2: condition-based handoffs (fallback). Mirrors Python's
+            // handoff_check_worker — evaluate each trigger against the context.
+            if (handoffConditions.Count > 0)
+            {
+                var context = new Dictionary<string, object?>
+                {
+                    ["result"]      = args.TryGetValue("result", out var rEl) ? rEl.ToString() : "",
+                    ["messages"]    = args.TryGetValue("conversation", out var cEl) ? cEl.ToString() : "",
+                    ["tool_name"]   = "",
+                    ["tool_result"] = "",
+                };
+                foreach (var cond in handoffConditions)
+                {
+                    if (!cond.ShouldHandoff(context)) continue;
+                    if (!IsAllowed(activeAgent, cond.Target)) continue;
+                    var targetIdx = nameToIdx.TryGetValue(cond.Target, out var ci) ? ci : activeAgent;
+                    if (targetIdx != activeAgent)
+                        return System.Threading.Tasks.Task.FromResult<object?>(new Dictionary<string, object>
+                        {
+                            ["active_agent"] = targetIdx,
+                            ["handoff"]      = true,
+                        });
+                }
             }
 
             return System.Threading.Tasks.Task.FromResult<object?>(new Dictionary<string, object>

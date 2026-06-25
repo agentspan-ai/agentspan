@@ -4,7 +4,7 @@
 
 - Java 21+
 - Gradle 7+ or Maven 3.6+
-- A running Agentspan server — see [self-hosting](../self-hosting.md) or start one locally:
+- A running Agentspan server — see the [Agentspan repo](https://github.com/agentspan-ai/agentspan) or start one locally:
 
 ```bash
 docker run -p 6767:6767 agentspan/server:latest
@@ -116,12 +116,13 @@ Use `stream()` to get events as they happen:
 ```java
 import org.conductoross.conductor.ai.model.AgentStream;
 import org.conductoross.conductor.ai.model.AgentEvent;
+import org.conductoross.conductor.ai.enums.EventType;
 
 try (AgentRuntime runtime = new AgentRuntime();
      AgentStream stream = runtime.stream(agent, "Tell me a story")) {
 
     for (AgentEvent event : stream) {
-        if (event.getType().isMessage()) {
+        if (event.getType() == EventType.MESSAGE) {
             System.out.print(event.getContent());
         }
     }
