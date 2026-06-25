@@ -5,6 +5,9 @@
 
 package dev.agentspan.runtime.service;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -16,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.core.listener.TaskStatusListener;
 import com.netflix.conductor.core.listener.WorkflowStatusListener;
 import com.netflix.conductor.model.TaskModel;
@@ -199,12 +203,23 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     @Override
     public void onWorkflowStartedIfEnabled(WorkflowModel workflow) {
+        String parentId = workflow.getParentWorkflowId();
+
+        // Root workflow: ensure an execution token exists so credentialed tools
+        // can resolve their secrets regardless of HOW the workflow was started.
+        // The SDK /agent/start path mints one already; inbound webhook / UI /
+        // schedule starts go through Conductor core and do not — this fills that
+        // gap. Sub-workflows (parentId set) inherit the token from the parent's
+        // input, so they skip this and fall through to the handoff logic below.
+        if (parentId == null || parentId.isEmpty()) {
+            ensureExecutionToken(workflow);
+            return;
+        }
+
         // For sub-workflows: register alias so child events forward to parent,
         // and emit a HANDOFF event on the parent stream.
         // (onTaskScheduled is not called for system tasks like SUB_WORKFLOW,
         //  so we detect handoffs here instead.)
-        String parentId = workflow.getParentWorkflowId();
-        if (parentId == null || parentId.isEmpty()) return;
 
         String childId = workflow.getWorkflowId();
         String childName = workflow.getWorkflowName();
@@ -263,6 +278,81 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
             revokeWorkflowToken(workflow);
         }
         streamRegistry.complete(wfId);
+    }
+
+    /**
+     * Mint an execution token for a root workflow started WITHOUT one, so its
+     * credentialed tools can resolve secrets. The SDK {@code /agent/start} path
+     * embeds a token in the workflow input; inbound-webhook / UI / schedule
+     * starts go through Conductor core and don't — this is a no-op in the former
+     * case and the fix in the latter.
+     *
+     * <p>Identity and the resolvable-name allow-list come from the WorkflowDef
+     * metadata stamped at deploy time ({@code agentspan_credential_user} /
+     * {@code agentspan_declared_credentials}): the agent runs with its deployer's
+     * credentials, bounded to its declared secrets, independent of the trigger.</p>
+     *
+     * <p>Mutating {@code workflow.getInput()} here is safe and durable: Conductor
+     * fires this listener (STARTED) immediately before {@code decide()} on the
+     * same {@link WorkflowModel} instance, so the first task sees the token; and
+     * {@code decide()} persists the workflow via {@code updateWorkflow()}, so it
+     * survives every later decide()-cycle reload (the agent loop, the final
+     * delivery task, etc.).</p>
+     */
+    @SuppressWarnings("unchecked")
+    private void ensureExecutionToken(WorkflowModel workflow) {
+        if (executionTokenService == null) return;
+        try {
+            Map<String, Object> input = workflow.getInput();
+            if (input == null) return;
+            Object existing = input.get("__agentspan_ctx__");
+            if (existing instanceof Map && ((Map<?, ?>) existing).get("execution_token") != null) {
+                return; // already minted by the SDK /agent/start path
+            }
+
+            WorkflowDef def = workflow.getWorkflowDefinition();
+            Map<String, Object> md = def != null ? def.getMetadata() : null;
+            if (md == null) return;
+
+            Object userObj = md.get("agentspan_credential_user");
+            String userId = userObj instanceof String ? (String) userObj : workflow.getCreatedBy();
+            if (userId == null || userId.isEmpty()) {
+                logger.debug(
+                        "No credential identity for workflow {} — skipping token mint",
+                        workflow.getWorkflowId());
+                return;
+            }
+
+            Object declaredObj = md.get("agentspan_declared_credentials");
+            List<String> declared = declaredObj instanceof List ? (List<String>) declaredObj : List.of();
+
+            long ttlSeconds = def.getTimeoutSeconds() > 0 ? def.getTimeoutSeconds() : 0;
+            String token =
+                    executionTokenService.mint(userId, workflow.getWorkflowId(), declared, ttlSeconds);
+
+            Map<String, Object> ctx = new LinkedHashMap<>();
+            ctx.put("execution_token", token);
+            input.put("__agentspan_ctx__", ctx);
+
+            // Mirror into variables so onWorkflowCompleted/Terminated can revoke it.
+            Map<String, Object> vars = workflow.getVariables();
+            if (vars == null) {
+                vars = new HashMap<>();
+                workflow.setVariables(vars);
+            }
+            vars.put("__agentspan_ctx__", ctx);
+
+            logger.info(
+                    "Minted execution token for workflow {} started without one (user={}, declared={})",
+                    workflow.getWorkflowId(),
+                    userId,
+                    declared.size());
+        } catch (Exception e) {
+            logger.warn(
+                    "Failed to ensure execution token for workflow {}: {}",
+                    workflow.getWorkflowId(),
+                    e.getMessage());
+        }
     }
 
     private void revokeWorkflowToken(WorkflowModel workflow) {

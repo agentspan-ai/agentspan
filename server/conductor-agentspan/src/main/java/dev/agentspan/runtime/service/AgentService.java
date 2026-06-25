@@ -141,6 +141,7 @@ public class AgentService {
                 def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
+        stampCredentialContext(metadata, config);
         def.setMetadata(metadata);
 
         Set<String> workerNames = collectSimpleTaskNames(def);
@@ -227,6 +228,7 @@ public class AgentService {
                 def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
+        stampCredentialContext(metadata, config);
         def.setMetadata(metadata);
 
         // 2. Register workflow definition (upsert)
@@ -275,6 +277,7 @@ public class AgentService {
                 def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
+        stampCredentialContext(metadata, config);
         def.setMetadata(metadata);
 
         // 2. Register workflow definition (upsert)
@@ -763,6 +766,32 @@ public class AgentService {
                 agentDef.put("skillRef", request.getSkillRef());
             }
             metadata.put("agentDef", agentDef);
+        }
+    }
+
+    /**
+     * Stamp the credential-resolution context onto the WorkflowDef metadata so a
+     * workflow started WITHOUT a pre-minted execution token (inbound webhook, UI,
+     * schedule — any path that bypasses {@link #start}) can still mint one.
+     *
+     * <p>{@code agentspan_credential_user} is the deploying principal: the agent
+     * runs with ITS deployer's stored credentials regardless of who triggered it.
+     * {@code agentspan_declared_credentials} bounds what that minted token may
+     * resolve, mirroring the allow-list {@link #start} mints against. The mint
+     * itself happens at runtime in {@code AgentEventListener.onWorkflowStarted}.</p>
+     */
+    private void stampCredentialContext(Map<String, Object> metadata, AgentConfig config) {
+        try {
+            metadata.put("agentspan_declared_credentials", extractDeclaredCredentials(config));
+            RequestContextHolder.get()
+                    .map(ctx -> ctx.getUserId())
+                    .filter(uid -> uid != null && !uid.isEmpty())
+                    .ifPresent(uid -> metadata.put("agentspan_credential_user", uid));
+        } catch (Exception e) {
+            log.warn(
+                    "Failed to stamp credential context for agent '{}': {}",
+                    config.getName(),
+                    e.getMessage());
         }
     }
 

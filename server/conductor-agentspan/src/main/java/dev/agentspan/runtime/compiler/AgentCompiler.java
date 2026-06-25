@@ -1081,6 +1081,13 @@ public class AgentCompiler {
         wf.setTimeoutSeconds(60L);
         wf.setTimeoutPolicy(null);
         wf.setInputParameters(WORKFLOW_INPUTS);
+        // Enable the workflow status listener (AgentEventListener) for EVERY start
+        // path. Conductor gates onWorkflowStarted/Completed/Terminated on this
+        // per-def flag (defaults false). We rely on those callbacks to:
+        //   - mint an execution token for workflows started WITHOUT one (webhook,
+        //     UI, schedule) so credentialed tools can resolve secrets, and
+        //   - revoke the token + emit SSE done events on completion.
+        wf.setWorkflowStatusListenerEnabled(true);
         return wf;
     }
 
