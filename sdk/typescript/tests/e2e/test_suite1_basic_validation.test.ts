@@ -18,8 +18,8 @@ import {
   pdfTool,
   RegexGuardrail,
   guardrail,
-} from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
+import type { GuardrailResult } from '@conductoross/conductor-ai-sdk';
 import { checkServerHealth, MODEL, MCP_TESTKIT_URL } from './helpers';
 
 let runtime: AgentRuntime;

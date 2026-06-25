@@ -11,7 +11,7 @@
 import { MemorySaver } from '@langchain/langgraph';
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-ai-sdk';
 
 // ---------------------------------------------------------------------------
 // Build the graph with checkpointer

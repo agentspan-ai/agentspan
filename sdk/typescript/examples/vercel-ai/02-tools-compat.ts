@@ -13,7 +13,7 @@ import {
   AgentRuntime,
   tool as agentspanTool,
   getToolDef,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
 
 // ── Agentspan native tool ────────────────────────────────
 export const nativeSearchTool = agentspanTool(

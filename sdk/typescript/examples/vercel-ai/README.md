@@ -38,9 +38,9 @@ console.log(result.text);
 </td><td>
 
 ```typescript
-import { generateText, tool } from '@agentspan-ai/sdk/vercel-ai';
+import { generateText, tool } from '@conductoross/conductor-ai-sdk/vercel-ai';
 //      ^^^^^^^^^^^^
-//      from '@agentspan-ai/sdk/vercel-ai'  <-- only change
+//      from '@conductoross/conductor-ai-sdk/vercel-ai'  <-- only change
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
@@ -108,7 +108,7 @@ console.log(result.text);
 import { tool as aiTool } from 'ai';
 //                          ^^^ tools still from 'ai'
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-ai-sdk';
 //      ^^^^^  ^^^^^^^^^^^^
 //      agentspan Agent + Runtime
 

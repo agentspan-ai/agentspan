@@ -8,7 +8,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-ai-sdk';
 
 // ── Specialist tools (Vercel AI SDK format) ──────────────
 

@@ -17,8 +17,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
 vi.setConfig({ testTimeout: 300_000 }); // 5 min — stateful tests involve real LLM calls
-import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
-import type { ToolDef } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool } from '@conductoross/conductor-ai-sdk';
+import type { ToolDef } from '@conductoross/conductor-ai-sdk';
 import { checkServerHealth, getWorkflow, MODEL, TIMEOUT } from './helpers';
 
 // ── Deterministic tools ─────────────────────────────────────

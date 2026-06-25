@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime, waitForMessageTool, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, waitForMessageTool, tool } from '@conductoross/conductor-ai-sdk';
 import { z } from 'zod';
 import { checkServerHealth, MODEL } from './helpers';
 

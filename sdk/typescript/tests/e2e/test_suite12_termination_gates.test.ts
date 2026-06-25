@@ -21,7 +21,7 @@ import {
   TextMention,
   MaxMessage,
   TextGate,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
 import {
   checkServerHealth,
   MODEL,

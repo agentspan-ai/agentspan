@@ -2,7 +2,7 @@
 
 The official TypeScript/Node SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
 
-- **Package:** `@agentspan-ai/sdk` (npm)
+- **Package:** `@conductoross/conductor-ai-sdk` (npm)
 - **Runtime:** Node.js >= 18
 - **Module:** ESM and CommonJS (`import` / `require`)
 
@@ -19,7 +19,7 @@ The official TypeScript/Node SDK for [Agentspan](https://agentspan.ai) — durab
 ## At a glance
 
 ```ts
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-ai-sdk';
 
 const agent = new Agent({
   name: 'greeter',

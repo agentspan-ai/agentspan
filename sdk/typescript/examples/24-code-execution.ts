@@ -21,7 +21,7 @@ import {
   AgentRuntime,
   LocalCodeExecutor,
   DockerCodeExecutor,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 // -- Example 1: Local code execution ---------------------------------------

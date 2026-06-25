@@ -14,7 +14,7 @@
  * SDKs.
  *
  * @example
- *   import { Plan, Step, Op, Ref } from "@agentspan-ai/sdk";
+ *   import { Plan, Step, Op, Ref } from "@conductoross/conductor-ai-sdk";
  *
  *   const plan = new Plan({
  *     steps: [

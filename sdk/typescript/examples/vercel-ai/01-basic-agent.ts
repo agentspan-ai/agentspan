@@ -10,7 +10,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-ai-sdk';
 
 // ── Vercel AI SDK tool (auto-detected by superset tool system) ──
 const weatherTool = aiTool({

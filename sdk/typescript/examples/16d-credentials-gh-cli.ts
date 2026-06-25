@@ -17,7 +17,7 @@
  *   - GH_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 export const agent = new Agent({

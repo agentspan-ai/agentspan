@@ -24,7 +24,7 @@
  *   npx ts-node examples/17-scheduled-agent.ts
  */
 
-import { Agent, AgentRuntime, Schedule, schedules } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, Schedule, schedules } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 // -- Agent definition --------------------------------------------------------

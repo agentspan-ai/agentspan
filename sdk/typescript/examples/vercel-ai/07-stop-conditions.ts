@@ -15,7 +15,7 @@ import {
   AgentRuntime,
   MaxMessage,
   TextMention,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
 
 // ── Tool state ───────────────────────────────────────────
 let analysisStepCount = 0;

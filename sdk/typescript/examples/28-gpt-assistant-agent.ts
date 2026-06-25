@@ -16,7 +16,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { AgentRuntime, GPTAssistantAgent } from '@agentspan-ai/sdk';
+import { AgentRuntime, GPTAssistantAgent } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 // -- Example 1: Create assistant on the fly --------------------------------

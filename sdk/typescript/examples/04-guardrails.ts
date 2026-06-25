@@ -13,8 +13,8 @@ import {
   RegexGuardrail,
   LLMGuardrail,
   guardrail,
-} from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
+import type { GuardrailResult } from '@conductoross/conductor-ai-sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 

@@ -1,6 +1,6 @@
 # API Reference
 
-The public surface of `@agentspan-ai/sdk`. One section per type. Everything here is exported from the package root unless noted.
+The public surface of `@conductoross/conductor-ai-sdk`. One section per type. Everything here is exported from the package root unless noted.
 
 ## AgentRuntime
 
@@ -322,4 +322,4 @@ interface AgentEvent {
 - **Claude Code:** `ClaudeCode(modelName?, permissionMode?)`, `PermissionMode`, `resolveClaudeCodeModel`.
 - **Extended agents:** `GPTAssistantAgent({ name, assistantId, model?, instructions? })`.
 - **Framework integration:** `detectFramework`, `serializeFrameworkAgent`, `serializeLangGraph`, `serializeLangChain`.
-- **Subpath exports:** `@agentspan-ai/sdk/vercel-ai`, `@agentspan-ai/sdk/langgraph`, `@agentspan-ai/sdk/langchain`, `@agentspan-ai/sdk/testing`.
+- **Subpath exports:** `@conductoross/conductor-ai-sdk/vercel-ai`, `@conductoross/conductor-ai-sdk/langgraph`, `@conductoross/conductor-ai-sdk/langchain`, `@conductoross/conductor-ai-sdk/testing`.

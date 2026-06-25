@@ -2,13 +2,6 @@
 # yarn lockfile v1
 
 
-"@agentspan-ai/sdk@file:..":
-  version "1.0.0"
-  resolved "file:"
-  dependencies:
-    "@io-orkes/conductor-javascript" "^3.0.3"
-    dotenv "^16.0.0"
-
 "@ai-sdk/provider-utils@2.2.8":
   version "2.2.8"
   resolved "https://registry.npmjs.org/@ai-sdk/provider-utils/-/provider-utils-2.2.8.tgz"
@@ -48,6 +41,13 @@
   version "4.1.1"
   resolved "https://registry.npmjs.org/@cfworker/json-schema/-/json-schema-4.1.1.tgz"
   integrity sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==
+
+"@conductoross/conductor-ai-sdk@file:..":
+  version "1.0.0"
+  resolved "file:"
+  dependencies:
+    "@io-orkes/conductor-javascript" "^3.0.3"
+    dotenv "^16.0.0"
 
 "@esbuild/darwin-arm64@0.28.1":
   version "0.28.1"
@@ -1596,9 +1596,9 @@ eventsource@^3.0.2:
   dependencies:
     "@agentspan-ai/sdk" "file:.."
     "@google/adk" "0.2.5"
-    "@langchain/core" "^0.3.80"
+    "@langchain/core" "^0.3.40"
     "@langchain/langgraph" "^0.2.74"
-    "@langchain/openai" "^0.3.0"
+    "@langchain/openai" "^0.3.17"
     "@openai/agents" "^0.3.0"
     ai "^4.3.19"
     tsx "^4.21.0"

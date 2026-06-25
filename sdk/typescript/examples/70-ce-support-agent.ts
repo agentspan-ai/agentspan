@@ -18,7 +18,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, RegexGuardrail, agentTool, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, RegexGuardrail, agentTool, tool } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 // -- Credential lists --------------------------------------------------------

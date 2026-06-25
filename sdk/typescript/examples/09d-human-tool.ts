@@ -22,8 +22,8 @@
 
 import * as readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { Agent, AgentRuntime, humanTool, tool } from '@agentspan-ai/sdk';
-import type { AgentHandle } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, humanTool, tool } from '@conductoross/conductor-ai-sdk';
+import type { AgentHandle } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 const lookupEmployee = tool(

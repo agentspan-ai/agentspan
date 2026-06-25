@@ -18,7 +18,7 @@ import {
   AgentRuntime,
   WorkflowClient,
   Schedule,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
 import { checkServerHealth, MODEL } from './helpers';
 
 const healthy = await checkServerHealth();

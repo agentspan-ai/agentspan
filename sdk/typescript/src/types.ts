@@ -260,7 +260,7 @@ export interface RunOptions {
   /**
    * LLM model hint for framework agents where automatic detection fails.
    * Accepts a model string ('openai/gpt-4o-mini') or an LLM object (e.g. ChatOpenAI instance).
-   * Required for LangGraph agents that don't use the @agentspan-ai/sdk/langgraph wrapper.
+   * Required for LangGraph agents that don't use the @conductoross/conductor-ai-sdk/langgraph wrapper.
    */
   model?: unknown;
   /**

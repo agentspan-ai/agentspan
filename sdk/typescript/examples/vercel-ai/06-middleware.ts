@@ -15,7 +15,7 @@ import {
   AgentRuntime,
   RegexGuardrail,
   guardrail,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
 
 // ── Regex guardrail: block PII patterns (server-side) ────
 const piiGuardrail = new RegexGuardrail({

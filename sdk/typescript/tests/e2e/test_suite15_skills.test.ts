@@ -27,7 +27,7 @@ import {
   agentTool,
   createSkillWorkers,
   getToolDef,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
 import { checkServerHealth, getWorkflow, MODEL } from './helpers';
 
 // ── Fixtures ─────────────────────────────────────────────────

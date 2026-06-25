@@ -24,7 +24,7 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool, getCredential } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 // Mirrors an OpenAI @function_tool that checks for a credential

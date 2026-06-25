@@ -53,7 +53,7 @@ for await (const event of events) {
 import { LlmAgent, FunctionTool }
   from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-ai-sdk';
 // ^^^ add agentspan import
 
 const getWeather = new FunctionTool({
@@ -94,7 +94,7 @@ await runtime.shutdown();
 
 | What | Change |
 |------|--------|
-| **Imports** | Add `AgentRuntime` from `@agentspan-ai/sdk` |
+| **Imports** | Add `AgentRuntime` from `@conductoross/conductor-ai-sdk` |
 | **Agent** | No changes — same `new LlmAgent({ ... })` |
 | **Tools** | No changes — same `new FunctionTool({ ... })` |
 | **Execution** | ADK runner → `runtime.run(agent, prompt)` |

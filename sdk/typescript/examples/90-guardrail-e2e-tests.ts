@@ -17,8 +17,8 @@ import {
   RegexGuardrail,
   guardrail,
   tool,
-} from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
+import type { GuardrailResult } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 // -- Test infrastructure -----------------------------------------------------

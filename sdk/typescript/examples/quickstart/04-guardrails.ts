@@ -2,7 +2,7 @@
  * Guardrails — block responses containing email addresses.
  */
 
-import { Agent, AgentRuntime, RegexGuardrail } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, RegexGuardrail } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from '../settings.js';
 
 export const agent = new Agent({

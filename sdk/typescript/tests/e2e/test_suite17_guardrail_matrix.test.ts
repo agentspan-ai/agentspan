@@ -17,8 +17,8 @@ import {
   guardrail,
   RegexGuardrail,
   LLMGuardrail,
-} from '@agentspan-ai/sdk';
-import type { GuardrailResult, AgentHandle, AgentStatus } from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-ai-sdk';
+import type { GuardrailResult, AgentHandle, AgentStatus } from '@conductoross/conductor-ai-sdk';
 import { checkServerHealth, MODEL, getOutputText } from './helpers';
 
 // ── Types ────────────────────────────────────────────────────────────────

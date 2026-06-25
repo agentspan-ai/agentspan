@@ -19,8 +19,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, RegexGuardrail, guardrail } from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, RegexGuardrail, guardrail } from '@conductoross/conductor-ai-sdk';
+import type { GuardrailResult } from '@conductoross/conductor-ai-sdk';
 import { llmModel } from './settings';
 
 // -- RegexGuardrail: block bullet-point lists --------------------------------
