@@ -10,10 +10,10 @@
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
 using Xunit;
-using Agentspan;
-using Agentspan.Plans;
+using Conductor.AI;
+using Conductor.AI.Plans;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 public sealed class Plans_ContextTests
 {
@@ -189,7 +189,7 @@ public sealed class Plans_ContextTests
     private static JsonObject SerializeAgentConfigForTest(Agent agent)
     {
         var t = typeof(Agent).Assembly
-            .GetType("Agentspan.AgentConfigSerializer", throwOnError: true)!;
+            .GetType("Conductor.AI.AgentConfigSerializer", throwOnError: true)!;
         var mi = t.GetMethod(
             "SerializeAgent",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;

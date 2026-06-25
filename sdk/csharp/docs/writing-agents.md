@@ -524,7 +524,7 @@ Attach cron triggers to a deployed agent. See [advanced.md](advanced.md#schedule
 for the full lifecycle API; the short version:
 
 ```csharp
-using Agentspan.Scheduling;
+using Conductor.AI.Scheduling;
 
 await runtime.DeployAsync(agent, schedules:
 [

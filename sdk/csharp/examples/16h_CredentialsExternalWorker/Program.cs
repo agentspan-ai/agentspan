@@ -26,8 +26,8 @@
 //   - An external worker polling for "github_lookup" tasks (see comments below)
 
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── External tool declaration ─────────────────────────────────
 //
@@ -88,7 +88,7 @@ result.PrintResult();
  *
  * Implementation sketch:
  *
- *   using Agentspan;
+ *   using Conductor.AI;
  *   using OrchestratorSDK.Client;           // Conductor .NET SDK
  *   using System.Net.Http.Headers;
  *   using System.Text.Json;

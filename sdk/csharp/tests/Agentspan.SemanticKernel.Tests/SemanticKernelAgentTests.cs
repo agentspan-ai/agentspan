@@ -3,12 +3,12 @@
 
 using System.ComponentModel;
 using System.Text.Json;
-using Agentspan;
-using Agentspan.SemanticKernel;
+using Conductor.AI;
+using Conductor.AI.SemanticKernel;
 using Microsoft.SemanticKernel;
 using Xunit;
 
-namespace Agentspan.SemanticKernel.Tests;
+namespace Conductor.AI.SemanticKernel.Tests;
 
 /// <summary>
 /// Plan-level (no LLM) tests for the SK → Agentspan bridge. Each test is a

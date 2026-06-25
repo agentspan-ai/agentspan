@@ -8,14 +8,14 @@ applies — you run them with the same `AgentRuntime`.
 
 | Framework | Package | Namespace | Entry point |
 |---|---|---|---|
-| OpenAI Agents | `Agentspan.OpenAI` | `Agentspan.OpenAI` | `OpenAIAgent.Builder()` / `OpenAIAgent.From(...)` |
-| Google ADK | `Agentspan.GoogleADK` | `Agentspan.GoogleADK` | `GoogleADKAgent.Builder()` / `GoogleADKAgent.From(...)` |
-| Semantic Kernel | `Agentspan.SemanticKernel` | `Agentspan.SemanticKernel` | `SemanticKernelAgent.From(...)` |
+| OpenAI Agents | `Conductor.AI.OpenAI` | `Conductor.AI.OpenAI` | `OpenAIAgent.Builder()` / `OpenAIAgent.From(...)` |
+| Google ADK | `Conductor.AI.GoogleADK` | `Conductor.AI.GoogleADK` | `GoogleADKAgent.Builder()` / `GoogleADKAgent.From(...)` |
+| Semantic Kernel | `Conductor.AI.SemanticKernel` | `Conductor.AI.SemanticKernel` | `SemanticKernelAgent.From(...)` |
 
 ```bash
-dotnet add package Agentspan.OpenAI
-dotnet add package Agentspan.GoogleADK
-dotnet add package Agentspan.SemanticKernel
+dotnet add package conductor-ai-sdk-openai
+dotnet add package conductor-ai-sdk-google-adk
+dotnet add package conductor-ai-sdk-semantic-kernel
 ```
 
 (Inside this repo, reference the corresponding `src/Agentspan.*/*.csproj`.)
@@ -27,8 +27,8 @@ Mirrors the OpenAI Agents SDK shape. The SDK routes the agent through
 without a provider prefix are auto-prefixed with `openai/` server-side.
 
 ```csharp
-using Agentspan;
-using Agentspan.OpenAI;
+using Conductor.AI;
+using Conductor.AI.OpenAI;
 
 var agent = OpenAIAgent.Builder()
     .Name("greeter")
@@ -83,8 +83,8 @@ model names like `"gemini-2.0-flash"` are prefixed with `"google_gemini/"`
 server-side. Consumed by the server's `GoogleADKNormalizer`.
 
 ```csharp
-using Agentspan;
-using Agentspan.GoogleADK;
+using Conductor.AI;
+using Conductor.AI.GoogleADK;
 
 var agent = GoogleADKAgent.Builder()
     .Name("greeter")
@@ -112,8 +112,8 @@ async unwrapping apply.)
 
 ```csharp
 using System.ComponentModel;
-using Agentspan;
-using Agentspan.SemanticKernel;
+using Conductor.AI;
+using Conductor.AI.SemanticKernel;
 using Microsoft.SemanticKernel;
 
 internal sealed class CalculatorPlugin

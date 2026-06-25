@@ -19,9 +19,9 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.Plans;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.Plans;
 
 // ── Main ─────────────────────────────────────────────────
 

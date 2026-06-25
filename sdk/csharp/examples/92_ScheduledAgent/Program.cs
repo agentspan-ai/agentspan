@@ -12,9 +12,9 @@
 //   AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini \
 //   dotnet run --project sdk/csharp/examples/92_ScheduledAgent/Example92ScheduledAgent.csproj
 
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.Scheduling;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.Scheduling;
 
 var agent = new Agent("eng_digest_92")
 {

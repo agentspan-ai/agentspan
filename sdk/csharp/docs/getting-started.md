@@ -9,7 +9,7 @@ The SDK ships as the `Agentspan` NuGet package (target framework: .NET 10).
 ```bash
 dotnet new console -n MyAgent
 cd MyAgent
-dotnet add package Agentspan
+dotnet add package conductor-ai-sdk
 ```
 
 > Working inside this repository instead of from NuGet? Reference the project directly:
@@ -44,7 +44,7 @@ The runtime reads these on construction. You can also pass them explicitly via `
 Replace `Program.cs` with:
 
 ```csharp
-using Agentspan;
+using Conductor.AI;
 
 var agent = new Agent("greeter")
 {

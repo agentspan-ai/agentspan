@@ -29,8 +29,8 @@
 //   - Conductor server with WMQ support (conductor.workflow-message-queue.enabled=true)
 
 using System.Threading.Channels;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 const string SessionFile = "/tmp/agentspan_chat_repl_81.session";
 

@@ -206,7 +206,7 @@ Positions map to server task names: `before_agent`, `after_agent`,
 
 ## Schedule / Schedules
 
-`namespace Agentspan.Scheduling`.
+`namespace Conductor.AI.Scheduling`.
 
 **`Schedule`** (init-only): `Name` (required), `Cron` (required, 6-field Quartz),
 `Timezone` (`"UTC"`), `Input` (`IReadOnlyDictionary<string, object?>`), `Catchup`,
@@ -226,7 +226,7 @@ Positions map to server task names: `before_agent`, `after_agent`,
 
 ## Plans
 
-`namespace Agentspan.Plans`. For `Strategy.PlanExecute`.
+`namespace Conductor.AI.Plans`. For `Strategy.PlanExecute`.
 
 - **`Plan`** — `Steps` (`List<Step>`), `Validation`, `OnSuccess`, `OnFailure`. `ToJson()`.
 - **`Step(string id)`** — `Operations` (`List<Op>`), `DependsOn` (`List<string>`), `Parallel`.

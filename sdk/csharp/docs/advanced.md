@@ -143,7 +143,7 @@ Cron triggers attach to a deployed agent. The lifecycle API is `runtime.Schedule
 (equivalently `runtime.Client.Schedules`).
 
 ```csharp
-using Agentspan.Scheduling;
+using Conductor.AI.Scheduling;
 
 var agent = new Agent("eng_digest") { Model = "openai/gpt-4o-mini", Instructions = "..." };
 
@@ -287,7 +287,7 @@ inline text and/or fetched URLs (with credentialed headers). Only valid with
 `Strategy.PlanExecute`:
 
 ```csharp
-using Agentspan.Plans;
+using Conductor.AI.Plans;
 
 harness.PlannerContext =
 [
@@ -304,7 +304,7 @@ of `Step`s; wire one step's whole output into another with `new Ref("step_id")`
 (the referenced step must be in `DependsOn`). Pass it to `RunAsync(..., plan: ...)`:
 
 ```csharp
-using Agentspan.Plans;
+using Conductor.AI.Plans;
 
 var plan = new Plan
 {

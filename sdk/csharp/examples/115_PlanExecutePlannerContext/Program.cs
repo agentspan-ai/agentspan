@@ -24,9 +24,9 @@
 // and sdk/java/examples/.../Example115PlannerContext.java.
 
 using System.Net.Http.Json;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.Plans;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.Plans;
 
 // ── Agents ──────────────────────────────────────────────────────────
 

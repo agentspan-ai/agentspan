@@ -15,7 +15,7 @@ The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalabl
 ### 2. Add the package
 
 ```bash
-dotnet add package Agentspan
+dotnet add package conductor-ai-sdk
 ```
 
 Or, for in-repo / unpublished use, reference the project directly in your `.csproj`:
@@ -29,7 +29,7 @@ Or, for in-repo / unpublished use, reference the project directly in your `.cspr
 ### 3. Hello World
 
 ```csharp
-using Agentspan;
+using Conductor.AI;
 
 var agent = new Agent("greeter")
 {

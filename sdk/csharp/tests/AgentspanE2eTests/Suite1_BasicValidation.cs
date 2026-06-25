@@ -12,9 +12,9 @@
 
 using System.Text.Json.Nodes;
 using Xunit;
-using Agentspan.Examples;
+using Conductor.AI.Examples;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite1_BasicValidation
@@ -453,7 +453,7 @@ public sealed class Suite1_BasicValidation
 
     private static System.Text.Json.Nodes.JsonObject SerializeAgentForTest(Agent agent)
     {
-        var t  = typeof(Agent).Assembly.GetType("Agentspan.AgentConfigSerializer", throwOnError: true)!;
+        var t  = typeof(Agent).Assembly.GetType("Conductor.AI.AgentConfigSerializer", throwOnError: true)!;
         var mi = t.GetMethod("SerializeAgent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         return (System.Text.Json.Nodes.JsonObject)mi.Invoke(null, new object[] { agent })!;
     }

@@ -1,0 +1,482 @@
+// Copyright (c) 2025 Agentspan
+// Licensed under the MIT License.
+
+using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Conductor.AI.Scheduling;
+
+namespace Conductor.AI;
+
+/// <summary>
+/// Control-plane client for the Agentspan <c>/agent/*</c> API (compile, deploy,
+/// start, status, respond, stream) plus convenience entry points to <b>run</b> and
+/// <b>schedule</b> agents.
+///
+/// <para><b>Run is control-plane only:</b> <see cref="RunAsync(Agent, string, string?, IEnumerable{string}?, Plans.Plan?, CancellationToken)"/>
+/// starts the agent and polls to a result — it does NOT register or poll local tool
+/// workers. Agents that use local <c>[Tool]</c> functions must run through
+/// <see cref="AgentRuntime"/>, which owns worker orchestration. For LLM-only agents,
+/// remote tools (HTTP/MCP), or pre-deployed workflows, this client suffices.</para>
+/// </summary>
+public sealed class AgentClient : IDisposable
+{
+    private readonly HttpClient _client;
+    private readonly string _baseUrl;
+    private Schedules? _schedules;
+
+    public AgentClient(string serverUrl, string? authKey = null, string? authSecret = null)
+    {
+        _baseUrl = serverUrl.TrimEnd('/');
+        // Auth is attached per-request by AgentAuthHandler: it mints/caches a JWT
+        // from key+secret (or passes an explicit key token through) and sends
+        // X-Authorization — matching the Python/TS SDKs and working against
+        // Orkes-secured servers. No credentials → no header (OSS anonymous).
+        var handler = new AgentAuthHandler(_baseUrl, authKey, authSecret)
+        {
+            InnerHandler = new HttpClientHandler(),
+        };
+        _client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
+    }
+
+    // ── Run / start / deploy / schedule (agent-level, control-plane) ──────────
+
+    /// <summary>
+    /// Compile + register + start an agent, then poll to a result.
+    /// Control-plane only — does NOT register local tool workers (use
+    /// <see cref="AgentRuntime.RunAsync"/> for agents with local <c>[Tool]</c> functions).
+    /// </summary>
+    public async Task<AgentResult> RunAsync(
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null, Plans.Plan? plan = null, CancellationToken ct = default)
+    {
+        var handle = await StartAsync(agent, prompt, sessionId, media, plan, ct);
+        return await handle.WaitAsync(ct);
+    }
+
+    /// <summary>Compile + register + start an agent; returns a handle. No local workers.</summary>
+    public async Task<AgentHandle> StartAsync(
+        Agent agent, string prompt, string? sessionId = null,
+        IEnumerable<string>? media = null, Plans.Plan? plan = null, CancellationToken ct = default)
+    {
+        var payload = AgentConfigSerializer.Serialize(agent, prompt, sessionId ?? "", media);
+        if (plan is not null) payload["static_plan"] = plan.ToJson();
+        var executionId = await StartAsync(payload, ct);
+        return new AgentHandle(executionId, this);
+    }
+
+    /// <summary>Compile + register one or more agents on the server (no execution).</summary>
+    public async Task<DeploymentInfo[]> DeployAsync(params Agent[] agents)
+    {
+        var results = new DeploymentInfo[agents.Length];
+        for (int i = 0; i < agents.Length; i++)
+        {
+            var cfg = AgentConfigSerializer.SerializeAgent(agents[i]);
+            var registeredName = await DeployAsync(cfg);
+            results[i] = new DeploymentInfo(RegisteredName: registeredName, AgentName: agents[i].Name);
+        }
+        return results;
+    }
+
+    /// <summary>Cron-schedule lifecycle API (save/list/pause/resume/delete/runNow/preview/reconcile).</summary>
+    public Schedules Schedules => _schedules ??= new Schedules(_client, _baseUrl);
+
+    /// <summary>
+    /// Deploy an agent and reconcile its cron schedules declaratively (upsert these,
+    /// prune any others for the agent). Pass an empty list to purge all schedules.
+    /// </summary>
+    public async Task<DeploymentInfo> ScheduleAsync(
+        Agent agent, IEnumerable<Schedule> schedules, CancellationToken ct = default)
+    {
+        var info = (await DeployAsync(agent))[0];
+        await Schedules.ReconcileAsync(agent.Name, schedules, ct);
+        return info;
+    }
+
+    // ── Agent API ───────────────────────────────────────────
+
+    public async Task<string> StartAsync(JsonObject payload, CancellationToken ct = default)
+    {
+        var json = payload.ToJsonString();
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/start", content, ct);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            throw new AgentApiException((int)resp.StatusCode, $"{resp.ReasonPhrase}: {body}", body);
+        }
+
+        var node = await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+        return node?["executionId"]?.GetValue<string>()
+            ?? throw new AgentApiException(200, "No executionId in start response");
+    }
+
+    /// <summary>Deploy (register) an agent on the server without starting execution.</summary>
+    public async Task<string> DeployAsync(JsonObject agentConfig, CancellationToken ct = default)
+    {
+        var payload = FrameworkAwarePayload(agentConfig);
+        var json = payload.ToJsonString();
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/deploy", content, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            throw new AgentApiException((int)resp.StatusCode, $"{resp.ReasonPhrase}: {body}", body);
+        }
+        var node = await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+        return node?["agentName"]?.GetValue<string>() ?? "";
+    }
+
+    /// <summary>Compile an agent to a Conductor WorkflowDef without executing it.</summary>
+    public async Task<JsonNode?> CompileAsync(JsonObject agentConfig, CancellationToken ct = default)
+    {
+        var payload = FrameworkAwarePayload(agentConfig);
+        var json = payload.ToJsonString();
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/compile", content, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            throw new AgentApiException((int)resp.StatusCode, $"{resp.ReasonPhrase}: {body}", body);
+        }
+        return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+    }
+
+    public async Task<JsonNode?> GetStatusAsync(string executionId, CancellationToken ct = default)
+    {
+        using var resp = await _client.GetAsync($"{_baseUrl}/agent/{executionId}/status", ct);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+    }
+
+    /// <summary>Fetch the full execution record (includes tokenUsage, finishReason).</summary>
+    public async Task<JsonNode?> GetExecutionAsync(string executionId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await _client.GetAsync($"{_baseUrl}/agent/execution/{executionId}", ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+        }
+        catch { return null; }
+    }
+
+    public async Task RespondAsync(string executionId, object body, CancellationToken ct = default)
+    {
+        var json = JsonSerializer.Serialize(body, AgentspanJson.Options);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/{executionId}/respond", content, ct);
+        resp.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>Push a message into a running agent's Workflow Message Queue.</summary>
+    public async Task SendWorkflowMessageAsync(string executionId, object message, CancellationToken ct = default)
+    {
+        object payload = message is string s
+            ? new Dictionary<string, object> { ["message"] = s }
+            : message;
+        var json = JsonSerializer.Serialize(payload, AgentspanJson.Options);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/workflow/{executionId}/messages", content, ct);
+        resp.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>Gracefully stop an agent — sets _stop_requested and unblocks WMQ waits.</summary>
+    public async Task StopAgentAsync(string executionId, CancellationToken ct = default)
+    {
+        // Signal the agent to stop
+        using var emptyContent = new StringContent("{}", Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/agent/{executionId}/stop", emptyContent, ct);
+        // Best-effort — ignore failures (agent may have already completed)
+
+        // Also unblock any blocking PULL_WORKFLOW_MESSAGES wait
+        try
+        {
+            await SendWorkflowMessageAsync(executionId, new Dictionary<string, object> { ["_signal"] = "stop" }, ct);
+        }
+        catch { /* ignore — WMQ may not be enabled */ }
+    }
+
+    /// <summary>Immediately cancel an agent execution (TERMINATED status).</summary>
+    public async Task CancelAgentAsync(string executionId, string reason = "", CancellationToken ct = default)
+    {
+        var url = string.IsNullOrEmpty(reason)
+            ? $"{_baseUrl}/workflow/{executionId}"
+            : $"{_baseUrl}/workflow/{executionId}?reason={Uri.EscapeDataString(reason)}";
+        using var req = new HttpRequestMessage(HttpMethod.Delete, url);
+        using var resp = await _client.SendAsync(req, ct);
+        // Best-effort
+    }
+
+    // ── SSE streaming ───────────────────────────────────────
+
+    public async IAsyncEnumerable<AgentEvent> StreamEventsAsync(
+        string executionId,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"{_baseUrl}/agent/stream/{executionId}");
+        request.Headers.Accept.ParseAdd("text/event-stream");
+
+        using var resp = await _client.SendAsync(
+            request, HttpCompletionOption.ResponseHeadersRead, ct);
+        resp.EnsureSuccessStatusCode();
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(stream);
+
+        string? eventType = null;
+        string? eventId   = null;
+        var dataLines = new StringBuilder();
+
+        while (!ct.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break; // end of stream
+
+            // Heartbeat lines (start with ':') — skip
+            if (line.StartsWith(':')) continue;
+
+            if (line.StartsWith("event:"))
+            {
+                eventType = line["event:".Length..].Trim();
+            }
+            else if (line.StartsWith("id:"))
+            {
+                eventId = line["id:".Length..].Trim();
+            }
+            else if (line.StartsWith("data:"))
+            {
+                if (dataLines.Length > 0) dataLines.Append('\n');
+                dataLines.Append(line["data:".Length..].TrimStart());
+            }
+            else if (line.Length == 0 && dataLines.Length > 0)
+            {
+                // Blank line = end of event block
+                var ev = ParseEvent(eventType, dataLines.ToString());
+                eventType = null;
+                eventId   = null;
+                dataLines.Clear();
+
+                if (ev is not null)
+                {
+                    yield return ev;
+                    if (ev.Type == EventType.Done) yield break;
+                }
+            }
+        }
+    }
+
+    private static AgentEvent? ParseEvent(string? eventType, string data)
+    {
+        JsonNode? node = null;
+        try { node = JsonNode.Parse(data); } catch { /* skip malformed */ }
+
+        return eventType switch
+        {
+            "thinking" => new AgentEvent
+            {
+                Type    = EventType.Thinking,
+                Content = node?["content"]?.GetValue<string>(),
+            },
+            "tool_call" => new AgentEvent
+            {
+                Type     = EventType.ToolCall,
+                ToolName = node?["toolName"]?.GetValue<string>(),
+            },
+            "tool_result" => new AgentEvent
+            {
+                Type     = EventType.ToolResult,
+                ToolName = node?["toolName"]?.GetValue<string>(),
+            },
+            "guardrail_pass" => new AgentEvent
+            {
+                Type          = EventType.GuardrailPass,
+                GuardrailName = node?["guardrailName"]?.GetValue<string>(),
+            },
+            "guardrail_fail" => new AgentEvent
+            {
+                Type          = EventType.GuardrailFail,
+                GuardrailName = node?["guardrailName"]?.GetValue<string>(),
+                Content       = node?["message"]?.GetValue<string>(),
+            },
+            "waiting" => new AgentEvent { Type = EventType.Waiting },
+            "handoff"  => new AgentEvent
+            {
+                Type   = EventType.Handoff,
+                Target = node?["target"]?.GetValue<string>(),
+            },
+            "done" => new AgentEvent
+            {
+                Type    = EventType.Done,
+                Status  = node?["output"]?["finishReason"]?.GetValue<string>()
+                       ?? node?["status"]?.GetValue<string>(),
+                Content = ExtractOutputText(node?["output"]),
+            },
+            "error" => new AgentEvent
+            {
+                Type    = EventType.Error,
+                Content = node?["message"]?.GetValue<string>(),
+            },
+            _ => null,
+        };
+    }
+
+    private static string? ExtractOutputText(JsonNode? output)
+    {
+        if (output is null) return null;
+        if (output is JsonObject obj && obj.TryGetPropertyValue("result", out var r))
+            return r?.GetValue<string>();
+        if (output is JsonValue v)
+        {
+            try { return v.GetValue<string>(); } catch { return null; }
+        }
+        return null;
+    }
+
+    // ── Credential resolution ────────────────────────────────
+
+    /// <summary>
+    /// Resolve credential values from the server using the execution token.
+    /// Returns a dict of name → plaintext value.
+    /// </summary>
+    /// <remarks>
+    /// Error contract (matches Python <c>WorkerCredentialFetcher</c>):
+    /// <list type="bullet">
+    ///   <item>Empty <paramref name="names"/> → returns empty dict (no HTTP call).</item>
+    ///   <item>Missing or empty <paramref name="executionToken"/> →
+    ///     <see cref="CredentialNotFoundException"/>. Caller must mark the task
+    ///     as terminal-failed; we never silently inject empty values.</item>
+    ///   <item>200 with some names missing from response →
+    ///     <see cref="CredentialNotFoundException"/> on the first missing name.</item>
+    ///   <item>401 → <see cref="CredentialAuthException"/>.</item>
+    ///   <item>429 → <see cref="CredentialRateLimitException"/>.</item>
+    ///   <item>5xx or network failure → <see cref="CredentialServiceException"/>.</item>
+    /// </list>
+    /// Previously this method swallowed all errors and returned an empty dict, which
+    /// (a) hid a URL drift (the path was <c>/credentials/resolve</c> after rename to
+    /// <c>/workers/secrets</c>) and (b) caused tools to silently see no injected
+    /// credentials — sometimes reading stale process-env values, sometimes failing
+    /// with confusing downstream errors. Surfacing the right exception lets
+    /// <c>WorkerManager</c> mark the task terminal-failed and surface the cause.
+    /// </remarks>
+    public async Task<Dictionary<string, string>> ResolveCredentialsAsync(
+        string? executionToken, IEnumerable<string> names, CancellationToken ct = default)
+    {
+        var nameList = names.ToList();
+        if (nameList.Count == 0) return new Dictionary<string, string>();
+
+        if (string.IsNullOrEmpty(executionToken))
+            throw new CredentialNotFoundException(
+                "<no-token> — execution token missing; secrets cannot be resolved");
+
+        var body = JsonSerializer.Serialize(new { token = executionToken, names = nameList },
+            AgentspanJson.Options);
+        using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await _client.PostAsync($"{_baseUrl}/workers/secrets", content, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new CredentialServiceException(
+                $"Credential service unreachable: {ex.Message}");
+        }
+
+        using (resp)
+        {
+            switch ((int)resp.StatusCode)
+            {
+                case 401:
+                    throw new CredentialAuthException(
+                        $"Execution token rejected by /workers/secrets: " +
+                        await resp.Content.ReadAsStringAsync(ct));
+                case 429:
+                    throw new CredentialRateLimitException();
+                case >= 500:
+                    throw new CredentialServiceException(
+                        $"HTTP {(int)resp.StatusCode} from /workers/secrets: " +
+                        await resp.Content.ReadAsStringAsync(ct));
+            }
+            if (!resp.IsSuccessStatusCode)
+                throw new CredentialServiceException(
+                    $"HTTP {(int)resp.StatusCode} from /workers/secrets: " +
+                    await resp.Content.ReadAsStringAsync(ct));
+
+            var result = await resp.Content.ReadFromJsonAsync<Dictionary<string, string>>(
+                cancellationToken: ct) ?? new Dictionary<string, string>();
+
+            var missing = nameList.Where(n => !result.ContainsKey(n)).ToList();
+            if (missing.Count > 0)
+                throw new CredentialNotFoundException(string.Join(", ", missing));
+
+            return result;
+        }
+    }
+
+    // ── Run by name ──────────────────────────────────────────
+
+    /// <summary>Start a pre-deployed workflow by name (no agentConfig payload).</summary>
+    public async Task<string> StartWorkflowByNameAsync(
+        string workflowName, string prompt, string sessionId = "", CancellationToken ct = default)
+    {
+        var input = new Dictionary<string, object?>
+        {
+            ["prompt"]     = prompt,
+            ["media"]      = Array.Empty<string>(),
+            ["session_id"] = sessionId ?? "",
+            ["context"]    = new Dictionary<string, object>(),
+        };
+        var payload = new Dictionary<string, object?> { ["name"] = workflowName, ["input"] = input };
+        var json = JsonSerializer.Serialize(payload);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _client.PostAsync($"{_baseUrl}/workflow", content, ct);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            throw new AgentApiException((int)resp.StatusCode, $"{resp.ReasonPhrase}: {body}", body);
+        }
+
+        // Returns the execution ID as a bare string
+        var executionId = await resp.Content.ReadAsStringAsync(ct);
+        return executionId.Trim('"', ' ', '\n', '\r');
+    }
+
+    // ── Workflow metadata ────────────────────────────────────
+
+    /// <summary>Fetch the workflow definition (without tasks) to read taskToDomain.</summary>
+    public async Task<JsonNode?> GetWorkflowAsync(string executionId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var resp = await _client.GetAsync(
+                $"{_baseUrl}/workflow/{executionId}?includeTasks=false", ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: ct);
+        }
+        catch { return null; }
+    }
+
+    private static JsonObject FrameworkAwarePayload(JsonObject agentConfig)
+    {
+        var framework = agentConfig["_framework"]?.GetValue<string>();
+        if (!string.IsNullOrEmpty(framework))
+        {
+            return new JsonObject
+            {
+                ["framework"] = framework,
+                ["rawConfig"] = agentConfig.DeepClone(),
+            };
+        }
+
+        return new JsonObject { ["agentConfig"] = agentConfig };
+    }
+
+    public void Dispose() => _client.Dispose();
+}

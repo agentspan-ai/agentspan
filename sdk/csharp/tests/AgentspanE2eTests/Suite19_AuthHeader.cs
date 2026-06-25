@@ -13,7 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 public sealed class Suite19_AuthHeader
 {

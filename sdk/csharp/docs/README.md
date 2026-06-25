@@ -19,7 +19,7 @@ The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalabl
 ## At a glance
 
 ```csharp
-using Agentspan;
+using Conductor.AI;
 
 var agent = new Agent("greeter")
 {

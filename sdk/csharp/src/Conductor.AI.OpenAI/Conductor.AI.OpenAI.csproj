@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Conductor.AI.OpenAI</RootNamespace>
+    <AssemblyName>Conductor.AI.OpenAI</AssemblyName>
+    <PackageId>conductor-ai-sdk-openai</PackageId>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Conductor.AI/Conductor.AI.csproj" />
+  </ItemGroup>
+</Project>

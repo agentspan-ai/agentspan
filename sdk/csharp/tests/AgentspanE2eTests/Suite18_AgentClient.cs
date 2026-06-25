@@ -12,10 +12,10 @@
 
 using System.Threading;
 using Xunit;
-using Agentspan.Examples;
-using Agentspan.Scheduling;
+using Conductor.AI.Examples;
+using Conductor.AI.Scheduling;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite18_AgentClient
