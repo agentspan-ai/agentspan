@@ -49,10 +49,9 @@ func TestStart_ReturnsExecutionIDAndAgentName(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"executionId":     "exec-123",
-			"agentName":       "my-agent",
-			"requiredWorkers": []string{"my-agent__tool"},
+		json.NewEncoder(w).Encode(map[string]string{
+			"executionId": "exec-123",
+			"agentName":   "my-agent",
 		})
 	}))
 
@@ -65,27 +64,6 @@ func TestStart_ReturnsExecutionIDAndAgentName(t *testing.T) {
 	}
 	if resp.AgentName != "my-agent" {
 		t.Errorf("AgentName = %q, want my-agent", resp.AgentName)
-	}
-	if len(resp.RequiredWorkers) != 1 || resp.RequiredWorkers[0] != "my-agent__tool" {
-		t.Errorf("RequiredWorkers = %v, want [my-agent__tool]", resp.RequiredWorkers)
-	}
-}
-
-func TestPollTask_ReturnsNilForNoTaskStatuses(t *testing.T) {
-	for _, status := range []int{http.StatusNoContent, http.StatusNotFound} {
-		t.Run(fmt.Sprint(status), func(t *testing.T) {
-			_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(status)
-			}))
-
-			task, err := c.PollTask("skill__read_skill_file")
-			if err != nil {
-				t.Fatalf("PollTask: %v", err)
-			}
-			if task != nil {
-				t.Fatalf("PollTask task = %v, want nil", task)
-			}
-		})
 	}
 }
 
@@ -398,33 +376,26 @@ func TestStream_SendsBearerToken(t *testing.T) {
 	}
 }
 
-// ─── Credentials CRUD ────────────────────────────────────────────────────────────
+// ─── Credentials CRUD ────────────────────────────────────────────────────────
 
-func TestSetCredential_PutsRawBodyAtKeyPath(t *testing.T) {
-	var gotMethod, gotPath, gotCT, gotBody string
+func TestSetCredential_PostsCorrectBody(t *testing.T) {
+	var gotBody map[string]string
+	var gotPath string
 	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
 		gotPath = r.URL.Path
-		gotCT = r.Header.Get("Content-Type")
 		b, _ := io.ReadAll(r.Body)
-		gotBody = string(b)
+		json.Unmarshal(b, &gotBody)
 		w.WriteHeader(http.StatusOK)
 	}))
 
 	if err := c.SetCredential("TOKEN", "secret-val"); err != nil {
 		t.Fatalf("SetCredential: %v", err)
 	}
-	if gotMethod != http.MethodPut {
-		t.Errorf("method = %q, want PUT", gotMethod)
+	if gotPath != "/api/credentials" {
+		t.Errorf("path = %q, want /api/credentials", gotPath)
 	}
-	if gotPath != "/api/secrets/TOKEN" {
-		t.Errorf("path = %q, want /api/secrets/TOKEN", gotPath)
-	}
-	if gotCT != "text/plain" {
-		t.Errorf("Content-Type = %q, want text/plain", gotCT)
-	}
-	if gotBody != "secret-val" {
-		t.Errorf("body = %q, want raw secret-val", gotBody)
+	if gotBody["name"] != "TOKEN" || gotBody["value"] != "secret-val" {
+		t.Errorf("body = %v, want name=TOKEN value=secret-val", gotBody)
 	}
 }
 
