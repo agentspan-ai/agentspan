@@ -176,6 +176,8 @@ def _get_credential_fetcher():
             server_url=config.server_url,
             strict_mode=config.secret_strict_mode,
             api_key=config.api_key or config.auth_key,
+            auth_key=config.auth_key,
+            auth_secret=config.auth_secret,
         )
     return _credential_fetcher
 
