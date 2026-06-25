@@ -405,7 +405,7 @@ func ptyCommandArgs(bin string) []string {
 	command := "stty rows 40 cols 120; exec " + shellQuote(bin) + " tui"
 	switch runtime.GOOS {
 	case "darwin":
-		return []string{"-qe", "/dev/null", "/bin/sh", "-lc", command}
+		return []string{"-qe", "/dev/null", "/bin/sh", "-c", command}
 	default:
 		return []string{"-qe", "-c", command, "/dev/null"}
 	}
