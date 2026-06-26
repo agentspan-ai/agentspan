@@ -1,6 +1,6 @@
 # Framework Agents
 
-You don't have to rewrite agents authored with another framework to run them on Agentspan. The runtime **detects** the framework object you pass to `run()` / `deploy()` / `stream()`, serializes it to an Agentspan config, and runs it on the server — same call you'd make with a native `Agent`.
+You don't have to rewrite agents authored with another framework to run them on Conductor Agent. The runtime **detects** the framework object you pass to `run()` / `deploy()` / `stream()`, serializes it to an agent config, and runs it on the server — same call you'd make with a native `Agent`.
 
 ```ts
 const runtime = new AgentRuntime();
@@ -126,7 +126,7 @@ The `@conductoross/conductor-agent-sdk/langchain` subpath also exports `createRu
 
 Two ways to use the AI SDK:
 
-**1. AI SDK tools on a native Agent (recommended).** The tool system is a superset — it auto-detects AI SDK `tool()` objects (Zod `parameters` + `execute`) and converts them to Agentspan tool defs. No wrapper needed.
+**1. AI SDK tools on a native Agent (recommended).** The tool system is a superset — it auto-detects AI SDK `tool()` objects (Zod `parameters` + `execute`) and converts them to native tool defs. No wrapper needed.
 
 ```ts
 import { tool as aiTool } from 'ai';

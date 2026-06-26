@@ -1,6 +1,6 @@
 # Google ADK
 
-Use Google's Agent Development Kit (ADK) agents directly with Agentspan. The `AdkBridge` converts a native `LlmAgent` (or any `BaseAgent`) into an Agentspan `Agent`, serialising its tools, instructions, and sub-agent graph into the format the server's `GoogleADKNormalizer` understands.
+Use Google's Agent Development Kit (ADK) agents directly with Conductor Agent. The `AdkBridge` converts a native `LlmAgent` (or any `BaseAgent`) into an `Agent`, serialising its tools, instructions, and sub-agent graph into the format the server's `GoogleADKNormalizer` understands.
 
 ## Dependency
 
@@ -35,7 +35,7 @@ LlmAgent adkAgent = LlmAgent.builder()
     .tools(FunctionTool.create(WeatherService.class, "getWeather"))
     .build();
 
-// Convert to Agentspan Agent
+// Convert to an Agent
 Agent agent = AdkBridge.toAgentspan(adkAgent);
 
 // Run via AgentRuntime
@@ -45,9 +45,9 @@ try (AgentRuntime runtime = new AgentRuntime()) {
 }
 ```
 
-## agentBuilder — attach extra Agentspan features
+## agentBuilder — attach extra Conductor Agent features
 
-If you want to mix ADK agent structure with Agentspan-only features (guardrails, credentials, callbacks), use `agentBuilder()` which returns an `Agent.Builder` you can continue configuring:
+If you want to mix ADK agent structure with Conductor Agent–only features (guardrails, credentials, callbacks), use `agentBuilder()` which returns an `Agent.Builder` you can continue configuring:
 
 ```java
 import org.conductoross.conductor.ai.guardrail.RegexGuardrail;
@@ -66,7 +66,7 @@ Agent agent = AdkBridge.agentBuilder(adkAgent)
 
 ## What gets mapped
 
-| ADK concept | Agentspan mapping |
+| ADK concept | Conductor Agent mapping |
 |---|---|
 | `LlmAgent.name()` | `Agent.name` |
 | `LlmAgent.model()` | `Agent.model` |

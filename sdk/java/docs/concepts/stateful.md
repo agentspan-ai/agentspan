@@ -1,7 +1,7 @@
 # Stateful Agents
 
 By default each `run()` is independent — the agent has no memory of previous runs. For
-conversational or long-lived agents, Agentspan offers three complementary mechanisms.
+conversational or long-lived agents, Conductor Agent offers three complementary mechanisms.
 
 ## Sessions — multi-turn continuity
 

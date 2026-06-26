@@ -4,7 +4,7 @@ Get an agent running in under 30 seconds.
 
 ## 1. Install
 
-The SDK ships as the `Agentspan` NuGet package (target framework: .NET 10).
+The SDK ships as the `conductor-agent-sdk` NuGet package (target framework: .NET 10).
 
 ```bash
 dotnet new console -n MyAgent

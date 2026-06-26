@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../assets/logo-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="../../assets/logo-light.svg">
-    <img src="../../assets/logo-light.svg" alt="Agentspan" width="400">
+    <img src="../../assets/logo-light.svg" alt="Conductor Agent" width="400">
   </picture>
 </p>
 
@@ -27,9 +27,9 @@
 
 ---
 
-**Agentspan** is a distributed, durable runtime for running AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
+**Conductor Agent** is a distributed, durable runtime for running AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
-Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
+Conductor Agent is the execution layer, not the replacement. Use native agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 ```python
 from conductor.ai.agents import Agent, AgentRuntime, tool
@@ -46,13 +46,13 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-## Why Agentspan?
+## Why Conductor Agent?
 
-Other frameworks give you a Python library. Agentspan gives you a **production runtime**.
+Other frameworks give you a Python library. Conductor Agent gives you a **production runtime**.
 
 Your agent code compiles to a durable, server-side execution. The server manages execution, retries, scaling, and state — so your agents keep running even when your process doesn't.
 
-| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan**                                                          |
+| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Conductor Agent**                                                    |
 |---|---|---|---|---|------------------------------------------------------------------------|
 | **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Durable executions**                                                 |
 | **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None | **Automatic — execution resumes exactly where it left off**            |
@@ -88,7 +88,7 @@ Your agent code compiles to a durable, server-side execution. The server manages
 
 10. **Full observability** — OpenTelemetry spans, Prometheus metrics, visual execution UI, execution history, and token/cost tracking — all built in.
 
-11. **Framework agnostic** — Use Google ADK, Langchain, OpenAI, CrewAI etc to write agents, run on Agentspan's durable execution runtime.
+11. **Framework agnostic** — Use Google ADK, Langchain, OpenAI, CrewAI etc to write agents, run on Conductor Agent's durable execution runtime.
 
 ## Quickstart
 
@@ -520,7 +520,7 @@ pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 
 ## Community
 
-We're building Agentspan in the open and would love your help.
+We're building Conductor Agent in the open and would love your help.
 
 - **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
 - **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
@@ -540,7 +540,7 @@ We welcome PRs of all sizes — from typo fixes to new examples to core features
 
 ### Spread the Word
 
-If Agentspan is useful to you, help others find it:
+If Conductor Agent is useful to you, help others find it:
 
 - [Star this repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
 - [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network

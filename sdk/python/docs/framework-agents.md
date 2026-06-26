@@ -1,7 +1,7 @@
 # Framework agents
 
-Agentspan can run agents authored in other frameworks by bridging them onto its
-durable runtime. You keep your framework's authoring API; Agentspan handles
+Conductor Agent can run agents authored in other frameworks by bridging them onto its
+durable runtime. You keep your framework's authoring API; Conductor Agent handles
 durability, retries, streaming, and observability.
 
 Supported bridges: **OpenAI Agents SDK**, **LangChain**, **LangGraph**, **Claude
@@ -16,12 +16,12 @@ Agent SDK**. The runtime auto-detects the framework from the object you pass to
 ## OpenAI Agents SDK
 
 Two ways. Either keep your existing `agents.Agent` and swap the runner, or use the
-Agentspan `Runner` with an Agentspan `Agent`.
+SDK's `Runner` with a native `Agent`.
 
 ### Drop-in `Runner`
 
 Change one import — `from conductor.ai import Runner` instead of `from agents import
-Runner` — and run your existing OpenAI-Agents agent on Agentspan:
+Runner` — and run your existing OpenAI-Agents agent on Conductor Agent:
 
 ```python
 from conductor.ai import Runner            # the one line that changes
@@ -42,7 +42,7 @@ result = Runner.run_sync(agent, "What's the weather in NYC?")
 print(result.final_output)
 ```
 
-`Runner` methods (all classmethods, accept an OpenAI-Agents `Agent` or an Agentspan
+`Runner` methods (all classmethods, accept an OpenAI-Agents `Agent` or a native
 `Agent`):
 
 - `Runner.run_sync(starting_agent, input, *, context=None, max_turns=10, **kwargs) -> RunResult`
@@ -86,7 +86,7 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-Agentspan also provides a thin wrapper, `conductor.ai.agents.langchain.create_agent`,
+Conductor Agent also provides a thin wrapper, `conductor.ai.agents.langchain.create_agent`,
 that captures the model, tools, and system prompt up front so they compile to native
 server-side model + tool tasks (rather than running the whole agent in one opaque
 worker).
@@ -129,7 +129,7 @@ def approval_node(state): ...
 
 ## Claude Agent SDK
 
-Run a Claude Agent SDK / Claude Code agent. The simplest path is an Agentspan `Agent`
+Run a Claude Agent SDK / Claude Code agent. The simplest path is a native `Agent`
 configured with `ClaudeCode`:
 
 ```python
@@ -157,4 +157,4 @@ functions are not yet supported there.
 
 You can also bring `ClaudeCodeOptions` / a Claude Agent SDK agent directly; the bridge
 runs the full `query()` in one durable worker with instrumentation hooks that stream
-tool-use and lifecycle events back to Agentspan.
+tool-use and lifecycle events back to Conductor Agent.

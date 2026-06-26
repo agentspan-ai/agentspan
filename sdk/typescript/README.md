@@ -45,9 +45,9 @@ One import change. Your code stays identical.
 +import { generateText } from '@conductoross/conductor-agent-sdk/vercel-ai';
 ```
 
-That's it. `generateText` and `streamText` are intercepted, compiled to an agent execution, and run on Agentspan. Tools, model, prompt, result shape -- all unchanged.
+That's it. `generateText` and `streamText` are intercepted, compiled to an agent execution, and run on Conductor Agent. Tools, model, prompt, result shape -- all unchanged.
 
-When you need Agentspan-specific features (guardrails, termination, multi-agent handoff), switch to the Agent API. See [`examples/vercel-ai/README.md`](examples/vercel-ai/README.md) for the full before/after.
+When you need Conductor Agent–specific features (guardrails, termination, multi-agent handoff), switch to the Agent API. See [`examples/vercel-ai/README.md`](examples/vercel-ai/README.md) for the full before/after.
 
 ## Already using another framework?
 
@@ -229,7 +229,7 @@ All config can also be passed to the `AgentRuntime` constructor.
 
 | Directory | Count | Description |
 |-----------|-------|-------------|
-| [`examples/`](examples/) | 107 | Native Agentspan agents |
+| [`examples/`](examples/) | 107 | Native agents |
 | [`examples/vercel-ai/`](examples/vercel-ai/) | 10 | Vercel AI SDK integration |
 | [`examples/langgraph/`](examples/langgraph/) | 10 | LangGraph integration |
 | [`examples/langchain/`](examples/langchain/) | 10 | LangChain integration |

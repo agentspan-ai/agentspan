@@ -1,7 +1,7 @@
 # Framework Agents
 
-Agentspan ships thin adapters that let you author agents in the shape of three
-popular frameworks and run them on the Agentspan runtime unchanged. Each adapter
+Conductor Agent ships thin adapters that let you author agents in the shape of three
+popular frameworks and run them on the Conductor Agent runtime unchanged. Each adapter
 builds a normal `Agent` (or attaches tools to one), so everything in
 [writing-agents.md](writing-agents.md) and [advanced.md](advanced.md) still
 applies — you run them with the same `AgentRuntime`.
@@ -18,7 +18,7 @@ dotnet add package conductor-agent-sdk-google-adk
 dotnet add package conductor-agent-sdk-semantic-kernel
 ```
 
-(Inside this repo, reference the corresponding `src/Agentspan.*/*.csproj`.)
+(Inside this repo, reference the corresponding `src/Conductor.AI.*/*.csproj`.)
 
 ## OpenAI Agents
 
@@ -105,7 +105,7 @@ children with `.SubAgents(child1, child2)`. Shortcut:
 
 Bridges Microsoft Semantic Kernel plugins. If you already have classes with
 `[KernelFunction]`-annotated methods, hand them straight to
-`SemanticKernelAgent.From` and each function becomes an Agentspan tool. (This
+`SemanticKernelAgent.From` and each function becomes a tool. (This
 adapter builds a plain `Agent` — no `Framework` tag; the functions run as local
 worker tools, invoked through the `KernelFunction` so SK's own arg coercion and
 async unwrapping apply.)

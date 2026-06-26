@@ -32,7 +32,7 @@ conductor.root-uri=http://localhost:6767/api
 conductor.security.client.key-id=your-key      # optional
 conductor.security.client.secret=your-secret   # optional
 
-# Agentspan worker tuning
+# Conductor Agent worker tuning
 agentspan.worker-poll-interval-ms=100
 agentspan.worker-thread-count=1
 ```

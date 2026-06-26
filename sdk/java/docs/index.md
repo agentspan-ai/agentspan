@@ -39,7 +39,7 @@ The docs are organized into five areas:
 
 ### c) Framework agents
 
-Run agents authored in another framework on the durable Agentspan runtime.
+Run agents authored in another framework on the durable Conductor Agent runtime.
 
 - **[OpenAI Agents SDK](frameworks/openai.md)** · **[Google ADK](frameworks/google-adk.md)** · **[LangChain4j](frameworks/langchain4j.md)** · **[LangGraph4j](frameworks/langgraph4j.md)**.
 
@@ -77,7 +77,7 @@ Run agents authored in another framework on the durable Agentspan runtime.
 
 ## What makes it different
 
-| Feature | Agentspan | Thread-based SDKs |
+| Feature | Conductor Agent | Thread-based SDKs |
 |---|---|---|
 | Survives crashes | ✅ Conductor workflow | ❌ State lost |
 | Tool workers | ✅ Distributed tasks | ❌ In-process only |

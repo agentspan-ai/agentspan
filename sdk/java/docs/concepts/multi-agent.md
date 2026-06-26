@@ -1,6 +1,6 @@
 # Multi-Agent
 
-Agentspan has one primitive — `Agent` — and multiple strategies for composing agents together. Pick the strategy that matches your workflow's structure.
+Conductor Agent has one primitive — `Agent` — and multiple strategies for composing agents together. Pick the strategy that matches your workflow's structure.
 
 ## Strategy overview
 

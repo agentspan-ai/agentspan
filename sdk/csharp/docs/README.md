@@ -2,9 +2,9 @@
 
 The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
 
-- **Package:** `Agentspan` (NuGet)
+- **Package:** `conductor-agent-sdk` (NuGet)
 - **Target:** .NET 10
-- **Namespace:** `Agentspan`
+- **Namespace:** `Conductor.AI`
 
 ## Contents
 

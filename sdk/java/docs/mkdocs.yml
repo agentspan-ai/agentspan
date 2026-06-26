@@ -1,5 +1,5 @@
-site_name: Agentspan Java SDK
-site_description: Build durable AI agents in Java with Agentspan.
+site_name: Conductor Agent Java SDK
+site_description: Build durable AI agents in Java with Conductor Agent.
 site_url: https://agentspan.ai/docs/java-sdk/
 repo_url: https://github.com/agentspan-ai/agentspan
 repo_name: agentspan-ai/agentspan
