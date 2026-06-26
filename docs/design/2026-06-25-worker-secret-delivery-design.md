@@ -15,10 +15,20 @@ work in exactly one deployment:
 | Deployment | `agentspan.embedded` | Secrets? |
 |---|---|---|
 | Embedded in **Orkes-Conductor** | `true` | **Yes** — Orkes resolves the references |
-| Embedded in **OSS Conductor** | `true` | No — references stamped but nothing resolves them |
+| Embedded in **OSS Conductor** | `true` | No — references stamped, but OSS resolves `${workflow.secrets.X}` to `null` |
 | **Standalone** | `false` | No — references not stamped |
 
 The two "No" modes are non-secure by design. There is nothing to operate or secure.
+
+### What OSS Conductor actually does with the reference
+
+OSS Conductor has no secret store. Its `ParametersUtils.replaceVariables` evaluates
+`${workflow.secrets.NAME}` as a JSONPath over the workflow context with
+`Option.SUPPRESS_EXCEPTIONS`; since the workflow has no `secrets` node, the read returns
+`null`. So a worker tool either gets `null` (embedded on OSS) or no credential field at all
+(standalone — the reference is never stamped). Either way **the secret is "trimmed"** — it
+never reaches the tool. A tool that requires a credential therefore fails, which is the
+correct, intended outcome off Orkes.
 
 ## How Orkes resolves the references
 
@@ -106,3 +116,22 @@ metadata, and all associated tests.
   reference when embedded, absent when standalone.
 
 Per project rule, each behavior was made to fail first before confirming it passes.
+
+### e2e: the OSS trim is validated, not worked around
+
+The e2e suites run against the standalone server (OSS Conductor, `agentspan.embedded=false`),
+so there is no secret backend. The credential e2e tests therefore assert the **trim** directly
+rather than injecting secret values (which is impossible here):
+
+- A tool needing **no** credential runs and its task **COMPLETES**.
+- A tool **requiring** a credential **FAILS** because the secret is trimmed — this expected
+  failure *is* the assertion. The tests also prove the secret was genuinely not delivered (the
+  tool's success marker never appears) and that an OS env var of the same name is not a silent
+  fallback (tools read via the SDK credential accessor — `get_secret` / `getCredential` /
+  `ctx.getCredentialOrNull` — which never consults `os.environ`).
+- `FAILED` is accepted alongside the terminal variants: with the in-process credential
+  machinery removed, a missing credential now surfaces as an ordinary tool exception.
+
+Suites: `sdk/python/e2e/test_suite2_tool_calling.py`, `sdk/typescript/tests/e2e/test_suite2_tool_calling.test.ts`,
+`sdk/java/e2e/Suite2ToolCallingCredentials.java`, `sdk/csharp/tests/AgentspanE2eTests/Suite2_ToolCalling.cs`.
+The old set/update-and-read lifecycle steps and the `agentspan credentials` CLI command were removed.

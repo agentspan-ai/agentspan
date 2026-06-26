@@ -138,146 +138,70 @@ public sealed class Suite2_ToolCalling
         Assert.True(result.IsSuccess, $"Agent failed: {result.Error}");
     }
 
-    // ── 2.5  Credential lifecycle — mirrors Python test_suite2 ──────────
+    // ── 2.5  Credential trimmed in OSS — required tool fails ────────────
     //
-    // Four-step lifecycle exercising the runtime injection contract:
-    //   2.5a  no creds in store          → paid tool must be TERMINAL-failed
-    //   2.5b  env set + no store value   → env MUST NOT be read (security)
-    //   2.5c  cred set via API           → tool sees stored value at runtime
-    //   2.5d  cred updated via API       → next run sees the new value
-    //
-    // This is the test that would have caught the /credentials/resolve URL
-    // drift. The Suite 7 serialization tests passed throughout because they
-    // never invoke a tool — only inspect the plan.
-
-    private const string LCRED_A = "E2E_DOTNET_CRED_A";
-    private const string LCRED_B = "E2E_DOTNET_CRED_B";
+    // Secrets are delegated to the host via ${workflow.secrets.NAME} and
+    // resolved ONLY by Orkes-Conductor. The standalone server embeds OSS
+    // Conductor, which has no secret store, so the reference is never resolved
+    // and the secret is TRIMMED — it never reaches the worker tool. This is
+    // intentional (standalone/OSS is non-secure by design): a tool that
+    // requires a credential MUST fail, and that expected failure IS the
+    // assertion. There is no store to set a value in, so the old set/update
+    // lifecycle steps are gone.
 
     private static readonly string ApiBase =
         (Environment.GetEnvironmentVariable("AGENTSPAN_SERVER_URL") ?? "http://localhost:6767/api")
         .TrimEnd('/');
 
     [SkippableFact]
-    public async Task CredentialLifecycle_RuntimeInjection()
+    public async Task CredentialTrimmed_RequiredToolFails()
     {
         _fixture.RequireServer();
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        var savedA = Environment.GetEnvironmentVariable(LCRED_A);
-        var savedB = Environment.GetEnvironmentVariable(LCRED_B);
 
-        try
+        var host = new S2CredHost();
+        var allTools = ToolRegistry.FromInstance(host);
+
+        var agent = new Agent("s2_cred_trimmed")
         {
-            // ── Step 1: clean slate ─────────────────────────────────────
-            await DeleteSecretAsync(http, LCRED_A);
-            await DeleteSecretAsync(http, LCRED_B);
+            Model        = Settings.LlmModel,
+            Instructions =
+                "You have three tools: free_tool, paid_tool_a, paid_tool_b. " +
+                "Call all three with the argument 'test'. Do not skip any.",
+            Tools    = allTools,
+            MaxTurns = 4,
+        };
 
-            var host = new S2CredHost();
-            var allTools = ToolRegistry.FromInstance(host);
-            // Declared credentials are set on the [Tool(... Credentials = ...)]
-            // attribute itself; ToolDef.Credentials is init-only, so we can't
-            // mutate it post-construction.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
 
-            var agent = new Agent("s2_cred_lifecycle")
-            {
-                Model        = Settings.LlmModel,
-                Instructions =
-                    "You have three tools: free_tool, paid_tool_a, paid_tool_b. " +
-                    "Call all three with the argument 'test'. Do not skip any.",
-                Tools    = allTools,
-                MaxTurns = 4,
-            };
+        // No secret store exists, so the credentials are trimmed. The
+        // credential-requiring tools must fail; the free tool must complete.
+        await using var runtime = new AgentRuntime();
+        var r = await runtime.RunAsync(agent, "Call all three tools.", ct: cts.Token);
+        Assert.False(string.IsNullOrEmpty(r.ExecutionId), "no execution_id");
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+        var tasks = await FetchToolTasksAsync(http, r.ExecutionId);
 
-            // ── Step 2: no creds → paid tools must be terminal ──────────
-            {
-                await using var runtime = new AgentRuntime();
-                var r = await runtime.RunAsync(agent, "Call all three tools.", ct: cts.Token);
-                Assert.False(string.IsNullOrEmpty(r.ExecutionId), "Step 2: no execution_id");
-                var tasks = await FetchToolTasksAsync(http, r.ExecutionId);
-                AssertToolTaskTerminal(tasks, "paid_tool_a", "Step 2: no creds");
-                AssertToolTaskTerminal(tasks, "paid_tool_b", "Step 2: no creds");
-            }
+        // The no-credential tool runs to completion.
+        AssertToolTaskCompleted(tasks, "free_tool", "free tool");
 
-            // ── Step 3: env set + no store value → env NOT read ─────────
-            Environment.SetEnvironmentVariable(LCRED_A, "from-env-aaa");
-            Environment.SetEnvironmentVariable(LCRED_B, "from-env-bbb");
-            try
-            {
-                await using var runtime = new AgentRuntime();
-                var r = await runtime.RunAsync(agent, "Call all three tools.", ct: cts.Token);
-                var tasks = await FetchToolTasksAsync(http, r.ExecutionId);
-
-                AssertToolTaskTerminal(tasks, "paid_tool_a", "Step 3: env-leak check");
-                AssertToolTaskTerminal(tasks, "paid_tool_b", "Step 3: env-leak check");
-
-                foreach (var (_, info) in tasks)
-                {
-                    var outStr = info.Output?.ToString() ?? "";
-                    Assert.DoesNotContain("from-env", outStr);
-                }
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable(LCRED_A, null);
-                Environment.SetEnvironmentVariable(LCRED_B, null);
-            }
-
-            // ── Step 4: cred set via API → value reaches the tool ───────
-            await PutSecretAsync(http, LCRED_A, "secret-aaa-value");
-            await PutSecretAsync(http, LCRED_B, "secret-bbb-value");
-
-            {
-                await using var runtime = new AgentRuntime();
-                var r = await runtime.RunAsync(agent, "Call all three tools.", ct: cts.Token);
-                var tasks = await FetchToolTasksAsync(http, r.ExecutionId);
-
-                AssertToolTaskCompleted(tasks, "free_tool", "Step 4");
-                AssertToolTaskCompleted(tasks, "paid_tool_a", "Step 4");
-                AssertToolTaskCompleted(tasks, "paid_tool_b", "Step 4");
-
-                Assert.Contains("sec", tasks["paid_tool_a"].Output?.ToString() ?? "");
-                Assert.Contains("sec", tasks["paid_tool_b"].Output?.ToString() ?? "");
-            }
-
-            // ── Step 5: cred updated → new value propagates ─────────────
-            await PutSecretAsync(http, LCRED_A, "newval-xxx-updated");
-
-            {
-                await using var runtime = new AgentRuntime();
-                var r = await runtime.RunAsync(agent, "Call all three tools.", ct: cts.Token);
-                var tasks = await FetchToolTasksAsync(http, r.ExecutionId);
-                AssertToolTaskCompleted(tasks, "paid_tool_a", "Step 5");
-                Assert.Contains("new", tasks["paid_tool_a"].Output?.ToString() ?? "");
-            }
-        }
-        finally
+        // The credential-requiring tools FAIL (the secret is trimmed) and must
+        // not produce their success output — proving no value was delivered.
+        var markers = new Dictionary<string, string>
         {
-            try { await DeleteSecretAsync(http, LCRED_A); } catch { }
-            try { await DeleteSecretAsync(http, LCRED_B); } catch { }
-            Environment.SetEnvironmentVariable(LCRED_A, savedA);
-            Environment.SetEnvironmentVariable(LCRED_B, savedB);
+            ["paid_tool_a"] = "paid_a:",
+            ["paid_tool_b"] = "paid_b:",
+        };
+        foreach (var (name, marker) in markers)
+        {
+            AssertToolTaskFailed(tasks, name, "trimmed credential");
+            var outStr = tasks[name].Output?.ToString() ?? "";
+            Assert.DoesNotContain(marker, outStr);
         }
     }
 
-    // ── Lifecycle helpers ───────────────────────────────────────────────
-
-    private static async Task PutSecretAsync(HttpClient http, string name, string value)
-    {
-        using var content = new StringContent(value, System.Text.Encoding.UTF8, "text/plain");
-        using var resp = await http.PutAsync($"{ApiBase}/secrets/{Uri.EscapeDataString(name)}", content);
-        resp.EnsureSuccessStatusCode();
-    }
-
-    private static async Task DeleteSecretAsync(HttpClient http, string name)
-    {
-        using var req = new HttpRequestMessage(HttpMethod.Delete,
-            $"{ApiBase}/secrets/{Uri.EscapeDataString(name)}");
-        using var resp = await http.SendAsync(req);
-        if (!resp.IsSuccessStatusCode && (int)resp.StatusCode != 404)
-            resp.EnsureSuccessStatusCode();
-    }
+    // ── Tool-task helpers ───────────────────────────────────────────────
 
     private record ToolTaskInfo(string Status, string Reason, JsonNode? Output, string Ref);
 
@@ -312,17 +236,20 @@ public sealed class Suite2_ToolCalling
         return results;
     }
 
-    private static void AssertToolTaskTerminal(
+    private static void AssertToolTaskFailed(
         Dictionary<string, ToolTaskInfo> tasks, string name, string step)
     {
         Assert.True(tasks.ContainsKey(name),
             $"[{step}] {name} task not found. Found: [{string.Join(", ", tasks.Keys)}]");
-        // FAILED_WITH_TERMINAL_ERROR (TaskResult) → COMPLETED_WITH_ERRORS (Task)
-        var terminal = new HashSet<string> { "FAILED_WITH_TERMINAL_ERROR", "COMPLETED_WITH_ERRORS" };
-        Assert.True(terminal.Contains(tasks[name].Status),
-            $"[{step}] {name} expected terminal status (FAILED_WITH_TERMINAL_ERROR or " +
-            $"COMPLETED_WITH_ERRORS) but got '{tasks[name].Status}'. " +
-            $"Reason: {tasks[name].Reason}");
+        // The secret is trimmed, so the tool must not succeed. 'FAILED' is
+        // accepted alongside the terminal variants: with no in-process
+        // credential machinery, a missing credential surfaces as an ordinary
+        // tool exception rather than a pre-classified terminal error.
+        var failed = new HashSet<string>
+            { "FAILED", "FAILED_WITH_TERMINAL_ERROR", "COMPLETED_WITH_ERRORS", "TERMINATED" };
+        Assert.True(failed.Contains(tasks[name].Status),
+            $"[{step}] {name} expected a failure status (one of {string.Join(", ", failed)}) " +
+            $"but got '{tasks[name].Status}'. Reason: {tasks[name].Reason}");
     }
 
     private static void AssertToolTaskCompleted(
