@@ -157,6 +157,32 @@ same mechanism as "stand up the embedded target + reuse the suite" below. No new
 - Missing SPI impl ⇒ **fail fast at startup** (the one property verifiable today, by construction).
 - Kill-switch: `agentspan.embedded=false` returns a clean Conductor, no residual beans/paths.
 
+### Host requirement: populate `RequestContextHolder` (the embed security bridge)
+
+The only non-test code that sets `RequestContextHolder` is `AuthFilter`, which lives in
+`conductor-agentspan-server` (standalone-only, stamps the anonymous user) and is **not on the embed
+classpath**. The embeddable library ships only the `RequestContextHolder` API, not a populator. So
+in Mode C **the host must register a request filter / security adapter that maps its authenticated
+principal → `RequestContextHolder.set(...)` before any AgentSpan controller runs.** This is the
+embed-mode host principal adapter that the "Security validation" residual #2 refers to — it lives in
+the host (orkes-conductor), not this repo, and is unverified here.
+
+`RequestContextHolder` is consumed synchronously on the HTTP request thread at: `/api/secrets` CRUD
+(`SecretController.getRequiredUserId()`), agent start (`AgentService` — captures the principal into
+`createdBy` **and the minted execution token's `userId`**), the masking advice, the skill registry,
+and compile-time LLM calls. Task/worker execution does **not** read it — execution resolves the user
+from the execution token (`__agentspan_ctx__`) minted at start, so the principal is captured exactly
+once, at the `/api/agent` start call.
+
+If the host does **not** wire the filter, two failure modes (worth an explicit embed test):
+
+- **Secrets CRUD hard-fails** — `getRequiredUserId()` throws `IllegalStateException` ("No
+  RequestContext on this thread") ⇒ `/api/secrets` 500s.
+- **Execution silently degrades to single-tenant** — at agent start `principal == null` ⇒ **no
+  execution token is minted**, `createdBy` unset ⇒ worker resolution falls back to the anonymous
+  user. No error; per-user isolation quietly collapses. This is the more dangerous mode (fails
+  open-ish, not closed) and is the highest-value thing to assert once the embed target exists.
+
 ---
 
 ## The real residue (after pressure-testing)
