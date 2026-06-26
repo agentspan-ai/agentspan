@@ -4,40 +4,36 @@
  */
 package dev.agentspan.runtime.controller;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.when;
-
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import dev.agentspan.runtime.context.*;
-import dev.agentspan.runtime.credentials.*;
+import dev.agentspan.runtime.context.RequestContext;
+import dev.agentspan.runtime.context.RequestContextHolder;
+import dev.agentspan.runtime.credentials.CredentialResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.credentials.ResolveRequest;
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
 
 @ExtendWith(MockitoExtension.class)
 class WorkerCredentialsTest {
-
-    @Mock
-    private CredentialStoreProvider storeProvider;
-
     @Mock
     private CredentialResolutionService resolutionService;
 
-    @Mock
     private ExecutionTokenService tokenService;
 
     @InjectMocks

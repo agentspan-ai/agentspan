@@ -60,32 +60,81 @@ imports, and **`AGENTSPAN_SERVER_URL`** pointed at the booted orkes instance.
 
 ---
 
+## Security validation — covered; two residuals are out of OSS scope
+
+*(Corrected after pressure-testing against the actual test tree — the earlier "entirely
+uncovered, neither suite exercises it" framing was wrong.)* A dedicated server-side security test
+layer already covers the auth-boundary, scoping, masking-pipeline, and cross-tenant claims that
+were called gaps: token lifecycle + HMAC, declared-name bounding / rate limit / login rejection,
+cross-tenant isolation, principal-scoped listing, masking advice routing + pipeline substitution,
+the standalone request-filter → context bridge, and per-user identity resolution.
+
+What is left is **two residuals, both genuinely not OSS work** — not a coverage gap to close here:
+
+1. **The masking redaction *algorithm*.** Per-execution disclosure lookup, Jackson tree-walk, and
+   JSON-escape handling live in the enterprise module. OSS ships `NoOpSecretOutputMasker` and has no
+   disclosure tracking to redact against, so that correctness is — by design — tested where the real
+   masker is provided. The OSS side (that the pipeline applies whatever the masker returns) is
+   covered above. Two complementary coverage paths:
+   - **Algorithm correctness (scaffolded now).** `SecretOutputMaskerContract` defines the behavioral
+     spec (redacts disclosed plaintext incl. JSON-escaped/nested values, scoped by execution, never
+     throws); the enterprise module extends it to run the spec against the real masker (publish OSS
+     test sources as a test-jar — same cross-module reuse as the e2e "Option C").
+     `ReferenceSecretOutputMaskerContractTest` keeps the spec honest in OSS by running it against a
+     correct reference redactor.
+   - **Wiring / disclosure-tracking (SDK e2e, gated on §6).** The contract test can't prove the real
+     masker is actually wired into the response path and fed real disclosure data in the assembled
+     system. An SDK e2e against the embedded orkes target closes that: create a secret, run a
+     **deterministic** credential-using worker that surfaces the plaintext into task output (this
+     populates `credential_disclosures`), read the execution back via `/api/agent/executions/{id}`,
+     assert the plaintext is gone and `***NAME***` is present. Meaningless against OSS standalone
+     (no-op masker passes the value through), so it **env-gates** to the embedded target, and stays
+     **LLM-free** (deterministic worker, not an agent loop; assertion is a string check on the
+     payload). Authored when the embedded target exists, since an always-skipped test can't be
+     validated.
+2. **The embed-mode host principal adapter.** In an embed, a host-supplied security adapter
+   *replaces* `AuthFilter` as the source of identity. The standalone bridge it replaces is covered
+   above (`AuthFilterContextBridgeTest`). **Validation vehicle: the SDK e2e suite, run against the
+   embedded orkes target** — a request authenticated as user A flows through orkes' real auth adapter
+   → `RequestContext.userId` → AgentSpan scoping, so an e2e that creates a secret as A and fails to
+   read/list it as B exercises the adapter end-to-end (not a mock — that would be circular). This is
+   meaningless against OSS standalone, where `AuthFilter` pins every request to one anonymous
+   principal, so the test must **env-gate** (skip unless two identities, e.g. `AGENTSPAN_API_KEY_A`/
+   `_B`, are configured) and stays **LLM-free** (assert at the `/api/secrets` layer; no agent run).
+   Needs: a two-client e2e fixture (the SDK clients can already authenticate, just unconfigured
+   today). **Gated on §6 engine coordinates** — authored when the embedded target exists, since an
+   always-skipped test can't be validated.
+
 ## Entirely uncovered dimensions
 
-3. **Security validation — biggest blind spot.** Not in scope anywhere yet:
-   - Two auth boundaries (per §2 secrets note): `SecretController` `/api/secrets` (login-JWT /
-     API-key) vs `WorkerController` `/api/workers/secrets` (HMAC execution-token, declared-name
-     bounded, rate-limited). Validate the token bounding actually holds.
-   - Output masking: `CredentialOutputMasker` redacts; no secret leakage in logs/payloads; masking
-     advice covers `/api/workflow/{id}` reads.
-   - **Embed only:** the security-context bridge (host identity → `RequestContextHolder`) does not
-     grant cross-tenant access.
-4. **Performance / regression baseline.** Does embedding AgentSpan (`@Primary` HttpTask/MCPService
+1. **Performance / regression baseline.** Does embedding AgentSpan (`@Primary` HttpTask/MCPService
    overrides, the masking `@ControllerAdvice`) change engine throughput/latency? No baseline ⇒ can't
    detect upgrade regressions.
 
 ---
 
+## Already covered — do NOT rebuild
+
+After pressure-testing, several "gaps" turn out to be covered elsewhere. Re-testing them is wasted
+work:
+
+- **Engine executes workflows** → covered by **Conductor's own test suite** (upstream).
+- **AgentSpan compiles agents → WorkflowDef** → covered by **SDK e2e `test_suite1`** (LLM-free).
+- **Agent runs end-to-end (LLM↔tool loop)** → covered by the **SDK e2e execution suites**.
+
+So there is **no net-new "agent smoke test" to write.** A post-deploy smoke is just a fast subset of
+the existing SDK e2e suite (tag a few tests `@smoke`) pointed at the deployed URL — which is the
+same mechanism as "stand up the embedded target + reuse the suite" below. No new test logic.
+
+---
+
 ## Deployment — mechanics not yet discussed
 
-5. **Post-deploy liveness, not just "context loads."** Deterministic smoke test proving agents
-   actually run end-to-end (define → start → terminal status). **No LLM-judged output** (per
-   `CLAUDE.md`) — assert on compile/start/status only.
-6. **Multi-replica / rolling-deploy safety.** Confirm AgentSpan servers are stateless +
+1. **Multi-replica / rolling-deploy safety.** Confirm AgentSpan servers are stateless +
    horizontally scalable (like Conductor). `CredentialSchemaMigrator` claims multi-replica safety —
    validate concurrent replicas during a rolling upgrade don't race on schema init or task
    registration.
-7. **Config / secrets provisioning at deploy.** SPI impl beans, master key, DB credentials for
+2. **Config / secrets provisioning at deploy.** SPI impl beans, master key, DB credentials for
    **both** datasources — the deploy-config story, especially in embed where the host wires every
    SPI.
 
@@ -93,7 +142,7 @@ imports, and **`AGENTSPAN_SERVER_URL`** pointed at the booted orkes instance.
 
 ## Testing — fixtures needed
 
-8. **Realistic upgrade fixtures.** Validating §9.3's upgrade path needs a **populated** DB with
+1. **Realistic upgrade fixtures.** Validating §9.3's upgrade path needs a **populated** DB with
    **in-flight / long-paused HITL** executions (`AgentHumanTask`) spanning the bump, across **both**
    datasources — not a clean-start test.
 
@@ -110,15 +159,24 @@ imports, and **`AGENTSPAN_SERVER_URL`** pointed at the booted orkes instance.
 
 ---
 
-## Top 3 for this task (if prioritizing)
+## The real residue (after pressure-testing)
+
+Most candidate "gaps" collapsed into *already covered* (Conductor tests the engine; the SDK e2e
+suite tests compile + execution) or *already exists, just needs pointing* (the suite is endpoint-
+parameterized). The honest residue is:
 
 1. **Stand up the embedded orkes target + reuse the existing suite against it** (Option A today) —
-   the instrument already exists; the work is the target + the cross-repo wiring. Gated on §6.
-2. **Stand up security validation** — the largest currently-uncovered surface.
-3. **Deterministic agent-runs-end-to-end smoke test** — for post-deploy confidence.
+   the instrument already exists; the work is the target + the cross-repo wiring. **Gated on §6.**
+   The post-deploy "smoke" is a `@smoke` subset of this same suite — not separate work.
+2. **Security validation is covered in OSS** — auth boundaries, declared-name bounding, rate
+   limiting, token revocation, cross-tenant isolation, principal-scoped listing, the masking
+   pipeline, and the standalone request-filter → context bridge are all exercised by a dedicated
+   server-side test layer (see "Security validation" above). The only two remaining items are
+   genuinely **not** OSS work: the masking redaction *algorithm* (enterprise module) and the
+   embed-mode host principal adapter (gated on §6 engine coordinates).
 
-The rest are real but secondary. (Building the Option C conformance container is a high-leverage
-follow-on, not a blocker.)
+Everything else (multi-replica, deploy config, upgrade fixtures, perf baseline) is real but
+secondary. Building the Option C conformance container is a high-leverage follow-on, not a blocker.
 
 ---
 
