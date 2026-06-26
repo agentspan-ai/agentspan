@@ -526,7 +526,8 @@ public class JavaScriptBuilder {
             String cliConfigJson,
             String humanConfigJson,
             String wmqConfigJson,
-            String knownToolNamesJson) {
+            String knownToolNamesJson,
+            String workerCredConfigJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = "
                 + mcpConfigJson + ";" + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
@@ -535,6 +536,7 @@ public class JavaScriptBuilder {
                 + cliConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
                 + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
+                + "  var workerCredCfg = " + workerCredConfigJson + ";"
                 + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
@@ -613,7 +615,18 @@ public class JavaScriptBuilder {
                 + "        contentType: hc.contentType || 'application/json',"
                 + "        connectionTimeOut: 30000,"
                 + "        readTimeOut: 30000}};"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
+                // Conductor task-level timeout backstop. The readTimeOut above is
+                // enforced by the HTTP CLIENT only, which the embedded orkes host
+                // does not reliably honor — a non-responding endpoint then wedges
+                // the task IN_PROGRESS forever (it never FAILS, so the inline
+                // retryCount never fires). An embedded taskDefinition gives the
+                // sweeper a responseTimeoutSeconds deadline to TIME_OUT a stuck
+                // call and (timeoutPolicy RETRY) re-issue it; optional:true above
+                // keeps a final, post-retry failure from aborting the agent turn.
+                + "      t.taskDefinition = {name: n, retryCount: 2,"
+                + "        retryLogic: 'LINEAR_BACKOFF', retryDelaySeconds: 2,"
+                + "        timeoutPolicy: 'RETRY', responseTimeoutSeconds: 45,"
+                + "        timeoutSeconds: 90};"
                 + "    } else if (mcpCfg[n]) {"
                 + "      t.type = 'CALL_MCP_TOOL';"
                 + "      t.name = 'call_mcp_tool';"
@@ -622,7 +635,6 @@ public class JavaScriptBuilder {
                 + "        method: n,"
                 + "        arguments: tc.inputParameters || {},"
                 + "        headers: mcpCfg[n].headers || {}};"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
                 + "    } else if (agentToolCfg[n]) {"
                 + "      t.type = 'SUB_WORKFLOW';"
                 + "      t.name = agentToolCfg[n].workflowName;"
@@ -646,7 +658,6 @@ public class JavaScriptBuilder {
                 // anchor relative-date queries without drifting from a date
                 // computed at compile/boot time.
                 + "        __today__: new Date().toISOString().slice(0, 10)};"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
                 + "      if (agentToolCfg[n].retryCount !== undefined) t.retryCount = agentToolCfg[n].retryCount;"
                 + "      if (agentToolCfg[n].retryDelaySeconds !== undefined) t.retryDelaySeconds = agentToolCfg[n].retryDelaySeconds;"
                 + "      if (agentToolCfg[n].optional !== undefined) t.optional = agentToolCfg[n].optional;"
@@ -694,8 +705,8 @@ public class JavaScriptBuilder {
                 + "    }"
                 + "    if (t.type === 'SIMPLE') {"
                 + "      t.inputParameters._agent_state = agentState;"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
                 + "      if (cliCfg[n]) { t.inputParameters._allowed_commands = cliCfg[n].allowedCommands; }"
+                + "      if (workerCredCfg[n]) { t.inputParameters.__resolved_credentials__ = workerCredCfg[n]; }"
                 + "    }"
                 + "    result.push(t);"
                 + "  }"
@@ -1152,7 +1163,8 @@ public class JavaScriptBuilder {
             String ragConfigJson,
             String humanConfigJson,
             String wmqConfigJson,
-            String knownToolNamesJson) {
+            String knownToolNamesJson,
+            String workerCredConfigJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = $.mcpConfig || {};"
                 + "  var apiCfg = $.apiConfig || {};"
                 + "  var mediaCfg = "
@@ -1161,6 +1173,7 @@ public class JavaScriptBuilder {
                 + ragConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
                 + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
+                + "  var workerCredCfg = " + workerCredConfigJson + ";"
                 + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
@@ -1232,7 +1245,18 @@ public class JavaScriptBuilder {
                 + "        contentType: hc.contentType || 'application/json',"
                 + "        connectionTimeOut: 30000,"
                 + "        readTimeOut: 30000}};"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
+                // Conductor task-level timeout backstop. The readTimeOut above is
+                // enforced by the HTTP CLIENT only, which the embedded orkes host
+                // does not reliably honor — a non-responding endpoint then wedges
+                // the task IN_PROGRESS forever (it never FAILS, so the inline
+                // retryCount never fires). An embedded taskDefinition gives the
+                // sweeper a responseTimeoutSeconds deadline to TIME_OUT a stuck
+                // call and (timeoutPolicy RETRY) re-issue it; optional:true above
+                // keeps a final, post-retry failure from aborting the agent turn.
+                + "      t.taskDefinition = {name: n, retryCount: 2,"
+                + "        retryLogic: 'LINEAR_BACKOFF', retryDelaySeconds: 2,"
+                + "        timeoutPolicy: 'RETRY', responseTimeoutSeconds: 45,"
+                + "        timeoutSeconds: 90};"
                 + "    } else if (mcpCfg[n]) {"
                 + "      t.type = 'CALL_MCP_TOOL';"
                 + "      t.name = 'call_mcp_tool';"
@@ -1241,7 +1265,6 @@ public class JavaScriptBuilder {
                 + "        method: n,"
                 + "        arguments: tc.inputParameters || {},"
                 + "        headers: mcpCfg[n].headers || {}};"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
                 + "    } else if (apiCfg[n]) {"
                 + "      var api = apiCfg[n];"
                 + "      var uri = api.baseUrl + api.path;"
@@ -1274,7 +1297,6 @@ public class JavaScriptBuilder {
                 + "          accept: 'application/json', contentType: 'application/json',"
                 + "          connectionTimeOut: 30000, readTimeOut: 30000}};"
                 + "      }"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
                 + "    } else if (agentToolCfg[n]) {"
                 + "      t.type = 'SUB_WORKFLOW';"
                 + "      t.name = agentToolCfg[n].workflowName;"
@@ -1298,7 +1320,6 @@ public class JavaScriptBuilder {
                 // anchor relative-date queries without drifting from a date
                 // computed at compile/boot time.
                 + "        __today__: new Date().toISOString().slice(0, 10)};"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
                 + "      if (agentToolCfg[n].retryCount !== undefined) t.retryCount = agentToolCfg[n].retryCount;"
                 + "      if (agentToolCfg[n].retryDelaySeconds !== undefined) t.retryDelaySeconds = agentToolCfg[n].retryDelaySeconds;"
                 + "      if (agentToolCfg[n].optional !== undefined) t.optional = agentToolCfg[n].optional;"
@@ -1346,7 +1367,7 @@ public class JavaScriptBuilder {
                 + "    }"
                 + "    if (t.type === 'SIMPLE') {"
                 + "      t.inputParameters._agent_state = agentState;"
-                + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
+                + "      if (workerCredCfg[n]) { t.inputParameters.__resolved_credentials__ = workerCredCfg[n]; }"
                 + "    }"
                 + "    result.push(t);"
                 + "  }"

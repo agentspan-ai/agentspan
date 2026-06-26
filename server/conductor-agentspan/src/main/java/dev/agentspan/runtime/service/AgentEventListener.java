@@ -21,7 +21,6 @@ import com.netflix.conductor.core.listener.WorkflowStatusListener;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
 
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.AgentSSEEvent;
 
 import io.micrometer.core.instrument.Counter;
@@ -47,9 +46,6 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private final AgentStreamRegistry streamRegistry;
     private final MeterRegistry meterRegistry;
 
-    @Autowired(required = false)
-    private ExecutionTokenService executionTokenService;
-
     @Autowired
     public AgentEventListener(AgentStreamRegistry streamRegistry, MeterRegistry meterRegistry) {
         this.streamRegistry = streamRegistry;
@@ -57,11 +53,10 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         logger.info("AgentEventListener active (TaskStatusListener + WorkflowStatusListener)");
     }
 
-    /** Package-private constructor for testing with token revocation. */
-    AgentEventListener(AgentStreamRegistry streamRegistry, ExecutionTokenService tokenService) {
+    /** Package-private constructor for testing without a meter registry. */
+    AgentEventListener(AgentStreamRegistry streamRegistry) {
         this.streamRegistry = streamRegistry;
         this.meterRegistry = null;
-        this.executionTokenService = tokenService;
     }
 
     // ── TaskStatusListener ───────────────────────────────────────────
@@ -203,10 +198,6 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         // and emit a HANDOFF event on the parent stream.
         // (onTaskScheduled is not called for system tasks like SUB_WORKFLOW,
         //  so we detect handoffs here instead.)
-        // NOTE: execution-token minting is NOT done here — it happens in the
-        // AGENTSPAN_MINT_TOKEN system task injected by the compiler, so it works
-        // on every core (including orkes-conductor, which does not persist a
-        // status-listener's workflow mutations).
         String parentId = workflow.getParentWorkflowId();
         if (parentId == null || parentId.isEmpty()) return;
 
@@ -251,9 +242,6 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
         Map<String, Object> output = workflow.getOutput();
         emit(wfId, AgentSSEEvent.done(wfId, output));
-        if (executionTokenService != null) {
-            revokeWorkflowToken(workflow);
-        }
         streamRegistry.complete(wfId);
     }
 
@@ -263,26 +251,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         recordWorkflowAIMetrics(workflow);
         String reason = workflow.getReasonForIncompletion();
         emit(wfId, AgentSSEEvent.error(wfId, "workflow", reason != null ? reason : "Workflow terminated"));
-        if (executionTokenService != null) {
-            revokeWorkflowToken(workflow);
-        }
         streamRegistry.complete(wfId);
-    }
-
-    private void revokeWorkflowToken(WorkflowModel workflow) {
-        try {
-            Object ctx =
-                    workflow.getVariables() != null ? workflow.getVariables().get("__agentspan_ctx__") : null;
-            if (!(ctx instanceof Map)) return;
-            Object tokenObj = ((Map<?, ?>) ctx).get("execution_token");
-            if (!(tokenObj instanceof String token)) return;
-            ExecutionTokenService.TokenPayload payload = executionTokenService.validate(token);
-            executionTokenService.revoke(payload.jti(), payload.exp());
-            logger.info("Execution token revoked for terminated workflow {}", workflow.getWorkflowId());
-        } catch (Exception e) {
-            logger.debug(
-                    "Could not revoke execution token for workflow {}: {}", workflow.getWorkflowId(), e.getMessage());
-        }
     }
 
     // ── Metrics ──────────────────────────────────────────────────────

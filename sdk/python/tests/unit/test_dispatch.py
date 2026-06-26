@@ -79,61 +79,29 @@ class TestCheckApprovalWorker:
 
 
 class TestCredentialExtraction:
-    """_dispatch.py extracts __agentspan_ctx__ from task input/variables."""
+    """Per-user secrets are injected into the task input by the server at poll
+    time; the external-worker helper just reads them off input_data."""
 
-    def test_extract_token_from_input_data_dict(self):
-        from agentspan.agents.runtime._dispatch import _extract_execution_token
+    def test_resolve_credentials_reads_injected_map(self):
+        from agentspan.agents import resolve_credentials
 
-        class FakeTask:
-            input_data = {
-                "__agentspan_ctx__": {"execution_token": "token-from-input"},
-                "x": "hello",
-            }
-            workflow_input = {}
+        input_data = {
+            "prompt": "hi",
+            "__resolved_credentials__": {"GITHUB_TOKEN": "ghp", "AWS_KEY": "ak"},
+        }
+        assert resolve_credentials(input_data) == {"GITHUB_TOKEN": "ghp", "AWS_KEY": "ak"}
 
-        token = _extract_execution_token(FakeTask())
-        assert token == "token-from-input"
+    def test_resolve_credentials_filters_by_names(self):
+        from agentspan.agents import resolve_credentials
 
-    def test_extract_token_from_input_data_string(self):
-        """Backwards compat: plain string is also accepted."""
-        from agentspan.agents.runtime._dispatch import _extract_execution_token
+        input_data = {"__resolved_credentials__": {"GITHUB_TOKEN": "ghp", "AWS_KEY": "ak"}}
+        assert resolve_credentials(input_data, ["GITHUB_TOKEN"]) == {"GITHUB_TOKEN": "ghp"}
 
-        class FakeTask:
-            input_data = {"__agentspan_ctx__": "token-from-input", "x": "hello"}
-            workflow_input = {}
+    def test_resolve_credentials_returns_empty_when_none_injected(self):
+        from agentspan.agents import resolve_credentials
 
-        token = _extract_execution_token(FakeTask())
-        assert token == "token-from-input"
-
-    def test_extract_token_returns_none_when_absent(self):
-        from agentspan.agents.runtime._dispatch import _extract_execution_token
-
-        class FakeTask:
-            input_data = {"x": "hello"}
-            workflow_input = {}
-
-        token = _extract_execution_token(FakeTask())
-        assert token is None
-
-    def test_extract_token_from_workflow_input_dict(self):
-        from agentspan.agents.runtime._dispatch import _extract_execution_token
-
-        class FakeTask:
-            input_data = {}
-            workflow_input = {"__agentspan_ctx__": {"execution_token": "token-from-wf"}}
-
-        token = _extract_execution_token(FakeTask())
-        assert token == "token-from-wf"
-
-    def test_extract_token_empty_dict_returns_none(self):
-        from agentspan.agents.runtime._dispatch import _extract_execution_token
-
-        class FakeTask:
-            input_data = {"__agentspan_ctx__": {}}
-            workflow_input = {}
-
-        token = _extract_execution_token(FakeTask())
-        assert token is None
+        assert resolve_credentials({"prompt": "hi"}) == {}
+        assert resolve_credentials({}) == {}
 
 
 class TestToolDefCredentialsSurvival:

@@ -1526,35 +1526,16 @@ def make_langgraph_worker(
         prompt = task.input_data.get("prompt", "")
         session_id = (task.input_data.get("session_id") or "").strip()
 
-        # Resolve workflow-level credentials via the centralized injection helper.
-        # See docs/design/secret-injection-contract.md.
+        # Read per-user credentials injected into the task input at poll time by
+        # the server (WorkerSecretPollAdvice), resolved from the workflow's
+        # createdBy. See docs/design/secret-injection-contract.md.
         resolved_secrets = {}
         try:
-            from agentspan.agents.runtime._dispatch import (
-                _extract_execution_token,
-                _get_credential_fetcher,
-                _workflow_credentials,
-                _workflow_credentials_lock,
-            )
-
-            cred_names = list(_closure_cred_names)
-            if not cred_names:
-                exec_id = execution_id or ""
-                with _workflow_credentials_lock:
-                    cred_names = list(_workflow_credentials.get(exec_id, []))
-            if cred_names:
-                token = _extract_execution_token(task)
-                if token:
-                    fetcher = _get_credential_fetcher()
-                    resolved_secrets = fetcher.fetch(token, cred_names)
-                else:
-                    logger.warning(
-                        "No execution token in task for LangGraph worker — "
-                        "credentials %s will not be injected",
-                        cred_names,
-                    )
+            _injected = (getattr(task, "input_data", None) or {}).get("__resolved_credentials__")
+            if isinstance(_injected, dict):
+                resolved_secrets = dict(_injected)
         except Exception as _cred_err:
-            logger.warning("Failed to resolve credentials for LangGraph: %s", _cred_err)
+            logger.warning("Failed to read credentials for LangGraph: %s", _cred_err)
 
         from agentspan.agents.runtime.secret_injection import inject_via_env
 

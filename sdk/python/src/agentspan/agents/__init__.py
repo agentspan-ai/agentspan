@@ -145,33 +145,27 @@ from agentspan.agents.runtime.credentials.types import (
 )
 
 
-def resolve_credentials(input_data: dict, names: list) -> dict:
-    """Resolve credentials from Conductor task input data.
+def resolve_credentials(input_data: dict, names: list = None) -> dict:
+    """Read per-user credentials the server injected into a task's input.
 
-    For external workers that need to resolve credentials from the
-    agentspan credential store. Extracts the execution token from
-    ``__agentspan_ctx__`` in the task input and calls the server.
+    For external workers. Secrets are resolved server-side (per the workflow's
+    ``createdBy``) and injected into the polled task input at poll time, exactly
+    like any other Conductor secret delivery — there is no callback to the
+    server. This helper just reads them off ``task.input_data``.
 
     Args:
         input_data: The Conductor task's ``input_data`` dict.
-        names: Credential names to resolve.
+        names: Optional subset of names to return; ``None`` returns all injected.
 
     Returns:
         Dict mapping credential name to resolved plaintext value.
     """
-    from agentspan.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
-    from agentspan.agents.runtime.config import AgentConfig
-
-    token = None
-    ctx = input_data.get("__agentspan_ctx__")
-    if isinstance(ctx, dict):
-        token = ctx.get("execution_token")
-    elif isinstance(ctx, str):
-        token = ctx
-
-    config = AgentConfig.from_env()
-    fetcher = WorkerCredentialFetcher(server_url=config.server_url)
-    return fetcher.fetch(token, names)
+    injected = (input_data or {}).get("__resolved_credentials__") or {}
+    if not isinstance(injected, dict):
+        return {}
+    if names is None:
+        return dict(injected)
+    return {n: injected[n] for n in names if n in injected}
 
 
 # Agent discovery

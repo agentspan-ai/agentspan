@@ -13,10 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import org.conductoross.conductor.ai.AgentConfig;
-import org.conductoross.conductor.ai.exceptions.CredentialAuthException;
-import org.conductoross.conductor.ai.exceptions.CredentialNotFoundException;
-import org.conductoross.conductor.ai.exceptions.CredentialRateLimitException;
-import org.conductoross.conductor.ai.exceptions.CredentialServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,7 +85,6 @@ public class WorkerManager {
     }
 
     private final AgentConfig config;
-    private final WorkerCredentialFetcher credentialFetcher;
     private final TaskClient taskClient;
     private final MetadataClient metadataClient;
 
@@ -114,7 +109,6 @@ public class WorkerManager {
 
     public WorkerManager(AgentConfig config, ConductorClient conductorClient) {
         this.config = config;
-        this.credentialFetcher = new WorkerCredentialFetcher(conductorClient);
         this.handlers = new ConcurrentHashMap<>();
         this.taskDomains = new ConcurrentHashMap<>();
         this.taskCredentials = new ConcurrentHashMap<>();
@@ -368,29 +362,11 @@ public class WorkerManager {
         TaskResult result = new TaskResult(task);
         Map<String, Object> inputData = task.getInputData() != null ? task.getInputData() : Collections.emptyMap();
 
-        // Resolve declared secrets BEFORE invoking the handler. Credential
-        // failures are terminal so Conductor doesn't burn retries on a config
-        // problem. See docs/design/secret-injection-contract.md.
-        Map<String, String> resolvedSecrets = Collections.emptyMap();
-        List<String> declared = taskCredentials.getOrDefault(taskName, Collections.emptyList());
-        if (!declared.isEmpty()) {
-            String execToken = extractExecutionToken(inputData);
-            try {
-                resolvedSecrets = credentialFetcher.fetch(execToken, declared);
-            } catch (CredentialNotFoundException
-                    | CredentialAuthException
-                    | CredentialRateLimitException
-                    | CredentialServiceException ce) {
-                logger.error(
-                        "Credential resolution failed for task {} ({}): {}",
-                        taskName,
-                        task.getTaskId(),
-                        ce.getMessage());
-                result.setStatus(TaskResult.Status.FAILED_WITH_TERMINAL_ERROR);
-                result.setReasonForIncompletion("Credential resolution failed: " + ce.getMessage());
-                return result;
-            }
-        }
+        // Per-user secret values are injected into this task's input at poll time
+        // by the server (WorkerSecretPollAdvice), resolved from the workflow's
+        // createdBy. We read them like any other input field — no callback to the
+        // server. See docs/design/secret-injection-contract.md.
+        Map<String, String> resolvedSecrets = readResolvedCredentials(inputData);
 
         Function<Map<String, Object>, Object> handler = handlers.get(taskName);
         if (handler == null) {
@@ -417,18 +393,18 @@ public class WorkerManager {
         return result;
     }
 
-    /**
-     * Pull the execution token out of {@code inputData["__agentspan_ctx__"]["execution_token"]}.
-     * Returns {@code null} if no token is present.
-     */
+    /** Read the {name -> plaintext} map the server injected into the task input at poll time. */
     @SuppressWarnings("unchecked")
-    private static String extractExecutionToken(Map<String, Object> inputData) {
-        if (inputData == null) return null;
-        Object ctx = inputData.get("__agentspan_ctx__");
-        if (!(ctx instanceof Map<?, ?> ctxMap)) return null;
-        Object token = ctxMap.get("execution_token");
-        if (token == null) token = ctxMap.get("executionToken"); // tolerate camelCase
-        return token instanceof String s ? s : null;
+    private static Map<String, String> readResolvedCredentials(Map<String, Object> inputData) {
+        Object injected = inputData.get("__resolved_credentials__");
+        if (injected instanceof Map<?, ?> map) {
+            Map<String, String> out = new java.util.LinkedHashMap<>();
+            for (Map.Entry<?, ?> e : map.entrySet()) {
+                if (e.getKey() instanceof String k && e.getValue() instanceof String v) out.put(k, v);
+            }
+            return out;
+        }
+        return Collections.emptyMap();
     }
 
     @SuppressWarnings("unchecked")

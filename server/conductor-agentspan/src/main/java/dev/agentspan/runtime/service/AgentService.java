@@ -45,7 +45,6 @@ import com.netflix.conductor.service.WorkflowService;
 import dev.agentspan.runtime.compiler.AgentCompiler;
 import dev.agentspan.runtime.compiler.MultiAgentCompiler;
 import dev.agentspan.runtime.context.RequestContextHolder;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
 import dev.agentspan.runtime.util.ModelParser;
@@ -71,9 +70,6 @@ public class AgentService {
     private final ProviderValidator providerValidator;
 
     @Autowired(required = false)
-    private ExecutionTokenService executionTokenService;
-
-    @Autowired(required = false)
     private SkillRegistryService skillRegistryService;
 
     /**
@@ -95,30 +91,6 @@ public class AgentService {
      */
     @Autowired(required = false)
     private MetadataService metadataService;
-
-    /** Package-private constructor for testing with ExecutionTokenService */
-    AgentService(
-            AgentCompiler agentCompiler,
-            NormalizerRegistry normalizerRegistry,
-            ExecutionDAO executionDAO,
-            MetadataDAO metadataDAO,
-            WorkflowExecutor workflowExecutor,
-            WorkflowService workflowService,
-            AgentStreamRegistry streamRegistry,
-            ExecutionService executionService,
-            ProviderValidator providerValidator,
-            ExecutionTokenService executionTokenService) {
-        this.agentCompiler = agentCompiler;
-        this.normalizerRegistry = normalizerRegistry;
-        this.executionDAO = executionDAO;
-        this.metadataDAO = metadataDAO;
-        this.workflowExecutor = workflowExecutor;
-        this.workflowService = workflowService;
-        this.streamRegistry = streamRegistry;
-        this.executionService = executionService;
-        this.providerValidator = providerValidator;
-        this.executionTokenService = executionTokenService;
-    }
 
     /**
      * Compile an agent config into a WorkflowDef and return it.
@@ -322,44 +294,17 @@ public class AgentService {
         }
         input.put("cwd", cwd);
 
-        // Pre-generate the workflow id so the execution token can be minted
-        // against the same id Conductor will use. Without this the token's
-        // executionId is null, and CredentialDisclosureService.record() crashes
-        // with NPE when it tries Map.of(..., null, ...) on the not-null
-        // execution_id column. Passing this id to setWorkflowId on the start
-        // input below makes Conductor adopt it instead of generating one.
-        // Use the host's configured ID generator (time-based when embedded in orkes) so the
-        // host can derive createTime from the ID; fall back to a random UUID outside Spring.
+        // Pre-generate the workflow id and pass it to setWorkflowId below so
+        // Conductor adopts it instead of generating one. Use the host's
+        // configured ID generator (time-based when embedded in orkes) so the
+        // host can derive createTime from the ID; fall back to a random UUID
+        // outside Spring.
+        //
+        // Credential resolution no longer needs anything embedded in the input:
+        // secret references (${workflow.secrets.NAME}) are stamped into task input at
+        // compile time and resolved by the host (orkes-conductor) just-in-time.
         String preallocatedExecutionId =
                 idGenerator != null ? idGenerator.generate() : UUID.randomUUID().toString();
-
-        // Mint execution token and embed in workflow variables for worker credential resolution
-        if (executionTokenService != null) {
-            try {
-                long timeoutSeconds = config.getTimeoutSeconds() > 0 ? config.getTimeoutSeconds() : 0;
-                List<String> declaredNames = extractDeclaredCredentials(config);
-                // Also include credentials from the start request payload
-                // (used by framework agents and run(credentials=[...]) calls)
-                Object inputCreds = input.get("credentials");
-                if (inputCreds instanceof List<?> credList) {
-                    for (Object c : credList) {
-                        if (c instanceof String s && !declaredNames.contains(s)) {
-                            declaredNames.add(s);
-                        }
-                    }
-                }
-                String currentUserId = principal;
-                if (currentUserId != null) {
-                    String token = executionTokenService.mint(
-                            currentUserId, preallocatedExecutionId, declaredNames, timeoutSeconds);
-                    Map<String, Object> agentCtx = new LinkedHashMap<>();
-                    agentCtx.put("execution_token", token);
-                    input.put("__agentspan_ctx__", agentCtx);
-                }
-            } catch (Exception e) {
-                log.warn("Failed to mint execution token: {}", e.getMessage());
-            }
-        }
 
         startReq.setInput(input);
 
@@ -859,50 +804,6 @@ public class AgentService {
     }
 
     /**
-     * Extract credential names declared in tool configs (for execution token bounding).
-     */
-    private List<String> extractDeclaredCredentials(AgentConfig config) {
-        Set<String> names = new LinkedHashSet<>();
-        collectCredentialsRecursive(config, names);
-        return new ArrayList<>(names);
-    }
-
-    private void collectCredentialsRecursive(AgentConfig config, Set<String> names) {
-        // Agent-level credentials
-        if (config.getCredentials() != null) {
-            names.addAll(config.getCredentials());
-        }
-        // Tool-level credentials
-        if (config.getTools() != null) {
-            for (ToolConfig tool : config.getTools()) {
-                if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> creds) {
-                    for (Object c : creds) {
-                        if (c instanceof String s) names.add(s);
-                    }
-                }
-                // Recurse into agent_tool nested agents
-                if ("agent_tool".equals(tool.getToolType()) && tool.getConfig() != null) {
-                    Object nested = tool.getConfig().get("agentConfig");
-                    if (nested instanceof Map<?, ?> nestedMap) {
-                        try {
-                            AgentConfig nestedConfig = new ObjectMapper().convertValue(nestedMap, AgentConfig.class);
-                            collectCredentialsRecursive(nestedConfig, names);
-                        } catch (Exception e) {
-                            // Skip if can't parse nested config
-                        }
-                    }
-                }
-            }
-        }
-        // Recurse into sub-agents (multi-agent strategies)
-        if (config.getAgents() != null) {
-            for (AgentConfig sub : config.getAgents()) {
-                collectCredentialsRecursive(sub, names);
-            }
-        }
-    }
-
-    /**
      * Walk the agent tree and register task definitions for all worker tools.
      */
     private void registerTaskDefinitions(AgentConfig config) {
@@ -918,6 +819,20 @@ public class AgentService {
                 String tt = tool.getToolType();
                 if ("worker".equals(tt) && !registered.contains(tool.getName())) {
                     registerTaskDef(tool.getName());
+                    registered.add(tool.getName());
+                } else if (("http".equals(tt) || "api".equals(tt) || "mcp".equals(tt))
+                        && !registered.contains(tool.getName())) {
+                    // HTTP/API/MCP tools execute as server-side system tasks (HTTP /
+                    // CALL_MCP_TOOL) created dynamically by the enrich fork. A
+                    // dynamically-forked task carries NO inline TaskDef — Conductor
+                    // strips it — so its responseTimeoutSeconds defaults to 0 = never
+                    // times out. A non-responding endpoint then wedges the task (and
+                    // its system-task-worker thread) IN_PROGRESS forever; enough of
+                    // those exhaust the pool and starve even trivial INLINE tasks.
+                    // Register a TaskDef by tool name with a short response timeout so
+                    // the sweeper reaps a stuck call and (timeoutPolicy RETRY) re-issues
+                    // it instead of hanging the workflow.
+                    registerTaskDef(tool.getName(), 60, 90);
                     registered.add(tool.getName());
                 }
             }
@@ -1371,13 +1286,19 @@ public class AgentService {
     // ── Task registration ────────────────────────────────────────────
 
     private void registerTaskDef(String taskName) {
+        // Workers are local pollers that can legitimately run long; keep the
+        // lenient 1h response window and no hard total timeout.
+        registerTaskDef(taskName, 3600, 0);
+    }
+
+    private void registerTaskDef(String taskName, int responseTimeoutSeconds, int timeoutSeconds) {
         TaskDef taskDef = new TaskDef();
         taskDef.setName(taskName);
         taskDef.setRetryCount(2);
         taskDef.setRetryDelaySeconds(2);
         taskDef.setRetryLogic(TaskDef.RetryLogic.LINEAR_BACKOFF);
-        taskDef.setTimeoutSeconds(0);
-        taskDef.setResponseTimeoutSeconds(3600);
+        taskDef.setTimeoutSeconds(timeoutSeconds);
+        taskDef.setResponseTimeoutSeconds(responseTimeoutSeconds);
         taskDef.setTimeoutPolicy(TaskDef.TimeoutPolicy.RETRY);
 
         try {

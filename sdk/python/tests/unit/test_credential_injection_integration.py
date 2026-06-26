@@ -22,14 +22,19 @@ from conductor.client.http.models import Task, TaskResult
 # ---------------------------------------------------------------------------
 
 
-def _real_conductor_task(workflow_instance_id="wf-integ-001"):
-    """Build a real Conductor Task object (not a mock)."""
+def _real_conductor_task(workflow_instance_id="wf-integ-001", resolved=None):
+    """Build a real Conductor Task object (not a mock).
+
+    *resolved* mirrors what the server injects into a polled tool task's input at
+    poll time (WorkerSecretPollAdvice): a ``__resolved_credentials__`` map of
+    name → plaintext. The worker reads it from input — there is no fetch.
+    """
     task = Task()
     task.task_id = "task-integ-001"
     task.workflow_instance_id = workflow_instance_id
-    task.input_data = {
-        "__agentspan_ctx__": {"execution_token": "tok-integ-fake"},
-    }
+    task.input_data = {}
+    if resolved:
+        task.input_data["__resolved_credentials__"] = dict(resolved)
     return task
 
 
@@ -105,12 +110,9 @@ class TestFullExtractionPathIntegration:
             credential_names=["GITHUB_TOKEN"],
         )
 
-        fake_fetcher = MagicMock()
-        fake_fetcher.fetch.return_value = {"GITHUB_TOKEN": "ghp_real_token_123"}
-        task = _real_conductor_task()
-
-        with patch(_FETCHER_PATCH, return_value=fake_fetcher):
-            result = worker_fn(task)
+        # Server-injected credentials live in the task input.
+        task = _real_conductor_task(resolved={"GITHUB_TOKEN": "ghp_real_token_123"})
+        result = worker_fn(task)
 
         # The tool saw the credential during execution
         assert result.status.name == "COMPLETED"
@@ -118,9 +120,6 @@ class TestFullExtractionPathIntegration:
 
         # Credential was cleaned up from env
         assert "GITHUB_TOKEN" not in os.environ
-
-        # Fetcher was called with the correct token and credential names
-        fake_fetcher.fetch.assert_called_once_with("tok-integ-fake", ["GITHUB_TOKEN"])
 
     def test_extracted_tool_without_credentials_sees_empty_env(self):
         """Without credential_names, the tool sees no GITHUB_TOKEN."""
@@ -145,14 +144,12 @@ class TestFullExtractionPathIntegration:
         # Ensure GITHUB_TOKEN is NOT in env
         os.environ.pop("GITHUB_TOKEN", None)
 
+        # No __resolved_credentials__ injected → tool sees nothing.
         task = _real_conductor_task()
-
-        with patch(_FETCHER_PATCH) as mock_get_fetcher:
-            result = worker_fn(task)
+        result = worker_fn(task)
 
         assert result.status.name == "COMPLETED"
         assert "NOT_FOUND" in str(result.output_data)
-        mock_get_fetcher.assert_not_called()
 
     def test_credential_cleanup_on_tool_exception(self):
         """Credentials are cleaned up even when the tool raises."""
@@ -169,12 +166,8 @@ class TestFullExtractionPathIntegration:
             credential_names=["SECRET_KEY"],
         )
 
-        fake_fetcher = MagicMock()
-        fake_fetcher.fetch.return_value = {"SECRET_KEY": "s3cr3t"}
-        task = _real_conductor_task()
-
-        with patch(_FETCHER_PATCH, return_value=fake_fetcher):
-            result = worker_fn(task)
+        task = _real_conductor_task(resolved={"SECRET_KEY": "s3cr3t"})
+        result = worker_fn(task)
 
         assert result.status.name == "FAILED"
         assert "SECRET_KEY" not in os.environ

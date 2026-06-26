@@ -24,19 +24,19 @@ public class ProviderValidator {
 
     /**
      * When embedded in a host (e.g. orkes-conductor), Conductor is the authority for model
-     * providers and credentials: conductor-ai <b>integrations</b> resolve providers by name,
-     * and the host's <b>credential store</b> (AWS SSM / Vault / etc., reached via the
-     * {@code CredentialStoreProvider} SPI) supplies raw keys. This standalone pre-flight check
-     * only knows AgentSpan's own provider model, so it would wrongly reject host-configured
-     * providers. The execution path already delegates to conductor-ai (which resolves or
-     * rejects the provider), so when embedded we defer to Conductor and skip this check.
+     * providers and credentials: conductor-ai <b>integrations</b> resolve providers by name, and
+     * the host resolves API keys just-in-time from {@code ${workflow.secrets.NAME}} references in
+     * the LLM task input. This standalone pre-flight check only knows providers configured at
+     * startup, so it would wrongly reject host-configured providers. The execution path already
+     * delegates to conductor-ai (which resolves or rejects the provider), so when embedded we
+     * defer to Conductor and skip this check.
      */
     @Value("${agentspan.embedded:false}")
     private boolean embedded;
 
     /**
-     * Returns Optional.empty() if the provider is configured (either via startup environment
-     * variables or via a credential added in the UI), or Optional.of(errorMessage) if not.
+     * Returns Optional.empty() if the provider is configured at startup (via environment
+     * variables / application.properties), or Optional.of(errorMessage) if not.
      */
     public Optional<String> validateProvider(String provider) {
         if (embedded || aiModelProvider.isProviderConfigured(provider)) {

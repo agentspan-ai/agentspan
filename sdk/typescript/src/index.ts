@@ -158,8 +158,6 @@ export { schedules };
 
 // ── Credentials ─────────────────────────────────────────
 export {
-  extractExecutionToken,
-  resolveCredentials,
   getCredential,
   setCredentialContext,
   runWithCredentialContext,

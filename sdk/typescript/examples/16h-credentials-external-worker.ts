@@ -120,7 +120,8 @@ console.log('Agent definition:');
 console.log(`  name: ${agent.name}`);
 console.log(`  tools: [${agent.tools.map((t) => (t as { name?: string }).name ?? 'unknown').join(', ')}]`);
 console.log();
-console.log('External worker pattern:');
-console.log("  const token = extractExecutionToken(taskInput);");
-console.log("  const creds = await resolveCredentials(serverUrl, {}, token, ['GITHUB_TOKEN']);");
+console.log('External worker pattern (pull-based — server derives owner from createdBy):');
+console.log(
+  "  const creds = await resolveCredentials(serverUrl, {}, task.workflowInstanceId, ['GITHUB_TOKEN'], task.taskId);",
+);
 console.log("  const value = creds.GITHUB_TOKEN;");

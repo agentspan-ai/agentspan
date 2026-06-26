@@ -28,7 +28,6 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger _logger;
     private readonly int _pollIntervalMs;
-    private readonly string[] _credentialNames;
     private System.Threading.Tasks.Task? _pollTask;
 
     internal WorkerPollLoop(
@@ -38,7 +37,6 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
         Func<Dictionary<string, JsonElement>, ToolContext?, System.Threading.Tasks.Task<object?>> handler,
         int pollIntervalMs = 100,
         ILogger? logger = null,
-        string[]? credentialNames = null,
         string? domain = null)
     {
         _taskClient      = taskClient;
@@ -48,7 +46,6 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
         _handler         = handler;
         _pollIntervalMs  = pollIntervalMs;
         _logger          = logger ?? NullLogger.Instance;
-        _credentialNames = credentialNames ?? [];
     }
 
     public void Start()
@@ -89,23 +86,24 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
 
             // Strip internal keys from the handler-visible input
             var handlerInput = inputData
-                .Where(kv => !string.Equals(kv.Key, "__agentspan_ctx__", StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(kv.Key, "_agent_state",      StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(kv.Key, "method",            StringComparison.OrdinalIgnoreCase))
+                .Where(kv => !string.Equals(kv.Key, "__agentspan_ctx__",        StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(kv.Key, "__resolved_credentials__", StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(kv.Key, "_agent_state",             StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(kv.Key, "method",                   StringComparison.OrdinalIgnoreCase))
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
-            // Resolve and inject credentials via the centralized helper so the
-            // mutation + invocation + restoration is atomic under a single
-            // process-wide lock. See docs/design/secret-injection-contract.md.
-            // Tier-2 (env-injection) path; tier-1 (explicit-key) lands when the
-            // user-facing API exposes a `credentials` parameter to agent factories.
+            // Per-user secret values are injected into this task's input at poll
+            // time by the server (WorkerSecretPollAdvice), resolved from the
+            // workflow's createdBy. We read them like any other field — no callback
+            // to the server. Injected via env under a process-wide lock (tier-2).
+            // See docs/design/secret-injection-contract.md.
             Dictionary<string, string> resolvedCredentials = new();
-            if (_credentialNames.Length > 0)
+            if (inputData.TryGetValue("__resolved_credentials__", out var credsEl)
+                && credsEl.ValueKind == JsonValueKind.Object)
             {
-                var creds = await _http.ResolveCredentialsAsync(
-                    toolCtx?.ExecutionToken, _credentialNames, ct);
-                foreach (var (k, v) in creds)
-                    resolvedCredentials[k] = v;
+                foreach (var prop in credsEl.EnumerateObject())
+                    if (prop.Value.ValueKind == JsonValueKind.String)
+                        resolvedCredentials[prop.Name] = prop.Value.GetString()!;
             }
 
             object? result = await CredentialInjection.InjectViaEnvAsync<object?>(
@@ -277,19 +275,15 @@ internal sealed class WorkerManager : IAsyncDisposable
     private WorkerPollLoop NewLoop(
         string taskName,
         Func<Dictionary<string, JsonElement>, ToolContext?, System.Threading.Tasks.Task<object?>> handler,
-        string[]? credentialNames = null,
         string? domain = null)
-        => new(_taskClient, _http, taskName, handler,
-               credentialNames: credentialNames, domain: domain);
+        => new(_taskClient, _http, taskName, handler, domain: domain);
 
     public void RegisterTools(IEnumerable<ToolDef> tools, string? domain = null)
     {
         foreach (var tool in tools)
         {
             if (tool.Handler is null) continue;
-            _workers.Add(NewLoop(tool.Name, tool.Handler,
-                credentialNames: tool.Credentials.Length > 0 ? tool.Credentials : null,
-                domain: domain));
+            _workers.Add(NewLoop(tool.Name, tool.Handler, domain: domain));
         }
     }
 

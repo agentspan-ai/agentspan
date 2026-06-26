@@ -18,8 +18,8 @@ import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
-import dev.agentspan.runtime.credentials.AgentspanMintTokenTask;
 import dev.agentspan.runtime.model.*;
+import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ModelParser.ParsedModel;
@@ -203,45 +203,6 @@ public class AgentCompiler {
             wf.setMetadata(metadata);
         }
 
-        // Inject the execution-token mint task as the FIRST task of every agent
-        // workflow (root AND recursively-compiled sub-workflows). It guarantees an
-        // execution token lives in workflow.variables.__agentspan_ctx__ regardless
-        // of HOW the workflow was started: the SDK /agent/start path embeds one in
-        // the workflow input and the task passes it through; inbound-webhook / UI /
-        // schedule starts go through Conductor core WITHOUT one and the task mints
-        // it (from the identity + declared-name allow-list stamped on the def). The
-        // variable is persisted via executionDAOFacade.updateWorkflow — the same
-        // durable channel SET_VARIABLE uses — so it survives every decide() reload
-        // on every core (unlike a status-listener mutation, which orkes-conductor
-        // does not persist). Downstream tasks read ${workflow.variables.__agentspan_ctx__}.
-        //
-        // Excluded paths (framework passthrough, graph structures) carry no
-        // credentialed tool tasks of their own and receive the ctx via their
-        // SUB_WORKFLOW input mapping, so they intentionally keep reading input.
-        if (wf.getTasks() != null
-                && !isFrameworkPassthrough(config)
-                && !isGraphStructure(config)) {
-            boolean alreadyMinted = !wf.getTasks().isEmpty()
-                    && AgentspanMintTokenTask.TASK_TYPE.equals(wf.getTasks().get(0).getType());
-            if (!alreadyMinted) {
-                WorkflowTask mint = new WorkflowTask();
-                mint.setType(AgentspanMintTokenTask.TASK_TYPE);
-                mint.setTaskReferenceName(toRef(config.getName()) + "_mint_token");
-                Map<String, Object> mintInputs = new LinkedHashMap<>();
-                // Read from input: the SDK /agent/start path and SUB_WORKFLOW input
-                // mappings deliver an existing token here; absent (webhook/UI), the
-                // task mints a fresh one.
-                mintInputs.put(
-                        AgentspanMintTokenTask.CTX_KEY, "${workflow.input.__agentspan_ctx__}");
-                mint.setInputParameters(mintInputs);
-                // Rebuild into a mutable list: some compile paths set an immutable
-                // task list (List.of(...)), which would reject an in-place add(0,...).
-                List<WorkflowTask> withMint = new ArrayList<>(wf.getTasks());
-                withMint.add(0, mint);
-                wf.setTasks(withMint);
-            }
-        }
-
         // Ensure every task has a name (Conductor requires it for execution)
         if (wf.getTasks() != null) {
             wf.getTasks().forEach(AgentCompiler::ensureTaskNames);
@@ -377,6 +338,7 @@ public class AgentCompiler {
         List<ToolConfig> tools = config.getTools();
 
         ToolCompiler tc = new ToolCompiler();
+        tc.setWorkerCreds(collectToolCredentials(config));
         boolean hasApproval = tools.stream().anyMatch(ToolConfig::isApprovalRequired);
         boolean hasMcp = tools.stream().anyMatch(t -> "mcp".equals(t.getToolType()));
         boolean hasApi = tools.stream().anyMatch(t -> "api".equals(t.getToolType()));
@@ -751,6 +713,7 @@ public class AgentCompiler {
         }
 
         ToolCompiler tc = new ToolCompiler();
+        tc.setWorkerCreds(collectToolCredentials(config));
         boolean hasApproval = allTools.stream().anyMatch(ToolConfig::isApprovalRequired);
         boolean hasMcp = allTools.stream().anyMatch(t -> "mcp".equals(t.getToolType()));
         boolean hasApi = allTools.stream().anyMatch(t -> "api".equals(t.getToolType()));
@@ -1048,7 +1011,6 @@ public class AgentCompiler {
         inputs.put("media", mediaRef);
         inputs.put("session_id", "${workflow.input.session_id}");
         // Forward execution token to sub-workflows for credential resolution
-        inputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
         // Pass context to sub-workflow for pipeline state
         if (contextRef != null) {
             inputs.put("context", contextRef);
@@ -1124,13 +1086,6 @@ public class AgentCompiler {
         wf.setTimeoutSeconds(60L);
         wf.setTimeoutPolicy(null);
         wf.setInputParameters(WORKFLOW_INPUTS);
-        // Enable the workflow status listener (AgentEventListener) for EVERY start
-        // path. Conductor gates onWorkflowStarted/Completed/Terminated on this
-        // per-def flag (defaults false). We rely on those callbacks to:
-        //   - mint an execution token for workflows started WITHOUT one (webhook,
-        //     UI, schedule) so credentialed tools can resolve secrets, and
-        //   - revoke the token + emit SSE done events on completion.
-        wf.setWorkflowStatusListenerEnabled(true);
         return wf;
     }
 
@@ -1161,7 +1116,12 @@ public class AgentCompiler {
             task.setType("SIMPLE");
 
             Map<String, Object> inputs = new LinkedHashMap<>(ptc.getArguments());
-            inputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
+            // EMBEDDED: stamp the worker's secret references so orkes resolves them at poll time.
+            Map<String, Object> prefillRefs =
+                    embeddedSecretRefs(collectToolCredentials(config).get(ptc.getToolName()));
+            if (!prefillRefs.isEmpty()) {
+                inputs.put("__resolved_credentials__", prefillRefs);
+            }
             task.setInputParameters(inputs);
 
             tasks.add(task);
@@ -1313,7 +1273,6 @@ public class AgentCompiler {
                 Map<String, Object> args = pr.arguments();
                 if (args != null && !args.isEmpty()) {
                     String summary = args.entrySet().stream()
-                            .filter(e -> !"__agentspan_ctx__".equals(e.getKey()))
                             .map(e -> e.getKey() + "=" + e.getValue())
                             .collect(Collectors.joining(", "));
                     if (!summary.isEmpty()) {
@@ -1384,7 +1343,6 @@ public class AgentCompiler {
         }
 
         // Forward execution token so per-user credential resolution works in worker threads
-        inputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
 
         llm.setInputParameters(inputs);
 
@@ -1904,7 +1862,6 @@ public class AgentCompiler {
             // Pass subgraph input from prep output + execution token
             Map<String, Object> subInputs = new LinkedHashMap<>();
             subInputs.put("state", "${" + prepRef + ".output.subgraph_input}");
-            subInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             subTask.setInputParameters(subInputs);
             defaultTasks.add(subTask);
 
@@ -3455,6 +3412,62 @@ public class AgentCompiler {
                 && Boolean.TRUE.equals(config.getMetadata().get("_framework_passthrough"));
     }
 
+    /**
+     * Build {@code {toolName -> [credentialNames]}} for this agent's own (worker) tools.
+     * A tool's effective names = its own declared credentials, else (fallback) the
+     * agent-level credentials. Nested sub-agents are compiled into their own
+     * workflows (each stamps its own map), so this is intentionally non-recursive.
+     */
+    static Map<String, List<String>> collectToolCredentials(AgentConfig config) {
+        List<String> agentCreds = config.getCredentials() != null ? config.getCredentials() : List.of();
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                if (tool.getName() == null) continue;
+                List<String> own = new ArrayList<>();
+                if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> cl) {
+                    for (Object c : cl) {
+                        if (c instanceof String s) own.add(s);
+                    }
+                }
+                List<String> effective = own.isEmpty() ? agentCreds : own;
+                if (!effective.isEmpty()) map.put(tool.getName(), new ArrayList<>(effective));
+            }
+        }
+        return map;
+    }
+
+    /** Union of agent-level + all tool-level declared credential names (poll-time fallback). */
+    private static List<String> collectCredentialUnion(AgentConfig config) {
+        Set<String> names = new LinkedHashSet<>();
+        if (config.getCredentials() != null) names.addAll(config.getCredentials());
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> cl) {
+                    for (Object c : cl) {
+                        if (c instanceof String s) names.add(s);
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(names);
+    }
+
+    /**
+     * Build {@code {NAME: "${workflow.secrets.NAME}"}} from credential names for stamping
+     * static SIMPLE worker tasks in EMBEDDED mode (framework passthrough, prefill). The orkes
+     * host resolves the references at poll time; the SDK worker reads {@code __resolved_credentials__}
+     * and strips it. Returns an empty map when not embedded or no names — caller stamps nothing.
+     */
+    private static Map<String, Object> embeddedSecretRefs(List<String> names) {
+        Map<String, Object> refs = new LinkedHashMap<>();
+        if (!EmbeddedMode.isEmbedded() || names == null) return refs;
+        for (String name : names) {
+            refs.put(name, "${workflow.secrets." + name + "}");
+        }
+        return refs;
+    }
+
     WorkflowDef compileFrameworkPassthrough(AgentConfig config) {
         log.debug("Compiling framework passthrough workflow: {}", config.getName());
 
@@ -3472,15 +3485,20 @@ public class AgentCompiler {
                 "prompt", "${workflow.input.prompt}",
                 "session_id", "${workflow.input.session_id}",
                 "media", "${workflow.input.media}",
-                "cwd", "${workflow.input.cwd}",
-                "__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}")));
+                "cwd", "${workflow.input.cwd}")));
+
+        // EMBEDDED: stamp the worker's secret references so orkes resolves them at poll time.
+        List<String> fwCreds = collectToolCredentials(config).getOrDefault(workerName, collectCredentialUnion(config));
+        Map<String, Object> fwRefs = embeddedSecretRefs(fwCreds);
+        if (!fwRefs.isEmpty()) {
+            fwTask.getInputParameters().put("__resolved_credentials__", fwRefs);
+        }
 
         WorkflowDef wf = new WorkflowDef();
         wf.setName(config.getName());
         wf.setVersion(1);
         List<String> inputs = new ArrayList<>(WORKFLOW_INPUTS);
         inputs.add("context");
-        inputs.add("__agentspan_ctx__");
         wf.setInputParameters(inputs);
         wf.setTasks(List.of(fwTask));
         // Output both result and context so sequential pipelines can merge

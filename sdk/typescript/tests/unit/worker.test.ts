@@ -498,13 +498,14 @@ describe("WorkerManager", () => {
   // full conductor polling machinery.
 
   describe("credential context during execution", () => {
-    it("sets credential context when execution token is present", async () => {
-      const serverUrl = "http://cred-test";
-      const headers = { Authorization: "Bearer tok" };
-      const manager = new WorkerManager(serverUrl, headers, 100);
+    // Per-user secret values are injected into the task input at poll time by the
+    // server (WorkerSecretPollAdvice) under __resolved_credentials__. The worker
+    // scopes that map so getCredential() resolves names — no fetch.
+
+    it("sets credential context from injected credentials", async () => {
+      const manager = new WorkerManager("http://cred-test", {}, 100);
 
       let contextAvailable = false;
-
       manager.addWorker("cred_task", async (_input) => {
         const { getCredential } = await import("../../src/credentials.js");
         try {
@@ -518,36 +519,37 @@ describe("WorkerManager", () => {
         return { ok: true };
       });
 
-      // Mock fetch for credential resolution
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation(async (url: string) => {
-          if (typeof url === "string" && url.includes("/workers/secrets")) {
-            return {
-              ok: true,
-              status: 200,
-              json: async () => ({ MY_CRED: "secret-value" }),
-            };
-          }
-          return { ok: true, status: 200, text: async () => "" };
-        }),
-      );
-
-      // Get the wrapped ConductorWorker and call execute() directly
       const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
       await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
         inputData: {
           arg1: "value",
-          __agentspan_ctx__: {
-            executionToken: "exec-tok-123",
-            executionId: "wf-1",
-          },
+          __resolved_credentials__: { MY_CRED: "secret-value" },
         },
       });
 
       expect(contextAvailable).toBe(true);
+    });
+
+    it("does not leak injected credentials into the handler input", async () => {
+      const manager = new WorkerManager("http://test", {}, 100);
+
+      let seenInput: Record<string, unknown> = {};
+      manager.addWorker("strip_task", async (input) => {
+        seenInput = input;
+        return { ok: true };
+      });
+
+      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
+      await wrapped.execute({
+        taskId: "task-1",
+        workflowInstanceId: "wf-1",
+        inputData: { arg1: "value", __resolved_credentials__: { MY_CRED: "secret-value" } },
+      });
+
+      expect(seenInput["arg1"]).toBe("value");
+      expect(seenInput).not.toHaveProperty("__resolved_credentials__");
     });
 
     it("clears credential context after handler completes", async () => {
@@ -561,11 +563,7 @@ describe("WorkerManager", () => {
       await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
-        inputData: {
-          __agentspan_ctx__: {
-            executionToken: "exec-tok-456",
-          },
-        },
+        inputData: { __resolved_credentials__: { ANY: "v" } },
       });
 
       const { getCredential } = await import("../../src/credentials.js");
@@ -581,105 +579,54 @@ describe("WorkerManager", () => {
 
       const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
 
-      // The execute() should throw (conductor SDK catches and reports failure)
       await expect(
         wrapped.execute({
           taskId: "task-1",
           workflowInstanceId: "wf-1",
-          inputData: {
-            __agentspan_ctx__: {
-              executionToken: "exec-tok-789",
-            },
-          },
+          inputData: { __resolved_credentials__: { ANY: "v" } },
         }),
       ).rejects.toThrow("handler boom");
 
-      // Context should still be cleared despite handler error
       const { getCredential } = await import("../../src/credentials.js");
       await expect(getCredential("ANY")).rejects.toThrow("No credential context available");
     });
 
     it("isolates credential context across concurrent worker executions (regression: race in test_suite2)", async () => {
-      // Reproduces the test_suite2_tool_calling flake deterministically:
-      // The LLM emits parallel tool calls, so multiple worker.execute()
-      // run concurrently. Pre-fix, all share a single module-level
-      // credential context. Worker B's `finally`-block clear races with
-      // worker A's getCredential() call, throwing
-      // "No credential context available".
-      //
-      // We force the race by gating each handler on a barrier so all
-      // handlers are mid-flight at the same time, then have each call
-      // getCredential() and verify each got *its own* execution token's
-      // resolved value back.
-      const serverUrl = "http://cred-race";
-      const manager = new WorkerManager(serverUrl, {}, 100);
+      // The LLM emits parallel tool calls, so multiple worker.execute() run
+      // concurrently. Each must see only ITS OWN injected secrets — a sibling's
+      // context cleanup must not clobber an in-flight handler. The handler yields
+      // (await) before reading getCredential() so the executions interleave across
+      // await boundaries; the AsyncLocalStorage-scoped map must keep them separate.
+      const manager = new WorkerManager("http://cred-race", {}, 100);
 
       const NUM = 5;
-      const barrier = new Promise<void>((resolve) => {
-        let arrived = 0;
-        manager.addWorker(
-          "race_task",
-          async () => {
-            arrived++;
-            // Wait until all handlers are running concurrently.
-            if (arrived === NUM) resolve();
-            await barrierGate;
-            const { getCredential } = await import("../../src/credentials.js");
-            return { value: await getCredential("MY_CRED") };
-          },
-          undefined,
-        );
-        // Build the gate via a sentinel resolved after all arrive.
-        // The actual barrier the handlers await:
+      manager.addWorker("race_task", async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        const { getCredential } = await import("../../src/credentials.js");
+        return { value: await getCredential("MY_CRED") };
       });
-      // Bridge: when `barrier` (all-arrived) resolves, open the gate.
-      let openGate!: () => void;
-      const barrierGate = new Promise<void>((res) => {
-        openGate = res;
-      });
-      void barrier.then(() => openGate());
 
-      // Echo the token back as the resolved value so we can detect crosstalk.
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
-          if (typeof url === "string" && url.includes("/workers/secrets")) {
-            const body = JSON.parse(String(init?.body));
-            return {
-              ok: true,
-              status: 200,
-              json: async () => ({ MY_CRED: `${body.token}:resolved` }),
-            };
-          }
-          return { ok: true, status: 200, text: async () => "" };
-        }),
-      );
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
 
+      // Each concurrent execution carries its own injected secret value.
       const tasks = Array.from({ length: NUM }, (_, i) => ({
         taskId: `task-${i}`,
-        workflowInstanceId: "wf-1",
-        inputData: {
-          __agentspan_ctx__: { executionToken: `tok-${i}` },
-        },
+        workflowInstanceId: `wf-${i}`,
+        inputData: { __resolved_credentials__: { MY_CRED: `secret-${i}` } },
       }));
 
       const results = await Promise.all(tasks.map((t) => wrapped.execute(t)));
 
-      // Each handler must see its own execution token, end to end —
-      // no nulls, no crosstalk between concurrent calls.
       for (let i = 0; i < NUM; i++) {
-        expect(results[i].outputData).toEqual({ value: `tok-${i}:resolved` });
+        expect(results[i].outputData).toEqual({ value: `secret-${i}` });
       }
     });
 
-    it("does not set credential context when no execution token", async () => {
+    it("does not set credential context when none injected", async () => {
       const manager = new WorkerManager("http://test", {}, 100);
 
       let handlerCalled = false;
-      manager.addWorker("no_token_task", async () => {
+      manager.addWorker("no_creds_task", async () => {
         handlerCalled = true;
         return { ok: true };
       });
@@ -688,9 +635,7 @@ describe("WorkerManager", () => {
       await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
-        inputData: {
-          arg1: "value",
-        },
+        inputData: { arg1: "value" },
       });
 
       expect(handlerCalled).toBe(true);

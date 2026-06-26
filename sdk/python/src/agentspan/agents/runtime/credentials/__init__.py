@@ -4,7 +4,6 @@
 """Credential management subpackage for the Agentspan Python SDK."""
 
 from agentspan.agents.runtime.credentials.accessor import get_secret
-from agentspan.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
 from agentspan.agents.runtime.credentials.types import (
     CredentialAuthError,
     CredentialNotFoundError,
@@ -17,6 +16,5 @@ __all__ = [
     "CredentialAuthError",
     "CredentialRateLimitError",
     "CredentialServiceError",
-    "WorkerCredentialFetcher",
     "get_secret",
 ]

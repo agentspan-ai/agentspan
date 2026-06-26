@@ -66,13 +66,13 @@ class MultiAgentCompilerTest {
         assertThat(wf.getName()).isEqualTo("team");
 
         // Handoff: ctx_resolve + init + DoWhile loop + final LLM
-        assertThat(wf.getTasks()).hasSize(5);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE");
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("DO_WHILE");
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
 
         // Loop should contain router LLM + switch with agent cases
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         boolean hasSwitchInLoop = loop.getLoopOver().stream().anyMatch(t -> "SWITCH".equals(t.getType()));
         assertThat(hasSwitchInLoop).isTrue();
 
@@ -100,13 +100,13 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        assertThat(wf.getTasks()).hasSize(7);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SIMPLE");
-        assertThat(wf.getTasks().get(1).getTaskReferenceName()).isEqualTo("dynamic_team_instructions_worker");
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("INLINE");
-        assertThat(wf.getTasks().get(2).getTaskReferenceName()).isEqualTo("dynamic_team_instructions");
+        assertThat(wf.getTasks()).hasSize(6);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SIMPLE");
+        assertThat(wf.getTasks().get(0).getTaskReferenceName()).isEqualTo("dynamic_team_instructions_worker");
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(1).getTaskReferenceName()).isEqualTo("dynamic_team_instructions");
 
-        WorkflowTask loop = wf.getTasks().get(5);
+        WorkflowTask loop = wf.getTasks().get(4);
         WorkflowTask routerSubWorkflow = loop.getLoopOver().get(0);
         WorkflowTask routerLlm = routerSubWorkflow
                 .getSubWorkflowParam()
@@ -118,7 +118,7 @@ class MultiAgentCompilerTest {
         String routerSystemMsg = (String) routerMessages.get(0).get("message");
         assertThat(routerSystemMsg).contains("${dynamic_team_instructions.output.result}");
 
-        WorkflowTask finalLlm = wf.getTasks().get(6);
+        WorkflowTask finalLlm = wf.getTasks().get(5);
         List<Map<String, Object>> finalMessages =
                 (List<Map<String, Object>>) finalLlm.getInputParameters().get("messages");
         String finalSystemMsg = (String) finalMessages.get(0).get("message");
@@ -139,15 +139,15 @@ class MultiAgentCompilerTest {
 
         // ctx_init_resolve + ctx_init + SUB_WORKFLOW(writer) + ctx_merge_0 + ctx_set_0 + coerce +
         // SUB_WORKFLOW(reviewer) + ctx_merge_1 + ctx_set_1
-        assertThat(wf.getTasks()).hasSize(10);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_init_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("SUB_WORKFLOW");
-        assertThat(wf.getTasks().get(3).getTaskReferenceName()).contains("writer");
-        assertThat(wf.getTasks().get(6).getType()).isEqualTo("INLINE");
-        assertThat(wf.getTasks().get(6).getTaskReferenceName()).contains("coerce");
-        assertThat(wf.getTasks().get(7).getType()).isEqualTo("SUB_WORKFLOW");
-        assertThat(wf.getTasks().get(7).getTaskReferenceName()).contains("reviewer");
+        assertThat(wf.getTasks()).hasSize(9);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_init_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(wf.getTasks().get(2).getTaskReferenceName()).contains("writer");
+        assertThat(wf.getTasks().get(5).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(5).getTaskReferenceName()).contains("coerce");
+        assertThat(wf.getTasks().get(6).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(wf.getTasks().get(6).getTaskReferenceName()).contains("reviewer");
     }
 
     @Test
@@ -163,13 +163,13 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // ctx_resolve + ctx_init + Fork + Join + Aggregate INLINE + ctx_merge + ctx_set
-        assertThat(wf.getTasks()).hasSize(8);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("FORK_JOIN");
-        assertThat(wf.getTasks().get(4).getType()).isEqualTo("JOIN");
-        assertThat(wf.getTasks().get(5).getType()).isEqualTo("INLINE");
-        assertThat(wf.getTasks().get(5).getTaskReferenceName()).isEqualTo("parallel_team_aggregate");
+        assertThat(wf.getTasks()).hasSize(7);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("FORK_JOIN");
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("JOIN");
+        assertThat(wf.getTasks().get(4).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(4).getTaskReferenceName()).isEqualTo("parallel_team_aggregate");
 
         // Output references the aggregate task — result is always a string
         assertThat(wf.getOutputParameters().get("result").toString()).contains("_aggregate");
@@ -190,13 +190,13 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // ctx_resolve + Init + DoWhile
-        assertThat(wf.getTasks()).hasSize(4);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE");
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("DO_WHILE");
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
 
         // DoWhile should have select + switch
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         assertThat(loop.getLoopOver()).hasSize(2);
         assertThat(loop.getLoopOver().get(0).getType()).isEqualTo("INLINE");
         assertThat(loop.getLoopOver().get(1).getType()).isEqualTo("SWITCH");
@@ -214,8 +214,8 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // ctx_resolve + Init + DoWhile
-        assertThat(wf.getTasks()).hasSize(4);
-        WorkflowTask loop = wf.getTasks().get(3);
+        assertThat(wf.getTasks()).hasSize(3);
+        WorkflowTask loop = wf.getTasks().get(2);
 
         // Select script should use Math.random
         WorkflowTask selectTask = loop.getLoopOver().get(0);
@@ -241,19 +241,19 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // ctx_resolve + Init + DoWhile + Final LLM
-        assertThat(wf.getTasks()).hasSize(5);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("DO_WHILE");
-        assertThat(wf.getTasks().get(4).getType()).isEqualTo("LLM_CHAT_COMPLETE");
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("LLM_CHAT_COMPLETE");
 
         // Init should contain last_response, is_transfer, transfer_to
-        WorkflowTask init = wf.getTasks().get(2);
+        WorkflowTask init = wf.getTasks().get(1);
         assertThat(init.getInputParameters()).containsKey("last_response");
         assertThat(init.getInputParameters()).containsKey("is_transfer");
         assertThat(init.getInputParameters()).containsKey("transfer_to");
 
         // Loop: switch + handoff_check + update_active
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         assertThat(loop.getLoopOver()).hasSize(3);
 
         // Switch should have 3 cases: "0" (parent), "1" (agent_a), "2" (agent_b)
@@ -315,8 +315,8 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // ctx_resolve + Init + DoWhile
-        assertThat(wf.getTasks()).hasSize(4);
-        WorkflowTask loop = wf.getTasks().get(3);
+        assertThat(wf.getTasks()).hasSize(3);
+        WorkflowTask loop = wf.getTasks().get(2);
 
         // Loop: human + process_selection + switch
         assertThat(loop.getLoopOver()).hasSize(3);
@@ -336,14 +336,14 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // Iterative: ctx_resolve + init + DoWhile + final LLM
-        assertThat(wf.getTasks()).hasSize(5);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE");
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("DO_WHILE");
-        assertThat(wf.getTasks().get(4).getType()).isEqualTo("LLM_CHAT_COMPLETE");
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
+        assertThat(wf.getTasks().get(3).getType()).isEqualTo("LLM_CHAT_COMPLETE");
 
         // Loop should contain the worker router task
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         WorkflowTask routerInLoop = loop.getLoopOver().get(0);
         assertThat(routerInLoop.getType()).isEqualTo("SIMPLE");
         assertThat(routerInLoop.getName()).isEqualTo("my_router_fn");
@@ -368,13 +368,13 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // Iterative: ctx_resolve + init + DoWhile + final LLM
-        assertThat(wf.getTasks()).hasSize(5);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE");
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("DO_WHILE");
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
 
         // Loop should contain router sub-workflow (using anthropic model) + annotation + switch
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         boolean hasSwitchInLoop = loop.getLoopOver().stream().anyMatch(t -> "SWITCH".equals(t.getType()));
         assertThat(hasSwitchInLoop).isTrue();
 
@@ -407,13 +407,13 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        assertThat(wf.getTasks()).hasSize(7);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SIMPLE");
-        assertThat(wf.getTasks().get(1).getTaskReferenceName()).isEqualTo("routed_dynamic_router_instructions_worker");
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("INLINE");
-        assertThat(wf.getTasks().get(2).getTaskReferenceName()).isEqualTo("routed_dynamic_router_instructions");
+        assertThat(wf.getTasks()).hasSize(6);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SIMPLE");
+        assertThat(wf.getTasks().get(0).getTaskReferenceName()).isEqualTo("routed_dynamic_router_instructions_worker");
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(1).getTaskReferenceName()).isEqualTo("routed_dynamic_router_instructions");
 
-        WorkflowTask loop = wf.getTasks().get(5);
+        WorkflowTask loop = wf.getTasks().get(4);
         WorkflowTask routerSubWorkflow = loop.getLoopOver().get(0);
         WorkflowTask routerLlm = routerSubWorkflow
                 .getSubWorkflowParam()
@@ -440,12 +440,12 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Init should set last_agent (at index 2, after mint_token + ctx_resolve)
-        WorkflowTask init = wf.getTasks().get(2);
+        // Init should set last_agent (at index 1, after ctx_resolve)
+        WorkflowTask init = wf.getTasks().get(1);
         assertThat(init.getInputParameters()).containsKey("last_agent");
 
         // Select script should reference allowed transitions
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         WorkflowTask select = loop.getLoopOver().get(0);
         String script = (String) select.getInputParameters().get("expression");
         assertThat(script).contains("allowed");
@@ -486,13 +486,13 @@ class MultiAgentCompilerTest {
         assertThat(wf.getName()).isEqualTo("team");
 
         // With allowedTransitions, handoff compiles as ctx_resolve + init + loop + final
-        assertThat(wf.getTasks()).hasSize(5);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE");
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("DO_WHILE");
+        assertThat(wf.getTasks()).hasSize(4);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
 
         // Loop should contain sub-agent routing logic
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         assertThat(loop.getLoopOver()).isNotEmpty();
     }
 
@@ -516,13 +516,13 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // ctx_resolve + Init + DoWhile
-        assertThat(wf.getTasks()).hasSize(4);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE");
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("DO_WHILE");
+        assertThat(wf.getTasks()).hasSize(3);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("DO_WHILE");
 
         // Select script should contain allowed transitions mapping
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         WorkflowTask selectTask = loop.getLoopOver().get(0);
         String script = (String) selectTask.getInputParameters().get("expression");
         assertThat(script).contains("allowed");
@@ -656,16 +656,16 @@ class MultiAgentCompilerTest {
 
         // Should have: ctx_init_resolve + ctx_init + SUB_WORKFLOW(researcher) + ctx_merge_0 + ctx_set_0 +
         // INLINE(coerce) + SUB_WORKFLOW(writer) + ctx_merge_1 + ctx_set_1
-        assertThat(wf.getTasks()).hasSize(10);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_init_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("SUB_WORKFLOW");
-        assertThat(wf.getTasks().get(6).getType()).isEqualTo("INLINE");
-        assertThat(wf.getTasks().get(6).getTaskReferenceName()).contains("coerce");
-        assertThat(wf.getTasks().get(7).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(wf.getTasks()).hasSize(9);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_init_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(wf.getTasks().get(5).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(5).getTaskReferenceName()).contains("coerce");
+        assertThat(wf.getTasks().get(6).getType()).isEqualTo("SUB_WORKFLOW");
 
         // The sub-workflow's prompt input should reference the coerced output
-        String promptInput = (String) wf.getTasks().get(7).getInputParameters().get("prompt");
+        String promptInput = (String) wf.getTasks().get(6).getInputParameters().get("prompt");
         assertThat(promptInput).contains("coerce");
         assertThat(promptInput).contains(".output.result");
     }
@@ -695,9 +695,9 @@ class MultiAgentCompilerTest {
         WorkflowDef wf = compiler.compile(config);
 
         // ctx_resolve + Init + DoWhile + Final LLM
-        assertThat(wf.getTasks()).hasSize(5);
+        assertThat(wf.getTasks()).hasSize(4);
 
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         WorkflowTask switchTask = loop.getLoopOver().stream()
                 .filter(t -> "SWITCH".equals(t.getType()))
                 .findFirst()
@@ -721,14 +721,14 @@ class MultiAgentCompilerTest {
         // The inner SUB_WORKFLOW should contain the handoff strategy (ctx_resolve + init + loop + final)
         WorkflowDef innerHandoff =
                 engInlineWf.getTasks().get(0).getSubWorkflowParam().getWorkflowDef();
-        assertThat(innerHandoff.getTasks()).hasSize(5);
-        assertThat(innerHandoff.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_resolve
-        assertThat(innerHandoff.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE"); // init
-        assertThat(innerHandoff.getTasks().get(3).getType()).isEqualTo("DO_WHILE"); // handoff loop
-        assertThat(innerHandoff.getTasks().get(4).getType()).isEqualTo("LLM_CHAT_COMPLETE"); // handoff final
+        assertThat(innerHandoff.getTasks()).hasSize(4);
+        assertThat(innerHandoff.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_resolve
+        assertThat(innerHandoff.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // init
+        assertThat(innerHandoff.getTasks().get(2).getType()).isEqualTo("DO_WHILE"); // handoff loop
+        assertThat(innerHandoff.getTasks().get(3).getType()).isEqualTo("LLM_CHAT_COMPLETE"); // handoff final
 
         // Verify the handoff loop has the switch with backend_dev and frontend_dev
-        WorkflowTask handoffLoop = innerHandoff.getTasks().get(3);
+        WorkflowTask handoffLoop = innerHandoff.getTasks().get(2);
         WorkflowTask handoffSwitch = handoffLoop.getLoopOver().stream()
                 .filter(t -> "SWITCH".equals(t.getType()))
                 .findFirst()
@@ -761,7 +761,7 @@ class MultiAgentCompilerTest {
 
         // Extract the router LLM system prompt from the loop
         // The router is a SUB_WORKFLOW wrapping an inner LLM task
-        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask loop = wf.getTasks().get(2);
         WorkflowTask routerSubWf = loop.getLoopOver().get(0);
         WorkflowTask innerLlm =
                 routerSubWf.getSubWorkflowParam().getWorkflowDef().getTasks().get(0);
@@ -910,21 +910,21 @@ class MultiAgentCompilerTest {
 
         // ctx_init_resolve + ctx_init + SUB_WORKFLOW(fetcher) + ctx_merge_0 + ctx_set_0 + coerce + INLINE(gate) +
         // SWITCH(gate_switch) + output_selector
-        assertThat(wf.getTasks()).hasSize(10);
-        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE"); // ctx_init_resolve
-        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
-        assertThat(wf.getTasks().get(3).getType()).isEqualTo("SUB_WORKFLOW");
-        assertThat(wf.getTasks().get(3).getTaskReferenceName()).contains("fetcher");
-        assertThat(wf.getTasks().get(6).getType()).isEqualTo("INLINE"); // coerce
-        assertThat(wf.getTasks().get(7).getType()).isEqualTo("INLINE"); // gate
-        assertThat(wf.getTasks().get(7).getTaskReferenceName()).isEqualTo("pipeline_gate_0");
-        assertThat(wf.getTasks().get(8).getType()).isEqualTo("SWITCH");
-        assertThat(wf.getTasks().get(8).getTaskReferenceName()).isEqualTo("pipeline_gate_switch_0");
-        assertThat(wf.getTasks().get(9).getType()).isEqualTo("INLINE"); // output_selector
-        assertThat(wf.getTasks().get(9).getTaskReferenceName()).isEqualTo("pipeline_output_selector");
+        assertThat(wf.getTasks()).hasSize(9);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("INLINE"); // ctx_init_resolve
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("SET_VARIABLE"); // ctx_init
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(wf.getTasks().get(2).getTaskReferenceName()).contains("fetcher");
+        assertThat(wf.getTasks().get(5).getType()).isEqualTo("INLINE"); // coerce
+        assertThat(wf.getTasks().get(6).getType()).isEqualTo("INLINE"); // gate
+        assertThat(wf.getTasks().get(6).getTaskReferenceName()).isEqualTo("pipeline_gate_0");
+        assertThat(wf.getTasks().get(7).getType()).isEqualTo("SWITCH");
+        assertThat(wf.getTasks().get(7).getTaskReferenceName()).isEqualTo("pipeline_gate_switch_0");
+        assertThat(wf.getTasks().get(8).getType()).isEqualTo("INLINE"); // output_selector
+        assertThat(wf.getTasks().get(8).getTaskReferenceName()).isEqualTo("pipeline_output_selector");
 
         // SWITCH should have "continue" case with remaining stages
-        WorkflowTask switchTask = wf.getTasks().get(8);
+        WorkflowTask switchTask = wf.getTasks().get(7);
         assertThat(switchTask.getDecisionCases()).containsKey("continue");
         List<WorkflowTask> continueTasks = switchTask.getDecisionCases().get("continue");
         // coder SUB_WORKFLOW + coerce + pusher SUB_WORKFLOW
@@ -952,7 +952,7 @@ class MultiAgentCompilerTest {
 
         // ctx_init_resolve + ctx_init + SUB_WORKFLOW(a) + ctx_merge_0 + ctx_set_0 + coerce + SUB_WORKFLOW(b) +
         // ctx_merge_1 + ctx_set_1 — no SWITCH
-        assertThat(wf.getTasks()).hasSize(10);
+        assertThat(wf.getTasks()).hasSize(9);
         boolean hasSwitch = wf.getTasks().stream().anyMatch(t -> "SWITCH".equals(t.getType()));
         assertThat(hasSwitch).isFalse();
     }
@@ -977,11 +977,11 @@ class MultiAgentCompilerTest {
 
         // ctx_init_resolve + ctx_init + SUB_WORKFLOW + ctx_merge_0 + ctx_set_0 + coerce + SIMPLE(gate) + SWITCH +
         // output_selector
-        assertThat(wf.getTasks()).hasSize(10);
-        assertThat(wf.getTasks().get(7).getType()).isEqualTo("SIMPLE");
-        assertThat(wf.getTasks().get(7).getName()).isEqualTo("fetcher_gate");
-        assertThat(wf.getTasks().get(8).getType()).isEqualTo("SWITCH");
-        assertThat(wf.getTasks().get(9).getType()).isEqualTo("INLINE"); // output_selector
+        assertThat(wf.getTasks()).hasSize(9);
+        assertThat(wf.getTasks().get(6).getType()).isEqualTo("SIMPLE");
+        assertThat(wf.getTasks().get(6).getName()).isEqualTo("fetcher_gate");
+        assertThat(wf.getTasks().get(7).getType()).isEqualTo("SWITCH");
+        assertThat(wf.getTasks().get(8).getType()).isEqualTo("INLINE"); // output_selector
     }
 
     // ── Plan-Execute tests ──────────────────────────────────────────
@@ -1128,7 +1128,6 @@ class MultiAgentCompilerTest {
         //   1) emit an HTTP fetch task in the live branch BEFORE ctx_build
         //   2) escape ${CRED} → #{CRED} in headers (matches ToolCompiler's
         //      pipeline so credential resolution is single-source)
-        //   3) forward __agentspan_ctx__ for CredentialAwareHttpTask
         AgentConfig planner = simpleSubAgent("planner", "Write a plan");
         AgentConfig harness = AgentConfig.builder()
                 .name("pae_with_url_ctx")
@@ -1167,9 +1166,6 @@ class MultiAgentCompilerTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> headers = (Map<String, Object>) inputs.get("headers");
         assertThat(headers).containsEntry("Authorization", "Bearer #{CONFLUENCE_TOKEN}");
-
-        // Execution token forwarded for credential resolution.
-        assertThat(inputs).containsEntry("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
 
         // ctx_build INLINE comes after the fetch, referencing its
         // output.response.body via template.
@@ -2033,13 +2029,13 @@ class MultiAgentCompilerTest {
 
         // Top level: ctx_init_resolve + ctx_init + SUB_WORKFLOW(a) + ctx_merge_0 + ctx_set_0 + coerce + gate_0 +
         // SWITCH_0 + output_selector
-        assertThat(wf.getTasks()).hasSize(10);
-        assertThat(wf.getTasks().get(8).getType()).isEqualTo("SWITCH");
-        assertThat(wf.getTasks().get(9).getType()).isEqualTo("INLINE"); // output_selector
+        assertThat(wf.getTasks()).hasSize(9);
+        assertThat(wf.getTasks().get(7).getType()).isEqualTo("SWITCH");
+        assertThat(wf.getTasks().get(8).getType()).isEqualTo("INLINE"); // output_selector
 
         // Inside SWITCH_0's "continue" case: SUB_WORKFLOW(b) + coerce + gate_1 + SWITCH_1
         List<WorkflowTask> continueCase0 =
-                wf.getTasks().get(8).getDecisionCases().get("continue");
+                wf.getTasks().get(7).getDecisionCases().get("continue");
         assertThat(continueCase0).hasSize(4);
         assertThat(continueCase0.get(2).getTaskReferenceName()).isEqualTo("pipeline_gate_1");
         assertThat(continueCase0.get(3).getType()).isEqualTo("SWITCH");

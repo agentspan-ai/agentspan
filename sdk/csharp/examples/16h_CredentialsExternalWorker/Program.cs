@@ -102,18 +102,11 @@ result.PrintResult();
  *       var task = await taskClient.PollAsync("github_lookup", workerId: "worker-1");
  *       if (task is null) { await Task.Delay(1000); continue; }
  *
- *       // Extract the execution token injected by Agentspan into __agentspan_ctx__
- *       string? executionToken = null;
- *       if (task.InputData.TryGetValue("__agentspan_ctx__", out var ctxRaw))
- *       {
- *           var ctx = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
- *               ctxRaw.ToString()!);
- *           if (ctx?.TryGetValue("execution_token", out var tok) == true)
- *               executionToken = tok.GetString();
- *       }
- *
- *       // Resolve GITHUB_TOKEN from the server using the execution token
- *       var creds = await http.ResolveCredentialsAsync(executionToken, ["GITHUB_TOKEN"]);
+ *       // Resolve GITHUB_TOKEN from the server. Resolution is pull-based: pass
+ *       // the running task's workflow id and the server derives the credential
+ *       // owner from the workflow's createdBy — no execution token needed.
+ *       var creds = await http.ResolveCredentialsAsync(
+ *           task.WorkflowInstanceId, ["GITHUB_TOKEN"], taskId: task.TaskId);
  *       var token = creds.GetValueOrDefault("GITHUB_TOKEN", "");
  *
  *       // Use the credential to call the GitHub API

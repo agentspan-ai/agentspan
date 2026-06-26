@@ -1054,34 +1054,15 @@ def _resolve_credentials(
     execution_id: str,
     credential_names: Optional[List[str]] = None,
 ) -> Dict[str, str]:
-    """Resolve workflow-level credentials for this task.
+    """Read workflow-level credentials injected into this task's input.
 
-    Returns a name → plaintext dict. The caller is responsible for injecting
-    these via :func:`agentspan.agents.runtime.secret_injection.inject_via_env`
-    so the env mutation + invoke + restore happens atomically under the
-    shared process-wide lock. See ``docs/design/secret-injection-contract.md``.
+    Per-user secret values are injected into the polled task input by the server
+    (WorkerSecretPollAdvice), resolved from the workflow's createdBy. Returns a
+    name → plaintext dict. The caller injects these via
+    :func:`agentspan.agents.runtime.secret_injection.inject_via_env` so the env
+    mutation + invoke + restore happens atomically under the shared process-wide
+    lock. See ``docs/design/secret-injection-contract.md``.
     """
-    from agentspan.agents.runtime._dispatch import (
-        _extract_execution_token,
-        _get_credential_fetcher,
-        _workflow_credentials,
-        _workflow_credentials_lock,
-    )
-
-    cred_names = list(credential_names) if credential_names else []
-    if not cred_names:
-        exec_id = execution_id or ""
-        with _workflow_credentials_lock:
-            cred_names = list(_workflow_credentials.get(exec_id, []))
-    if not cred_names:
-        return {}
-    token = _extract_execution_token(task)
-    if not token:
-        logger.warning(
-            "No execution token in task for Claude Agent SDK worker — "
-            "credentials %s will not be injected",
-            cred_names,
-        )
-        return {}
-    fetcher = _get_credential_fetcher()
-    return fetcher.fetch(token, cred_names)
+    input_data = getattr(task, "input_data", None) or {}
+    resolved = input_data.get("__resolved_credentials__")
+    return dict(resolved) if isinstance(resolved, dict) else {}

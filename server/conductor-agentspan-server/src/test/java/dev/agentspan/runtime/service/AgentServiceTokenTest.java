@@ -24,7 +24,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import dev.agentspan.runtime.context.*;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 @ExtendWith(MockitoExtension.class)
 class AgentServiceTokenTest {
@@ -57,14 +56,9 @@ class AgentServiceTokenTest {
     private dev.agentspan.runtime.util.ProviderValidator providerValidator;
 
     private AgentService agentService;
-    private ExecutionTokenService tokenService;
 
     @BeforeEach
     void setUp() {
-        byte[] key = new byte[32];
-        new SecureRandom().nextBytes(key);
-        tokenService = new ExecutionTokenService(key);
-
         agentService = new AgentService(
                 agentCompiler,
                 normalizerRegistry,
@@ -74,8 +68,7 @@ class AgentServiceTokenTest {
                 workflowService,
                 streamRegistry,
                 executionService,
-                providerValidator,
-                tokenService);
+                providerValidator);
 
         RequestContextHolder.set(RequestContext.builder()
                 .requestId("r1")
@@ -89,45 +82,11 @@ class AgentServiceTokenTest {
         RequestContextHolder.clear();
     }
 
-    @Test
-    void start_injectsExecutionToken_intoWorkflowInput() {
-        com.netflix.conductor.common.metadata.workflow.WorkflowDef def =
-                new com.netflix.conductor.common.metadata.workflow.WorkflowDef();
-        def.setName("test_agent");
-        def.setVersion(1);
-        when(agentCompiler.compile(any())).thenReturn(def);
-        when(workflowExecutor.startWorkflow(any())).thenReturn("wf-xyz");
-        when(providerValidator.validateProvider(any())).thenReturn(java.util.Optional.empty());
-
-        dev.agentspan.runtime.model.StartRequest req = dev.agentspan.runtime.model.StartRequest.builder()
-                .agentConfig(dev.agentspan.runtime.model.AgentConfig.builder()
-                        .name("test_agent")
-                        .model("openai/gpt-4o")
-                        .credentials(new ArrayList<>(List.of("AGENT_LEVEL")))
-                        .build())
-                .prompt("hello")
-                .credentials(List.of("REQUEST_LEVEL"))
-                .build();
-
-        agentService.start(req);
-
-        ArgumentCaptor<com.netflix.conductor.core.execution.StartWorkflowInput> captor =
-                ArgumentCaptor.forClass(com.netflix.conductor.core.execution.StartWorkflowInput.class);
-        verify(workflowExecutor).startWorkflow(captor.capture());
-
-        java.util.Map<String, Object> input = captor.getValue().getWorkflowInput();
-        assertThat(input).containsKey("__agentspan_ctx__");
-
-        @SuppressWarnings("unchecked")
-        java.util.Map<String, Object> ctx = (java.util.Map<String, Object>) input.get("__agentspan_ctx__");
-        assertThat(ctx).containsKey("execution_token");
-
-        String executionToken = (String) ctx.get("execution_token");
-        ExecutionTokenService.TokenPayload payload = tokenService.validate(executionToken);
-        assertThat(payload.userId()).isEqualTo("user-999");
-        assertThat(payload.declaredNames()).containsExactlyInAnyOrder("AGENT_LEVEL", "REQUEST_LEVEL");
-        assertThat(input.get("credentials")).isEqualTo(List.of("REQUEST_LEVEL"));
-    }
+    // Credential resolution is now pull-based (the worker fetches by workflowId
+    // and the server derives the owner from createdBy), so /agent/start no longer
+    // mints an execution token into the workflow input. The former
+    // start_injectsExecutionToken_intoWorkflowInput test was removed with that
+    // behavior; pull-based resolution is covered by WorkerCredentialsTest.
 
     @Test
     void start_withoutRequestCredentials_omitsCredentialsInput() {

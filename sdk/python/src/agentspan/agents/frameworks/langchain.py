@@ -108,37 +108,18 @@ def make_langchain_worker(
                 session_id,
             )
 
-        # Resolve workflow-level credentials via the centralized injection helper.
-        # See docs/design/secret-injection-contract.md — this is the tier-2
-        # (env-injection with lock-around-full-invoke) path. Tier-1 explicit-key
-        # passthrough lands when a user's agent factory accepts a `credentials` kwarg.
+        # Read per-user credentials injected into the task input at poll time by
+        # the server (WorkerSecretPollAdvice), resolved from the workflow's
+        # createdBy. Injected via env (tier-2) under the shared process-wide lock.
+        # See docs/design/secret-injection-contract.md.
         resolved_secrets = {}
         try:
-            from agentspan.agents.runtime._dispatch import (
-                _extract_execution_token,
-                _get_credential_fetcher,
-                _workflow_credentials,
-                _workflow_credentials_lock,
-            )
-
-            cred_names = list(_closure_cred_names)
-            if not cred_names:
-                exec_id = execution_id or ""
-                with _workflow_credentials_lock:
-                    cred_names = list(_workflow_credentials.get(exec_id, []))
-            if cred_names:
-                token = _extract_execution_token(task)
-                if token:
-                    fetcher = _get_credential_fetcher()
-                    resolved_secrets = fetcher.fetch(token, cred_names)
-                else:
-                    logger.warning(
-                        "No execution token in task for LangChain worker — "
-                        "credentials %s will not be injected",
-                        cred_names,
-                    )
+            _input = getattr(task, "input_data", None) or {}
+            _injected = _input.get("__resolved_credentials__")
+            if isinstance(_injected, dict):
+                resolved_secrets = dict(_injected)
         except Exception as _cred_err:
-            logger.warning("Failed to resolve credentials for LangChain: %s", _cred_err)
+            logger.warning("Failed to read credentials for LangChain: %s", _cred_err)
 
         from agentspan.agents.runtime.secret_injection import inject_via_env
 

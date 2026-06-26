@@ -604,6 +604,56 @@ class AgentChatCompleteTaskMapperTest {
         return messages;
     }
 
+    // ── Credential reference injection (embedded) ────────────────────────
+
+    @Test
+    void injectCredentialReferences_embedded_stampsApiKeySecretRef() throws Exception {
+        new dev.agentspan.runtime.util.EmbeddedMode().setEmbedded(true);
+        try {
+            TaskModel task = new TaskModel();
+            task.addInput("llmProvider", "openai");
+
+            invokeInjectCredentialReferences(task);
+
+            assertThat(task.getInputData().get("apiKey")).isEqualTo("${workflow.secrets.OPENAI_API_KEY}");
+        } finally {
+            new dev.agentspan.runtime.util.EmbeddedMode().setEmbedded(false);
+        }
+    }
+
+    @Test
+    void injectCredentialReferences_embedded_anthropicProvider() throws Exception {
+        new dev.agentspan.runtime.util.EmbeddedMode().setEmbedded(true);
+        try {
+            TaskModel task = new TaskModel();
+            task.addInput("llmProvider", "anthropic");
+
+            invokeInjectCredentialReferences(task);
+
+            assertThat(task.getInputData().get("apiKey")).isEqualTo("${workflow.secrets.ANTHROPIC_API_KEY}");
+        } finally {
+            new dev.agentspan.runtime.util.EmbeddedMode().setEmbedded(false);
+        }
+    }
+
+    @Test
+    void injectCredentialReferences_notEmbedded_stampsNothing() throws Exception {
+        // EmbeddedMode defaults to false; be explicit for clarity.
+        new dev.agentspan.runtime.util.EmbeddedMode().setEmbedded(false);
+        TaskModel task = new TaskModel();
+        task.addInput("llmProvider", "openai");
+
+        invokeInjectCredentialReferences(task);
+
+        assertThat(task.getInputData()).doesNotContainKey("apiKey");
+    }
+
+    private void invokeInjectCredentialReferences(TaskModel task) throws Exception {
+        Method method = AgentChatCompleteTaskMapper.class.getDeclaredMethod("injectCredentialReferences", TaskModel.class);
+        method.setAccessible(true);
+        method.invoke(mapper, task);
+    }
+
     // Use reflection to test private methods
     @SuppressWarnings("unchecked")
     private Map<String, Object> invokeExtractResult(Map<String, Object> outputData) throws Exception {

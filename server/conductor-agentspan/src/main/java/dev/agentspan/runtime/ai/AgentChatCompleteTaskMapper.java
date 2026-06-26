@@ -42,6 +42,7 @@ import com.netflix.conductor.model.WorkflowModel;
 
 import dev.agentspan.runtime.model.AgentSSEEvent;
 import dev.agentspan.runtime.service.AgentStreamRegistry;
+import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.ModelContextWindows;
 
 /**
@@ -111,8 +112,11 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         TaskModel taskModel = super.getMappedTask(taskMapperContext);
         WorkflowModel workflowModel = taskMapperContext.getWorkflowModel();
 
-        // Per-user LLM key resolution is handled by AgentspanAIModelProvider.getModel()
-        // which creates a fresh AIModel with the user's credential. No inputData injection needed.
+        // EMBEDDED: stamp an orkes secret reference for the LLM API key into the task input so
+        // the host resolves it just-in-time (per-org) before this in-process LLM system task runs.
+        // AgentspanAIModelProvider.getModel() then reads the resolved value from the task input.
+        // Standalone injects nothing — the provider falls back to server-wide env keys.
+        injectCredentialReferences(taskModel);
 
         try {
             ChatCompletion chatCompletion = objectMapper.convertValue(taskModel.getInputData(), ChatCompletion.class);
@@ -142,6 +146,31 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             }
         }
         return taskModel;
+    }
+
+    /**
+     * EMBEDDED only: stamp {@code apiKey = "${workflow.secrets.<PROVIDER_KEY>}"} into the LLM
+     * task input. The orkes host resolves it (per-org) before the in-process LLM system task
+     * runs, then reverts the input before persisting — plaintext never hits the DB.
+     *
+     * <p>Only the required API key is stamped. Base URL and Gemini project id are intentionally
+     * NOT auto-stamped: orkes hard-fails on a missing secret reference, and those are optional, so
+     * an unconditional reference would break every call when the secret is absent. An agent that
+     * wants a secret-backed base URL can set {@code base_url} to a {@code ${workflow.secrets.X}}
+     * literal in its own config, which flows through and is resolved by the host.</p>
+     */
+    private void injectCredentialReferences(TaskModel taskModel) {
+        if (!EmbeddedMode.isEmbedded()) {
+            return;
+        }
+        Object provObj = taskModel.getInputData().get("llmProvider");
+        if (!(provObj instanceof String provider) || provider.isBlank()) {
+            return;
+        }
+        String apiKeyEnv = LlmProviderEnv.apiKeyEnv(provider);
+        if (apiKeyEnv != null) {
+            taskModel.getInputData().put("apiKey", "${workflow.secrets." + apiKeyEnv + "}");
+        }
     }
 
     /**
@@ -932,9 +961,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
      * Strip internal dispatch fields from tool input before including in conversation history.
      *
      * <p>The dispatch layer injects {@code _agent_state} (accumulated agent state, can be 170+ KB)
-     * and {@code __agentspan_ctx__} (execution tokens) into tool inputs. These are internal
-     * plumbing — including them in every tool message bloats the conversation payload
-     * (170 KB × N tool calls = multi-MB overhead) and provides no value to the LLM.</p>
+     * into tool inputs. This is internal plumbing — including it in every tool message bloats
+     * the conversation payload (170 KB × N tool calls = multi-MB overhead) and provides no
+     * value to the LLM.</p>
      */
     private Map<String, Object> stripInternalFields(Map<String, Object> inputData) {
         if (inputData == null || inputData.isEmpty()) {
@@ -942,7 +971,6 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         }
         Map<String, Object> clean = new HashMap<>(inputData);
         clean.remove("_agent_state");
-        clean.remove("__agentspan_ctx__");
         clean.remove("method"); // internal dispatch method name
         return clean;
     }

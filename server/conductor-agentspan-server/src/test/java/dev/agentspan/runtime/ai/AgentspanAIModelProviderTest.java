@@ -4,80 +4,92 @@
  */
 package dev.agentspan.runtime.ai;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.util.List;
+import java.util.Map;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.env.Environment;
 
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import com.netflix.conductor.common.metadata.tasks.Task;
+import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
+
+import org.conductoross.conductor.ai.AIModel;
+import org.conductoross.conductor.ai.models.LLMWorkerInput;
 
 import okhttp3.OkHttpClient;
 
 class AgentspanAIModelProviderTest {
 
-    private static final String ANON_USER = "00000000-0000-0000-0000-000000000000";
-
-    private CredentialResolutionService credentialService;
-    private ExecutionTokenService tokenService;
     private OkHttpClient httpClient;
     private AgentspanAIModelProvider provider;
 
     @BeforeEach
     void setUp() {
-        credentialService = mock(CredentialResolutionService.class);
-        tokenService = mock(ExecutionTokenService.class);
         httpClient = new OkHttpClient();
         Environment env = mock(Environment.class);
         when(env.getProperty(anyString(), anyString())).thenAnswer(i -> i.getArgument(1));
 
-        provider = new AgentspanAIModelProvider(List.of(), env, httpClient, credentialService, tokenService);
+        // No startup model configurations — provider map is empty, so the only way getModel()
+        // builds a model is from the task-input credential (host-resolved, as in embedded mode).
+        provider = new AgentspanAIModelProvider(List.of(), env, httpClient);
+    }
+
+    @AfterEach
+    void tearDown() {
+        TaskContext.TASK_CONTEXT_INHERITABLE_THREAD_LOCAL.remove();
     }
 
     @Test
     void constructorAcceptsInjectedHttpClient() {
-        // Verifies the constructor doesn't substitute its own client
         assertThat(provider).isNotNull();
     }
 
     @Test
-    void isProviderConfigured_returnsFalse_whenNoCredential() {
-        when(credentialService.resolve(ANON_USER, "OPENAI_API_KEY")).thenReturn(null);
+    void getModel_buildsModel_fromHostResolvedApiKeyInTaskInput() {
+        // Embedded: orkes has resolved ${workflow.secrets.OPENAI_API_KEY} into the task input.
+        Task task = new Task();
+        task.setStatus(Task.Status.IN_PROGRESS);
+        task.setInputData(Map.of("apiKey", "sk-resolved-test-key"));
+        TaskContext.set(task);
 
-        assertThat(provider.isProviderConfigured("openai")).isFalse();
-    }
+        LLMWorkerInput input = new LLMWorkerInput();
+        input.setLlmProvider("openai");
 
-    @Test
-    void isProviderConfigured_returnsTrue_whenCredentialFound() {
-        when(credentialService.resolve(ANON_USER, "OPENAI_API_KEY")).thenReturn("sk-test-key");
+        AIModel model = provider.getModel(input);
 
+        assertThat(model).isNotNull();
+        // The freshly built per-call model is cached under the provider name.
         assertThat(provider.isProviderConfigured("openai")).isTrue();
     }
 
     @Test
-    void isProviderConfigured_caseInsensitive() {
-        when(credentialService.resolve(ANON_USER, "ANTHROPIC_API_KEY")).thenReturn("key");
+    void getModel_unresolvedReferenceInTaskInput_isIgnored() {
+        // Defensive: a literal "${...}" must never be handed to the model client as a key.
+        Task task = new Task();
+        task.setStatus(Task.Status.IN_PROGRESS);
+        task.setInputData(Map.of("apiKey", "${workflow.secrets.OPENAI_API_KEY}"));
+        TaskContext.set(task);
 
-        assertThat(provider.isProviderConfigured("Anthropic")).isTrue();
-        assertThat(provider.isProviderConfigured("ANTHROPIC")).isTrue();
-    }
+        LLMWorkerInput input = new LLMWorkerInput();
+        input.setLlmProvider("openai");
 
-    @Test
-    void isProviderConfigured_unknownProvider_returnsFalse() {
-        // No PROVIDER_TO_ENV_VAR entry → resolveUserApiKey returns null early
-        assertThat(provider.isProviderConfigured("unknown-provider")).isFalse();
-        verifyNoInteractions(credentialService);
-    }
-
-    @Test
-    void isProviderConfigured_credentialServiceThrows_returnsFalse() {
-        when(credentialService.resolve(ANON_USER, "OPENAI_API_KEY"))
-                .thenThrow(new RuntimeException("store unavailable"));
-
+        // No usable key (placeholder ignored, no env key, no startup config) → falls through to
+        // super.getModel, which has no registered model and throws. Crucially, no per-call model
+        // was built from the placeholder string.
+        assertThatThrownBy(() -> provider.getModel(input)).isInstanceOf(RuntimeException.class);
         assertThat(provider.isProviderConfigured("openai")).isFalse();
+    }
+
+    @Test
+    void isProviderConfigured_falseWhenNotConfiguredAtStartup() {
+        // No store, no startup model map → nothing is configured ahead of an actual call.
+        assertThat(provider.isProviderConfigured("openai")).isFalse();
+        assertThat(provider.isProviderConfigured("anthropic")).isFalse();
+        assertThat(provider.isProviderConfigured("unknown-provider")).isFalse();
     }
 }

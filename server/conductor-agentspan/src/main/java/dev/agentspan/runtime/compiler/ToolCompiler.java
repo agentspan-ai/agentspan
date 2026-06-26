@@ -41,6 +41,69 @@ public class ToolCompiler {
     private static final Logger logger = LoggerFactory.getLogger(ToolCompiler.class);
 
     /**
+     * Per-tool credential names ({@code toolName -> [credentialNames]}) used to stamp
+     * {@code __resolved_credentials__} onto SIMPLE worker-tool tasks in EMBEDDED mode so
+     * the host (orkes-conductor) resolves them via {@code ${workflow.secrets.NAME}}. Set by
+     * {@link AgentCompiler} (preserves agent-level credential fallback); empty by default
+     * (no stamping — e.g. standalone or non-worker tools).
+     */
+    private Map<String, List<String>> workerCreds = Map.of();
+
+    /** Tool types that compile to a non-SIMPLE task (i.e. NOT external-worker tools). */
+    private static final Set<String> NON_WORKER_TOOL_TYPES = Set.of(
+            "http",
+            "api",
+            "mcp",
+            "agent_tool",
+            "human",
+            "pull_workflow_messages",
+            "generate_image",
+            "generate_audio",
+            "generate_video",
+            "generate_pdf",
+            "rag_index",
+            "rag_search");
+
+    /** Inject per-tool credential names so worker-tool tasks can carry secret references. */
+    void setWorkerCreds(Map<String, List<String>> workerCreds) {
+        this.workerCreds = workerCreds != null ? workerCreds : Map.of();
+    }
+
+    /** True if a tool compiles to a SIMPLE worker task (executed by an external worker). */
+    private static boolean isWorkerTool(ToolConfig tool) {
+        String t = tool.getToolType() != null ? tool.getToolType() : "worker";
+        return !NON_WORKER_TOOL_TYPES.contains(t);
+    }
+
+    /**
+     * Build {@code {toolName -> {NAME: "${workflow.secrets.NAME}"}}} for this agent's SIMPLE
+     * worker tools, EMBEDDED only. The orkes host resolves the references just-in-time at
+     * poll time; the SDK worker reads {@code __resolved_credentials__} and strips it. HTTP/MCP
+     * tools are excluded (their secrets travel as {@code ${workflow.secrets.NAME}} headers).
+     */
+    private Map<String, Object> buildWorkerCredConfig(List<ToolConfig> tools) {
+        Map<String, Object> cfg = new LinkedHashMap<>();
+        if (!EmbeddedMode.isEmbedded() || tools == null || workerCreds.isEmpty()) {
+            return cfg;
+        }
+        for (ToolConfig tool : tools) {
+            if (tool.getName() == null || !isWorkerTool(tool)) {
+                continue;
+            }
+            List<String> names = workerCreds.get(tool.getName());
+            if (names == null || names.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> refs = new LinkedHashMap<>();
+            for (String name : names) {
+                refs.put(name, "${workflow.secrets." + name + "}");
+            }
+            cfg.put(tool.getName(), refs);
+        }
+        return cfg;
+    }
+
+    /**
      * Result of building tool call routing, including any tool-level guardrail metadata.
      */
     @Data
@@ -417,8 +480,11 @@ public class ToolCompiler {
         }
         String knownToolNamesJson = JavaScriptBuilder.toJson(knownToolNames);
 
+        String workerCredJson = JavaScriptBuilder.toJson(buildWorkerCredConfig(tools));
+
         String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson, knownToolNamesJson);
+                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson, knownToolNamesJson,
+                workerCredJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -431,7 +497,6 @@ public class ToolCompiler {
         enrichInput.put("expression", script);
         enrichInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
-        enrichInput.put("agentspanCtx", "${workflow.variables.__agentspan_ctx__}");
         enrichInput.put("userPrompt", "${workflow.input.prompt}");
         enrichTask.setInputParameters(enrichInput);
 
@@ -739,7 +804,6 @@ public class ToolCompiler {
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
-            listInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -897,8 +961,6 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
-            // Forward execution token so CredentialAwareHttpTask can resolve #{NAME} headers
-            fetchInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -1055,7 +1117,6 @@ public class ToolCompiler {
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
-            listInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -1104,7 +1165,6 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
-            fetchInputs.put("__agentspan_ctx__", "${workflow.variables.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -1566,8 +1626,9 @@ public class ToolCompiler {
             }
         }
         String knownToolNamesJson = JavaScriptBuilder.toJson(knownToolNames);
+        String workerCredJson = JavaScriptBuilder.toJson(buildWorkerCredConfig(tools));
         String script = JavaScriptBuilder.enrichToolsScriptDynamic(
-                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson, knownToolNamesJson);
+                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson, knownToolNamesJson, workerCredJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1584,7 +1645,6 @@ public class ToolCompiler {
             enrichInput.put("apiConfig", apiConfigRef);
         }
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
-        enrichInput.put("agentspanCtx", "${workflow.variables.__agentspan_ctx__}");
         enrichInput.put("userPrompt", "${workflow.input.prompt}");
         enrichTask.setInputParameters(enrichInput);
 

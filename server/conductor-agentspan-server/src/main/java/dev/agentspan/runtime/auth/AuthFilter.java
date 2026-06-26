@@ -27,7 +27,7 @@ import dev.agentspan.runtime.context.RequestContextHolder;
 @Component
 public class AuthFilter extends OncePerRequestFilter {
 
-    /** Matches {@code CredentialEnvSeeder.ANONYMOUS_USER_ID}. */
+    /** Anonymous user id used in OSS / no-auth standalone mode. */
     static final String ANONYMOUS_USER_ID = "00000000-0000-0000-0000-000000000000";
 
     @Override

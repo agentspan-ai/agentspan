@@ -156,53 +156,6 @@ def _coerce_value(value, annotation):
     return value
 
 
-# Lazily created credential fetcher — initialized from AgentConfig on first use
-_credential_fetcher = None
-
-
-def _get_credential_fetcher():
-    """Return the module-level WorkerCredentialFetcher, creating it on first call.
-
-    The fetcher is initialized from AgentConfig.from_env() so it picks up
-    AGENTSPAN_SERVER_URL, AGENTSPAN_API_KEY, AGENTSPAN_SECRET_STRICT_MODE.
-    """
-    global _credential_fetcher
-    if _credential_fetcher is None:
-        from agentspan.agents.runtime.config import AgentConfig
-        from agentspan.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
-
-        config = AgentConfig.from_env()
-        _credential_fetcher = WorkerCredentialFetcher(
-            server_url=config.server_url,
-            strict_mode=config.secret_strict_mode,
-            api_key=config.api_key or config.auth_key,
-            auth_key=config.auth_key,
-            auth_secret=config.auth_secret,
-        )
-    return _credential_fetcher
-
-
-def _extract_execution_token(task) -> str | None:
-    """Extract __agentspan_ctx__.execution_token from a Conductor task.
-
-    Checks task.input_data first (most common), then task.workflow_input.
-    Returns None if not present.
-    """
-    # input_data is the primary source (set by Conductor enrichment scripts)
-    ctx = (task.input_data or {}).get("__agentspan_ctx__")
-    if isinstance(ctx, dict):
-        return ctx.get("execution_token") or None
-    if isinstance(ctx, str) and ctx:
-        return ctx
-    # Fallback: check workflow_input (set at workflow start)
-    ctx = (getattr(task, "workflow_input", None) or {}).get("__agentspan_ctx__")
-    if isinstance(ctx, dict):
-        return ctx.get("execution_token") or None
-    if isinstance(ctx, str) and ctx:
-        return ctx
-    return None
-
-
 def _get_credential_names_from_tool(tool_func) -> list:
     """Extract credential names from a @tool-decorated function's ToolDef.
 
@@ -398,43 +351,13 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
             # Extract server-side agent state (injected by enrichment script)
             agent_state = task.input_data.pop("_agent_state", None) or {}
 
-            # ── Credential fetching ───────────────────────────────────────
-            # Priority order for credential names:
-            # 1. Closure-captured credentials (framework-extracted tools via
-            #    _register_framework_workers → make_tool_worker(credential_names=...))
-            # 2. tool_def from registry or closure (native @tool decorated)
-            # 3. _tool_def attribute on tool_func
-            # 4. Workflow-level fallback (_workflow_credentials dict)
-            if _closure_cred_names:
-                credential_names = list(_closure_cred_names)
-            else:
-                _td = _tool_def_registry.get(tool_name) or tool_def
-                raw_secrets = (
-                    list(getattr(_td, "credentials", []))
-                    if _td
-                    else _get_credential_names_from_tool(tool_func)
-                )
-                credential_names = [c for c in raw_secrets if isinstance(c, str)]
-                # Fallback: workflow-level credentials (for framework-extracted tools)
-                if not credential_names and task.workflow_instance_id:
-                    with _workflow_credentials_lock:
-                        credential_names = list(
-                            _workflow_credentials.get(task.workflow_instance_id, [])
-                        )
-            resolved_secrets = {}
-            if credential_names:
-                token = _extract_execution_token(task)
-                fetcher = _get_credential_fetcher()
-                try:
-                    resolved_secrets = fetcher.fetch(token, credential_names)
-                except Exception as cred_err:
-                    # Credential errors are configuration issues — non-retryable.
-                    logger.error(
-                        "Credential resolution failed for tool '%s': %s", tool_name, cred_err
-                    )
-                    task_result.status = TaskResultStatus.FAILED_WITH_TERMINAL_ERROR
-                    task_result.reason_for_incompletion = str(cred_err)
-                    return task_result
+            # ── Credentials ───────────────────────────────────────────────
+            # Per-user secret values are injected into this task's input at poll
+            # time by the server (WorkerSecretPollAdvice), resolved from the
+            # workflow's createdBy. We read them here like any other input field —
+            # no callback to the server. Pop so they never leak into tool kwargs
+            # or the task output.
+            resolved_secrets = task.input_data.pop("__resolved_credentials__", None) or {}
 
             # Map task input to function kwargs
             sig = inspect.signature(tool_func)

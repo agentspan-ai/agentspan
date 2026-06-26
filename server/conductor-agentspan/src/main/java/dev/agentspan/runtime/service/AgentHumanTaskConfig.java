@@ -20,9 +20,8 @@ import org.springframework.context.annotation.Primary;
  * library is imported into a host such as orkes-conductor). The host provides its own
  * (richer) HUMAN task — overriding it here would collide on the {@code HUMAN} bean name and
  * replace the host's full HITL implementation with this SSE-only shim. The host is expected
- * to emit the {@code WAITING} SSE event from its own HUMAN task, guarded by the
- * {@code __agentspan_ctx__} input. The standalone OSS server leaves this property unset, so
- * the override stays active as before.</p>
+ * to emit the {@code WAITING} SSE event from its own HUMAN task. The standalone OSS server
+ * leaves this property unset, so the override stays active as before.</p>
  */
 @Configuration
 @ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
