@@ -376,6 +376,28 @@ The server is a Spring Boot application (Java 21) built on top of [Conductor](ht
 
 Tests use an in-memory SQLite database with AI providers disabled.
 
+### Releasing
+
+The server splits into two Maven artifacts — `conductor-agentspan` (the library a host like
+orkes-conductor embeds) and `conductor-agentspan-server` (the runnable standalone app) — plus the
+Docker image and S3 fat jar. Releases are still **manual `workflow_dispatch`** (no tag-driven
+fan-out). Because the library declares its Conductor deps `compileOnly`, the embedded engine version
+is **not** carried in the published POM, so version coupling is a release-time convention:
+
+- **Release the platform artifacts together — same version, same commit.** Dispatch the Maven,
+  Docker, and S3 release workflows from one commit with the same version string. Nothing enforces
+  this; a given build can't produce a mismatched lib/server pair (both read `project.version` and
+  the single `conductorVersion`), but separate dispatches with different inputs can.
+- **Record the Conductor version the release was *built against* in the release notes** — read it
+  off `conductorVersion` in `build.gradle` (e.g. "built/tested against Conductor 3.30.2"). State it
+  as a **fact, not a required range**: a declared "compatible with 3.30.x" would only be honest if
+  tested across that range and kept current — maintenance we don't want. The deps stay `compileOnly`
+  so the host's version still wins; this line is just the build-against breadcrumb the POM can't
+  carry. An embedding host certifies *its own* engine version with its own tests. See design doc §9.2.
+- **Keep `conductorVersion` a single variable** in `build.gradle`. It is the source of truth for
+  both modules; splitting it reintroduces silent lib↔server drift. A Conductor bump (on whichever
+  side bumps) is the event that warrants re-running the conformance suite on that engine.
+
 ### Project structure
 
 ```
