@@ -35,16 +35,16 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
 
 # Design docs live in the top-level design/ folder, not here. docs/ holds only
-# user-facing docs. A few legacy/unpublished user docs remain but stay out of nav.
+# user-facing docs. The per-SDK docs (java-sdk/, python-sdk/, typescript-sdk/,
+# csharp-sdk/) are symlinks into sdk/<lang>/docs and are linked from the nav.
+# A few legacy/unpublished user docs remain but stay out of nav.
 not_in_nav: |
-  python-sdk/**
   langchain-integration.md
   langgraph-integration.md
   ocg-agent-flow.md
 
 exclude_docs: |
   /guardrails.md
-  python-sdk/**
   langchain-integration.md
   langgraph-integration.md
   ocg-agent-flow.md
@@ -87,8 +87,14 @@ nav:
           - Termination: java-sdk/concepts/termination.md
           - Scheduling: java-sdk/concepts/scheduling.md
           - Skills: java-sdk/concepts/skills.md
+          - Stateful Agents: java-sdk/concepts/stateful.md
+          - Structured Output: java-sdk/concepts/structured-output.md
+          - Streaming & HITL: java-sdk/concepts/streaming-hitl.md
+          - Callbacks: java-sdk/concepts/callbacks.md
+          - Deploy, Serve, Run: java-sdk/concepts/deploy-serve-run.md
       - Frameworks:
           - LangChain4j: java-sdk/frameworks/langchain4j.md
+          - LangGraph4j: java-sdk/frameworks/langgraph4j.md
           - OpenAI Agents SDK: java-sdk/frameworks/openai.md
           - Google ADK: java-sdk/frameworks/google-adk.md
       - Spring Boot: java-sdk/spring-boot.md
@@ -96,6 +102,27 @@ nav:
           - AgentRuntime: java-sdk/agent-runtime-api.md
           - AgentClient (internal): java-sdk/agent-client-api.md
           - Public API summary: java-sdk/api-reference.md
+  - Python SDK:
+      - Overview: python-sdk/README.md
+      - Getting Started: python-sdk/getting-started.md
+      - Writing Agents: python-sdk/writing-agents.md
+      - Framework Agents: python-sdk/framework-agents.md
+      - Advanced: python-sdk/advanced.md
+      - API Reference: python-sdk/api-reference.md
+  - TypeScript SDK:
+      - Overview: typescript-sdk/README.md
+      - Getting Started: typescript-sdk/getting-started.md
+      - Writing Agents: typescript-sdk/writing-agents.md
+      - Framework Agents: typescript-sdk/framework-agents.md
+      - Advanced: typescript-sdk/advanced.md
+      - API Reference: typescript-sdk/api-reference.md
+  - C# SDK:
+      - Overview: csharp-sdk/README.md
+      - Getting Started: csharp-sdk/getting-started.md
+      - Writing Agents: csharp-sdk/writing-agents.md
+      - Framework Agents: csharp-sdk/framework-agents.md
+      - Advanced: csharp-sdk/advanced.md
+      - API Reference: csharp-sdk/api-reference.md
   - Reference:
       - Providers: providers.md
       - AI Models: ai-models.md
