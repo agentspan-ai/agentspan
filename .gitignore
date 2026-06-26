@@ -54,3 +54,7 @@ obj/
 *.user
 *.suo
 .vs/
+
+# Editor / tooling local config
+.vscode/
+.claude/

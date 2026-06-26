@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
@@ -1339,6 +1340,22 @@ public class AgentCompiler {
         inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
 
         llm.setInputParameters(inputs);
+
+        // Retry the LLM call on TRANSIENT provider failures (e.g. OpenAI
+        // "503 upstream connect error / disconnect/reset before headers", or a
+        // brief gateway blip). The LLM_CHAT_COMPLETE task fails as FAILED
+        // (retryable — not FAILED_WITH_TERMINAL_ERROR), so an inline TaskDef
+        // retry policy makes Conductor re-issue the call with exponential
+        // backoff before the failure bubbles up and aborts the agent's turn
+        // (which would otherwise kill a whole retrieval/reasoning round).
+        TaskDef llmRetryDef = new TaskDef();
+        llmRetryDef.setName("LLM_CHAT_COMPLETE");
+        llmRetryDef.setRetryCount(3);
+        llmRetryDef.setRetryLogic(TaskDef.RetryLogic.EXPONENTIAL_BACKOFF);
+        llmRetryDef.setRetryDelaySeconds(2);
+        llmRetryDef.setBackoffScaleFactor(2);
+        llm.setTaskDefinition(llmRetryDef);
+
         return llm;
     }
 

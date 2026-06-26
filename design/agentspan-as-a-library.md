@@ -440,6 +440,11 @@ its own modules. AgentSpan currently compiles against `org.conductoross:conducto
 AgentSpan ships those as transitive `implementation` deps, we get a version clash on the host
 classpath.
 
+> This section covers the **build/classpath mechanics** of alignment. For *who owns* alignment in
+> each deployment, see the three-consumption-mode table in §9.2: Mode A (standalone) is drift-free
+> by construction, Mode C (orkes) is one host-pinned pair, and Mode B (external OSS self-embed) is
+> explicitly best-effort + self-certify.
+
 **Strategy — `compileOnly`/provided for ALL Conductor artifacts:**
 
 - `conductor-agentspan` declares `conductor-common`, `conductor-core`, `conductor-ai` (and
@@ -625,7 +630,8 @@ failing test that pins the target behavior.
    security context → `RequestContextHolder`.
 3. Smoke + integration test inside orkes: deploy an agent, start it, observe status, exercise a
    tool call. Confirm no bean conflicts, no path collisions, scheduler/SSE intact, and that a
-   missing SPI impl fails startup loudly.
+   missing SPI impl fails startup loudly. See §9.1 for the two embedded-mode e2e layers
+   (in-orkes server e2e + reused SDK e2e) and the version-pinning requirement.
 
 ---
 
@@ -657,6 +663,144 @@ New test types introduced:
 7. **Secret masking seam test** — with a non-no-op `SecretOutputMasker`, assert
    `CredentialMaskingResponseAdvice` redacts execution-read responses; with the no-op (OSS),
    assert payloads pass through unchanged. No real secrets/LLM — deterministic fixtures.
+
+### 9.1 Embedded-mode e2e (orkes repo)
+
+Test types 1–7 above cover the **standalone** module and the library boundary *in this repo*. The
+**embedded** deployment (AgentSpan-as-a-library inside orkes-conductor) is verified in the
+**orkes-conductor repo**, because that's the only side that can depend on both — orkes depends on
+`conductor-agentspan`, never the reverse (§3.1). It splits into two layers:
+
+1. **Server e2e (in-JVM, host-specific) — lives in orkes.** The Phase-4 §8 smoke/integration
+   tests: a `@SpringBootTest` that boots orkes' context with the embedded library **plus orkes'
+   own SPI impl beans**, then asserts deploy → start → status → tool-call, no bean conflicts, no
+   `/api/...` path collisions, scheduler/SSE intact, and that **omitting** an SPI impl fails
+   startup loudly. These compile against orkes' application class and its impl beans, so they
+   *cannot* live here — the dependency direction forbids it.
+
+2. **SDK e2e (black-box HTTP) — reused, not rewritten.** The existing per-language suites
+   (`sdk/{java,python,ts,csharp}`) are pure HTTP clients parameterized only by
+   `AGENTSPAN_SERVER_URL`; they don't depend on either server at the code level. So the **same
+   suites** run against a booted orkes instance — the only delta is the URL (and orkes' base
+   path/port). This is the behavioral-equivalence oracle: if the suites that pass against
+   `agentspan-runtime.jar` also pass against orkes, the embedding behaves identically.
+
+**Where the pipeline lives.** The embedded-e2e workflow is configured in the **orkes repo** (its
+CI secrets, runners, backing services — Postgres/Redis/ES). It: builds orkes-with-lib → boots it →
+runs layer 1 (its own tests) and layer 2 (agentspan's suites). orkes *reads* the agentspan repo
+for layer 2 (`actions/checkout` of the suite, or a published test artifact) — that's test input,
+not a build dependency, so the direction stays clean.
+
+**Version pinning (required).** Layer 2 is only a valid oracle for the exact server version it was
+written against. The embedded library coordinate
+(`dev.agentspan:conductor-agentspan:vX`), the checked-out suite (`ref: vX`), **and** the SDK
+client package the suite imports (`agentspan==X` / `@agentspan-ai/sdk@X` / Maven / NuGet) must all
+be the **same `vX`** — drive them from one `AGENTSPAN_VERSION` variable so they can't drift.
+Mismatched versions yield false failures (suite expects a field the lib doesn't emit) or false
+passes (suite too old to cover a new path). This is distinct from the §6 *Conductor*-version pin.
+
+**Validation stays LLM-free** in both layers (compile/start/status/tool-call assertions), same as
+the standalone e2e.
+
+### 9.2 Interoperability & version drift (scoped to three consumption modes)
+
+Conductor-version alignment is an **ongoing** concern, not a one-time "verify before coding" item:
+`compileOnly` means **nothing bundles or enforces an engine version — the host's classpath wins**,
+so a mismatch is silent until runtime. Two failure classes:
+
+1. **Linkage (ABI)** — `NoSuchMethodError`/`ClassNotFoundException` the first time a path hits a
+   method that moved or a class the host repackaged. The surface is small and enumerable: the
+   injected Conductor services (`WorkflowService`, `MetadataDAO`/`MetadataService`,
+   `ExecutionService`, `WorkflowExecutor`, `ExecutionDAO`), the extended base classes
+   (`WorkflowSystemTask`, `HttpTask`, `MCPService`), and `conductor-common` models on the public API
+   (`WorkflowDef`/`WorkflowTask` — §10.8).
+2. **Semantic** — even when it links, engines may differ (JOIN, sub-workflow, HTTP task, scheduler,
+   SSE). No static check; the **SDK conformance suite (§9.1 layer 2) is the only oracle** — "is it
+   interoperable" = "does the same suite pass on each engine."
+
+Rather than reason about "any host at any version," scope the concern to the **three concrete ways
+a consumer actually picks an AgentSpan + Conductor pair**. Each mode has a different owner and a
+different (or zero) drift risk:
+
+| Mode | What the consumer takes | AgentSpan ver. | Conductor ver. | Drift risk | Owner |
+| --- | --- | --- | --- | --- | --- |
+| **A — Standalone** | `conductor-agentspan-server` bootJar / Docker | our release | **fixed**, bundled | **none** (consistent by construction) | us |
+| **B — Self-embed (external OSS)** | `conductor-agentspan` library | library ver. | host-supplied, arbitrary | **real, unbounded** | the host |
+| **C — Enterprise embed** | `orkes-conductor` (embeds the library) | orkes picks | orkes pins (`3.30.0.rc8`) | **real, but single pinned pair** | orkes |
+
+**Mode A — drift-free by construction.** The standalone bootJar reads the **single**
+`conductorVersion` (`server/build.gradle`) at the same commit for both lib and server (§7), so the
+lib is always compiled against the engine it ships with. This protection holds *only* while it stays
+one variable — **don't split it.** No extra handling needed; the boot/smoke test already links lib
+against the bundled engine.
+
+**Mode C — one pinned pair, host-certified.** orkes pins its engine (`3.30.0.rc8`, §6) and runs its
+own integration + conformance suite against that pair. Compatibility is proven at *its* one version,
+re-validated whenever orkes bumps the engine. No range, no matrix — exactly one certified pair, owned
+by orkes.
+
+**Mode B — the genuinely open case; both sides are OSS, so the host owns the pairing.** When the
+external host runs a Conductor version that differs from our pinned `conductorVersion`, there are two
+paths, and we recommend the first:
+
+1. **Build from source against your engine (recommended).** Clone the repo, set `conductorVersion`
+   to *your* engine version, and build `conductor-agentspan` yourself. The library is then compiled
+   against the exact engine you run — drift is eliminated **by construction**, the same guarantee
+   Mode A gets, because the `compileOnly` deps resolve to your version at compile time. No trust, no
+   breadcrumb, no self-certify guesswork. This is the right path for anyone off our pinned version,
+   and it's the natural OSS answer: the source is right there.
+2. **Take the published jar + self-certify (fallback).** `conductor-agentspan` publishes to Maven
+   Central, and `compileOnly` deps **don't appear in the POM**, so the published jar is compiled
+   against *our* pinned `conductorVersion` and carries **no version constraint**. Drop it onto a
+   different engine and you are trusting ABI compatibility you haven't verified. We **cannot** and
+   **do not** promise this works across arbitrary versions. If you go this route:
+   - **We state only the point fact we get for free:** "built/tested against `conductorVersion`"
+     (auto-derived, always true, nothing to maintain). Surface it where the POM can't — release
+     notes / README, and a `Conductor-Built-Against` jar-manifest breadcrumb so a mismatch is
+     diagnosable at a glance rather than a bare runtime `NoSuchMethodError`. It is **informational,
+     not a constraint** (deps stay `compileOnly`, host's version still wins — §6).
+   - **The host self-certifies**, exactly as a JDBC driver vendor certifies against the spec rather
+     than the spec enumerating drivers. Re-running the SDK conformance suite (§9.1 layer 2) against
+     their engine is the only honest proof; the burden sits with the implementor.
+
+**A declared *range* is out of scope either way.** "Compatible with 3.30.x" is only honest if we test
+across it and keep re-testing as Conductor moves — the matrix maintenance we are deliberately not
+signing up for. An unverified range is a false promise. Build-from-source sidesteps the question
+entirely; the published jar gets a point-fact, not a range.
+
+> Why the residual risk is *only* drift, not structure: §4.1 keeps the interop surface tiny (no
+> execution SPI). Modes A and C are each a single pinned pair re-checked on bump; Mode B's
+> recommended path (build from source) inherits Mode A's by-construction guarantee, with
+> take-the-jar + self-certify as the best-effort fallback. No maintained compatibility range, no new
+> abstraction.
+
+### 9.3 Upgrade & adoption
+
+Both paths consume **whole releases, never hand-swapped jars** — so API/ABI is the release
+producer's build-time concern (§9.2 self-certify), and the consuming customer's job is **data + ops
+only**.
+
+**Version upgrade** (existing AgentSpan deployment → newer release) — like any stateful app:
+
+- Two schema lifecycles migrate on startup: Conductor's (engine-owned) **and** AgentSpan's
+  `credentials_store`. Back up both datasources.
+- In-flight workflows must deserialize under the new engine — note **long-paused HITL**
+  (`AgentHumanTask`) makes such executions routine, not rare.
+- Rollback = **restore from backup** (Flyway is forward-only), not redeploy-old-artifact.
+
+**Adoption** (plain Conductor → +AgentSpan) is **additive**: it adds `credentials_store`, custom
+task types, and agent `WorkflowDef`s; existing Conductor data is untouched. Net-new concerns:
+
+- **Engine direction is `>=`, same major** (no downgrade: forward-only Flyway + model
+  serialization); *equal* = pure additive, no migration.
+  - **Mode A:** customer must pick a server release whose bundled engine `>=` theirs; if their
+    engine is ahead of every release, fall back to **Mode B**.
+  - **Mode B (build-from-source):** aligned to the host's own engine by construction.
+  - **Mode C:** `>=` auto-enforced by moving forward along orkes' release line; orkes owns it.
+- Host supplies one impl bean per SPI (no embedded default) — a missing one fails fast at startup.
+
+**Removal asymmetry:** backing AgentSpan out is clean *before* any agent runs (`credentials_store`
+is a harmless orphan); *after* agents exist, their custom `TASK_TYPE`s no longer resolve.
 
 ---
 

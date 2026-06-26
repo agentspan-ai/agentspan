@@ -57,15 +57,15 @@ if TYPE_CHECKING:
 # on the real current date instead of one baked in at definition time.
 
 OCG_SYSTEM_PROMPT = """\
-Today's date is ${workflow.input.__today__} (UTC). When a user asks for
-"recent" / "last week" / any relative range, anchor on this date.
-Never invent a date range — if no range is implied by the user, omit
-start_time/end_time from the request.
-If the range extends to the present ("recent", "current state",
-"catch me up", "last N days"), set start_time and OMIT end_time —
-the results then run through now. Only set end_time when the user
-asks about a window that closed in the past. Never end a range at a
-month boundary before today; that silently drops the newest data.
+Today's date is ${workflow.input.__today__} (UTC). DEFAULT: do NOT set
+start_time or end_time — OMIT BOTH ENTIRELY. Searching the full history is
+the norm, and an unrequested time range silently drops older context that
+is usually exactly what you need. ONLY add a time range when the user
+EXPLICITLY asks about a recent or time-bounded window ("recent", "last
+week", "since Friday", "in May"); then anchor on today's date and set
+start_time (and set end_time only for a window that closed in the past).
+Timestamps must be full RFC3339 (2026-06-04T00:00:00Z); a bare date is
+rejected. Never invent a range the user did not ask for.
 
 You are querying an OCG (Open Context Graph). It is a RETRIEVAL
 engine over a knowledge graph of entities (messages, channels, people)
@@ -90,10 +90,20 @@ It CANNOT directly answer (you must do it yourself in two steps):
   - "Group these by Y" / "Top N by count"
   - Statistical or comparative questions
 
-RESPONSE SIZE: OCG responses are injected verbatim into your context.
-Keep max_results <= 25 and traversal_level = 0 unless you specifically
-need graph neighbors. A huge result set will destroy your own context —
-narrow the keywords or the time range instead of raising max_results.
+RESPONSE SIZE: ALWAYS request max_results=100 — it is both the maximum and
+the floor for getting decent context; NEVER use a small value like 10 or
+25, which starves your answer. ALWAYS set traversal_level = 1 (never 0,
+never higher). To focus results, sharpen the KEYWORDS — never by lowering
+max_results or by adding an unrequested time range.
+
+DIG DEEPER: the first ocg_query is only your entry point. After it returns,
+pick the 1-3 MOST RELEVANT entities from the citations (the ones most on
+point for the question) and call ocg_neighborhood on each — using the
+entity ids from the citation rows — to pull in their linked entities
+(related tickets, incidents, sub-workflows, prior fixes). The actual fix
+very often lives one hop away in a linked entity, not in the first page of
+citations. Do not answer from the initial citations alone when a clearly
+relevant entity is worth expanding.
 
 For aggregation questions, use a TWO-STEP pattern:
   1. RETRIEVE: ask OCG for the relevant entities.
@@ -114,10 +124,9 @@ Bad:  "Across all clusters, what alert/notification/error type appears
 
 Good (step 1): {
   "query": "TIMED_OUT health check failure cluster",
-  "max_results": 25,
-  "start_time": "<today minus 30 days>T00:00:00Z"
+  "max_results": 100
 }
-(end_time omitted — the range runs through now.)
+(no start_time/end_time — the query runs across the full history.)
 Then parse the returned citations, extract cluster names from titles,
 build the frequency table in your reasoning."""
 
@@ -161,26 +170,37 @@ def _query_tool() -> Dict[str, Any]:
                 "query": _prop("string", "Natural-language retrieval query."),
                 "max_results": {
                     "type": "integer",
-                    "description": "Max citations to return. Responses land verbatim "
-                    "in your context — keep this small; 100 is the hard maximum.",
-                    "default": 10,
+                    "description": "Max citations to return. ALWAYS use 100 — it is both "
+                    "the hard maximum and the floor for getting decent context; never "
+                    "request fewer.",
+                    "default": 100,
+                    "minimum": 100,
                     "maximum": 100,
                 },
-                "traversal_level": _prop(
-                    "integer",
-                    "0 = citations only (recommended), 1 = neighborhood, "
-                    "2-3 = multi-hop. Each level multiplies response size.",
-                    0,
-                ),
+                "traversal_level": {
+                    "type": "integer",
+                    "description": "ALWAYS 1 — pulls each citation's immediate neighborhood "
+                    "in alongside it. Never 0 (too shallow) and never higher (dig deeper by "
+                    "calling ocg_neighborhood on the most relevant entities, not by raising "
+                    "this).",
+                    "default": 1,
+                    "minimum": 1,
+                    "maximum": 1,
+                },
                 "start_time": _prop(
                     "string",
-                    "RFC3339 timestamp lower bound (inclusive), e.g. 2026-06-04T00:00:00Z. "
-                    "A bare date like 2026-06-04 is REJECTED. Optional.",
+                    "LEAVE UNSET by default — omit it so the search covers the FULL "
+                    "history. Set this ONLY when the user EXPLICITLY asked about a recent "
+                    "or time-bounded window (e.g. 'last week', 'since Friday'). RFC3339 "
+                    "lower bound (inclusive), e.g. 2026-06-04T00:00:00Z; a bare date like "
+                    "2026-06-04 is REJECTED.",
                 ),
                 "end_time": _prop(
                     "string",
-                    "RFC3339 timestamp upper bound (exclusive), e.g. 2026-06-11T00:00:00Z. "
-                    "A bare date is REJECTED. Optional — omit for ranges that run to now.",
+                    "LEAVE UNSET by default. Set this ONLY for a window the user said has "
+                    "CLOSED in the past; for anything running through now, omit it. RFC3339 "
+                    "upper bound (exclusive), e.g. 2026-06-11T00:00:00Z; a bare date is "
+                    "REJECTED.",
                 ),
             },
             ["query"],
