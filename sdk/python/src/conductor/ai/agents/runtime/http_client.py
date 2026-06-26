@@ -102,7 +102,10 @@ class AgentClient:
         if not self._auth_key or not self._auth_secret:
             return {}
 
-        if self._token and (self._token_exp == 0.0 or time.time() < self._token_exp - 30):
+        # Reuse the cached token only if it has a decodable expiry and isn't near
+        # it. A token with no decodable exp (_token_exp == 0.0) is NOT cached —
+        # re-mint it (matches the C# SDK; avoids serving a stale token forever).
+        if self._token and self._token_exp != 0.0 and time.time() < self._token_exp - 30:
             return {"X-Authorization": self._token}
 
         try:

@@ -74,6 +74,9 @@ export function decodeJwtExp(token: string): number {
   }
 }
 
+/** Default client-side ceiling for {@link AgentClient.run}/`wait()` when no `timeoutSeconds` is given. */
+const DEFAULT_WAIT_MS = 600_000; // 10 min — mirrors the C# SDK's HttpClient cap
+
 export class AgentClient {
   readonly config: AgentConfig;
 
@@ -84,7 +87,8 @@ export class AgentClient {
 
   // Cached minted JWT (auth-key/secret path).
   private _token = "";
-  private _tokenExp = 0; // epoch seconds; 0 == "no decodable expiry"
+  private _tokenExp = 0; // epoch seconds; 0 == "no decodable expiry" (not cached)
+  private _mintPromise?: Promise<string>; // single-flight guard for concurrent mints
 
   constructor(options?: AgentConfigOptions | AgentConfig) {
     this.config = options instanceof AgentConfig ? options : new AgentConfig(options);
@@ -154,10 +158,30 @@ export class AgentClient {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    if (this._token && (this._tokenExp === 0 || now < this._tokenExp - 30)) {
+    // Reuse the cached token only if it has a decodable expiry and isn't near it.
+    // A token with no decodable exp (_tokenExp === 0) is NOT cached — re-mint it
+    // (matches the C#/Python SDKs; avoids serving a stale token indefinitely).
+    if (this._token && this._tokenExp !== 0 && now < this._tokenExp - 30) {
       return { "X-Authorization": this._token };
     }
 
+    // Single-flight: concurrent first-callers share one in-flight mint rather
+    // than stampeding the token endpoint.
+    if (!this._mintPromise) {
+      this._mintPromise = this._mintToken().finally(() => {
+        this._mintPromise = undefined;
+      });
+    }
+    const token = await this._mintPromise;
+    return { "X-Authorization": token };
+  }
+
+  /**
+   * Mint + cache a JWT from `authKey`/`authSecret`. Throws on failure — when
+   * credentials WERE supplied we surface the error instead of silently sending
+   * an anonymous request that 401s downstream with the cause erased.
+   */
+  private async _mintToken(): Promise<string> {
     let token: string;
     try {
       const client = await this.getClient();
@@ -166,14 +190,23 @@ export class AgentClient {
         keySecret: this.config.authSecret,
       })) as { token?: string } | undefined;
       token = data?.token ?? "";
-    } catch {
-      return {};
+    } catch (e) {
+      throw new AgentAPIError(
+        `Failed to mint Orkes auth token from authKey/authSecret: ${(e as Error).message}`,
+        0,
+        "",
+      );
     }
-    if (!token) return {};
-
+    if (!token) {
+      throw new AgentAPIError(
+        "Token endpoint returned an empty token for the supplied authKey/authSecret.",
+        0,
+        "",
+      );
+    }
     this._token = token;
     this._tokenExp = decodeJwtExp(token);
-    return { "X-Authorization": token };
+    return token;
   }
 
   // ── Raw `/agent/*` HTTP (Agentspan-specific endpoints) ─────────────
@@ -281,7 +314,10 @@ export class AgentClient {
   async getExecution(executionId: string, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
     try {
       return await this._request("GET", `/agent/execution/${executionId}`, undefined, signal);
-    } catch {
+    } catch (e) {
+      // Non-fatal: execution reads feed token accounting, not control flow.
+      // Surface at debug so a silent null is diagnosable.
+      console.debug(`getExecution(${executionId}) failed: ${(e as Error).message}`);
       return null;
     }
   }
@@ -335,7 +371,7 @@ export class AgentClient {
 
     const startResponse = await this.startAgent(payload, opts?.signal);
     const executionId = startResponse.executionId as string;
-    return this._makeHandle(executionId, opts?.signal);
+    return this._makeHandle(executionId, opts?.signal, opts?.timeoutSeconds);
   }
 
   /** Compile + register one or more agents (no execution, no workers). */
@@ -387,7 +423,7 @@ export class AgentClient {
     return serializeFrameworkAgent(agent);
   }
 
-  private _makeHandle(executionId: string, signal?: AbortSignal): ClientHandle {
+  private _makeHandle(executionId: string, signal?: AbortSignal, timeoutSeconds?: number): ClientHandle {
     return {
       executionId,
       getStatus: () => this.status(executionId, signal),
@@ -406,6 +442,8 @@ export class AgentClient {
         );
       },
       wait: async (pollIntervalMs = 500) => {
+        const deadline =
+          Date.now() + (timeoutSeconds ? timeoutSeconds * 1000 + 30_000 : DEFAULT_WAIT_MS);
         for (;;) {
           const status = await this.status(executionId, signal);
           if (TERMINAL_STATUSES.has(status.status)) {
@@ -421,6 +459,13 @@ export class AgentClient {
               // Non-critical.
             }
             return makeAgentResult(resultData);
+          }
+          if (Date.now() >= deadline) {
+            throw new AgentAPIError(
+              `wait() timed out for execution ${executionId} (last status: ${status.status})`,
+              0,
+              "",
+            );
           }
           await new Promise((r) => setTimeout(r, pollIntervalMs));
         }

@@ -69,7 +69,14 @@ export class WorkflowClient {
         includeTasks,
       )) as unknown as WorkflowExecution;
     } catch (e) {
-      if (this.fetchAgentExecution) {
+      // Only fall back to the agent-execution endpoint when Conductor genuinely
+      // doesn't have the workflow (404). A transient 5xx must propagate with its
+      // real status, not be masked by the fallback.
+      const status =
+        (e as { status?: number; statusCode?: number }).status ??
+        (e as { statusCode?: number }).statusCode;
+      const notFound = status === 404 || /\b404\b|not found/i.test((e as Error).message ?? "");
+      if (notFound && this.fetchAgentExecution) {
         const exec = await this.fetchAgentExecution(executionId);
         if (exec) {
           // Agent executions key on `executionId`; surface it as `workflowId`
@@ -114,7 +121,9 @@ export class WorkflowClient {
     let data: WorkflowExecution;
     try {
       data = await this.getWorkflow(executionId, true);
-    } catch {
+    } catch (e) {
+      // Token accounting is best-effort; surface at debug so a zeroed total is diagnosable.
+      console.debug(`token-usage read failed for ${executionId}: ${(e as Error).message}`);
       return { prompt: 0, completion: 0, total: 0, found: false };
     }
 

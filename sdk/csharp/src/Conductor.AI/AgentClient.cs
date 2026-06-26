@@ -208,7 +208,11 @@ public sealed class AgentClient : IDisposable
             : $"{_baseUrl}/workflow/{executionId}?reason={Uri.EscapeDataString(reason)}";
         using var req = new HttpRequestMessage(HttpMethod.Delete, url);
         using var resp = await _client.SendAsync(req, ct);
-        // Best-effort
+        // Best-effort, but a failed cancel means a still-running (billable) execution.
+        // Surface it via the diagnostics trace so a leaked execution is observable.
+        if (!resp.IsSuccessStatusCode)
+            System.Diagnostics.Trace.TraceWarning(
+                $"CancelAgentAsync({executionId}) returned {(int)resp.StatusCode} {resp.ReasonPhrase}; execution may still be running.");
     }
 
     // ── SSE streaming ───────────────────────────────────────

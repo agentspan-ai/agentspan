@@ -198,25 +198,55 @@ async def test_api_key_sends_x_authorization():
     await client.close()
 
 
+def _jwt_with_exp(exp: int) -> str:
+    """Build a fake JWT whose payload carries the given exp (epoch seconds)."""
+    import base64
+
+    def b64url(d: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
+
+    return f"{b64url({'alg': 'HS256'})}.{b64url({'exp': exp})}.sig"
+
+
 @pytest.mark.asyncio
 async def test_auth_key_mints_token_and_caches_it():
-    """auth_key/auth_secret mint a JWT via POST /token, cached across requests."""
+    """A minted token WITH a decodable (future) exp is cached across requests —
+    minted exactly once."""
     token_calls = {"count": 0}
+    jwt = _jwt_with_exp(4102444800)  # ~2100 → far future
 
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/token":
             token_calls["count"] += 1
             body = json.loads(request.content)
             assert body == {"keyId": "key1", "keySecret": "secret1"}
-            return httpx.Response(200, json={"token": "minted-token"})
-        assert request.headers.get("x-authorization") == "minted-token"
+            return httpx.Response(200, json={"token": jwt})
+        assert request.headers.get("x-authorization") == jwt
         return httpx.Response(200, json={"executionId": "wf-1"})
 
     client = _make_client(handler, auth_key="key1", auth_secret="secret1")
     await client.start_agent({"prompt": "one"})
     await client.start_agent({"prompt": "two"})
-    # opaque token → exp unknown → cached until rejected; minted exactly once
-    assert token_calls["count"] == 1
+    assert token_calls["count"] == 1  # decodable future exp → cached
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_auth_key_opaque_token_is_reminted_not_cached_forever():
+    """A token with no decodable exp must NOT be cached indefinitely — it is
+    re-minted on each request (matches the C# SDK; avoids serving a stale token)."""
+    token_calls = {"count": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/token":
+            token_calls["count"] += 1
+            return httpx.Response(200, json={"token": "opaque-no-exp"})
+        return httpx.Response(200, json={"executionId": "wf-1"})
+
+    client = _make_client(handler, auth_key="key1", auth_secret="secret1")
+    await client.start_agent({"prompt": "one"})
+    await client.start_agent({"prompt": "two"})
+    assert token_calls["count"] == 2  # no exp → not cached → minted each call
     await client.close()
 
 
