@@ -200,7 +200,7 @@ Credentials are declared at definition time and resolved at execution time. The 
 
 | Tool kind | Where resolved | Where injected | Mechanism |
 |---|---|---|---|
-| `@tool(secrets=[...])` | Worker, in-process | `os.environ` for the call | Server fetch → `inject_via_env` (lock-around-invoke) — see [secret-injection-contract.md](./secret-injection-contract.md) |
+| `@tool(secrets=[...])` | Worker, in-process | `os.environ` for the call | Server fetch → `inject_via_env` (lock-around-invoke) — see [secret-injection-contract.md](secret-injection-contract.md) |
 | `Agent(cli_commands=True)` | Worker, in-process | `os.environ` for the call | Auto-mapped from `CLI_CREDENTIAL_MAP`, same helper |
 | HTTP tool (system task) | Server | Request headers | `${NAME}` rewritten by `SecretAwareHttpTask` |
 | MCP tool (system task) | Server | Tool-server headers | `#{NAME}` rewritten by `SecretAwareMcpService` |
@@ -325,14 +325,14 @@ What this does **not** cover:
 | Threat | Mitigation |
 |---|---|
 | Worker process compromise | Token has 1h+ TTL, narrow scope, declared-name binding, revocable |
-| Credential bleed across concurrent agent invocations | `inject_via_env` holds a process-wide lock across mutation + invoke + restore. See [secret-injection-contract.md](./secret-injection-contract.md). |
+| Credential bleed across concurrent agent invocations | `inject_via_env` holds a process-wide lock across mutation + invoke + restore. See [secret-injection-contract.md](secret-injection-contract.md). |
 | `/proc/PID/environ` exposure | Env mutations are scoped to the duration of a single tool call and restored synchronously; only present during the locked region. |
 | Token replay | `jti` deny-list + `exp` + `wid` |
 | Tool exfiltration via egress | Names bounded to declared set; audit trail; rate-limited |
 | Conductor variable leakage | Conductor is internal-only; agentspan-server is sole external entry point |
 | Master key loss | Documented; backup is operator's responsibility |
 | Plaintext leaks via tool output (e.g. CLI error messages echo a token) | **Output masking** — `SecretMaskingResponseAdvice` redacts disclosed values from execution-read response bodies |
-| **Cross-tenant leak when SDK is embedded in a host app** (e.g. Django, FastAPI) | **Run agentspan-server as a separate service.** The process-wide env-injection lock is insufficient when arbitrary host-app code can read `os.environ` during the injection window. See [secret-injection-contract.md §7](./secret-injection-contract.md#7-embedded-deployments--the-contract-assumes-a-dedicated-worker-process). |
+| **Cross-tenant leak when SDK is embedded in a host app** (e.g. Django, FastAPI) | **Run agentspan-server as a separate service.** The process-wide env-injection lock is insufficient when arbitrary host-app code can read `os.environ` during the injection window. See [secret-injection-contract.md §7](secret-injection-contract.md#7-embedded-deployments--the-contract-assumes-a-dedicated-worker-process). |
 
 ---
 

@@ -13,7 +13,7 @@ Every change is test-first with e2e tests against a real server. No mocks.
 
 **Tech Stack:** Python 3.12, Java 21, Spring Boot 3.3, Conductor 3.22, SQLite, pytest, JUnit 5, httpx
 
-**Spec:** `docs/superpowers/specs/2026-03-22-universal-credential-support-design.md`
+**Spec:** `design/superpowers/specs/2026-03-22-universal-credential-support-design.md`
 
 ---
 

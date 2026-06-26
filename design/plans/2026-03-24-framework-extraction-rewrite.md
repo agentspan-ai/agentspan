@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Java (server normalizers), vitest, Gradle (server tests)
 
-**Spec:** `docs/sdk-design/2026-03-23-multi-language-sdk-design.md` §5.3
+**Spec:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md` §5.3
 
 ---
 

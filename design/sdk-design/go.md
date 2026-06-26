@@ -1,7 +1,7 @@
 # Go SDK Translation Guide
 
 **Date:** 2026-03-23
-**Base Spec:** `docs/sdk-design/2026-03-23-multi-language-sdk-design.md`
+**Base Spec:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md`
 **Python Reference:** `sdk/python/examples/kitchen_sink.py`
 
 ---

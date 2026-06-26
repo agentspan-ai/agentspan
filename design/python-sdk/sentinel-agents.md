@@ -518,7 +518,7 @@ Triggers:
 
 > **Status**: complete across all four SDKs (Python, TypeScript, Java, C#) and the UI.
 > See [`docs/scheduling.md`](../scheduling.md) for the user guide and
-> [`docs/design/scheduling.md`](../design/scheduling.md) for the design rationale.
+> [`docs/design/scheduling.md`](../../design/scheduling.md) for the design rationale.
 
 - ✅ `Schedule` dataclass / class in all four SDKs
 - ✅ `deploy(agent, schedules=[...])` with declarative tri-state reconciliation

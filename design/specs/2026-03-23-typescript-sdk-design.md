@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-23 (updated 2026-03-24)
 **Status:** Review
-**Base spec:** `docs/sdk-design/2026-03-23-multi-language-sdk-design.md`
+**Base spec:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md`
 **Reference implementation:** `sdk/python/` (Python SDK)
 **Replaces:** `sdk/typescript/` (PoC JS SDK)
 
@@ -1785,7 +1785,7 @@ Per base spec §12, with TypeScript-specific additions:
 
 The kitchen sink (`examples/kitchen-sink.ts`) exercises all 89 features from the traceability matrix in a single mega-pipeline — a content publishing pipeline processing an article through 9 stages.
 
-Per `docs/sdk-design/kitchen-sink.md`, the SDK passes when:
+Per `design/sdk-design/kitchen-sink.md`, the SDK passes when:
 
 1. **Wire format parity** — produces identical AgentConfig JSON for the same agent tree
 2. **Worker execution** — all tool/guardrail/callback workers execute successfully

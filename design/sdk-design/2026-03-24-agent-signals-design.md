@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-24
 **Status:** Draft
-**Requirements:** `docs/sdk-design/2026-03-23-agent-signals-requirements.md`
+**Requirements:** `design/sdk-design/2026-03-23-agent-signals-requirements.md`
 
 ---
 

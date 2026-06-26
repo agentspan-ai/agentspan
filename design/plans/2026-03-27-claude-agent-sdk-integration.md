@@ -10,7 +10,7 @@
 
 **Note:** The actual SDK package is `claude-code-sdk` (PyPI), which exports `ClaudeCodeOptions`. Detection handles both `ClaudeCodeOptions` and `ClaudeAgentOptions` for forward-compatibility.
 
-**Spec:** `docs/superpowers/specs/2026-03-27-claude-agent-sdk-integration-design.md`
+**Spec:** `design/superpowers/specs/2026-03-27-claude-agent-sdk-integration-design.md`
 
 ---
 

@@ -34,26 +34,20 @@ markdown_extensions:
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
 
+# Design docs live in the top-level design/ folder, not here. docs/ holds only
+# user-facing docs. A few legacy/unpublished user docs remain but stay out of nav.
 not_in_nav: |
-  design/**
-  sdk-design/**
-  superpowers/**
   python-sdk/**
-  typescript-sdk/**
   langchain-integration.md
   langgraph-integration.md
-  local-code-execution-design.md
+  ocg-agent-flow.md
 
 exclude_docs: |
   /guardrails.md
-  design/**
-  sdk-design/**
-  superpowers/**
   python-sdk/**
-  typescript-sdk/**
   langchain-integration.md
   langgraph-integration.md
-  local-code-execution-design.md
+  ocg-agent-flow.md
 
 nav:
   - Overview: index.md

@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-24
 **Status:** Approved
-**Depends on:** `docs/superpowers/specs/2026-03-23-typescript-sdk-design.md`
+**Depends on:** `design/superpowers/specs/2026-03-23-typescript-sdk-design.md`
 
 ---
 

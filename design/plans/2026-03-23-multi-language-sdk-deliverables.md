@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python (agentspan SDK), Pydantic (structured output), pytest (kitchen sink tests)
 
-**Spec:** `docs/sdk-design/2026-03-23-multi-language-sdk-design.md`
+**Spec:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md`
 
 ---
 
@@ -16,16 +16,16 @@
 
 | File | Responsibility |
 |------|---------------|
-| `docs/sdk-design/kitchen-sink.md` | Kitchen sink scenario spec, expected behavior, judge rubrics, acceptance criteria |
+| `design/sdk-design/kitchen-sink.md` | Kitchen sink scenario spec, expected behavior, judge rubrics, acceptance criteria |
 | `sdk/python/examples/kitchen_sink.py` | Working Python kitchen sink — single mega-workflow exercising all 88 features |
 | `sdk/python/examples/kitchen_sink_helpers.py` | Mock services, data fixtures, external worker stubs for kitchen sink |
 | `sdk/python/tests/test_kitchen_sink.py` | Kitchen sink test suite — structural + behavioral assertions |
-| `docs/sdk-design/typescript.md` | TypeScript idiom translation guide (all 9 sections) |
-| `docs/sdk-design/go.md` | Go idiom translation guide (all 9 sections) |
-| `docs/sdk-design/java.md` | Java idiom translation guide — record 16+ and POJO 8+ (all 9 sections) |
-| `docs/sdk-design/kotlin.md` | Kotlin idiom translation guide (all 9 sections) |
-| `docs/sdk-design/csharp.md` | C# idiom translation guide (all 9 sections) |
-| `docs/sdk-design/ruby.md` | Ruby idiom translation guide (all 9 sections) |
+| `design/sdk-design/typescript.md` | TypeScript idiom translation guide (all 9 sections) |
+| `design/sdk-design/go.md` | Go idiom translation guide (all 9 sections) |
+| `design/sdk-design/java.md` | Java idiom translation guide — record 16+ and POJO 8+ (all 9 sections) |
+| `design/sdk-design/kotlin.md` | Kotlin idiom translation guide (all 9 sections) |
+| `design/sdk-design/csharp.md` | C# idiom translation guide (all 9 sections) |
+| `design/sdk-design/ruby.md` | Ruby idiom translation guide (all 9 sections) |
 
 ---
 
@@ -34,11 +34,11 @@
 ### Task 1: Kitchen Sink Spec Document
 
 **Files:**
-- Create: `docs/sdk-design/kitchen-sink.md`
+- Create: `design/sdk-design/kitchen-sink.md`
 
 - [ ] **Step 1: Write the kitchen sink scenario spec**
 
-Create `docs/sdk-design/kitchen-sink.md` with these sections. The spec must cover every feature from the 88-feature traceability matrix in `docs/sdk-design/2026-03-23-multi-language-sdk-design.md` Section 11. Include:
+Create `design/sdk-design/kitchen-sink.md` with these sections. The spec must cover every feature from the 88-feature traceability matrix in `design/sdk-design/2026-03-23-multi-language-sdk-design.md` Section 11. Include:
 
 1. **Overview** — scenario description, user prompt
 2. **Stage 1-9 specifications** — each stage lists: input, output, features exercised, expected behavior, assertions
@@ -64,7 +64,7 @@ Testing section must cover: mock_run (78), expect (79), assertions (80), record/
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/sdk-design/kitchen-sink.md
+git add design/sdk-design/kitchen-sink.md
 git commit -m "docs: add kitchen sink scenario spec with expected behavior and judge rubrics"
 ```
 
@@ -223,7 +223,7 @@ The kitchen sink must exercise ALL 88 features. Below is the complete implementa
 """Kitchen Sink — Content Publishing Platform.
 
 A single mega-workflow that exercises every Agentspan SDK feature (88 features).
-See docs/sdk-design/kitchen-sink.md for the full scenario specification.
+See design/sdk-design/kitchen-sink.md for the full scenario specification.
 
 Requirements:
     - Conductor server with LLM support
@@ -1239,7 +1239,7 @@ Tasks 5-10 are **fully independent** and can be executed by parallel subagents.
 ### Task 5: TypeScript Translation Guide
 
 **Files:**
-- Create: `docs/sdk-design/typescript.md`
+- Create: `design/sdk-design/typescript.md`
 
 - [ ] **Step 1: Write TypeScript translation guide with all 9 sections**
 
@@ -1259,7 +1259,7 @@ Include complete code examples for: agent definition, tool with context, guardra
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/sdk-design/typescript.md
+git add design/sdk-design/typescript.md
 git commit -m "docs: TypeScript SDK translation guide — all 9 sections"
 ```
 
@@ -1268,7 +1268,7 @@ git commit -m "docs: TypeScript SDK translation guide — all 9 sections"
 ### Task 6: Go Translation Guide
 
 **Files:**
-- Create: `docs/sdk-design/go.md`
+- Create: `design/sdk-design/go.md`
 
 - [ ] **Step 1: Write Go translation guide with all 9 sections**
 
@@ -1286,7 +1286,7 @@ Must include:
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/sdk-design/go.md
+git add design/sdk-design/go.md
 git commit -m "docs: Go SDK translation guide — all 9 sections"
 ```
 
@@ -1295,7 +1295,7 @@ git commit -m "docs: Go SDK translation guide — all 9 sections"
 ### Task 7: Java Translation Guide
 
 **Files:**
-- Create: `docs/sdk-design/java.md`
+- Create: `design/sdk-design/java.md`
 
 - [ ] **Step 1: Write Java translation guide with all 9 sections**
 
@@ -1314,7 +1314,7 @@ Cover BOTH record (16+) and POJO (8+) patterns side-by-side:
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/sdk-design/java.md
+git add design/sdk-design/java.md
 git commit -m "docs: Java SDK translation guide — record + POJO patterns, all 9 sections"
 ```
 
@@ -1323,7 +1323,7 @@ git commit -m "docs: Java SDK translation guide — record + POJO patterns, all 
 ### Task 8: Kotlin Translation Guide
 
 **Files:**
-- Create: `docs/sdk-design/kotlin.md`
+- Create: `design/sdk-design/kotlin.md`
 
 - [ ] **Step 1: Write Kotlin translation guide with all 9 sections**
 
@@ -1340,7 +1340,7 @@ git commit -m "docs: Java SDK translation guide — record + POJO patterns, all 
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/sdk-design/kotlin.md
+git add design/sdk-design/kotlin.md
 git commit -m "docs: Kotlin SDK translation guide — DSL builders and coroutines, all 9 sections"
 ```
 
@@ -1349,7 +1349,7 @@ git commit -m "docs: Kotlin SDK translation guide — DSL builders and coroutine
 ### Task 9: C# Translation Guide
 
 **Files:**
-- Create: `docs/sdk-design/csharp.md`
+- Create: `design/sdk-design/csharp.md`
 
 - [ ] **Step 1: Write C# translation guide with all 9 sections**
 
@@ -1366,7 +1366,7 @@ git commit -m "docs: Kotlin SDK translation guide — DSL builders and coroutine
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/sdk-design/csharp.md
+git add design/sdk-design/csharp.md
 git commit -m "docs: C# SDK translation guide — operator overloading and async, all 9 sections"
 ```
 
@@ -1375,7 +1375,7 @@ git commit -m "docs: C# SDK translation guide — operator overloading and async
 ### Task 10: Ruby Translation Guide
 
 **Files:**
-- Create: `docs/sdk-design/ruby.md`
+- Create: `design/sdk-design/ruby.md`
 
 - [ ] **Step 1: Write Ruby translation guide with all 9 sections**
 
@@ -1392,7 +1392,7 @@ git commit -m "docs: C# SDK translation guide — operator overloading and async
 - [ ] **Step 2: Commit**
 
 ```bash
-git add docs/sdk-design/ruby.md
+git add design/sdk-design/ruby.md
 git commit -m "docs: Ruby SDK translation guide — DSL blocks and operator overloading, all 9 sections"
 ```
 
@@ -1403,7 +1403,7 @@ git commit -m "docs: Ruby SDK translation guide — DSL blocks and operator over
 ### Task 11: Cross-Reference and Final Commit
 
 **Files:**
-- Modify: `docs/sdk-design/2026-03-23-multi-language-sdk-design.md`
+- Modify: `design/sdk-design/2026-03-23-multi-language-sdk-design.md`
 
 - [ ] **Step 1: Add deliverable status table to base design doc**
 
@@ -1414,21 +1414,21 @@ Add after the "Deliverables" table in Section 1.3:
 
 | # | File | Status |
 |---|------|--------|
-| 1 | [base-design.md](2026-03-23-multi-language-sdk-design.md) | Complete |
-| 2 | [kitchen-sink.md](kitchen-sink.md) | Complete |
+| 1 | [base-design.md](../sdk-design/2026-03-23-multi-language-sdk-design.md) | Complete |
+| 2 | [kitchen-sink.md](../sdk-design/kitchen-sink.md) | Complete |
 | 3 | [kitchen_sink.py](../../sdk/python/examples/kitchen_sink.py) | Complete |
-| 4 | [typescript.md](typescript.md) | Complete |
-| 5 | [go.md](go.md) | Complete |
-| 6 | [java.md](java.md) | Complete |
-| 7 | [kotlin.md](kotlin.md) | Complete |
-| 8 | [csharp.md](csharp.md) | Complete |
-| 9 | [ruby.md](ruby.md) | Complete |
+| 4 | [typescript.md](../sdk-design/typescript.md) | Complete |
+| 5 | [go.md](../sdk-design/go.md) | Complete |
+| 6 | [java.md](../sdk-design/java.md) | Complete |
+| 7 | [kotlin.md](../sdk-design/kotlin.md) | Complete |
+| 8 | [csharp.md](../sdk-design/csharp.md) | Complete |
+| 9 | [ruby.md](../sdk-design/ruby.md) | Complete |
 ```
 
 - [ ] **Step 2: Final commit**
 
 ```bash
-git add docs/sdk-design/
+git add design/sdk-design/
 git commit -m "docs: complete multi-language SDK design — all guides and kitchen sink"
 ```
 

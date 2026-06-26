@@ -8,8 +8,8 @@
 
 **Tech Stack:** TypeScript 5.x, tsup, vitest, zod, zod-to-json-schema, dotenv, Node.js 18+
 
-**Spec:** `docs/superpowers/specs/2026-03-23-typescript-sdk-design.md`
-**Base spec:** `docs/sdk-design/2026-03-23-multi-language-sdk-design.md`
+**Spec:** `design/superpowers/specs/2026-03-23-typescript-sdk-design.md`
+**Base spec:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md`
 
 ---
 
@@ -655,7 +655,7 @@ Vercel AI SDK passthrough, mixed tools, streaming. LangGraph/LangChain passthrou
 
 - [ ] **Step 1: Write kitchen-sink.ts**
 
-Port all 9 stages from `sdk/python/examples/kitchen_sink.py` to TypeScript. Exercise all 89 features per `docs/sdk-design/kitchen-sink.md`.
+Port all 9 stages from `sdk/python/examples/kitchen_sink.py` to TypeScript. Exercise all 89 features per `design/sdk-design/kitchen-sink.md`.
 
 - [ ] **Step 2: Write structural tests**
 

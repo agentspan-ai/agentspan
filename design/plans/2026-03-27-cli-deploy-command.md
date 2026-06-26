@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go (Cobra, fatih/color, text/tabwriter, os/exec), Python (argparse, agentspan SDK), TypeScript (node:util parseArgs, agentspan SDK)
 
-**Spec:** `docs/superpowers/specs/2026-03-27-cli-deploy-command-design.md`
+**Spec:** `design/superpowers/specs/2026-03-27-cli-deploy-command-design.md`
 
 ---
 

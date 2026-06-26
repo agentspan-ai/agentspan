@@ -66,15 +66,15 @@ The Python SDK **is** the spec. Each language SDK must:
 
 | # | File | Purpose |
 |---|------|---------|
-| 1 | `docs/sdk-design/base-design.md` | This document — protocol, conceptual model, feature matrix |
-| 2 | `docs/sdk-design/kitchen-sink.md` | Kitchen sink scenario spec + expected behavior + judge rubrics |
-| 3 | `docs/sdk-design/kitchen-sink.py` | Working Python kitchen sink implementation |
-| 4 | `docs/sdk-design/typescript.md` | TypeScript idiom translation guide |
-| 5 | `docs/sdk-design/go.md` | Go idiom translation guide |
-| 6 | `docs/sdk-design/java.md` | Java idiom guide (record 16+ and POJO 8+ patterns) |
-| 7 | `docs/sdk-design/kotlin.md` | Kotlin idiom translation guide |
-| 8 | `docs/sdk-design/csharp.md` | C# idiom translation guide |
-| 9 | `docs/sdk-design/ruby.md` | Ruby idiom translation guide |
+| 1 | `design/sdk-design/base-design.md` | This document — protocol, conceptual model, feature matrix |
+| 2 | `design/sdk-design/kitchen-sink.md` | Kitchen sink scenario spec + expected behavior + judge rubrics |
+| 3 | `design/sdk-design/kitchen-sink.py` | Working Python kitchen sink implementation |
+| 4 | `design/sdk-design/typescript.md` | TypeScript idiom translation guide |
+| 5 | `design/sdk-design/go.md` | Go idiom translation guide |
+| 6 | `design/sdk-design/java.md` | Java idiom guide (record 16+ and POJO 8+ patterns) |
+| 7 | `design/sdk-design/kotlin.md` | Kotlin idiom translation guide |
+| 8 | `design/sdk-design/csharp.md` | C# idiom translation guide |
+| 9 | `design/sdk-design/ruby.md` | Ruby idiom translation guide |
 
 ---
 
@@ -724,7 +724,7 @@ These create tools that execute on the server — no local worker needed:
 
 **Note on `http_tool` credential headers:** Headers can reference credentials using `${NAME}` syntax (e.g., `"Authorization": "Bearer ${API_KEY}"`). The server resolves these at execution time from the credential store. All placeholder names must be declared in the `credentials` list.
 
-**Note on `api_tool`:** Mirrors the `mcp_tool()` pattern. Points to an OpenAPI/Swagger/Postman spec URL (or base URL for auto-discovery). Server fetches and parses the spec at workflow startup via `LIST_API_TOOLS` system task, discovers all operations as individual tools, and executes them as standard HTTP tasks. If discovered operations exceed `max_tools`, a lightweight LLM selects the most relevant ones based on the user's prompt. See `docs/sdk-design/2026-03-23-api-tool-design.md` for full design.
+**Note on `api_tool`:** Mirrors the `mcp_tool()` pattern. Points to an OpenAPI/Swagger/Postman spec URL (or base URL for auto-discovery). Server fetches and parses the spec at workflow startup via `LIST_API_TOOLS` system task, discovers all operations as individual tools, and executes them as standard HTTP tasks. If discovered operations exceed `max_tools`, a lightweight LLM selects the most relevant ones based on the user's prompt. See `design/sdk-design/2026-03-23-api-tool-design.md` for full design.
 
 #### External / By-Reference Tools
 

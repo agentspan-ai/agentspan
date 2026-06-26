@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java (server compiler), Python SDK, TypeScript SDK, Conductor workflow JSON, GraalJS inline tasks.
 
-**Spec:** `docs/superpowers/specs/2026-04-01-pipeline-context-passing-design.md`
+**Spec:** `design/superpowers/specs/2026-04-01-pipeline-context-passing-design.md`
 
 ---
 

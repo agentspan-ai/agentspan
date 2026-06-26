@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python SDK, Java Spring Boot server (SkillNormalizer), Go CLI, Conductor orchestration engine.
 
-**Spec:** `docs/sdk-design/2026-03-30-agent-skills-design.md`
+**Spec:** `design/sdk-design/2026-03-30-agent-skills-design.md`
 
 ---
 

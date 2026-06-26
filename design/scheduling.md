@@ -2,7 +2,7 @@
 
 **Status**: Draft — pending review
 **Date**: 2026-05-27
-**Scope**: Phase 1 of [sentinel-agents](../python-sdk/sentinel-agents.md) — cron triggers only.
+**Scope**: Phase 1 of [sentinel-agents](../design/python-sdk/sentinel-agents.md) — cron triggers only.
 
 ---
 

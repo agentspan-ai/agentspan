@@ -41,7 +41,7 @@ Remove `registerTaskDef()` calls from `runtime.ts`. Make `registerTaskDef()` in 
 
 ### Design doc update
 
-Update `docs/sdk-design/2026-03-23-multi-language-sdk-design.md` Section 5.2 to reflect server-side registration as the standard.
+Update `design/sdk-design/2026-03-23-multi-language-sdk-design.md` Section 5.2 to reflect server-side registration as the standard.
 
 ## Files Changed
 
@@ -51,5 +51,5 @@ Update `docs/sdk-design/2026-03-23-multi-language-sdk-design.md` Section 5.2 to 
 | `sdk/python/.../runtime/runtime.py` | Set `register_task_def=False` everywhere, remove task def factories |
 | `sdk/typescript/src/runtime.ts` | Remove `registerTaskDef()` calls |
 | `sdk/typescript/src/worker.ts` | Make `registerTaskDef()` a no-op |
-| `docs/sdk-design/2026-03-23-multi-language-sdk-design.md` | Update Section 5.2 |
+| `design/sdk-design/2026-03-23-multi-language-sdk-design.md` | Update Section 5.2 |
 | Tests | Update/add tests for all changes |

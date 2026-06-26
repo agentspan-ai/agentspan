@@ -249,7 +249,7 @@ This is its own stage per project rule.
   - `sdk/typescript/examples/NN-scheduled-digest.ts`
   - `sdk/java/examples/.../Example99ScheduledAgent.java`
   - `sdk/csharp/examples/Scheduling/Program.cs`
-- [ ] Mark `docs/python-sdk/sentinel-agents.md` Phase 1 items as shipped.
+- [ ] Mark `design/python-sdk/sentinel-agents.md` Phase 1 items as shipped.
 
 **Exit criteria**: docs PR merged; examples runnable from a fresh checkout per `quickstart.md`.
 

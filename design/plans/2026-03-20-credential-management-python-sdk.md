@@ -3201,7 +3201,7 @@ git commit -m "test(credentials): add end-to-end dispatch integration test for i
 ---
 
 **To save this plan, write it to:**
-`/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/docs/superpowers/plans/2026-03-20-credential-management-python-sdk.md`
+`/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/design/superpowers/plans/2026-03-20-credential-management-python-sdk.md`
 
 The plan header must start exactly with:
 

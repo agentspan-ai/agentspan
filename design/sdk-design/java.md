@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-23
 **Status:** Draft
-**Base Spec:** `docs/sdk-design/2026-03-23-multi-language-sdk-design.md`
+**Base Spec:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md`
 **Reference Implementation:** `sdk/python/examples/kitchen_sink.py`
 
 This guide covers implementing the Agentspan SDK in Java with full feature parity against the Python reference. It addresses **two** target audiences simultaneously: projects on Java 16+ (records, sealed interfaces, pattern matching) and projects constrained to Java 8+ (POJOs, Lombok optional). Every section shows both styles side-by-side.

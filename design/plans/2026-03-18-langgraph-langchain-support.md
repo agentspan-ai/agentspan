@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python (langgraph, langchain), Java 17 / Spring Boot, Netflix Conductor, SSE (SseEmitter), pytest, JUnit 5 + AssertJ.
 
-**Spec:** `docs/superpowers/specs/2026-03-18-langgraph-langchain-support-design.md`
+**Spec:** `design/superpowers/specs/2026-03-18-langgraph-langchain-support-design.md`
 
 ---
 

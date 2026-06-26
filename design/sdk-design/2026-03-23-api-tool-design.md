@@ -336,7 +336,7 @@ New Java class implementing Conductor's `WorkflowSystemTask`:
 
 ### Multi-Language SDK Specs
 
-- Add `api_tool` to `docs/sdk-design/2026-03-23-multi-language-sdk-design.md` Section 4.2
+- Add `api_tool` to `design/sdk-design/2026-03-23-multi-language-sdk-design.md` Section 4.2
 - Add to traceability matrix as feature #89
 - Update per-language translation guides
 

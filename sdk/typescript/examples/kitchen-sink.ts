@@ -2,7 +2,7 @@
  * Kitchen Sink — Content Publishing Platform
  *
  * A single mega-workflow that exercises every Agentspan SDK feature (89 features).
- * See docs/sdk-design/kitchen-sink.md for the full scenario specification.
+ * See design/sdk-design/kitchen-sink.md for the full scenario specification.
  *
  * Demonstrates:
  *   - All 8 multi-agent strategies
