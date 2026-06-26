@@ -10,7 +10,7 @@
     <!-- NuGet package metadata -->
     <PackageId>conductor-agent-sdk</PackageId>
     <Version>0.1.0</Version>
-    <Description>Agentspan .NET SDK — durable, scalable, observable AI agents</Description>
+    <Description>Conductor Agent .NET SDK — durable, scalable, observable AI agents</Description>
     <Authors>Agentspan</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/agentspan-ai/agentspan</PackageProjectUrl>
