@@ -3,7 +3,6 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -394,54 +393,6 @@ func TestStream_SendsBearerToken(t *testing.T) {
 
 	if gotAuth != "Bearer stream-token" {
 		t.Errorf("Authorization = %q, want %q", gotAuth, "Bearer stream-token")
-	}
-}
-
-// ─── Credentials CRUD ────────────────────────────────────────────────────────────
-
-func TestSetCredential_PutsRawBodyAtKeyPath(t *testing.T) {
-	var gotMethod, gotPath, gotCT, gotBody string
-	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotPath = r.URL.Path
-		gotCT = r.Header.Get("Content-Type")
-		b, _ := io.ReadAll(r.Body)
-		gotBody = string(b)
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	if err := c.SetCredential("TOKEN", "secret-val"); err != nil {
-		t.Fatalf("SetCredential: %v", err)
-	}
-	if gotMethod != http.MethodPut {
-		t.Errorf("method = %q, want PUT", gotMethod)
-	}
-	if gotPath != "/api/secrets/TOKEN" {
-		t.Errorf("path = %q, want /api/secrets/TOKEN", gotPath)
-	}
-	if gotCT != "text/plain" {
-		t.Errorf("Content-Type = %q, want text/plain", gotCT)
-	}
-	if gotBody != "secret-val" {
-		t.Errorf("body = %q, want raw secret-val", gotBody)
-	}
-}
-
-func TestDeleteCredential_EscapesName(t *testing.T) {
-	var gotPath string
-	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.RawPath
-		if gotPath == "" {
-			gotPath = r.URL.Path
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	if err := c.DeleteCredential("my/key"); err != nil {
-		t.Fatalf("DeleteCredential: %v", err)
-	}
-	if !strings.Contains(gotPath, "my%2Fkey") {
-		t.Errorf("path = %q, want escaped name", gotPath)
 	}
 }
 

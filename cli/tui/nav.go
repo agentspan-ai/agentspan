@@ -23,7 +23,6 @@ const (
 	ViewExecutions         // history + status + stream + HITL respond
 	ViewServer             // start/stop/logs
 	ViewSkills             // skill run/load/serve
-	ViewCredentials        // set/list/delete/bind
 	ViewDoctor             // system diagnostics
 	ViewConfigure          // server URL + auth + login/logout
 	// Keep these as aliases so existing app.go code compiles
@@ -37,7 +36,6 @@ var navItems = []NavItem{
 	{ViewExecutions, "Executions"},
 	{ViewServer, "Server"},
 	{ViewSkills, "Skills"},
-	{ViewCredentials, "Credentials"},
 	{ViewDoctor, "Doctor"},
 	{ViewConfigure, "Configure"},
 }

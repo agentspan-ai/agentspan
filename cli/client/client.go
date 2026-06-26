@@ -683,64 +683,6 @@ func sseFieldValue(line, prefix string) string {
 	return v
 }
 
-// ─── Auth API ─────────────────────────────────────────────────────────────────
-
-// ─── Credentials management API ───────────────────────────────────────────────────
-
-// CredentialMeta is the list-view for a stored credential (from GET /api/secrets/v2).
-type CredentialMeta struct {
-	Name      string `json:"name"`
-	Partial   string `json:"partial"`
-	UpdatedAt string `json:"updated_at"`
-}
-
-// ListCredentials returns all stored credential metadata (uses /api/secrets/v2 for richer payload).
-func (c *Client) ListCredentials() ([]CredentialMeta, error) {
-	resp, err := c.doRequest("GET", "/api/secrets/v2", nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var result []CredentialMeta
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode credentials: %w", err)
-	}
-	return result, nil
-}
-
-// SetCredential stores (upserts) a credential value via PUT /api/secrets/{key}.
-// Body is the raw plaintext value (Conductor parity).
-func (c *Client) SetCredential(name, value string) error {
-	req, err := http.NewRequest("PUT",
-		c.baseURL+"/api/secrets/"+url.PathEscape(name),
-		strings.NewReader(value))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "text/plain")
-	c.applyAuth(req)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-	return nil
-}
-
-// DeleteCredential removes a stored credential by name.
-func (c *Client) DeleteCredential(name string) error {
-	resp, err := c.doRequest("DELETE", "/api/secrets/"+url.PathEscape(name), nil)
-	if err != nil {
-		return err
-	}
-	resp.Body.Close()
-	return nil
-}
-
 // PruneExecutions deletes terminal execution records older than olderThanDays days.
 // Returns the number of records deleted.
 func (c *Client) PruneExecutions(olderThanDays int, archiveTasks bool) (int, error) {

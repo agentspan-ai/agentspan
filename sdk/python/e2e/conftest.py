@@ -1,7 +1,6 @@
 """E2E test infrastructure. No mocks. Real server, real CLI, real services."""
 
 import os
-import subprocess
 
 import pytest
 import requests
@@ -91,53 +90,6 @@ def mcp_url():
     return MCP_TESTKIT_URL
 
 
-# ── CLI credential helper ──────────────────────────────────────────────
-
-
-class CredentialsCLI:
-    """Wraps the agentspan CLI for credential operations.
-
-    The CLI expects AGENTSPAN_SERVER_URL without the /api suffix
-    (e.g., http://localhost:6767). It appends /api internally.
-    """
-
-    def __init__(self, cli_path: str, server_url: str):
-        self._cli = cli_path
-        # CLI expects base URL without /api — strip it if present
-        self._server_url = server_url.rstrip("/").removesuffix("/api")
-
-    def _run(self, *args: str) -> subprocess.CompletedProcess:
-        cmd = [self._cli] + list(args)
-        env = {**os.environ, "AGENTSPAN_SERVER_URL": self._server_url}
-        return subprocess.run(
-            cmd, capture_output=True, text=True, timeout=15, env=env
-        )
-
-    def set(self, name: str, value: str) -> None:
-        result = self._run("credentials", "set", name, value)
-        assert result.returncode == 0, (
-            f"credentials set {name} failed: {result.stderr}"
-        )
-
-    def delete(self, name: str) -> None:
-        result = self._run("credentials", "delete", name)
-        # Ignore "not found" errors during cleanup
-        if result.returncode != 0 and "not found" not in result.stderr.lower():
-            raise AssertionError(
-                f"credentials delete {name} failed: {result.stderr}"
-            )
-
-    def list(self) -> str:
-        result = self._run("credentials", "list")
-        assert result.returncode == 0, f"credentials list failed: {result.stderr}"
-        return result.stdout
-
-
-@pytest.fixture(scope="session")
-def cli_credentials():
-    return CredentialsCLI(CLI_PATH, SERVER_URL)
-
-
 # ── Server API helpers ──────────────────────────────────────────────────
 
 
@@ -151,8 +103,4 @@ def get_workflow(execution_id: str) -> dict:
 def get_task_by_name(execution_id: str, task_ref_prefix: str) -> list:
     """Find tasks in a workflow whose referenceTaskName contains prefix."""
     wf = get_workflow(execution_id)
-    return [
-        t
-        for t in wf.get("tasks", [])
-        if task_ref_prefix in t.get("referenceTaskName", "")
-    ]
+    return [t for t in wf.get("tasks", []) if task_ref_prefix in t.get("referenceTaskName", "")]

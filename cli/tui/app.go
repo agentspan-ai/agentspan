@@ -43,7 +43,6 @@ type AppModel struct {
 	executions  views.ExecutionsModel
 	status      views.StatusModel
 	server      views.ServerModel
-	credentials views.CredentialsModel
 	doctor      views.DoctorModel
 	configure   views.ConfigureModel
 	skills      views.SkillsModel
@@ -94,7 +93,6 @@ func New(version string) *AppModel {
 	m.executions = views.NewExecutions(c)
 	m.status = views.NewStatus(c, "")
 	m.server = views.NewServer(c)
-	m.credentials = views.NewCredentials(c)
 	m.doctor = views.NewDoctor(c)
 	m.configure = views.NewConfigure(cfg)
 	m.skills = views.NewSkills(c)
@@ -135,8 +133,6 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status, cmd = m.status.Update(msg)
 		cmds = append(cmds, cmd)
 		m.server, cmd = m.server.Update(msg)
-		cmds = append(cmds, cmd)
-		m.credentials, cmd = m.credentials.Update(msg)
 		cmds = append(cmds, cmd)
 		m.doctor, cmd = m.doctor.Update(msg)
 		cmds = append(cmds, cmd)
@@ -288,10 +284,8 @@ func (m *AppModel) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "5":
 		return m.jumpTo(ViewSkills)
 	case "6":
-		return m.jumpTo(ViewCredentials)
-	case "7":
 		return m.jumpTo(ViewDoctor)
-	case "8":
+	case "7":
 		return m.jumpTo(ViewConfigure)
 
 	default:
@@ -392,10 +386,6 @@ func (m *AppModel) handleNavigation(nav NavigateMsg) (tea.Model, tea.Cmd) {
 		m.server = views.NewServer(m.client)
 		m.server, _ = m.server.Update(sizeMsg)
 		initCmd = m.server.Init()
-	case ViewCredentials:
-		m.credentials = views.NewCredentials(m.client)
-		m.credentials, _ = m.credentials.Update(sizeMsg)
-		initCmd = m.credentials.Init()
 	case ViewDoctor:
 		m.doctor = views.NewDoctor(m.client)
 		m.doctor, _ = m.doctor.Update(sizeMsg)
@@ -423,8 +413,6 @@ func (m *AppModel) activeViewWantsEsc() bool {
 		return m.executions.WantsEsc()
 	case ViewServer:
 		return m.server.WantsEsc()
-	case ViewCredentials:
-		return m.credentials.WantsEsc()
 	}
 	return false
 }
@@ -438,8 +426,6 @@ func (m *AppModel) activeViewWantsAllKeys() bool {
 		return m.configure.FormActive()
 	case ViewAgents:
 		return m.agents.FormActive()
-	case ViewCredentials:
-		return m.credentials.FormActive()
 	}
 	return false
 }
@@ -460,8 +446,6 @@ func (m *AppModel) delegateToActiveView(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case ViewServer:
 		m.server, cmd = m.server.Update(msg)
-	case ViewCredentials:
-		m.credentials, cmd = m.credentials.Update(msg)
 	case ViewDoctor:
 		m.doctor, cmd = m.doctor.Update(msg)
 	case ViewConfigure:
@@ -526,8 +510,6 @@ func (m *AppModel) renderActiveView() string {
 		return m.executions.View()
 	case ViewServer:
 		return m.server.View()
-	case ViewCredentials:
-		return m.credentials.View()
 	case ViewDoctor:
 		return m.doctor.View()
 	case ViewConfigure:
@@ -569,8 +551,6 @@ func (m *AppModel) footerHints() string {
 		}
 	case ViewServer:
 		viewHints = m.server.FooterHints()
-	case ViewCredentials:
-		viewHints = m.credentials.FooterHints()
 	case ViewDoctor:
 		viewHints = m.doctor.FooterHints()
 	case ViewConfigure:

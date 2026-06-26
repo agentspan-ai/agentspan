@@ -3,18 +3,12 @@
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.*;
 
 import org.conductoross.conductor.ai.Agent;
 import org.conductoross.conductor.ai.AgentConfig;
 import org.conductoross.conductor.ai.AgentRuntime;
 import org.conductoross.conductor.ai.annotations.Tool;
-import org.conductoross.conductor.ai.exceptions.AgentspanException;
 import org.conductoross.conductor.ai.internal.ToolRegistry;
 import org.conductoross.conductor.ai.model.AgentResult;
 import org.conductoross.conductor.ai.model.ToolContext;
@@ -22,36 +16,40 @@ import org.conductoross.conductor.ai.model.ToolDef;
 import org.junit.jupiter.api.*;
 
 /**
- * Suite 2 — runtime credential lifecycle, mirrors Python's test_suite2_tool_calling.py.
+ * Suite 2 — runtime credential lifecycle (standalone, no secret backend).
  *
- * <p>The Python/.NET/TS contract test is the canonical: every SDK with
- * runtime injection must verify the same four guarantees:
+ * <p>Secrets are delegated to the Orkes host via {@code ${workflow.secrets.NAME}}.
+ * Standalone/CI has NO secret backend and NO way to inject a secret value into a
+ * running tool, so the legacy "set a secret via /api/secrets and assert the tool
+ * received it" steps are no longer applicable. We keep the credential-independent
+ * guarantees:
  * <ol>
- *   <li>No cred in store → tool task TERMINAL-fails (no retries on config bug)</li>
- *   <li>Cred set via API → tool sees the stored value at runtime via {@code ctx.getCredential()}</li>
- *   <li>Cred updated via API → next run sees the new value (no token snapshotting)</li>
- *   <li>Cred deleted → tool task TERMINAL-fails again</li>
+ *   <li>A tool that needs NO credential runs and its task is COMPLETED.</li>
+ *   <li>A tool REQUIRING a credential, with no secret backend, does NOT succeed —
+ *       its task is in a non-COMPLETED failure state and the tool body never
+ *       produced its success output (env is not a silent fallback).</li>
  * </ol>
  *
- * <p>Java is tier-1-only — there's no env-injection mode to break, so the
- * "env vars not used as fallback" security check from Python's Step 3 is
- * structurally satisfied by language design. We test it explicitly anyway
- * (set a JVM-startup env var; verify the SDK doesn't surface it via
- * {@code ctx.getCredential()}).</p>
- *
- * <p>This is the test that would catch URL drift on {@code /api/workers/secrets},
- * silent-swallow regressions in {@code WorkerCredentialFetcher}, or any
- * future "tool gets the wrong value" bug.</p>
+ * <p>Java is tier-1-only — the SDK reads secrets only from the server, never from
+ * {@code System.getenv}, so the "env vars not used as fallback" security check is
+ * structurally satisfied by language design and asserted explicitly below.</p>
  */
 @Tag("e2e")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class Suite2ToolCallingCredentials extends BaseTest {
 
     private static final String CRED_A = "E2E_JAVA_CRED_A";
-    private static final HttpClient HTTP =
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     private static AgentRuntime runtime;
+
+    // ── Tool that needs NO credential ────────────────────────────────────────
+
+    public static class FreeTools {
+        @Tool(name = "free_tool", description = "Tool that needs no credential. Echoes its input.")
+        public Map<String, Object> freeTool(String x) {
+            return Map.of("echo", "free:" + x);
+        }
+    }
 
     // ── Tool that reads CRED_A via the Secrets accessor ──────────────────────
 
@@ -78,117 +76,73 @@ class Suite2ToolCallingCredentials extends BaseTest {
     @AfterAll
     static void teardown() {
         if (runtime != null) runtime.close();
-        deleteSecret(CRED_A);
     }
 
-    // ── Test: no cred in store → tool fails terminally ───────────────────────
+    // ── Test: tool needing no credential runs and COMPLETES ──────────────────
 
     @Test
     @Order(1)
-    void step1_noCredentialInStore_taskFailsTerminally() {
-        deleteSecret(CRED_A);
-
-        Agent agent = buildAgent();
-        AgentResult result = runtime.run(
-                agent, "Call paid_tool_a exactly once with the argument 'test' and report what it returns.");
+    void step1_noCredentialNeeded_taskCompletes() {
+        Agent agent = buildFreeAgent();
+        AgentResult result =
+                runtime.run(agent, "Call free_tool exactly once with the argument 'test' and report what it returns.");
 
         assertNotNull(result.getExecutionId(), "result must include an execution id");
 
-        // The paid tool task should be terminal-failed (or the overall run failed).
         Map<String, Object> wf = getWorkflow(result.getExecutionId());
-        Set<String> terminal = Set.of("FAILED_WITH_TERMINAL_ERROR", "COMPLETED_WITH_ERRORS");
-        Map<String, Object> paidTask = findToolTask(wf, "paid_tool_a");
-        assertNotNull(paidTask, "paid_tool_a task not found in workflow — run shape changed?");
-        String status = (String) paidTask.get("status");
-        assertTrue(
-                terminal.contains(status),
-                "Step 1 expected paid_tool_a status in " + terminal + ", got '" + status
-                        + "'. Missing credential is a config issue — retries are pointless.\n"
-                        + "  task=" + paidTask);
+        Map<String, Object> freeTask = findToolTask(wf, "free_tool");
+        assertNotNull(freeTask, "free_tool task not found in workflow — run shape changed?");
+        assertEquals(
+                "COMPLETED",
+                freeTask.get("status"),
+                "Step 1 expected free_tool COMPLETED, got '" + freeTask.get("status") + "'.\n" + "  task=" + freeTask);
     }
 
-    // ── Test: env var set but no cred in store → Java is tier-1; env is irrelevant ─
+    // ── Test: tool requiring a credential, no backend → does NOT succeed ──────
 
     @Test
     @Order(2)
-    void step2_envVarSetButNoStoreValue_envIsNotASilentFallback() {
-        // We can't temporarily mutate System.getenv (Java's env map is
-        // immutable). The fact that the JVM-startup env exists for CRED_A or
-        // doesn't is irrelevant — the SDK reads from the server only, never
-        // from env. Asserting the same property the Python test asserts:
-        // tool task must still fail terminally.
-        deleteSecret(CRED_A);
-
-        Agent agent = buildAgent();
+    void step2_credentialRequiredButNoBackend_taskDoesNotSucceed() {
+        // No secret backend exists in standalone, and the SDK reads secrets only
+        // from the server, never from System.getenv. So the paid tool must NOT
+        // succeed, and its body must NOT produce its success output ("paid_a:").
+        Agent agent = buildPaidAgent();
         AgentResult result =
                 runtime.run(agent, "Call paid_tool_a exactly once with 'test' and report what it returns.");
 
         Map<String, Object> wf = getWorkflow(result.getExecutionId());
         Map<String, Object> paidTask = findToolTask(wf, "paid_tool_a");
-        Set<String> terminal = Set.of("FAILED_WITH_TERMINAL_ERROR", "COMPLETED_WITH_ERRORS");
-        assertTrue(
-                terminal.contains(paidTask.get("status")),
-                "Java SDK reads secrets only from the server, never from System.getenv. " + "Got status='"
-                        + paidTask.get("status") + "'.");
+        assertNotNull(paidTask, "paid_tool_a task not found in workflow — run shape changed?");
 
-        // Also: the output should NOT contain anything from System.getenv.
-        // (Tool body never runs when credential missing, but defense in depth.)
+        Set<String> failure = Set.of("FAILED", "FAILED_WITH_TERMINAL_ERROR", "COMPLETED_WITH_ERRORS", "TERMINATED");
+        String status = (String) paidTask.get("status");
+        assertTrue(
+                failure.contains(status),
+                "Step 2 expected paid_tool_a status in " + failure + ", got '" + status
+                        + "'. Missing credential with no backend must not succeed.\n"
+                        + "  task=" + paidTask);
+
+        // Env is not a silent fallback: the tool body must not have produced its
+        // success output.
         String output = String.valueOf(paidTask.get("outputData"));
-        assertFalse(output.contains("paid_a:"), "tool body should not have run when credential is missing");
-    }
-
-    // ── Test: cred set via API → tool runs and sees the stored value ─────────
-
-    @Test
-    @Order(3)
-    void step3_credentialSet_toolReceivesStoredValue() {
-        putSecret(CRED_A, "secret-aaa-value");
-
-        Agent agent = buildAgent();
-        AgentResult result =
-                runtime.run(agent, "Call paid_tool_a exactly once with 'test' and report what it returns.");
-
-        Map<String, Object> wf = getWorkflow(result.getExecutionId());
-        Map<String, Object> paidTask = findToolTask(wf, "paid_tool_a");
-        assertEquals(
-                "COMPLETED",
-                paidTask.get("status"),
-                "Step 3 expected paid_tool_a COMPLETED, got '" + paidTask.get("status") + "'.\n" + "  task="
-                        + paidTask);
-
-        String taskOutput = String.valueOf(paidTask.get("outputData"));
-        assertTrue(
-                taskOutput.contains("sec"),
-                "paid_tool_a output should contain 'sec' (first 3 chars of 'secret-aaa-value').\n" + "  outputData="
-                        + taskOutput);
-    }
-
-    // ── Test: cred updated → next run reflects new value ─────────────────────
-
-    @Test
-    @Order(4)
-    void step4_credentialUpdated_nextRunSeesNewValue() {
-        putSecret(CRED_A, "newval-xxx-updated");
-
-        Agent agent = buildAgent();
-        AgentResult result =
-                runtime.run(agent, "Call paid_tool_a exactly once with 'test' and report what it returns.");
-
-        Map<String, Object> wf = getWorkflow(result.getExecutionId());
-        Map<String, Object> paidTask = findToolTask(wf, "paid_tool_a");
-        assertEquals("COMPLETED", paidTask.get("status"));
-
-        String taskOutput = String.valueOf(paidTask.get("outputData"));
-        assertTrue(
-                taskOutput.contains("new"),
-                "Step 4 expected paid_tool_a output to contain 'new' (first 3 chars of "
-                        + "'newval-xxx-updated'). The update didn't propagate.\n"
-                        + "  outputData=" + taskOutput);
+        assertFalse(output.contains("paid_a:"), "tool body should not have produced its success output");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private Agent buildAgent() {
+    private Agent buildFreeAgent() {
+        List<ToolDef> tools = ToolRegistry.fromInstance(new FreeTools());
+        return Agent.builder()
+                .name("e2e_java_free_tool")
+                .model(MODEL)
+                .instructions("You have one tool: free_tool. You MUST call it exactly once "
+                        + "with the argument 'test'. Then report its output verbatim.")
+                .tools(tools)
+                .maxTurns(3)
+                .build();
+    }
+
+    private Agent buildPaidAgent() {
         List<ToolDef> tools = ToolRegistry.fromInstance(new PaidGithubTools());
         return Agent.builder()
                 .name("e2e_java_cred_lifecycle")
@@ -212,38 +166,5 @@ class Suite2ToolCallingCredentials extends BaseTest {
             }
         }
         return null;
-    }
-
-    private static void putSecret(String name, String value) {
-        try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(BASE_URL + "/api/secrets/"
-                            + java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8)))
-                    .timeout(Duration.ofSeconds(10))
-                    .header("Content-Type", "text/plain")
-                    .PUT(HttpRequest.BodyPublishers.ofString(value))
-                    .build();
-            HttpResponse<String> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() >= 400) {
-                throw new AgentspanException(
-                        "PUT /api/secrets/" + name + " failed: HTTP " + resp.statusCode() + " " + resp.body());
-            }
-        } catch (Exception e) {
-            fail("putSecret(" + name + ") failed: " + e);
-        }
-    }
-
-    private static void deleteSecret(String name) {
-        try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(BASE_URL + "/api/secrets/"
-                            + java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8)))
-                    .timeout(Duration.ofSeconds(10))
-                    .DELETE()
-                    .build();
-            HTTP.send(req, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception ignored) {
-            // best-effort
-        }
     }
 }

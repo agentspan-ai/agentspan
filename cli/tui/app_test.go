@@ -146,9 +146,8 @@ func TestNumberJumpsToView(t *testing.T) {
 		{"3", ViewExecutions},
 		{"4", ViewServer},
 		{"5", ViewSkills},
-		{"6", ViewCredentials},
-		{"7", ViewDoctor},
-		{"8", ViewConfigure},
+		{"6", ViewDoctor},
+		{"7", ViewConfigure},
 	}
 	for _, tt := range tests {
 		m := newTestApp()

@@ -1,18 +1,21 @@
-"""Suite 4: MCP Tools — discovery, execution, and authenticated access.
+"""Suite 4: MCP Tools — unauthenticated discovery and execution.
 
 Tests MCP tool integration end-to-end:
   1. Unauthenticated: discover all 65 tools, execute 3 specific tools
-  2. Authenticated: credential-based access, same discovery and execution
+
+The authenticated (credential-injected) phase has been removed: secrets are
+delegated to the Orkes host via ``${workflow.secrets.NAME}`` and standalone/CI
+has no secret backend to inject a credential value into a running tool.
 
 Manages its own mcp-testkit instance on a dedicated port.
 Single sequential test with try/finally cleanup.
-No mocks. Real server, real CLI, real LLM.
+No mocks. Real server, real LLM.
 """
 
 import asyncio
+import inspect
 import os
 import re
-import inspect
 import subprocess
 import time
 
@@ -31,11 +34,10 @@ pytestmark = [
 MCP_PORT = 3002  # Dedicated port — avoids conflict with orchestrator's 3001
 MCP_BASE_URL = f"http://localhost:{MCP_PORT}"
 MCP_SERVER_URL = f"{MCP_BASE_URL}/mcp"
-MCP_AUTH_KEY = "e2e-test-secret-key-12345"
-CRED_NAME = "MCP_AUTH_KEY"
 TIMEOUT = 120
 
 # ── Expected tools (from mcp-testkit source) ─────────────────────────────
+
 
 def _expected_tools_from_source():
     """Dynamically compute expected tool names from mcp-testkit source."""
@@ -77,9 +79,7 @@ def _start_mcp_server(port, auth_key=None):
     while time.time() < deadline:
         if proc.poll() is not None:
             stderr = proc.stderr.read().decode() if proc.stderr else ""
-            raise RuntimeError(
-                f"mcp-testkit exited with code {proc.returncode}: {stderr}"
-            )
+            raise RuntimeError(f"mcp-testkit exited with code {proc.returncode}: {stderr}")
         try:
             requests.post(MCP_BASE_URL, json={}, timeout=2)
             return proc  # Any response means server is up
@@ -109,17 +109,15 @@ def _discover_tools_via_mcp(server_url, auth_key=None):
 
     Returns a sorted list of tool names.
     """
-    from mcp.client.streamable_http import streamablehttp_client
     from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
 
     async def _inner():
         headers = {}
         if auth_key:
             headers["Authorization"] = f"Bearer {auth_key}"
 
-        async with streamablehttp_client(
-            server_url, headers=headers
-        ) as (read, write, _):
+        async with streamablehttp_client(server_url, headers=headers) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.list_tools()
@@ -153,23 +151,6 @@ def _make_agent(model, server_url):
     )
     return Agent(
         name="e2e_mcp_unauth",
-        model=model,
-        instructions=AGENT_INSTRUCTIONS,
-        tools=[mt],
-    )
-
-
-def _make_auth_agent(model, server_url, cred_name):
-    """Agent with authenticated MCP tools (credential in headers)."""
-    mt = mcp_tool(
-        server_url=server_url,
-        name="test_mcp_auth",
-        description="Authenticated MCP test tools",
-        headers={"Authorization": f"Bearer ${{{cred_name}}}"},
-        credentials=[cred_name],
-    )
-    return Agent(
-        name="e2e_mcp_auth",
         model=model,
         instructions=AGENT_INSTRUCTIONS,
         tools=[mt],
@@ -318,18 +299,14 @@ def _assert_run_completed(result, step_name):
             f"  {diag}"
         )
 
-    assert result.status == "COMPLETED", (
-        f"[{step_name}] Run did not complete. {diag}"
-    )
+    assert result.status == "COMPLETED", f"[{step_name}] Run did not complete. {diag}"
 
 
 def _validate_tool_execution(result, step_name):
     """Validate that the 3 test tools executed successfully via workflow tasks."""
     _assert_run_completed(result, step_name)
 
-    tool_tasks, all_refs = _find_mcp_tool_tasks(
-        result.execution_id, TEST_TOOL_NAMES
-    )
+    tool_tasks, all_refs = _find_mcp_tool_tasks(result.execution_id, TEST_TOOL_NAMES)
 
     # Dump CALL_MCP_TOOL tasks for diagnostics if tools not found
     mcp_task_dump = _dump_mcp_tasks(result.execution_id)
@@ -362,10 +339,10 @@ def _validate_tool_execution(result, step_name):
 
 @pytest.mark.timeout(600)
 class TestSuite4McpTools:
-    """MCP tools: discovery, execution, and authenticated access."""
+    """MCP tools: unauthenticated discovery and execution."""
 
-    def test_mcp_lifecycle(self, runtime, cli_credentials, model):
-        """Full MCP lifecycle — unauthenticated → authenticated."""
+    def test_mcp_lifecycle(self, runtime, model):
+        """Unauthenticated MCP discovery + execution."""
         # Verify mcp-testkit is installed
         try:
             subprocess.run(
@@ -375,20 +352,14 @@ class TestSuite4McpTools:
                 timeout=5,
             )
         except FileNotFoundError:
-            pytest.skip(
-                "mcp-testkit not installed — required for Suite 4 MCP tools test"
-            )
+            pytest.skip("mcp-testkit not installed — required for Suite 4 MCP tools test")
 
+        self._run_lifecycle(runtime, model)
+
+    def _run_lifecycle(self, runtime, model):
         server_proc = None
         try:
-            self._run_lifecycle(runtime, cli_credentials, model)
-        finally:
-            cli_credentials.delete(CRED_NAME)
-
-    def _run_lifecycle(self, runtime, cli_credentials, model):
-        server_proc = None
-        try:
-            # ── Phase 1: Unauthenticated ──────────────────────────────
+            # ── Unauthenticated discovery + execution ─────────────────
 
             # Step d: Start MCP server without auth
             server_proc = _start_mcp_server(MCP_PORT)
@@ -396,13 +367,13 @@ class TestSuite4McpTools:
             # Step e: Discover tools, validate all are present
             discovered = _discover_tools_via_mcp(MCP_SERVER_URL)
             assert len(discovered) == EXPECTED_TOOL_COUNT, (
-                f"[Phase 1: Discovery] Expected {EXPECTED_TOOL_COUNT} tools, "
+                f"[Discovery] Expected {EXPECTED_TOOL_COUNT} tools, "
                 f"discovered {len(discovered)}.\n"
                 f"  Missing: {sorted(set(EXPECTED_TOOL_NAMES) - set(discovered))}\n"
                 f"  Extra: {sorted(set(discovered) - set(EXPECTED_TOOL_NAMES))}"
             )
             assert set(discovered) == set(EXPECTED_TOOL_NAMES), (
-                f"[Phase 1: Discovery] Tool names mismatch.\n"
+                f"[Discovery] Tool names mismatch.\n"
                 f"  Missing: {sorted(set(EXPECTED_TOOL_NAMES) - set(discovered))}\n"
                 f"  Extra: {sorted(set(discovered) - set(EXPECTED_TOOL_NAMES))}"
             )
@@ -410,47 +381,7 @@ class TestSuite4McpTools:
             # Steps b+c+f: Create agent, run with 3 tools, validate
             agent = _make_agent(model, MCP_SERVER_URL)
             result = runtime.run(agent, PROMPT_USE_3_TOOLS, timeout=TIMEOUT)
-            _validate_tool_execution(result, "Phase 1: Unauthenticated execution")
-
-            # ── Phase 2: Authenticated ────────────────────────────────
-
-            # Step g: Stop server, restart with auth
-            _stop_mcp_server(server_proc)
-            server_proc = None
-            time.sleep(1)  # Let port release
-            server_proc = _start_mcp_server(MCP_PORT, auth_key=MCP_AUTH_KEY)
-
-            # Verify auth is enforced — unauthenticated call should fail
-            with pytest.raises(Exception):
-                _discover_tools_via_mcp(MCP_SERVER_URL)
-
-            # Step h: Create auth agent with credential placeholder
-            auth_agent = _make_auth_agent(model, MCP_SERVER_URL, CRED_NAME)
-
-            # Step i: Set credential via CLI
-            cli_credentials.set(CRED_NAME, MCP_AUTH_KEY)
-
-            # Step j: Discover tools with auth, validate all present
-            discovered_auth = _discover_tools_via_mcp(
-                MCP_SERVER_URL, auth_key=MCP_AUTH_KEY
-            )
-            assert len(discovered_auth) == EXPECTED_TOOL_COUNT, (
-                f"[Phase 2: Auth Discovery] Expected {EXPECTED_TOOL_COUNT} tools, "
-                f"discovered {len(discovered_auth)}."
-            )
-            assert set(discovered_auth) == set(EXPECTED_TOOL_NAMES), (
-                f"[Phase 2: Auth Discovery] Tool names mismatch.\n"
-                f"  Missing: {sorted(set(EXPECTED_TOOL_NAMES) - set(discovered_auth))}\n"
-                f"  Extra: {sorted(set(discovered_auth) - set(EXPECTED_TOOL_NAMES))}"
-            )
-
-            # Step k: Execute and validate
-            result_auth = runtime.run(
-                auth_agent, PROMPT_USE_3_TOOLS, timeout=TIMEOUT
-            )
-            _validate_tool_execution(
-                result_auth, "Phase 2: Authenticated execution"
-            )
+            _validate_tool_execution(result, "Unauthenticated execution")
 
         finally:
             if server_proc:

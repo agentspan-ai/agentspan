@@ -1,18 +1,19 @@
-"""Suite 5: HTTP Tools — API discovery, execution, and authenticated access.
+"""Suite 5: HTTP Tools — API discovery and execution.
 
 Tests HTTP/API tool integration end-to-end:
   1. Unauthenticated: discover all 65 tools via OpenAPI spec, execute 3
-  2. Authenticated: credential-based access, same discovery and execution
-  3. External OpenAPI spec: validate agent discovers startWorkflow operation
+  2. External OpenAPI spec: validate agent discovers startWorkflow operation
+
+The authenticated (credential-injected) phase has been removed: secrets are
+delegated to the Orkes host via ``${workflow.secrets.NAME}`` and standalone/CI
+has no secret backend to inject a credential value into a running tool.
 
 Manages its own mcp-testkit instance on a dedicated port.
 Single sequential test with try/finally cleanup.
-No mocks. Real server, real CLI, real LLM.
+No mocks. Real server, real LLM.
 """
 
-import inspect
 import os
-import re
 import subprocess
 import time
 
@@ -31,8 +32,6 @@ pytestmark = [
 HTTP_PORT = 3003  # Dedicated port — avoids conflict with 3001 (orchestrator) / 3002 (Suite 4)
 HTTP_BASE_URL = f"http://localhost:{HTTP_PORT}"
 HTTP_SPEC_URL = f"{HTTP_BASE_URL}/api-docs"
-HTTP_AUTH_KEY = "e2e-http-test-secret-key-67890"
-CRED_NAME = "HTTP_AUTH_KEY"
 TIMEOUT = 120
 
 ORKES_SPEC_URL = "https://developer.orkescloud.com/api-docs"
@@ -74,9 +73,7 @@ def _start_http_server(port, auth_key=None):
     while time.time() < deadline:
         if proc.poll() is not None:
             stderr = proc.stderr.read().decode() if proc.stderr else ""
-            raise RuntimeError(
-                f"mcp-testkit exited with code {proc.returncode}: {stderr}"
-            )
+            raise RuntimeError(f"mcp-testkit exited with code {proc.returncode}: {stderr}")
         try:
             requests.get(f"http://localhost:{port}/api-docs", timeout=2)
             return proc  # OpenAPI spec responding means server is up
@@ -195,17 +192,6 @@ def _make_agent(model, base_url):
         model=model,
         instructions=AGENT_INSTRUCTIONS,
         tools=_make_http_tools(base_url),
-    )
-
-
-def _make_auth_agent(model, base_url, cred_name):
-    """Agent with authenticated HTTP tools (credential in headers)."""
-    headers = {"Authorization": f"Bearer ${{{cred_name}}}"}
-    return Agent(
-        name="e2e_http_auth",
-        model=model,
-        instructions=AGENT_INSTRUCTIONS,
-        tools=_make_http_tools(base_url, headers=headers, credentials=[cred_name]),
     )
 
 
@@ -404,18 +390,14 @@ def _assert_run_completed(result, step_name):
             f"  {diag}"
         )
 
-    assert result.status == "COMPLETED", (
-        f"[{step_name}] Run did not complete. {diag}"
-    )
+    assert result.status == "COMPLETED", f"[{step_name}] Run did not complete. {diag}"
 
 
 def _validate_tool_execution(result, step_name):
     """Validate that the 3 test tools executed successfully via workflow tasks."""
     _assert_run_completed(result, step_name)
 
-    tool_tasks, all_refs = _find_http_tool_tasks(
-        result.execution_id, TEST_TOOL_NAMES
-    )
+    tool_tasks, all_refs = _find_http_tool_tasks(result.execution_id, TEST_TOOL_NAMES)
 
     # Dump HTTP tasks for diagnostics if tools not found
     http_task_dump = _dump_http_tasks(result.execution_id)
@@ -448,10 +430,10 @@ def _validate_tool_execution(result, step_name):
 
 @pytest.mark.timeout(600)
 class TestSuite5HttpTools:
-    """HTTP tools: API discovery, execution, and authenticated access."""
+    """HTTP tools: API discovery and execution."""
 
-    def test_http_lifecycle(self, runtime, cli_credentials, model):
-        """Full HTTP lifecycle — unauthenticated → authenticated."""
+    def test_http_lifecycle(self, runtime, model):
+        """Unauthenticated HTTP discovery + execution."""
         try:
             subprocess.run(
                 ["mcp-testkit", "--help"],
@@ -460,20 +442,14 @@ class TestSuite5HttpTools:
                 timeout=5,
             )
         except FileNotFoundError:
-            pytest.skip(
-                "mcp-testkit not installed — required for Suite 5 HTTP tools test"
-            )
+            pytest.skip("mcp-testkit not installed — required for Suite 5 HTTP tools test")
 
+        self._run_lifecycle(runtime, model)
+
+    def _run_lifecycle(self, runtime, model):
         server_proc = None
         try:
-            self._run_lifecycle(runtime, cli_credentials, model)
-        finally:
-            cli_credentials.delete(CRED_NAME)
-
-    def _run_lifecycle(self, runtime, cli_credentials, model):
-        server_proc = None
-        try:
-            # ── Phase 1: Unauthenticated ──────────────────────────────
+            # ── Unauthenticated discovery + execution ─────────────────
 
             # Step d: Start HTTP server without auth
             server_proc = _start_http_server(HTTP_PORT)
@@ -481,13 +457,13 @@ class TestSuite5HttpTools:
             # Step e: Discover tools via OpenAPI spec, validate all present
             discovered = _discover_tools_via_openapi(HTTP_SPEC_URL)
             assert len(discovered) == EXPECTED_TOOL_COUNT, (
-                f"[Phase 1: Discovery] Expected {EXPECTED_TOOL_COUNT} tools, "
+                f"[Discovery] Expected {EXPECTED_TOOL_COUNT} tools, "
                 f"discovered {len(discovered)}.\n"
                 f"  Missing: {sorted(set(EXPECTED_TOOL_NAMES) - set(discovered))}\n"
                 f"  Extra: {sorted(set(discovered) - set(EXPECTED_TOOL_NAMES))}"
             )
             assert set(discovered) == set(EXPECTED_TOOL_NAMES), (
-                f"[Phase 1: Discovery] Tool names mismatch.\n"
+                f"[Discovery] Tool names mismatch.\n"
                 f"  Missing: {sorted(set(EXPECTED_TOOL_NAMES) - set(discovered))}\n"
                 f"  Extra: {sorted(set(discovered) - set(EXPECTED_TOOL_NAMES))}"
             )
@@ -495,50 +471,7 @@ class TestSuite5HttpTools:
             # Steps b+c+f: Create agent, run with 3 tools, validate
             agent = _make_agent(model, HTTP_BASE_URL)
             result = runtime.run(agent, PROMPT_USE_3_TOOLS, timeout=TIMEOUT)
-            _validate_tool_execution(result, "Phase 1: Unauthenticated execution")
-
-            # ── Phase 2: Authenticated ────────────────────────────────
-
-            # Step g: Stop server, restart with auth
-            _stop_http_server(server_proc)
-            server_proc = None
-            time.sleep(1)  # Let port release
-            server_proc = _start_http_server(HTTP_PORT, auth_key=HTTP_AUTH_KEY)
-
-            # Verify auth is enforced — unauthenticated spec fetch should fail
-            unauth_resp = requests.get(HTTP_SPEC_URL, timeout=5)
-            assert unauth_resp.status_code in (401, 403), (
-                f"[Phase 2: Auth check] Expected 401/403 without auth, "
-                f"got {unauth_resp.status_code}"
-            )
-
-            # Step h: Create auth agent with credential placeholder
-            auth_agent = _make_auth_agent(model, HTTP_BASE_URL, CRED_NAME)
-
-            # Step i: Set credential via CLI
-            cli_credentials.set(CRED_NAME, HTTP_AUTH_KEY)
-
-            # Step j: Discover tools with auth, validate all present
-            discovered_auth = _discover_tools_via_openapi(
-                HTTP_SPEC_URL, auth_key=HTTP_AUTH_KEY
-            )
-            assert len(discovered_auth) == EXPECTED_TOOL_COUNT, (
-                f"[Phase 2: Auth Discovery] Expected {EXPECTED_TOOL_COUNT} tools, "
-                f"discovered {len(discovered_auth)}."
-            )
-            assert set(discovered_auth) == set(EXPECTED_TOOL_NAMES), (
-                f"[Phase 2: Auth Discovery] Tool names mismatch.\n"
-                f"  Missing: {sorted(set(EXPECTED_TOOL_NAMES) - set(discovered_auth))}\n"
-                f"  Extra: {sorted(set(discovered_auth) - set(EXPECTED_TOOL_NAMES))}"
-            )
-
-            # Step k: Execute and validate
-            result_auth = runtime.run(
-                auth_agent, PROMPT_USE_3_TOOLS, timeout=TIMEOUT
-            )
-            _validate_tool_execution(
-                result_auth, "Phase 2: Authenticated execution"
-            )
+            _validate_tool_execution(result, "Unauthenticated execution")
 
         finally:
             if server_proc:
@@ -558,9 +491,7 @@ class TestSuite5HttpTools:
             spec_resp.raise_for_status()
             spec = spec_resp.json()
         except Exception as e:
-            pytest.skip(
-                f"Orkes API spec not reachable at {ORKES_SPEC_URL}: {e}"
-            )
+            pytest.skip(f"Orkes API spec not reachable at {ORKES_SPEC_URL}: {e}")
 
         # ── Algorithmic validation: startWorkflow exists at /api/workflow
         found = False
@@ -568,8 +499,7 @@ class TestSuite5HttpTools:
             for method, op in methods.items():
                 if isinstance(op, dict) and op.get("operationId") == "startWorkflow":
                     assert "/workflow" in path, (
-                        f"[External OpenAPI] startWorkflow found but at "
-                        f"unexpected path: {path}"
+                        f"[External OpenAPI] startWorkflow found but at unexpected path: {path}"
                     )
                     found = True
         assert found, (
@@ -600,9 +530,7 @@ class TestSuite5HttpTools:
             timeout=TIMEOUT,
         )
 
-        assert result.execution_id, (
-            f"[External OpenAPI] No execution_id. {_run_diagnostic(result)}"
-        )
+        assert result.execution_id, f"[External OpenAPI] No execution_id. {_run_diagnostic(result)}"
         # Accept any terminal status — agent may fail without Orkes credentials
         assert result.status in ("COMPLETED", "FAILED", "TERMINATED"), (
             f"[External OpenAPI] Expected terminal status, "

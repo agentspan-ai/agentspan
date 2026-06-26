@@ -114,9 +114,8 @@ func TestE2ENavNumberShortcuts(t *testing.T) {
 		{"3", ViewExecutions},
 		{"4", ViewServer},
 		{"5", ViewSkills},
-		{"6", ViewCredentials},
-		{"7", ViewDoctor},
-		{"8", ViewConfigure},
+		{"6", ViewDoctor},
+		{"7", ViewConfigure},
 	}
 	for _, tc := range cases {
 		tc := tc // capture
@@ -661,103 +660,6 @@ func TestE2EServerRRefresh(t *testing.T) {
 	}
 }
 
-// ─── 6. Credentials ──────────────────────────────────────────────────────────
-
-func TestE2ECredentialsRendered(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	out := eout(m)
-	ehas(t, "secrets", out, "Secrets")
-}
-
-func TestE2ECredentialsButtonBar(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	if m.credentials.BtnCursor() != -1 {
-		t.Errorf("initial btnCursor=%d, want -1", m.credentials.BtnCursor())
-	}
-	m = esend(m, espec(tea.KeyDown)) // past empty list
-	if m.credentials.BtnCursor() != 0 {
-		t.Errorf("↓: btnCursor=%d, want 0", m.credentials.BtnCursor())
-	}
-	m = esend(m, espec(tea.KeyRight))
-	if m.credentials.BtnCursor() != 1 {
-		t.Errorf("→: btnCursor=%d, want 1", m.credentials.BtnCursor())
-	}
-	m = esend(m, espec(tea.KeyLeft))
-	if m.credentials.BtnCursor() != 0 {
-		t.Errorf("←: btnCursor=%d, want 0", m.credentials.BtnCursor())
-	}
-	m = esend(m, espec(tea.KeyUp))
-	if m.credentials.BtnCursor() != -1 {
-		t.Errorf("↑: btnCursor=%d, want -1", m.credentials.BtnCursor())
-	}
-}
-
-func TestE2ECredentialsAddForm(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	m = esend(m, "a")
-	if !m.credentials.AddMode() {
-		t.Fatal("a: should open add form")
-	}
-	if !m.credentials.FormActive() {
-		t.Error("FormActive() should be true after 'a'")
-	}
-	if !m.activeViewWantsAllKeys() {
-		t.Error("activeViewWantsAllKeys() should be true")
-	}
-}
-
-func TestE2ECredentialsAddFormEsc(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	m = esend(m, "a")
-	if !m.credentials.AddMode() {
-		t.Skip("add form not opened")
-	}
-	// huh form esc behavior depends on field state; try up to 5 times
-	for i := 0; i < 5; i++ {
-		if !m.credentials.AddMode() {
-			return // closed
-		}
-		m = esend(m, espec(tea.KeyEscape))
-	}
-	if m.credentials.AddMode() {
-		t.Logf("add form not closed after 5 esc presses — huh behaviour is implementation-dependent")
-		t.Skip("skipping strict assertion on huh form esc")
-	}
-}
-
-func TestE2ECredentialsDeleteConfirm(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	m = esend(m, "d") // no creds → no confirm
-	if m.credentials.DelConfirm() {
-		t.Error("d with no creds should not confirm")
-	}
-	tmpC := m.credentials
-	tmpC.InjectCred("OPENAI_API_KEY")
-	m.credentials = tmpC
-	m = esend(m, "d")
-	if !m.credentials.DelConfirm() {
-		t.Error("d with cred should confirm")
-	}
-	m = esend(m, "N")
-	if m.credentials.DelConfirm() {
-		t.Error("N should cancel")
-	}
-}
-
-func TestE2ECredentialsRRefresh(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	tmpCS := m.credentials
-	tmpCS.SetSuccess("done")
-	m.credentials = tmpCS
-	m = esend(m, "R")
-	if m.credentials.Success() != "" {
-		t.Error("R should clear success")
-	}
-	if !m.credentials.Loading() {
-		t.Error("R should set loading=true")
-	}
-}
-
 // ─── 7. Configure ─────────────────────────────────────────────────────────────
 
 func TestE2EConfigureRendered(t *testing.T) {
@@ -838,7 +740,7 @@ func TestE2EHelpFromAllViews(t *testing.T) {
 	}{
 		{ViewDashboard, "dashboard"}, {ViewAgents, "agents"},
 		{ViewExecutions, "executions"}, {ViewServer, "server"},
-		{ViewCredentials, "secrets"}, {ViewDoctor, "doctor"},
+		{ViewDoctor, "doctor"},
 		{ViewSkills, "skills"},
 	}
 	for _, v := range all {
@@ -896,7 +798,7 @@ func TestE2EWindowResizePropagates(t *testing.T) {
 	}
 
 	// Navigate to a new view using the current dimensions (not esz() which is 220×50)
-	r2, _ := m.Update(NavSelectMsg{View: ViewCredentials})
+	r2, _ := m.Update(NavSelectMsg{View: ViewDoctor})
 	m2 := r2.(*AppModel)
 	// Propagate size to the new view
 	r3, _ := m2.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -916,14 +818,14 @@ func TestE2EWindowResizePropagates(t *testing.T) {
 
 func TestE2ECrossViewNumberJumpAlwaysFocusesContent(t *testing.T) {
 	m := ebaseApp(t)
-	for _, k := range []string{"1", "2", "3", "4", "5", "6", "7", "8"} {
+	for _, k := range []string{"1", "2", "3", "4", "5", "6", "7"} {
 		m2 := esend(m, k)
 		efocused(t, "key "+k+" focused", m2, true)
 	}
 }
 
 func TestE2ECrossViewEscReturnsSidebar(t *testing.T) {
-	for _, v := range []ViewID{ViewAgents, ViewServer, ViewCredentials} {
+	for _, v := range []ViewID{ViewAgents, ViewServer, ViewDoctor} {
 		t.Run("", func(t *testing.T) {
 			m := enavTo(t, ebaseApp(t), v)
 			efocused(t, "after nav", m, true)
