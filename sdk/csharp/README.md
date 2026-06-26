@@ -183,14 +183,14 @@ dotnet run --project examples/08_RouterAgent
 Or build the whole solution:
 
 ```bash
-dotnet build Conductor.AI.sln
+dotnet build Agentspan.sln
 ```
 
 ## Project Structure
 
 ```
 sdk/csharp/
-├── Conductor.AI.sln
+├── Agentspan.sln
 ├── src/
 │   └── Conductor.AI/
 │       ├── Conductor.AI.csproj
