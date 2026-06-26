@@ -10,15 +10,25 @@ AND the poll-time-injection (`WorkerSecretPollAdvice`) model that briefly preced
 
 ## TL;DR
 
-When **embedded** in a host (orkes-conductor), AgentSpan resolves **no** credentials
-itself. Every credential need — LLM provider keys, MCP/HTTP headers, and SDK
-worker-tool secrets — is expressed as a Conductor-native `${workflow.secrets.NAME}`
-reference physically present in **task input**. The host resolves these just-in-time
-(never persisting the plaintext) exactly as it does for any other workflow.
+AgentSpan adds **nothing custom** for secrets. It only emits Conductor-native
+`${workflow.secrets.NAME}` references into **task input** and relies **entirely** on
+**Orkes-Conductor's existing secret mechanism** to resolve them just-in-time (never
+persisting the plaintext), exactly as Orkes does for any other workflow. There is no
+agentspan credential store, secrets API, token, or in-process resolution.
 
-**Standalone** (OSS) is deliberately **non-secure**: there is no credential store, no
-secrets API, no in-process resolution. Worker tools simply receive no secrets. Security
-exists only when deployed inside a host that owns a secret store.
+Because the resolution mechanism is Orkes-Conductor's — not ours, and not part of OSS
+Conductor — secrets work in **exactly one** deployment:
+
+| Deployment | `agentspan.embedded` | Secret resolution | Tools get secrets? |
+|---|---|---|---|
+| **Embedded in Orkes-Conductor** | `true` | Orkes' `${workflow.secrets}` store + JIT substitution | **Yes** |
+| **Embedded in OSS Conductor** | `true` | none — OSS Conductor has no `${workflow.secrets}` store | **No** |
+| **Standalone** | `false` | none — references not even stamped | **No** |
+
+In the two "No" rows the references are simply never substituted, so worker tools and
+in-process tasks receive no usable secret. This is **deliberate**: security exists only
+when deployed inside Orkes-Conductor, the one host that owns a secret store. OSS-embedded
+and standalone are non-secure by design — there is nothing to operate or secure.
 
 ---
 
@@ -41,13 +51,19 @@ This branch went through several iterations before arriving at the current desig
 
 The guiding principle that ended the iteration:
 
-> When embedded, the host is the authority for secrets. AgentSpan should resolve
-> nothing in-process — it should only emit `${workflow.secrets.NAME}` references and
-> let the host substitute them just-in-time, the same way it does for every other task.
+> Orkes-Conductor already has a secret mechanism. AgentSpan should add **nothing** of its
+> own — no store, no endpoint, no token, no in-process resolution. It should only emit
+> `${workflow.secrets.NAME}` references and let Orkes-Conductor substitute them just-in-time,
+> the same way Orkes does for every other task. Where that mechanism is absent (OSS Conductor,
+> standalone), there are simply no secrets — and that is acceptable.
 
 ---
 
 ## 2. How the host resolves references (verified in orkes-conductor)
+
+Everything below is **Orkes-Conductor** machinery (`TaskResource`, `prepareTaskWithSecrets`,
+`OrkesWorkflowExecutor`, `PostgresSecretsDAO`) — it does not exist in OSS Conductor. This is
+the existing mechanism we leverage as-is; AgentSpan contributes none of it.
 
 - **In-process system tasks** (`LLM_CHAT_COMPLETE`, MCP, HTTP): `OrkesWorkflowExecutor`
   calls `substituteSecret(inputData)` immediately before `start()`/`execute()` and then
@@ -185,10 +201,16 @@ sequenceDiagram
 - **Fail-loud on missing API key.** The LLM `apiKey` reference is stamped unconditionally
   in embedded; if the secret is absent the task fails with a clear host error rather than
   silently degrading.
-- **Standalone is non-secure by design.** No store, no resolution, no secrets API. Worker
-  tools get no secrets; MCP/HTTP `#{NAME}`/literal placeholders are left unresolved.
-- **Assumption:** the embedded host runs `securityEnabled=true` (required for `_createdBy`
-  stamping → worker-tool poll-path resolution).
+- **Secrets require Orkes-Conductor specifically.** The `EmbeddedMode.isEmbedded()` gate
+  stamps `${workflow.secrets.NAME}` references whenever `agentspan.embedded=true`, but only
+  Orkes-Conductor owns the store + just-in-time substitution that resolves them. Embedded in
+  **OSS Conductor** the references are stamped yet never substituted, so tools receive no
+  usable secret — the same effective outcome as standalone, reached a different way.
+- **Standalone is non-secure by design.** No store, no resolution, no secrets API; references
+  are not even stamped. Worker tools get no secrets; MCP/HTTP `#{NAME}`/literal placeholders
+  are left unresolved.
+- **Assumption (Orkes-embedded):** the host runs `securityEnabled=true` (required for
+  `_createdBy` stamping → worker-tool poll-path resolution).
 
 ---
 
@@ -213,10 +235,14 @@ sequenceDiagram
 
 ## 8. Why this is the right shape
 
-- **The host is the authority.** Embedded AgentSpan resolves nothing — it emits
-  Conductor-native references and the host substitutes them just-in-time, the same way it
-  does for every other task. No agentspan-specific endpoint, token, or in-process store.
+- **Reuse Orkes-Conductor's existing mechanism; add nothing.** AgentSpan resolves nothing —
+  it emits Conductor-native references and Orkes-Conductor substitutes them just-in-time, the
+  same way it does for every other task. No agentspan-specific endpoint, token, store, or
+  in-process resolution to build, operate, or secure.
 - **Every start path works** (SDK, webhook, UI, schedule) because identity is the
   workflow's own `createdBy`/org, not a token someone had to mint and thread in.
-- **Standalone stays simple** — deliberately non-secure, with no store to operate or secure.
+- **OSS-embedded and standalone stay simple** — deliberately non-secure. Where Orkes'
+  mechanism is absent, references are never substituted (OSS-embedded) or never stamped
+  (standalone), and tools get no secrets. Security is a property of running inside
+  Orkes-Conductor, not of AgentSpan.
 ```
