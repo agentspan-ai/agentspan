@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime, tool, getCredential } from '@conductoross/conductor-ai-sdk';
+import { Agent, AgentRuntime, tool, getCredential } from '@conductoross/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

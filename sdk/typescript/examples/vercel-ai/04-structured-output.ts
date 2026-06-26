@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@conductoross/conductor-ai-sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ── Schema ───────────────────────────────────────────────
 const PersonSchema = z.object({

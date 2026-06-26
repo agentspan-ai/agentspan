@@ -13,9 +13,9 @@ applies — you run them with the same `AgentRuntime`.
 | Semantic Kernel | `Conductor.AI.SemanticKernel` | `Conductor.AI.SemanticKernel` | `SemanticKernelAgent.From(...)` |
 
 ```bash
-dotnet add package conductor-ai-sdk-openai
-dotnet add package conductor-ai-sdk-google-adk
-dotnet add package conductor-ai-sdk-semantic-kernel
+dotnet add package conductor-agent-sdk-openai
+dotnet add package conductor-agent-sdk-google-adk
+dotnet add package conductor-agent-sdk-semantic-kernel
 ```
 
 (Inside this repo, reference the corresponding `src/Agentspan.*/*.csproj`.)

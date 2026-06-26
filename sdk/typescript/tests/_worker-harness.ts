@@ -3,7 +3,7 @@
  * Usage: npx tsx tests/_worker-harness.ts <example-file-path>
  *
  * Because the package root and node_modules may hold separate copies of
- * @conductoross/conductor-ai-sdk (different inodes), we must patch AgentRuntime.prototype
+ * @conductoross/conductor-agent-sdk (different inodes), we must patch AgentRuntime.prototype
  * on BOTH copies so the dynamically-imported example always hits our stub.
  */
 import { serializeLangGraph } from "../src/frameworks/langgraph-serializer.js";
@@ -127,7 +127,7 @@ function patchIfNew(RT: unknown) {
 }
 
 // 1) Patch the self-reference copy (root dist)
-const selfPkg = await import("@conductoross/conductor-ai-sdk");
+const selfPkg = await import("@conductoross/conductor-agent-sdk");
 patchIfNew(selfPkg.AgentRuntime);
 
 // 2) Patch the node_modules copy if it exists and is a different module
@@ -141,7 +141,7 @@ if (existsSync(nmDistPath)) {
   }
 }
 
-// 3) Patch the source copy (examples' tsconfig maps @conductoross/conductor-ai-sdk to ../src/index.ts)
+// 3) Patch the source copy (examples' tsconfig maps @conductoross/conductor-agent-sdk to ../src/index.ts)
 try {
   const srcPkg = await import("../src/index.js");
   patchIfNew(srcPkg.AgentRuntime);

@@ -19,8 +19,8 @@ import {
   AgentRuntime,
   tool,
   OnTextMention,
-} from '@conductoross/conductor-ai-sdk';
-import type { AgentOptions } from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
+import type { AgentOptions } from '@conductoross/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

@@ -5,7 +5,7 @@ Use Google's Agent Development Kit (ADK) agents directly with Agentspan. The `Ad
 ## Dependency
 
 ```groovy
-implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
 compileOnly 'com.google.adk:google-adk:1.3.0'
 ```
 

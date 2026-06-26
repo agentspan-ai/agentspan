@@ -22,8 +22,8 @@ import {
   LocalCodeExecutor,
   DockerCodeExecutor,
   JupyterCodeExecutor,
-} from '@conductoross/conductor-ai-sdk';
-import type { CodeExecutionConfig } from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
+import type { CodeExecutionConfig } from '@conductoross/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

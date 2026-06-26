@@ -7,7 +7,7 @@
     <RootNamespace>Conductor.AI.SemanticKernel</RootNamespace>
     <AssemblyName>Conductor.AI.SemanticKernel</AssemblyName>
 
-    <PackageId>conductor-ai-sdk-semantic-kernel</PackageId>
+    <PackageId>conductor-agent-sdk-semantic-kernel</PackageId>
     <Version>0.1.0</Version>
     <Description>Bridge Microsoft Semantic Kernel plugins into Agentspan agents.</Description>
     <Authors>Agentspan</Authors>

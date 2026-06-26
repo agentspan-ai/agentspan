@@ -12,8 +12,8 @@ import {
   tool,
   httpTool,
   getCredential,
-} from '@conductoross/conductor-ai-sdk';
-import type { ToolContext } from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
+import type { ToolContext } from '@conductoross/conductor-agent-sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 

@@ -42,7 +42,7 @@
   resolved "https://registry.npmjs.org/@cfworker/json-schema/-/json-schema-4.1.1.tgz"
   integrity sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==
 
-"@conductoross/conductor-ai-sdk@file:..":
+"@conductoross/conductor-agent-sdk@file:..":
   version "1.0.0"
   resolved "file:"
   dependencies:
@@ -1594,7 +1594,7 @@ eventsource@^3.0.2:
 "examples@file:/Users/viren/workspace/agentspan/agentspan/sdk/typescript/examples":
   resolved "file:examples"
   dependencies:
-    "@conductoross/conductor-ai-sdk" "file:.."
+    "@conductoross/conductor-agent-sdk" "file:.."
     "@google/adk" "0.2.5"
     "@langchain/core" "^0.3.40"
     "@langchain/langgraph" "^0.2.74"

@@ -1,11 +1,11 @@
 # OpenAI Agents SDK
 
-Use the Agentspan Java SDK with OpenAI Agents SDK-style tool definitions. The `OpenAIAgent` bridge accepts `@Tool`-annotated POJOs and registers them as Conductor worker tasks, routing the agent through the server's `OpenAINormalizer`.
+Use the Conductor Agent Java SDK with OpenAI Agents SDK-style tool definitions. The `OpenAIAgent` bridge accepts `@Tool`-annotated POJOs and registers them as Conductor worker tasks, routing the agent through the server's `OpenAINormalizer`.
 
 ## Dependency
 
 ```groovy
-implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
 ```
 
 The bridge uses the LangChain4j `@Tool` annotation as a practical equivalent of the Python OpenAI Agents SDK `@function_tool` decorator — add it if you need the annotation:

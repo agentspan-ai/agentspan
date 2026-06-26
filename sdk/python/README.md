@@ -96,7 +96,7 @@ Your agent code compiles to a durable, server-side execution. The server manages
 
 ```bash
 uv venv && source .venv/bin/activate
-uv pip install conductor-ai-sdk
+uv pip install conductor-agent-sdk
 ```
 
 ### Start the Server

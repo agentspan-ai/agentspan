@@ -22,7 +22,7 @@ import {
   StopMessage,
   TokenUsageCondition,
   OnTextMention,
-} from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
 
 // Force consistent model
 const llmModel = 'openai/gpt-4o-mini';

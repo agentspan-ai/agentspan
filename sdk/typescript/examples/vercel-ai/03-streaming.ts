@@ -7,7 +7,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@conductoross/conductor-ai-sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ── Vercel AI SDK tool ───────────────────────────────────
 const weatherTool = aiTool({

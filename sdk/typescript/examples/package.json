@@ -4,7 +4,7 @@
   "type": "module",
   "description": "TypeScript examples for building and running AI agents on Agentspan",
   "dependencies": {
-    "@conductoross/conductor-ai-sdk": "file:..",
+    "@conductoross/conductor-agent-sdk": "file:..",
     "@google/adk": "0.2.5",
     "@langchain/core": "^0.3.40",
     "@langchain/langgraph": "^0.2.74",

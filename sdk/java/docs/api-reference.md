@@ -1,6 +1,6 @@
 # API Reference
 
-Complete method signatures for the Agentspan Java SDK public API.
+Complete method signatures for the Conductor Agent Java SDK public API.
 
 ## AgentRuntime
 

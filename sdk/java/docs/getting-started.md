@@ -16,7 +16,7 @@ docker run -p 6767:6767 agentspan/server:latest
 
     ```groovy
     dependencies {
-        implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+        implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
     }
     ```
 
@@ -25,7 +25,7 @@ docker run -p 6767:6767 agentspan/server:latest
     ```xml
     <dependency>
         <groupId>org.conductoross.conductor</groupId>
-        <artifactId>conductor-ai-sdk</artifactId>
+        <artifactId>conductor-agent-sdk</artifactId>
         <version>0.1.0</version>
     </dependency>
     ```

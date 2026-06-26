@@ -23,7 +23,7 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '@conductoross/conductor-ai-sdk';
+import { Agent, AgentRuntime, tool, getCredential } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // Mirrors a LangChain @tool that checks for a credential in the environment

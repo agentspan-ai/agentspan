@@ -8,7 +8,7 @@
     <AssemblyName>Conductor.AI</AssemblyName>
 
     <!-- NuGet package metadata -->
-    <PackageId>conductor-ai-sdk</PackageId>
+    <PackageId>conductor-agent-sdk</PackageId>
     <Version>0.1.0</Version>
     <Description>Agentspan .NET SDK — durable, scalable, observable AI agents</Description>
     <Authors>Agentspan</Authors>

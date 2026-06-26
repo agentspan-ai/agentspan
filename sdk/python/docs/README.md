@@ -1,4 +1,4 @@
-# Agentspan Python SDK
+# Conductor Agent Python SDK
 
 Durable, scalable, observable AI agents. You write plain Python; Agentspan compiles
 your agent into a Conductor workflow that runs on a server — with automatic retries,

@@ -30,8 +30,8 @@ import {
   LLMGuardrail,
   guardrail,
   tool,
-} from '@conductoross/conductor-ai-sdk';
-import type { GuardrailResult } from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
+import type { GuardrailResult } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // ── Tools ─────────────────────────────────────────────────

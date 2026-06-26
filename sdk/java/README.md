@@ -1,4 +1,4 @@
-# Agentspan Java SDK
+# Conductor Agent Java SDK
 
 Java SDK for the [Agentspan](https://agentspan.dev) agent orchestration platform. Build, deploy, and run AI agents backed by Conductor workflows.
 
@@ -15,7 +15,7 @@ Maven (`pom.xml`):
 ```xml
 <dependency>
     <groupId>org.conductoross.conductor</groupId>
-    <artifactId>conductor-ai-sdk</artifactId>
+    <artifactId>conductor-agent-sdk</artifactId>
     <version>0.1.0</version>
 </dependency>
 ```
@@ -23,7 +23,7 @@ Maven (`pom.xml`):
 Gradle (`build.gradle`):
 
 ```groovy
-implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
 ```
 
 ### Spring Boot starter
@@ -33,13 +33,13 @@ For Spring Boot apps, add the auto-configuration starter instead:
 ```xml
 <dependency>
     <groupId>org.conductoross.conductor</groupId>
-    <artifactId>conductor-ai-sdk-spring</artifactId>
+    <artifactId>conductor-agent-sdk-spring</artifactId>
     <version>0.1.0</version>
 </dependency>
 ```
 
 ```groovy
-implementation 'org.conductoross.conductor:conductor-ai-sdk-spring:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk-spring:0.1.0'
 ```
 
 ## Quick Start

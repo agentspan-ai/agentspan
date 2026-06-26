@@ -5,7 +5,7 @@
 The package is named `agentspan` (see `pyproject.toml`). This project uses `uv`.
 
 ```bash
-uv add conductor-ai-sdk
+uv add conductor-agent-sdk
 ```
 
 Point the SDK at a running Agentspan server (defaults to `http://localhost:6767/api`):

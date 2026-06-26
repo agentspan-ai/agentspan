@@ -17,7 +17,7 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableLambda } from '@langchain/core/runnables';
 import { z } from 'zod';
-import { AgentRuntime } from '@conductoross/conductor-ai-sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ── Parsers ──────────────────────────────────────────────
 

@@ -10,7 +10,7 @@
  *   - AGENTSPAN_LLM_MODEL set as environment variable (optional)
  */
 
-import { Agent, AgentRuntime } from '@conductoross/conductor-ai-sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 export const agent = new Agent({

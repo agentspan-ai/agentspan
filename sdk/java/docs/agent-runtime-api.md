@@ -1,6 +1,6 @@
 # AgentRuntime — API Reference
 
-`AgentRuntime` is the primary entry point for the Agentspan Java SDK. It manages the connection to the Agentspan server, registers local tool workers, and exposes every operation for running, streaming, deploying, and serving agents.
+`AgentRuntime` is the primary entry point for the Conductor Agent Java SDK. It manages the connection to the Agentspan server, registers local tool workers, and exposes every operation for running, streaming, deploying, and serving agents.
 
 Implements `AutoCloseable` — always use try-with-resources or call `shutdown()` explicitly.
 

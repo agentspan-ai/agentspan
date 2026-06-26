@@ -1,4 +1,4 @@
-# Agentspan Java SDK
+# Conductor Agent Java SDK
 
 Build durable AI agents in Java, backed by [Conductor](https://conductor.netflix.com/) workflows. Your agents survive process crashes, tool calls scale independently, and human approvals can take days — all without managing state yourself.
 
@@ -60,7 +60,7 @@ Run agents authored in another framework on the durable Agentspan runtime.
 === "Gradle"
 
     ```groovy
-    implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+    implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
     ```
 
 === "Maven"
@@ -68,7 +68,7 @@ Run agents authored in another framework on the durable Agentspan runtime.
     ```xml
     <dependency>
         <groupId>org.conductoross.conductor</groupId>
-        <artifactId>conductor-ai-sdk</artifactId>
+        <artifactId>conductor-agent-sdk</artifactId>
         <version>0.1.0</version>
     </dependency>
     ```

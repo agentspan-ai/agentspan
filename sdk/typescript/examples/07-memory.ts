@@ -12,7 +12,7 @@ import {
   SemanticMemory,
   InMemoryStore,
   tool,
-} from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 

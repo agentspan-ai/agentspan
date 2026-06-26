@@ -14,8 +14,8 @@
 
 import * as readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { Agent, AgentRuntime, tool } from '@conductoross/conductor-ai-sdk';
-import type { AgentHandle } from '@conductoross/conductor-ai-sdk';
+import { Agent, AgentRuntime, tool } from '@conductoross/conductor-agent-sdk';
+import type { AgentHandle } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 const getWeather = tool(

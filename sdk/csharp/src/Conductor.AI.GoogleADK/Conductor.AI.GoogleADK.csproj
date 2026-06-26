@@ -6,7 +6,7 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Conductor.AI.GoogleADK</RootNamespace>
     <AssemblyName>Conductor.AI.GoogleADK</AssemblyName>
-    <PackageId>conductor-ai-sdk-google-adk</PackageId>
+    <PackageId>conductor-agent-sdk-google-adk</PackageId>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>

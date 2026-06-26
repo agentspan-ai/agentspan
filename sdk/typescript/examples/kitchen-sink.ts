@@ -121,7 +121,7 @@ import {
   // Discovery & Tracing
   discoverAgents,
   isTracingEnabled,
-} from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
 
 import type {
   GuardrailResult,
@@ -129,7 +129,7 @@ import type {
   CodeExecutionConfig,
   CliConfig,
   AgentResult,
-} from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
 
 // ── Settings ─────────────────────────────────────────────
 

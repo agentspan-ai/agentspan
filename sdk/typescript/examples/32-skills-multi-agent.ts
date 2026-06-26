@@ -15,7 +15,7 @@
  *   - conductor skill installed (https://github.com/conductor-oss/conductor-skills)
  */
 
-import { Agent, AgentRuntime, OnTextMention, agentTool, skill, tool } from '@conductoross/conductor-ai-sdk';
+import { Agent, AgentRuntime, OnTextMention, agentTool, skill, tool } from '@conductoross/conductor-agent-sdk';
 import { llmModel, secondaryLlmModel } from './settings';
 
 // ── Load skills ────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ import {
   AgentRuntime,
   tool,
   CallbackHandler,
-} from '@conductoross/conductor-ai-sdk';
+} from '@conductoross/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

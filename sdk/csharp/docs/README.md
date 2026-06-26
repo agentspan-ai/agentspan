@@ -1,4 +1,4 @@
-# Agentspan .NET SDK — Documentation
+# Conductor Agent .NET SDK — Documentation
 
 The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
 

@@ -14,7 +14,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '@conductoross/conductor-ai-sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // Specialist agents (as plain compiled graphs)

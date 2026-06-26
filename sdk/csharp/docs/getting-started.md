@@ -9,14 +9,14 @@ The SDK ships as the `Agentspan` NuGet package (target framework: .NET 10).
 ```bash
 dotnet new console -n MyAgent
 cd MyAgent
-dotnet add package conductor-ai-sdk
+dotnet add package conductor-agent-sdk
 ```
 
 > Working inside this repository instead of from NuGet? Reference the project directly:
 >
 > ```xml
 > <ItemGroup>
->   <ProjectReference Include="path/to/sdk/csharp/src/Agentspan/Agentspan.csproj" />
+>   <ProjectReference Include="path/to/sdk/csharp/src/Conductor.AI/Conductor.AI.csproj" />
 > </ItemGroup>
 > ```
 

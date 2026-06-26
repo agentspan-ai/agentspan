@@ -1,4 +1,4 @@
-# Agentspan .NET SDK
+# Conductor Agent .NET SDK
 
 The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
 
@@ -15,14 +15,14 @@ The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalabl
 ### 2. Add the package
 
 ```bash
-dotnet add package conductor-ai-sdk
+dotnet add package conductor-agent-sdk
 ```
 
 Or, for in-repo / unpublished use, reference the project directly in your `.csproj`:
 
 ```xml
 <ItemGroup>
-  <ProjectReference Include="path/to/sdk/csharp/src/Agentspan/Agentspan.csproj" />
+  <ProjectReference Include="path/to/sdk/csharp/src/Conductor.AI/Conductor.AI.csproj" />
 </ItemGroup>
 ```
 
@@ -183,22 +183,22 @@ dotnet run --project examples/08_RouterAgent
 Or build the whole solution:
 
 ```bash
-dotnet build Agentspan.sln
+dotnet build Conductor.AI.sln
 ```
 
 ## Project Structure
 
 ```
 sdk/csharp/
-├── Agentspan.sln
+├── Conductor.AI.sln
 ├── src/
-│   └── Agentspan/
-│       ├── Agentspan.csproj
+│   └── Conductor.AI/
+│       ├── Conductor.AI.csproj
 │       ├── Agent.cs                  # Agent + Strategy + >> operator
 │       ├── Tool.cs                   # [Tool] attribute + ToolRegistry
 │       ├── Result.cs                 # AgentResult, AgentHandle, AgentEvent
 │       ├── AgentConfigSerializer.cs  # Wire format serializer
-│       ├── AgentHttpClient.cs        # HTTP + SSE client
+│       ├── AgentClient.cs        # HTTP + SSE client
 │       ├── WorkerManager.cs          # Tool polling loop
 │       └── AgentRuntime.cs           # Main entry point
 └── examples/

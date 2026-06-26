@@ -57,7 +57,7 @@ mavenPublishing {
         signAllPublications()
     }
 
-    coordinates('org.conductoross.conductor', 'conductor-ai-sdk-spring', project.version.toString())
+    coordinates('org.conductoross.conductor', 'conductor-agent-sdk-spring', project.version.toString())
 
     pom {
         name = 'Agentspan Java SDK Spring Boot Starter'

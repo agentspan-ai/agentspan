@@ -14,7 +14,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '@conductoross/conductor-ai-sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // Tool definitions

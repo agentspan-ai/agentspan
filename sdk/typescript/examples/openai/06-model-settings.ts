@@ -14,7 +14,7 @@
  */
 
 import { Agent, setTracingDisabled } from '@openai/agents';
-import { AgentRuntime } from '@conductoross/conductor-ai-sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 setTracingDisabled(true);
 
