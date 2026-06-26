@@ -75,8 +75,12 @@ After calling it, report the tool's output verbatim. Do not add commentary.
 
 
 def _make_free_agent(model: str) -> Agent:
+    # Agent name must NOT contain a tool name as a substring: tool tasks are
+    # matched by substring on the reference name, and an agent named after the
+    # tool (e.g. "e2e_free_tool") would make orchestration tasks like
+    # "<agent>_ctx_resolve" falsely match "free_tool".
     return Agent(
-        name="e2e_free_tool",
+        name="e2e_nocred_agent",
         model=model,
         max_turns=3,
         instructions=FREE_AGENT_INSTRUCTIONS,
@@ -86,7 +90,7 @@ def _make_free_agent(model: str) -> Agent:
 
 def _make_paid_agent(model: str) -> Agent:
     return Agent(
-        name="e2e_paid_tool",
+        name="e2e_reqcred_agent",
         model=model,
         max_turns=3,
         instructions=PAID_AGENT_INSTRUCTIONS,
