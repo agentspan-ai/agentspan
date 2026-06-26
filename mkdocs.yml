@@ -37,17 +37,6 @@ markdown_extensions:
 # Design docs live in the top-level design/ folder, not here. docs/ holds only
 # user-facing docs. The per-SDK docs (java-sdk/, python-sdk/, typescript-sdk/,
 # csharp-sdk/) are symlinks into sdk/<lang>/docs and are linked from the nav.
-# A few legacy/unpublished user docs remain but stay out of nav.
-not_in_nav: |
-  langchain-integration.md
-  langgraph-integration.md
-  ocg-agent-flow.md
-
-exclude_docs: |
-  /guardrails.md
-  langchain-integration.md
-  langgraph-integration.md
-  ocg-agent-flow.md
 
 nav:
   - Overview: index.md

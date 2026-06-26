@@ -246,5 +246,5 @@ orkes-conductor on 8080) as above.
 
 ## API reference
 
-See [Python SDK API Reference → ocg_agent() / ocg_tools()](python-sdk/api-reference.md)
+See [Python SDK API Reference → ocg_agent() / ocg_tools()](../sdk/python/docs/api-reference.md)
 for the full parameter tables.
