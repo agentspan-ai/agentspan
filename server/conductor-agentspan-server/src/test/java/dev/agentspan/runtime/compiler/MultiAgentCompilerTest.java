@@ -873,7 +873,7 @@ class MultiAgentCompilerTest {
     }
 
     @Test
-    void testMultiAgentNoTimeoutSetsNoPolicy() {
+    void testMultiAgentNoTimeoutKeepsNonNullPolicy() {
         AgentConfig config = AgentConfig.builder()
                 .name("no_timeout_team")
                 .model("openai/gpt-4o")
@@ -883,8 +883,12 @@ class MultiAgentCompilerTest {
                 .build();
 
         WorkflowDef wf = compiler.compile(config);
-        // Default AgentCompiler timeoutSeconds is 0, so no timeout should be set
-        assertThat(wf.getTimeoutPolicy()).isNull();
+        // Default AgentCompiler timeoutSeconds is 0, so no timeout is enforced
+        // (timeoutSeconds=0). The policy must still be NON-null (ALERT_ONLY):
+        // orkes' ?short=true summary builder enum-parses it and a null 500s the
+        // metadata list with "Name is null".
+        assertThat(wf.getTimeoutSeconds()).isEqualTo(0L);
+        assertThat(wf.getTimeoutPolicy()).isEqualTo(WorkflowDef.TimeoutPolicy.ALERT_ONLY);
     }
 
     // ── Gate tests ──────────────────────────────────────────────────
