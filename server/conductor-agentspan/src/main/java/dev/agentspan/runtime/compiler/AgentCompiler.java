@@ -35,6 +35,9 @@ public class AgentCompiler {
     private static final Logger log = LoggerFactory.getLogger(AgentCompiler.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** Fallback workflow name when an AgentConfig arrives without one. */
+    static final String DEFAULT_AGENT_NAME = "agent";
+
     private static final List<String> WORKFLOW_INPUTS = List.of("prompt", "session_id", "media", "cwd");
     private static final Map<String, Object> USER_MESSAGE = Map.of(
             "role", "user",
@@ -97,6 +100,15 @@ public class AgentCompiler {
      * the SDK, never injected here.
      */
     public WorkflowDef compile(AgentConfig config) {
+        // A missing/blank name would otherwise propagate verbatim into the
+        // compiled WorkflowDef (createWorkflow -> wf.setName) and get persisted
+        // as a null/blank-named workflow, and would NPE in toRef(...) on the
+        // tool/graph branches. Default it here — the single chokepoint every
+        // deploy/start/child path funnels through — rather than failing loudly.
+        if (config.getName() == null || config.getName().isBlank()) {
+            config.setName(DEFAULT_AGENT_NAME);
+        }
+
         WorkflowDef wf;
 
         // Passthrough check MUST be first — passthrough configs have null model.
@@ -595,9 +607,9 @@ public class AgentCompiler {
         ctxResolve.setType("INLINE");
         ctxResolve.setTaskReferenceName(ctxResolveRef);
         ctxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
         allTasks.add(ctxResolve);
 
         // Initialize workflow variables
@@ -922,9 +934,9 @@ public class AgentCompiler {
         hybridCtxResolve.setType("INLINE");
         hybridCtxResolve.setTaskReferenceName(hybridCtxResolveRef);
         hybridCtxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
 
         // Initialize workflow variables
         Map<String, Object> initHybridVars = new LinkedHashMap<>();

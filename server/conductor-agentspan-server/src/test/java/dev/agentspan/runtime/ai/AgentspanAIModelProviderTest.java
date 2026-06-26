@@ -10,6 +10,8 @@ import static org.mockito.Mockito.*;
 import java.util.List;
 import java.util.Map;
 
+import org.conductoross.conductor.ai.AIModel;
+import org.conductoross.conductor.ai.models.LLMWorkerInput;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,9 +19,6 @@ import org.springframework.core.env.Environment;
 
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
-
-import org.conductoross.conductor.ai.AIModel;
-import org.conductoross.conductor.ai.models.LLMWorkerInput;
 
 import okhttp3.OkHttpClient;
 

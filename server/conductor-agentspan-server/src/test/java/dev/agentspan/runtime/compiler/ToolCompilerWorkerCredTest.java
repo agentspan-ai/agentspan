@@ -49,7 +49,10 @@ class ToolCompilerWorkerCredTest {
             Value v = ctx.eval("js", wrapped);
             Map<String, Object> outer = MAPPER.readValue(v.asString(), Map.class);
             List<Map<String, Object>> tasks = (List<Map<String, Object>>) outer.get("dynamicTasks");
-            return tasks.stream().filter(t -> toolName.equals(t.get("name"))).findFirst().orElseThrow();
+            return tasks.stream()
+                    .filter(t -> toolName.equals(t.get("name")))
+                    .findFirst()
+                    .orElseThrow();
         }
     }
 
@@ -83,7 +86,11 @@ class ToolCompilerWorkerCredTest {
         new EmbeddedMode().setEmbedded(true);
         ToolConfig gh = worker("gh", "GITHUB_TOKEN");
         ToolConfig sl = worker("sl", "SLACK_TOKEN");
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(gh, sl)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(gh, sl))
+                .build();
 
         String script = enrichScript(compilerFor(config), List.of(gh, sl));
 
@@ -97,7 +104,11 @@ class ToolCompilerWorkerCredTest {
     void notEmbedded_stampsEmptyConfig() {
         new EmbeddedMode().setEmbedded(false);
         ToolConfig gh = worker("gh", "GITHUB_TOKEN");
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(gh)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(gh))
+                .build();
 
         String script = enrichScript(compilerFor(config), List.of(gh));
 
@@ -115,7 +126,11 @@ class ToolCompilerWorkerCredTest {
                 .toolType("http")
                 .config(Map.of("url", "https://x", "credentials", List.of("HTTP_TOKEN")))
                 .build();
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(http)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(http))
+                .build();
 
         String script = enrichScript(compilerFor(config), List.of(http));
 
@@ -147,7 +162,11 @@ class ToolCompilerWorkerCredTest {
         // __resolved_credentials__ (proves the SIMPLE-block injection, not just the config literal).
         new EmbeddedMode().setEmbedded(true);
         ToolConfig gh = worker("gh", "GITHUB_TOKEN");
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(gh)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(gh))
+                .build();
 
         Map<String, Object> task = runEnrichForTool(enrichScript(compilerFor(config), List.of(gh)), "gh");
 
@@ -162,7 +181,11 @@ class ToolCompilerWorkerCredTest {
     void notEmbedded_noResolvedCredentialsOnSimpleTask() throws Exception {
         new EmbeddedMode().setEmbedded(false);
         ToolConfig gh = worker("gh", "GITHUB_TOKEN");
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(gh)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(gh))
+                .build();
 
         Map<String, Object> task = runEnrichForTool(enrichScript(compilerFor(config), List.of(gh)), "gh");
 
@@ -174,7 +197,11 @@ class ToolCompilerWorkerCredTest {
     void embedded_stampsInDynamicEnrichVariant() {
         new EmbeddedMode().setEmbedded(true);
         ToolConfig gh = worker("gh", "GITHUB_TOKEN");
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(gh)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(gh))
+                .build();
 
         String script = enrichScriptDynamic(compilerFor(config), List.of(gh));
 

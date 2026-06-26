@@ -649,7 +649,8 @@ class AgentChatCompleteTaskMapperTest {
     }
 
     private void invokeInjectCredentialReferences(TaskModel task) throws Exception {
-        Method method = AgentChatCompleteTaskMapper.class.getDeclaredMethod("injectCredentialReferences", TaskModel.class);
+        Method method =
+                AgentChatCompleteTaskMapper.class.getDeclaredMethod("injectCredentialReferences", TaskModel.class);
         method.setAccessible(true);
         method.invoke(mapper, task);
     }

@@ -483,7 +483,15 @@ public class ToolCompiler {
         String workerCredJson = JavaScriptBuilder.toJson(buildWorkerCredConfig(tools));
 
         String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson, knownToolNamesJson,
+                httpJson,
+                mcpJson,
+                mediaJson,
+                agentToolJson,
+                ragJson,
+                cliJson,
+                humanJson,
+                wmqJson,
+                knownToolNamesJson,
                 workerCredJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";

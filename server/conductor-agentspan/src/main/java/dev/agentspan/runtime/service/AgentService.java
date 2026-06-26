@@ -1062,6 +1062,16 @@ public class AgentService {
                     continue;
                 }
 
+                // A nameless nested config (e.g. a raw map without a "name")
+                // would otherwise default to the generic "agent" in the compiler,
+                // and two such children would collide on the same def name and
+                // clobber each other (plus the parent's workflowName reference
+                // below). Derive a stable, unique name from the tool instead.
+                if (childConfig.getName() == null || childConfig.getName().isBlank()) {
+                    childConfig.setName(
+                            tool.getName() != null && !tool.getName().isBlank() ? tool.getName() : "agent_tool");
+                }
+
                 // Recursively register any nested agent_tool workflows
                 registerAgentToolWorkflows(childConfig);
 

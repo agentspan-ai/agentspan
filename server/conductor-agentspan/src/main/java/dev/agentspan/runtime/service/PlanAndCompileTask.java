@@ -1572,8 +1572,7 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
         args.put("media", "${workflow.input.media}");
     }
 
-    private static final Set<String> AMBIENT_KEYS =
-            Set.of("session_id", "cwd", "credentials", "media");
+    private static final Set<String> AMBIENT_KEYS = Set.of("session_id", "cwd", "credentials", "media");
 
     /**
      * Build the Conductor task for a single plan op, routed by the tool's

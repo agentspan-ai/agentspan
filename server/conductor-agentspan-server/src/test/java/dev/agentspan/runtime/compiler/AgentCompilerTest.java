@@ -49,6 +49,34 @@ class AgentCompilerTest {
     }
 
     @Test
+    void testCompileDefaultsNullName() {
+        AgentConfig config = AgentConfig.builder()
+                .model("openai/gpt-4o")
+                .instructions("You are helpful.")
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // A null name must never propagate into a persisted (null-named) def.
+        assertThat(wf.getName()).isEqualTo(AgentCompiler.DEFAULT_AGENT_NAME);
+        // Task refs must also be valid (no "null_llm").
+        assertThat(wf.getTasks().get(0).getTaskReferenceName()).isEqualTo("agent_llm");
+    }
+
+    @Test
+    void testCompileDefaultsBlankName() {
+        AgentConfig config = AgentConfig.builder()
+                .name("   ")
+                .model("openai/gpt-4o")
+                .instructions("You are helpful.")
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        assertThat(wf.getName()).isEqualTo(AgentCompiler.DEFAULT_AGENT_NAME);
+    }
+
+    @Test
     void testCompileWithTools() {
         ToolConfig tool = ToolConfig.builder()
                 .name("search")
@@ -105,8 +133,8 @@ class AgentCompilerTest {
 
         new dev.agentspan.runtime.util.EmbeddedMode().setEmbedded(true);
         try {
-            String embeddedJson = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .writeValueAsString(compiler.compile(config));
+            String embeddedJson =
+                    new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(compiler.compile(config));
             // The enrich script is JSON-escaped inside the workflow; match on the quote-free ref.
             assertThat(embeddedJson).contains("workflow.secrets.GITHUB_TOKEN");
         } finally {

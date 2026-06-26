@@ -1568,16 +1568,6 @@ public class JavaScriptBuilder {
     // ── Context passing helpers ──────────────────────────────
 
     /**
-     * Null-coalescing script: returns {@code $.ctx} if truthy, else empty object.
-     * Used for INLINE tasks that resolve context with null fallback.
-     * Input: {@code ctx} → the reference to resolve (e.g. {@code ${workflow.input.context}}).
-     * Output: {@code result} → the resolved context dict.
-     */
-    public static String nullCoalesceScript() {
-        return iife("return $.ctx || {};");
-    }
-
-    /**
      * Flat-merge context script: merges child context into parent context.
      * Used after each sequential sub-workflow step.
      * Input: {@code parent} → parent context, {@code child} → child output.context.

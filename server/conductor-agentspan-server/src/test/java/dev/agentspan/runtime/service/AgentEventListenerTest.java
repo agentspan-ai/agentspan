@@ -639,5 +639,4 @@ class AgentEventListenerTest {
         verify(streamRegistry, times(2)).send(eq("wf-tool"), captor.capture());
         assertThat(captor.getAllValues().get(1).getType()).isEqualTo("tool_result");
     }
-
 }

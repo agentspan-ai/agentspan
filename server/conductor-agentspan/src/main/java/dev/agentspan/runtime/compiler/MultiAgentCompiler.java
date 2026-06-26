@@ -275,9 +275,9 @@ public class MultiAgentCompiler {
         handoffCtxResolve.setType("INLINE");
         handoffCtxResolve.setTaskReferenceName(handoffCtxResolveRef);
         handoffCtxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
 
         // 1. Init: seed conversation variable with prompt + context
         WorkflowTask initVar = new WorkflowTask();
@@ -430,9 +430,9 @@ public class MultiAgentCompiler {
         seqCtxResolve.setType("INLINE");
         seqCtxResolve.setTaskReferenceName(seqCtxResolveRef);
         seqCtxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
         tasks.add(seqCtxResolve);
 
         WorkflowTask seqCtxInit = new WorkflowTask();
@@ -652,9 +652,9 @@ public class MultiAgentCompiler {
         parCtxResolve.setType("INLINE");
         parCtxResolve.setTaskReferenceName(parCtxResolveRef);
         parCtxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
         tasks.add(parCtxResolve);
 
         WorkflowTask parCtxInit = new WorkflowTask();
@@ -827,9 +827,9 @@ public class MultiAgentCompiler {
         routerCtxResolve.setType("INLINE");
         routerCtxResolve.setTaskReferenceName(routerCtxResolveRef);
         routerCtxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
 
         // 1. Init: seed conversation variable + context
         WorkflowTask initVar = new WorkflowTask();
@@ -1023,9 +1023,9 @@ public class MultiAgentCompiler {
         rotCtxResolve.setType("INLINE");
         rotCtxResolve.setTaskReferenceName(rotCtxResolveRef);
         rotCtxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
 
         // 1. Init: seed conversation + context
         WorkflowTask initVar = new WorkflowTask();
@@ -1155,9 +1155,9 @@ public class MultiAgentCompiler {
         swarmCtxResolve.setType("INLINE");
         swarmCtxResolve.setTaskReferenceName(swarmCtxResolveRef);
         swarmCtxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
 
         // 1. Init — track conversation, active_agent, last_response, transfer state, context
         WorkflowTask initVar = new WorkflowTask();
@@ -1527,9 +1527,9 @@ public class MultiAgentCompiler {
         manCtxResolve.setType("INLINE");
         manCtxResolve.setTaskReferenceName(manCtxResolveRef);
         manCtxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
 
         // 1. Init
         WorkflowTask initVar = new WorkflowTask();
@@ -2155,9 +2155,9 @@ public class MultiAgentCompiler {
         ctxResolve.setType("INLINE");
         ctxResolve.setTaskReferenceName(ctxResolveRef);
         ctxResolve.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
+                "evaluatorType", "value-param",
                 "ctx", "${workflow.input.context}",
-                "expression", JavaScriptBuilder.nullCoalesceScript()));
+                "expression", "ctx"));
         tasks.add(ctxResolve);
 
         WorkflowTask ctxInit = new WorkflowTask();
