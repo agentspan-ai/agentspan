@@ -49,6 +49,25 @@ class AgentCompilerTest {
     }
 
     @Test
+    void testTimeoutPolicyNeverNull() {
+        // A null timeoutPolicy persists fine but makes orkes' ?short=true metadata
+        // summary builder throw "Name is null" (TimeoutPolicy.valueOf(null)) and 500
+        // the workflow/agent LIST page. The compiler must always emit a non-null policy.
+        AgentConfig config = AgentConfig.builder()
+                .name("timeout_agent")
+                .model("openai/gpt-4o")
+                .instructions("You are helpful.")
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        assertThat(wf.getTimeoutPolicy())
+                .as("timeoutPolicy must never be null — orkes ?short=true enum-parses it")
+                .isNotNull()
+                .isEqualTo(WorkflowDef.TimeoutPolicy.ALERT_ONLY);
+    }
+
+    @Test
     void testCompileDefaultsNullName() {
         AgentConfig config = AgentConfig.builder()
                 .model("openai/gpt-4o")

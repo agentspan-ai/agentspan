@@ -1096,7 +1096,12 @@ public class AgentCompiler {
         wf.setDescription("Agent workflow for " + config.getName());
         // Match Python SDK's ConductorWorkflow defaults
         wf.setTimeoutSeconds(60L);
-        wf.setTimeoutPolicy(null);
+        // timeoutPolicy MUST be non-null. Orkes' ?short=true metadata summary
+        // builder enum-parses it (WorkflowDef.TimeoutPolicy.valueOf(...)), so a
+        // null persists fine but 500s the workflow/agent LIST page with
+        // "Name is null". ALERT_ONLY is conductor's own default and does not
+        // terminate the workflow, so this is behavior-preserving.
+        wf.setTimeoutPolicy(WorkflowDef.TimeoutPolicy.ALERT_ONLY);
         wf.setInputParameters(WORKFLOW_INPUTS);
         return wf;
     }
@@ -1745,9 +1750,11 @@ public class AgentCompiler {
             wf.setTimeoutPolicy(WorkflowDef.TimeoutPolicy.TIME_OUT_WF);
         } else {
             // Explicitly clear the base workflow timeout (60s from createBaseWorkflow)
-            // so that timeout_seconds=0 means "no timeout"
+            // so that timeout_seconds=0 means "no timeout". timeoutSeconds=0 already
+            // disables enforcement; the policy must stay non-null (ALERT_ONLY) or
+            // orkes' ?short=true summary builder NPEs on valueOf(null) — see createWorkflow.
             wf.setTimeoutSeconds(0L);
-            wf.setTimeoutPolicy(null);
+            wf.setTimeoutPolicy(WorkflowDef.TimeoutPolicy.ALERT_ONLY);
         }
     }
 
