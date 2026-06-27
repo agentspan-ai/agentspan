@@ -1,128 +1,14 @@
-@ -0,0 +1,530 @@
-# Sentinel Agents: Always-On, Event-Driven, Omnipresent AI Agents
+# Sentinel Agents
 
-**Status**: Draft
-**Author**: Agent SDK Team
-**Date**: March 2026
+**Status:** Consolidated 2026-06-26 (scheduling shipped; other triggers roadmap)
+
+**Scope:** Sentinel Agents are always-on, event-driven agents — regular agents (model + tools + instructions) augmented with **triggers** that define when and how they activate. Where today's agentic frameworks are request-response (a human prompts, the agent runs once, returns), sentinels are autonomous background processes with LLM brains: a scheduled health-checker, a log watcher that files tickets on errors, an incident responder that wakes on a PagerDuty alert, a PR reviewer triggered by a webhook. Each needs **activation** (something to wake it), **context** (the triggering data injected into its prompt), **tools** (actions it can take), **durability** (retry, audit, timeout), and **lifecycle management** (deploy, pause, resume, undeploy, observe). This doc defines the trigger model, the **shipped** Phase 1 (declarative cron scheduling, across all four SDKs and the UI), and the roadmap for the remaining trigger types. See also [`agentspan-design.md`](agentspan-design.md), [`sdk-design.md`](sdk-design.md), and [`stateful-agents.md`](stateful-agents.md).
 
 ---
-<!-- TOC -->
-* [Sentinel Agents: Always-On, Event-Driven, Omnipresent AI Agents](#sentinel-agents--always-on-event-driven-omnipresent-ai-agents)
-  * [1. Problem Statement](#1-problem-statement)
-  * [2. Landscape Analysis](#2-landscape-analysis)
-    * [2.1 AutoGen v0.4 (AG2)](#21-autogen-v04--ag2-)
-    * [2.2 CrewAI](#22-crewai)
-    * [2.3 LangGraph Platform](#23-langgraph-platform)
-    * [2.4 OmniDaemon (Research Pattern)](#24-omnidaemon--research-pattern-)
-    * [2.5 Microsoft Sentinel (Security)](#25-microsoft-sentinel--security-)
-    * [2.6 Summary: The Gap](#26-summary--the-gap)
-  * [3. Conceptual Model](#3-conceptual-model)
-    * [3.1 The Sentinel Agent](#31-the-sentinel-agent)
-    * [3.2 The Activation Layer](#32-the-activation-layer)
-    * [3.3 Trigger Types](#33-trigger-types)
-      * [Schedule](#schedule)
-      * [Event Trigger](#event-trigger)
-      * [Webhook Trigger](#webhook-trigger)
-      * [File Watch](#file-watch)
-      * [Stream Watch](#stream-watch)
-    * [3.4 Prompt Templating](#34-prompt-templating)
-  * [4. Deployment Architecture](#4-deployment-architecture)
-    * [4.1 Server-Side Triggers (Schedule, Event, Webhook)](#41-server-side-triggers--schedule-event-webhook-)
-    * [4.2 Local Source Watchers (FileWatch, StreamWatch)](#42-local-source-watchers--filewatch-streamwatch-)
-    * [4.3 How You Install and Run This](#43-how-you-install-and-run-this)
-    * [4.4 Multi-Instance / HA Deployment](#44-multi-instance--ha-deployment)
-  * [5. Lifecycle Management](#5-lifecycle-management)
-    * [5.1 Deployment Handle](#51-deployment-handle)
-    * [5.2 Observability](#52-observability)
-  * [6. Concrete Examples](#6-concrete-examples)
-    * [6.1 Log Sentinel](#61-log-sentinel)
-    * [6.2 PR Review Sentinel](#62-pr-review-sentinel)
-    * [6.3 Incident Responder](#63-incident-responder)
-    * [6.4 Omnipresent Ops Agent](#64-omnipresent-ops-agent)
-  * [7. Execution Plan](#7-execution-plan)
-    * [Phase 1: Foundation (Schedule + Deploy/Undeploy)](#phase-1--foundation--schedule--deployundeploy-)
-    * [Phase 2: Event & Webhook Triggers](#phase-2--event--webhook-triggers)
-    * [Phase 3: Local File Watching](#phase-3--local-file-watching)
-    * [Phase 4: Stream Watching](#phase-4--stream-watching)
-    * [Phase 5: CLI & Observability](#phase-5--cli--observability)
-    * [Phase 6: Advanced Patterns](#phase-6--advanced-patterns)
-  * [8. Open Design Questions](#8-open-design-questions)
-<!-- TOC -->
-## 1. Problem Statement
 
-Today's agentic frameworks are **request-response**: a human types a prompt, the agent runs, returns a result. But real-world automation needs agents that are **always watching**:
+## 1. Scope & Vision
 
-- A log sentinel that tails application logs and creates tickets when it detects critical errors
-- A news monitor that checks for breaking stories every hour and sends digests
-- An incident responder that wakes up when PagerDuty fires a critical alert
-- A deployment watcher that reviews every PR merge and validates the rollout
-- An ops agent that monitors Kubernetes pods, restarts crashed services, and pages on-call
-
-These aren't "chatbot" agents. They are **autonomous background processes with LLM brains**. They need:
-
-1. **Activation** — something to wake them up (schedule, event, file change, webhook)
-2. **Context** — the triggering data injected into their prompt (log lines, event payload, PR diff)
-3. **Tools** — actions they can take (create ticket, send alert, restart service, query DB)
-4. **Durability** — retry on failure, audit trail, timeout protection
-5. **Lifecycle management** — deploy, pause, resume, undeploy, observe
-
-No current framework provides a clean, unified model for all of this.
-
-## 2. Landscape Analysis
-
-### 2.1 AutoGen v0.4 (AG2)
-
-AutoGen v0.4 (January 2025) adopted an async, event-driven, actor-model architecture. Agents exchange messages asynchronously with rich event surfacing (model calls, tool invocations, terminations).
-
-**Relevant**: Core event-driven architecture
-**Gap**: No deployment model. No external triggers (cron, file, webhook). You run it; it runs once.
-
-### 2.2 CrewAI
-
-CrewAI distinguishes **Crews** (autonomous agent groups) from **Flows** (event-driven pipelines). Flows provide deterministic, event-driven orchestration with conditional branching and state management.
-
-**Relevant**: Event-driven Flows with production-grade control
-**Gap**: "Events" are internal flow routing, not external activation. No scheduled execution, no file watchers, no webhook triggers out of the box.
-
-### 2.3 LangGraph Platform
-
-LangGraph Platform (GA October 2025) supports background runs with polling/streaming/webhooks for status monitoring. Includes a task queue for bursty workloads. Mentions cron support.
-
-**Relevant**: Background execution model, task queue, webhook status callbacks
-**Gap**: Platform is a managed deployment service, not a framework primitive. Event sources are limited. No local daemon patterns (file watching, stream tailing).
-
-### 2.4 OmniDaemon (Research Pattern)
-
-Event-driven runtime where agents subscribe to "Topics" (e.g. Redis streams). When a message arrives on a topic, the daemon triggers the agent callback.
-
-**Relevant**: Closest to the sentinel pattern — daemon process + event stream subscription
-**Gap**: Single event source type (Redis streams). No scheduling, no file watching.
-
-### 2.5 Microsoft Sentinel (Security)
-
-Microsoft Sentinel evolved from SIEM to an "agentic platform" with AI agents for security operations. Sentinel agents deploy as **sidecars** alongside primary systems — intercepting, filtering, and pre-validating communications.
-
-**Relevant**: Sidecar deployment model. Continuous behavioral monitoring. Hybrid rule-based + LLM auditing.
-**Gap**: Domain-specific (security). Not a general-purpose framework.
-
-### 2.6 Summary: The Gap
-
-| Capability | AutoGen | CrewAI | LangGraph | **Ours (Goal)** |
-|---|---|---|---|---|
-| Cron scheduling | - | - | Partial | **Yes** |
-| Event triggers | Internal | Internal | Webhooks | **Yes (Conductor events)** |
-| Webhook triggers | - | - | Status only | **Yes** |
-| File/log watching | - | - | - | **Yes (local daemon)** |
-| Stream watching (Kafka/Redis) | - | - | - | **Yes (local consumer)** |
-| Multi-trigger per agent | - | - | - | **Yes** |
-| Durable execution (retry, audit) | - | - | Yes | **Yes (Conductor)** |
-| Simple deployment | - | - | Managed service | **Yes (pip + one command)** |
-
-## 3. Conceptual Model
-
-### 3.1 The Sentinel Agent
-
-A **Sentinel Agent** is a regular agent (model + tools + instructions) with one addition: **triggers** that define when and how it activates.
+A **Sentinel Agent** is a regular agent with one addition — **triggers** that define when and how it activates:
 
 ```
 Sentinel Agent = Agent + Triggers
@@ -130,7 +16,7 @@ Sentinel Agent = Agent + Triggers
 
 The agent definition describes **what** it does. Triggers describe **when** it runs.
 
-### 3.2 The Activation Layer
+The activation layer sits in front of agent execution. A trigger fires, injects context into the prompt template, the agent executes (LLM ↔ tools, with guardrails and optional memory), and the result drives an action — an alert, a fix, a report, a ticket, a restart.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -163,10 +49,41 @@ The agent definition describes **what** it does. Triggers describe **when** it r
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 3.3 Trigger Types
+### Landscape & the gap
+
+No current framework provides a clean, unified model for always-on, multi-trigger agents with durable execution and simple deployment.
+
+| Capability | AutoGen | CrewAI | LangGraph | **Ours (Goal)** |
+|---|---|---|---|---|
+| Cron scheduling | - | - | Partial | **Yes (shipped)** |
+| Event triggers | Internal | Internal | Webhooks | **Yes (Conductor events)** |
+| Webhook triggers | - | - | Status only | **Yes** |
+| File/log watching | - | - | - | **Yes (local daemon)** |
+| Stream watching (Kafka/Redis) | - | - | - | **Yes (local consumer)** |
+| Multi-trigger per agent | - | - | - | **Yes** |
+| Durable execution (retry, audit) | - | - | Yes | **Yes (Conductor)** |
+| Simple deployment | - | - | Managed service | **Yes (pip + one command)** |
+
+- **AutoGen v0.4 (AG2)** — async, event-driven actor model with rich event surfacing. *Gap*: no deployment model, no external triggers; you run it, it runs once.
+- **CrewAI** — Crews (agent groups) vs. Flows (event-driven pipelines). *Gap*: "events" are internal flow routing, not external activation; no cron/file/webhook out of the box.
+- **LangGraph Platform** — background runs, task queue, webhook status callbacks, mentions cron. *Gap*: a managed deployment service, not a framework primitive; limited event sources; no local daemon patterns.
+- **OmniDaemon (research)** — daemon + topic subscription (e.g. Redis streams). *Gap*: single event-source type; no scheduling, no file watching.
+- **Microsoft Sentinel (security)** — sidecar deployment, continuous behavioral monitoring, hybrid rule + LLM auditing. *Gap*: domain-specific, not general-purpose.
+
+## 2. Trigger Model
+
+Five trigger types span the spectrum from fully server-managed to local-daemon-driven. **Schedule is shipped today (Phase 1)**; the rest are roadmap (Section 4).
+
+| Trigger | Activation | Deployment | Status |
+|---|---|---|---|
+| **Schedule** | cron expression | server-side | **Shipped** |
+| **EventTrigger** | named pub/sub event | server-side | Roadmap |
+| **WebhookTrigger** | matching HTTP request | server-side | Roadmap |
+| **FileWatch** | local file matches pattern | local watcher | Roadmap |
+| **StreamWatch** | message on a stream | local consumer | Roadmap |
 
 #### Schedule
-Runs the agent on a cron expression. Server-side — the orchestration platform handles timing.
+Runs the agent on a cron expression. Server-side — the orchestration platform handles timing. See Section 3 for the shipped API.
 
 ```
 Schedule:
@@ -231,7 +148,7 @@ StreamWatch:
 
 **Maps to**: Local consumer thread → calls workflow start API on message.
 
-### 3.4 Prompt Templating
+### Prompt templating
 
 Triggers inject context into the agent's prompt via template variables:
 
@@ -243,14 +160,365 @@ Triggers inject context into the agent's prompt via template variables:
 | FileWatch | `{matched_lines}`, `{filepath}`, `{line_number}`, `{match}` |
 | StreamWatch | `{message}`, `{topic}`, `{offset}`, `{timestamp}` |
 
-Server-side triggers use `${...}` (Conductor expression syntax, resolved server-side).
-Local triggers use `{...}` (resolved by the local watcher before workflow start).
+Server-side triggers use `${...}` (Conductor expression syntax, resolved server-side). Local triggers use `{...}` (resolved by the local watcher before workflow start).
 
-## 4. Deployment Architecture
+## 3. Phase 1 — Scheduling (SHIPPED)
 
-### 4.1 Server-Side Triggers (Schedule, Event, Webhook)
+**Status: complete across all four SDKs (Python, TypeScript, Java, C#) and the UI (2026-06).** Users can put an agent on one or more cron schedules from code, with full lifecycle control (deploy, list, pause/resume, delete, ad-hoc run-now). Schedules survive process restarts; the orchestration server (Conductor) handles timing.
 
-These are fully managed by the orchestration server. No local process needed beyond initial registration.
+### 3.1 Model
+
+```
+Agent ──deploy──► WorkflowDef
+                    ▲
+                    │  startWorkflowRequest.name = agent.name
+                    │
+              ┌─────┴─────┬───────────┐
+          Schedule    Schedule    Schedule       ← N independent crons per agent
+        (name="A")  (name="B")  (name="C")
+```
+
+- One `Schedule` = one cron expression + one input + one name.
+- An agent can have **N schedules**; pause/resume/delete each independently.
+- **Ownership is implicit**: a schedule "belongs to" an agent iff `startWorkflowRequest.name == agent.name`. No tags or metadata needed — Conductor's `findAllSchedules(workflowName)` does the lookup.
+- Server-side scheduler is **Conductor** (`/api/scheduler/*`). The SDK is a thin typed wrapper.
+
+### 3.2 Conductor surface this builds on
+
+Verified against [conductor-oss/conductor](https://github.com/conductor-oss/conductor):
+
+| SDK call | Conductor endpoint | Source |
+|---|---|---|
+| Save / upsert | `POST /api/scheduler/schedules` | `SchedulerResource.java:62` |
+| List for agent | `GET  /api/scheduler/schedules?workflowName={agent}` | `SchedulerResource.java:69` |
+| Get one | `GET  /api/scheduler/schedules/{name}` | `SchedulerResource.java:93` |
+| Delete | `DELETE /api/scheduler/schedules/{name}` | `SchedulerResource.java:99` |
+| Pause | `PUT  /api/scheduler/schedules/{name}/pause?reason=...` | `SchedulerResource.java:110` |
+| Resume | `PUT  /api/scheduler/schedules/{name}/resume` | `SchedulerResource.java:119` |
+| Preview next N fires | `GET  /api/scheduler/nextFewSchedules?cronExpression=...&limit=N` | `SchedulerResource.java:130` |
+| Run now (ad-hoc) | `POST /api/workflow/{agent.name}` (bypasses scheduler) | core workflow API |
+
+The `WorkflowSchedule` payload sent in `POST /schedules`:
+
+```json
+{
+  "name": "weekday-9am",
+  "cronExpression": "0 9 * * MON-FRI",
+  "zoneId": "America/Los_Angeles",
+  "paused": false,
+  "runCatchupScheduleInstances": false,
+  "scheduleStartTime": null,
+  "scheduleEndTime": null,
+  "description": "Daily digest",
+  "startWorkflowRequest": {
+    "name": "daily_digest",
+    "version": null,
+    "input": { "channel": "#eng" },
+    "correlationId": null
+  }
+}
+```
+
+### 3.3 Schedule object — fields
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `name` | string | **yes** | — | Unique per agent. SDK auto-prefixes the wire name as `{agent.name}-{name}` to satisfy Conductor's org-wide uniqueness constraint while preserving the per-agent mental model. Raise at construction if omitted. |
+| `cron` | string | **yes** | — | 5- or 6-field cron (seconds optional). Server validates. |
+| `timezone` | string | no | `"UTC"` | IANA tz id, maps to `zoneId`. |
+| `input` | object | no | `{}` | Workflow input. |
+| `catchup` | bool | no | `false` | Maps to `runCatchupScheduleInstances`. Replay missed fires on resume. |
+| `paused` | bool | no | `false` | Start in paused state. |
+| `start_at` | datetime | no | `null` | Window start (ms since epoch). |
+| `end_at` | datetime | no | `null` | Window end. |
+| `description` | string | no | `null` | Human-readable note. |
+
+**Not exposed in v1**: `overlap` (Conductor fires every tick — agentspan-side skip/queue is future work), `cronSchedules` multi-cron list (covered by N schedules).
+
+### 3.4 Lifecycle semantics
+
+#### Deploy is declarative, scoped to this agent
+
+```text
+deploy(agent, schedules=...)
+```
+
+| `schedules=` value | Behavior |
+|---|---|
+| omitted / `None` | Leave existing schedules untouched. |
+| `[]` (empty list) | Delete **all** schedules whose `workflowName == agent.name`. |
+| `[Schedule(...), ...]` | **Upsert** the listed schedules; delete any other schedule whose `workflowName == agent.name`. |
+
+Reconciliation algorithm:
+
+```
+existing  = SchedulerClient.getAllSchedules(workflowName=agent.name)
+desired   = schedules
+to_delete = {s.name for s in existing} - {s.name for s in desired}
+to_upsert = desired
+for s in to_delete: deleteSchedule(s)
+for s in to_upsert: saveSchedule(s)
+```
+
+This works precisely because agent name = workflow name. No tagging scheme.
+
+#### Module-level lifecycle API
+
+All operations are keyed by schedule **name** — no handles to pass around, survives process restart.
+
+```text
+schedules.list(agent=name) -> [ScheduleInfo]
+schedules.get(name)        -> ScheduleInfo
+schedules.pause(name, reason=None)
+schedules.resume(name)
+schedules.delete(name)
+schedules.run_now(name)               # bypasses scheduler; returns execution id immediately
+schedules.run_now(name, wait=True)    # opt-in: block until completion (returns AgentResult)
+schedules.executions(name, limit=20)  # past runs of this schedule
+schedules.preview_next(cron, n=5)     # for UI / drawer
+```
+
+`ScheduleInfo` returned by `get` / `list`:
+
+```
+ScheduleInfo {
+  name, cron, timezone, input, paused, paused_reason,
+  catchup, start_at, end_at, description,
+  next_run, last_run,        # epoch ms (server-computed)
+  create_time, created_by, update_time, updated_by,
+  agent,                     # = workflow name
+}
+```
+
+#### Overlap
+
+Fixed to `allow` in v1 (Conductor's native behavior). Every cron tick starts a new workflow execution even if the prior one is still running. Skip-if-running and queue policies are future agentspan-layer features.
+
+#### Errors
+
+- Duplicate `name` within the same agent → SDK raises `ScheduleNameConflict` before the wire call. Across agents, names are isolated by the `{agent.name}-` prefix, so no collision possible.
+- Bad cron → 400. SDK surfaces `InvalidCronExpression` with the server's parse error.
+- Schedule not found on `pause`/`resume`/`delete`/`get` → 404 → `ScheduleNotFound`.
+
+### 3.5 Language SDK surfaces
+
+Same semantics, idiomatic shape per language. All four wrap the same Conductor REST surface.
+
+#### Python
+
+```python
+from agentspan.agents import Agent, deploy, schedules
+from agentspan.agents.schedule import Schedule
+
+agent = Agent(name="daily_digest", ...)
+
+deploy(
+    agent,
+    schedules=[
+        Schedule(
+            name="weekday-9am",
+            cron="0 9 * * MON-FRI",
+            timezone="America/Los_Angeles",
+            input={"channel": "#eng"},
+        ),
+        Schedule(name="friday-5pm", cron="0 17 * * FRI", input={"channel": "#all-hands"}),
+    ],
+)
+
+schedules.list(agent="daily_digest")
+schedules.pause("weekday-9am", reason="rate limit cooldown")
+schedules.resume("weekday-9am")
+schedules.run_now("weekday-9am")
+schedules.delete("weekday-9am")
+schedules.preview_next("0 9 * * MON-FRI", n=5)
+```
+
+`Schedule` is a `@dataclass(frozen=True)` (matches repo convention — no Pydantic). All names snake_case. Async siblings: `schedules.list_async`, `pause_async`, etc., plus `deploy_async(..., schedules=...)`.
+
+#### TypeScript
+
+```ts
+import { Agent, deploy, schedules, Schedule } from "@conductoross/conductor-agent-sdk";
+
+const agent = new Agent({ name: "dailyDigest", /* ... */ });
+
+await deploy(agent, {
+  schedules: [
+    new Schedule({
+      name: "weekday-9am",
+      cron: "0 9 * * MON-FRI",
+      timezone: "America/Los_Angeles",
+      input: { channel: "#eng" },
+    }),
+    new Schedule({ name: "friday-5pm", cron: "0 17 * * FRI", input: { channel: "#all-hands" } }),
+  ],
+});
+
+await schedules.list({ agent: "dailyDigest" });
+await schedules.pause("weekday-9am", { reason: "rate limit cooldown" });
+await schedules.resume("weekday-9am");
+await schedules.runNow("weekday-9am");
+await schedules.delete("weekday-9am");
+await schedules.previewNext("0 9 * * MON-FRI", { n: 5 });
+```
+
+Constructor takes a single options object (camelCase). Field renames: `timezone` (not `tz`), `catchup`, `startAt`, `endAt`. All operations return Promises. Type exported as `ScheduleOptions` for the constructor and `ScheduleInfo` for the runtime view.
+
+#### Java
+
+```java
+import ai.agentspan.Agent;
+import ai.agentspan.AgentRuntime;
+import ai.agentspan.schedule.Schedule;
+import ai.agentspan.schedule.Schedules;
+
+Agent agent = Agent.builder().name("daily_digest")./*...*/.build();
+
+AgentRuntime runtime = new AgentRuntime();
+runtime.deploy(
+    agent,
+    List.of(
+        Schedule.builder()
+            .name("weekday-9am")
+            .cron("0 9 * * MON-FRI")
+            .timezone("America/Los_Angeles")
+            .input(Map.of("channel", "#eng"))
+            .build(),
+        Schedule.builder()
+            .name("friday-5pm")
+            .cron("0 17 * * FRI")
+            .input(Map.of("channel", "#all-hands"))
+            .build()));
+
+Schedules schedules = runtime.schedules();
+schedules.list("daily_digest");
+schedules.pause("weekday-9am", "rate limit cooldown");
+schedules.resume("weekday-9am");
+schedules.runNow("weekday-9am");
+schedules.delete("weekday-9am");
+schedules.previewNext("0 9 * * MON-FRI", 5);
+```
+
+`Schedule` uses Lombok `@Builder` (mirrors `WorkflowSchedule.java` from Conductor). `Schedules` is reached via `runtime.schedules()` rather than a top-level static — fits the existing `AgentRuntime`-centric Java idiom. Overloaded `deploy(Agent agent, List<Schedule> schedules)` extends the current `deploy(Agent...)`.
+
+#### C#
+
+```csharp
+using Conductor.AI;
+using Conductor.AI.Scheduling;
+
+var agent = new Agent { Name = "daily_digest", /* ... */ };
+
+await using var runtime = new AgentRuntime();
+await runtime.DeployAsync(
+    agent,
+    schedules: new[]
+    {
+        new Schedule
+        {
+            Name     = "weekday-9am",
+            Cron     = "0 9 * * MON-FRI",
+            Timezone = "America/Los_Angeles",
+            Input    = new { channel = "#eng" },
+        },
+        new Schedule
+        {
+            Name  = "friday-5pm",
+            Cron  = "0 17 * * FRI",
+            Input = new { channel = "#all-hands" },
+        },
+    });
+
+var schedules = runtime.Schedules;
+await schedules.ListAsync(agent: "daily_digest");
+await schedules.PauseAsync("weekday-9am", reason: "rate limit cooldown");
+await schedules.ResumeAsync("weekday-9am");
+await schedules.RunNowAsync("weekday-9am");
+await schedules.DeleteAsync("weekday-9am");
+await schedules.PreviewNextAsync("0 9 * * MON-FRI", n: 5);
+```
+
+`Schedule` is a property-init record-style class. All operations async-first (sync wrappers mirror existing `AgentRuntime` style). `Schedules` accessor on `AgentRuntime` parallels Java.
+
+### 3.6 UI
+
+Two surfaces. Both back onto the same REST endpoints.
+
+#### Agent detail → Schedules tab
+
+```
+┌─ Agent: daily_digest ─────────────────────────────────────────────────┐
+│  [ Overview ] [ Executions ] [ Schedules ] [ Versions ] [ Code ]      │
+│ ───────────────────────────────────────────────────────────────────── │
+│                                                              [+ New]  │
+│  ● weekday-9am    0 9 * * MON-FRI   PT   next: Tue 9:00 AM            │
+│      last: ✓ 2026-05-26 9:00 (12.4s)        [Pause] [Run now] [⋯]     │
+│                                                                       │
+│  ◐ friday-5pm     0 17 * * FRI      UTC  PAUSED (rate limit cooldown) │
+│      last: ✓ 2026-05-22 17:00               [Resume] [Run now] [⋯]    │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+Status glyph: ● active · ◐ paused · ⊘ expired. Row click → detail drawer.
+
+#### New / edit drawer
+
+```
+┌─ New schedule ─────────────────────────────────────┐
+│  Name *           [ weekday-9am               ]    │
+│  Cron *           [ 0 9 * * MON-FRI           ]    │
+│                   ⓘ "At 9:00 AM, Mon–Fri"          │
+│                   Next: Tue 9:00 · Wed 9:00 · ...  │
+│  Timezone         [ America/Los_Angeles      ▾ ]   │
+│  Input (JSON)     ┌──────────────────────────┐     │
+│                   │ { "channel": "#eng" }    │     │
+│                   └──────────────────────────┘     │
+│  Window           Start [ — ]  End [ — ]  (opt)    │
+│  [ ] Catch up missed runs on resume                │
+│  [ ] Start paused                                  │
+│                                                    │
+│             [ Cancel ]              [ Save ]       │
+└────────────────────────────────────────────────────┘
+```
+
+Cron preview uses `GET /api/scheduler/nextFewSchedules` and the existing `cronExpressionHelpers.ts`.
+
+#### Schedule detail drawer
+
+- Header: name · cron · tz · status · `[Pause/Resume]` `[Run now]` `[Edit]` `[Delete]`
+- Tabs:
+  - **Executions** — table of past runs (started, duration, status, workflow id → click through)
+  - **Definition** — read-only JSON
+  - **History** — audit trail (created / paused with reason / edited)
+
+#### Global Schedules list
+
+`Agent` column + filter on `ui/src/pages/scheduler/`. Same row controls. The cross-agent view; the agent-detail tab is a filtered slice.
+
+### 3.7 Validation evidence
+
+- Conductor REST surface — `scheduler/corexx/src/main/java/io/orkes/conductor/scheduler/rest/SchedulerResource.java` (verified all endpoints exist).
+- `findAllSchedules(orgId, workflowName)` — `scheduler/core/.../dao/scheduler/SchedulerDAO.java:36`.
+- `WorkflowSchedule` model fields — `scheduler/corexx/.../model/WorkflowSchedule.java`.
+- conductor-python already has `SchedulerClient` (`save_schedule`, `get_all_schedules(workflow_name=...)`, `delete_schedule`, `pause_schedule`, `resume_schedule`) — agentspan SDKs wrap it.
+- agent.name → workflow name — `server/.../AgentService.java:222` (`def.getName()` returned as `agentName`).
+
+### 3.8 Resolved design questions (Phase 1)
+
+1. **Module path** → `agentspan.agents.schedule.Schedule`. Ships only what exists today; if/when Webhook/Event triggers land, they get their own modules and we revisit a `triggers/` umbrella.
+2. **`run_now` blocking** → returns the execution id immediately. Agents can run for minutes; blocking is the wrong default for a UI button or scripted invocation. Opt-in `wait=True` (Python/TS) / overloaded `runNowAndWait` (Java/C#) for sync use.
+3. **`nextRunTime` when paused-on-create** → verified against Conductor source (`scheduler/core/.../SchedulerService.java:732`): `setNextRunTimeInEpoch(...)` is called unconditionally on save; the `isPaused()` check only gates the queue-message push that triggers the fire. The UI's "Next: ..." column is reliable for paused schedules. No SDK or UI accommodation needed.
+4. **Schedule name scoping** → unique **per agent**, not globally. The SDK auto-prefixes the wire name to `{agent.name}-{name}` at `deploy()` time so users write `Schedule(name="daily")` ergonomically while Conductor's org-wide uniqueness is satisfied. The prefixed name is the canonical identifier returned by `list()`/`get()` and accepted by `pause`/`resume`/`delete`/`run_now`. The `ScheduleInfo` dataclass exposes both `name` (prefixed, wire) and `short_name` (the user's original) for display.
+
+## 4. Roadmap — Event / Webhook / File / Stream Triggers
+
+The remaining four trigger types extend the same `deploy(agent, triggers=[...])` umbrella. Server-side triggers (Event, Webhook) are fully managed by the orchestration server; local source watchers (FileWatch, StreamWatch) require a local daemon.
+
+### 4.1 Deployment architecture
+
+#### Server-side triggers (Event, Webhook)
+
+Fully managed by the orchestration server. No local process needed beyond initial registration.
 
 ```
 Developer                    Orchestration Server
@@ -275,7 +543,7 @@ Developer                    Orchestration Server
     │◄─────────────────────────────│
 ```
 
-### 4.2 Local Source Watchers (FileWatch, StreamWatch)
+#### Local source watchers (FileWatch, StreamWatch)
 
 These require a local daemon process that watches the source and triggers the agent.
 
@@ -310,13 +578,13 @@ The local process runs:
 2. **Tool workers** — serving the agent's @tool functions to the orchestration server
 3. **Main thread** — `runtime.wait()` blocks, keeping everything alive
 
-### 4.3 How You Install and Run This
+#### How you install and run this
 
 **Scenario: "Tail a log file and trigger an agent on errors"**
 
 ```bash
 # 1. Install
-pip install agentspan-sdk   # or: npm install @agentspan-ai/sdk
+pip install conductor-agent-sdk   # or: npm install @conductoross/conductor-agent-sdk
 
 # 2. Write the sentinel (sentinel.py / sentinel.ts)
 #    Define agent + tools + FileWatch trigger
@@ -331,14 +599,9 @@ docker run -v /var/log:/var/log:ro my-sentinel   # containerized
 systemctl start conductor-sentinel@log_monitor   # systemd service
 ```
 
-**What `runtime.wait()` does:**
-- Blocks the main thread
-- Keeps file watchers alive (local threads)
-- Keeps tool workers polling for tasks
-- Handles graceful shutdown on SIGTERM/SIGINT
-- Logs trigger events and agent executions
+**What `runtime.wait()` does:** blocks the main thread, keeps file watchers alive, keeps tool workers polling, handles graceful shutdown on SIGTERM/SIGINT, and logs trigger events and agent executions.
 
-### 4.4 Multi-Instance / HA Deployment
+#### Multi-instance / HA deployment
 
 | Trigger Type | Multi-Instance Behavior |
 |---|---|
@@ -348,11 +611,9 @@ systemctl start conductor-sentinel@log_monitor   # systemd service
 | **FileWatch** | Local — each instance watches independently. Needs **distributed lock** or **leader election** to prevent duplicate triggers. |
 | **StreamWatch** | Use consumer groups (Kafka) or competing consumers (SQS) for natural dedup. |
 
-## 5. Lifecycle Management
+### 4.2 Lifecycle management (multi-trigger)
 
-### 5.1 Deployment Handle
-
-When an agent is deployed, a handle is returned for ongoing management:
+When an agent is deployed with non-schedule triggers, a handle is returned for ongoing management:
 
 ```
 DeploymentHandle:
@@ -369,23 +630,11 @@ DeploymentHandle:
   last_execution()               # most recent run result
 ```
 
-### 5.2 Observability
+Observability: deployed sentinels expose execution history (when it ran, what triggered it, outcome), trigger status (active? last fire? error count?), metrics (runs/hour, avg duration, tokens, tool calls), and structured logs. Access via API (`handle.executions()`, `handle.status`), CLI (`conductor-agent status`, `conductor-agent logs <name>`), and the Web UI (Conductor's workflow execution UI).
 
-Deployed sentinels should expose:
+### 4.3 Concrete examples
 
-- **Execution history** — when it ran, what triggered it, what it did, outcome
-- **Trigger status** — is each trigger active? Last fire time? Error count?
-- **Metrics** — runs per hour, avg duration, LLM tokens used, tool calls made
-- **Logs** — structured logs for each trigger fire and agent execution
-
-Access via:
-- **API**: `handle.executions()`, `handle.status`
-- **CLI**: `conductor-agent status`, `conductor-agent logs <name>`
-- **Web UI**: Conductor's workflow execution UI (already exists)
-
-## 6. Concrete Examples
-
-### 6.1 Log Sentinel
+#### Log Sentinel (FileWatch + Schedule)
 
 ```
 Agent:
@@ -415,7 +664,7 @@ Triggers:
       prompt: Compile a weekly summary of all errors from the past week.
 ```
 
-### 6.2 PR Review Sentinel
+#### PR Review Sentinel (WebhookTrigger + Schedule)
 
 ```
 Agent:
@@ -436,7 +685,7 @@ Triggers:
       prompt: "Check for any unreviewed PRs in the last 30 minutes."
 ```
 
-### 6.3 Incident Responder
+#### Incident Responder (EventTrigger)
 
 ```
 Agent:
@@ -467,9 +716,9 @@ Triggers:
         ${event.annotations.description}
 ```
 
-### 6.4 Omnipresent Ops Agent
+#### Omnipresent Ops Agent (all trigger types)
 
-The most ambitious pattern — a single agent with multiple trigger types:
+The most ambitious pattern — a single agent combining every trigger type:
 
 ```
 Agent:
@@ -512,67 +761,24 @@ Triggers:
       prompt: "Deployment to ${webhook.payload.environment}: verify health."
 ```
 
-## 7. Execution Plan
+### 4.4 Roadmap phases
 
-### Phase 1: Foundation (Schedule + Deploy/Undeploy) ✅ Shipped (2026-06)
+**Phase 2 — Event & Webhook Triggers.** `EventTrigger` class → registers event handler with the orchestration server. `WebhookTrigger` class → registers webhook handler. Prompt template interpolation with event/webhook payload. *Example*: incident responder triggered by PagerDuty events.
 
-> **Status**: complete across all four SDKs (Python, TypeScript, Java, C#) and the UI.
-> See [`docs/scheduling.md`](../scheduling.md) for the user guide and
-> [`docs/design/scheduling.md`](../../design/scheduling.md) for the design rationale.
+**Phase 3 — Local File Watching.** `FileWatch` trigger class. Local file tailing engine (efficient, handles rotation and glob patterns). Pattern matching + debounce. On match → `runtime.start(agent, prompt=rendered_template)`. *Example*: log sentinel watching error.log.
 
-- ✅ `Schedule` dataclass / class in all four SDKs
-- ✅ `deploy(agent, schedules=[...])` with declarative tri-state reconciliation
-- ✅ Module-level lifecycle API: `list`, `get`, `pause`, `resume`, `delete`, `run_now`, `preview_next`
-- ✅ Typed errors: `ScheduleNameConflict`, `ScheduleNotFound`, `InvalidCronExpression`
-- ✅ Wire-name auto-prefix (`{agent.name}-{name}`) with `ScheduleInfo.short_name` for display
-- ✅ Agent detail UI tab (Schedules) + global Schedules list with Agent column/filter
-- ✅ `run_now` non-blocking by default; `wait=True` opt-in in Python
+**Phase 4 — Stream Watching.** `StreamWatch` trigger class. Connector interface for Kafka, Redis Streams, SQS, etc. Consumer-group support for multi-instance dedup. *Example*: data-pipeline monitor on a Kafka topic.
 
-### Phase 2: Event & Webhook Triggers
-- `EventTrigger` class → registers event handler with orchestration server
-- `WebhookTrigger` class → registers webhook handler
-- Prompt template interpolation with event/webhook payload
-- **Example**: Incident responder triggered by PagerDuty events
+**Phase 5 — CLI & Observability.** `conductor-agent deploy <file>` (daemonize), `status` (list deployed sentinels), `logs <name>` (stream execution logs), `pause/resume/undeploy <name>`. Dashboard integration with execution history.
 
-### Phase 3: Local File Watching
-- `FileWatch` trigger class
-- Local file tailing engine (efficient, handles rotation, glob patterns)
-- Pattern matching + debounce logic
-- On match → `runtime.start(agent, prompt=rendered_template)`
-- **Example**: Log sentinel watching error.log
+**Phase 6 — Advanced Patterns.** Cost controls (max runs/hour, spend threshold, auto-pause); concurrency policy (skip-if-running / queue / parallel); state across runs (automatic memory injection for scheduled agents — see [`stateful-agents.md`](stateful-agents.md)); multi-instance coordination (distributed locking for FileWatch in HA); chained sentinels (one sentinel's output triggers another).
 
-### Phase 4: Stream Watching
-- `StreamWatch` trigger class
-- Connector interface for Kafka, Redis Streams, SQS, etc.
-- Consumer group support for multi-instance dedup
-- **Example**: Data pipeline monitor on Kafka topic
+### 4.5 Open design questions
 
-### Phase 5: CLI & Observability
-- `conductor-agent deploy <file>` — daemonize a sentinel
-- `conductor-agent status` — list deployed sentinels
-- `conductor-agent logs <name>` — stream execution logs
-- `conductor-agent pause/resume/undeploy <name>`
-- Dashboard integration with execution history
-
-### Phase 6: Advanced Patterns
-- **Cost controls**: Max runs per hour, spend threshold, auto-pause
-- **Concurrency policy**: Skip-if-running / queue / parallel
-- **State across runs**: Automatic memory injection for scheduled agents
-- **Multi-instance coordination**: Distributed locking for FileWatch in HA deployments
-- **Chained sentinels**: Output of one sentinel triggers another
-
-## 8. Open Design Questions
-
-1. **Prompt templating syntax**: Server-side triggers naturally use orchestration engine expressions (`${event.field}`). Local triggers resolve before the workflow starts (`{matched_lines}`). Should we unify or keep the natural split?
-
-2. **Concurrency on schedule overlap**: If a cron fires while the previous run is still executing — skip, queue, or parallel? Default recommendation: **skip-if-running** to prevent agent pile-up and runaway costs.
-
-3. **State persistence across scheduled runs**: Should sentinel agents automatically get conversation memory so they "remember" previous runs? Or is this opt-in via the memory parameter? Recommendation: **opt-in** — memory adds cost and complexity.
-
-4. **FileWatch reliability**: The local watcher process is a single point of failure. Options: (a) watchdog/health checks, (b) systemd auto-restart, (c) heartbeat to orchestration server that alerts on missed heartbeats.
-
-5. **Cost guardrails**: LLM calls cost money. Sentinel agents can run thousands of times per day. Should triggers support: max executions per hour? Monthly spend cap? Auto-pause on threshold?
-
-6. **Trigger composition**: Can triggers have dependencies? E.g., "Only trigger on FileWatch if the last Schedule run found issues." This adds complexity — defer to Phase 6.
-
-7. **Multi-SDK consistency**: Design should work across Python, TypeScript, Java, Go SDKs. Trigger classes and deployment API should be identical in structure, differing only in language idiom.
+1. **Prompt templating syntax**: Server-side triggers naturally use orchestration engine expressions (`${event.field}`). Local triggers resolve before the workflow starts (`{matched_lines}`). Unify, or keep the natural split?
+2. **Concurrency on schedule overlap**: If a cron fires while the previous run is still executing — skip, queue, or parallel? Default recommendation: **skip-if-running** to prevent agent pile-up and runaway costs. (Schedule overlap is `allow` in shipped Phase 1; this is the Phase 6 agentspan-layer feature.)
+3. **State persistence across scheduled runs**: Should sentinel agents automatically get conversation memory? Recommendation: **opt-in** via the memory parameter — memory adds cost and complexity.
+4. **FileWatch reliability**: The local watcher process is a single point of failure. Options: (a) watchdog/health checks, (b) systemd auto-restart, (c) heartbeat to the orchestration server that alerts on missed heartbeats.
+5. **Cost guardrails**: Sentinel agents can run thousands of times per day. Should triggers support max executions per hour, a monthly spend cap, auto-pause on threshold?
+6. **Trigger composition**: Can triggers have dependencies? E.g., "only trigger on FileWatch if the last Schedule run found issues." Adds complexity — defer to Phase 6.
+7. **Multi-SDK consistency**: Trigger classes and deployment API should be identical in structure across Python, TypeScript, Java, and C# SDKs, differing only in language idiom — as already achieved for Phase 1 scheduling.

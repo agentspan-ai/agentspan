@@ -1,282 +1,180 @@
-# AgentSpan as a Library: Module Split & SPI Design
+# Agentspan Design
 
-**Status:** Proposed
-**Author:** (design draft)
-**Date:** 2026-06-04
-**Goal:** Invert the dependency direction between AgentSpan and Conductor. Today the
-AgentSpan server bundles Conductor and runs as a standalone app. We want AgentSpan to be a
-**library that Conductor (starting with orkes-conductor) depends on**, with clean, swappable SPIs
-so the enterprise build can supply its own persistence/secret implementations while OSS uses the
-bundled ones as-is.
+**Status:** Consolidated 2026-06-26
+
+**Scope:** This is the canonical platform architecture and server-feature reference for Agentspan. It covers the core model ("everything is an agent"), how an `AgentConfig` compiles to a Conductor `WorkflowDef`, how those workflows execute (worker dispatch, durability), the library/server module split and its SPIs, multi-agent orchestration with pipeline context passing, and the server-side feature endpoints (HITL, dynamic DAG injection, agent signals) plus the `agentspan deploy` CLI. SDK-authoring detail (per-language idioms, serialization rules, worker registration mechanics) lives in [sdk-design.md](sdk-design.md); the REST/SSE contract in [api-design.md](api-design.md); and adjacent subsystems in [guardrails-design.md](guardrails-design.md), [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md), [framework-integration.md](framework-integration.md), [sentinel-agents.md](sentinel-agents.md), and [stateful-agents.md](stateful-agents.md).
 
 ---
 
-## 1. Goals & Non-Goals
+## 1. Overview & "Everything Is an Agent"
 
-### Goals
-1. **Invert the dependency.** `orkes-conductor` depends on the `conductor-agentspan` artifact, not
-   the other way around. AgentSpan stops shipping its own Conductor runtime in the embedded case.
-2. **Two modules** (`conductor-` prefix — these are Conductor-ecosystem artifacts):
-   - **`conductor-agentspan`** — the library. **Interfaces (SPIs) + core logic only.** Agent
-     domain, compilers, the Conductor integration, and all services that *operate on* the SPIs.
-     No concrete store/DAO/crypto implementations.
-   - **`conductor-agentspan-server`** — the OSS runtime + standalone app. Bundles the **default
-     implementations** of every SPI (JDBC secret store, filesystem skill stores, file/env master
-     key, HMAC tokens, …), the Conductor runtime, and the thin launcher (bootJar + Docker).
-3. **Implementations are the host's, contributed as beans.** Each persistence/secret concern is
-   an SPI; the library contains no impl. A host provides one impl bean per SPI:
-   `conductor-agentspan-server` ships the OSS defaults; orkes-conductor supplies its own
-   (enterprise secret manager, identity, etc.). This is the same `@ConditionalOnMissingBean` /
-   `@ConditionalOnProperty` contribution pattern orkes already uses for `http-task`, DAOs, and
-   security — just with the impls living entirely outside the library.
-4. **No reliance on the host's component scan.** AgentSpan registers itself through Spring
-   Boot auto-configuration (`META-INF/spring/...AutoConfiguration.imports`), so it works even
-   though orkes-conductor's `@ComponentScan` does **not** cover `dev.agentspan.*`.
-5. **Conductor version owned by the host.** `conductor-agentspan` compiles against Conductor APIs
-   as `compileOnly`/provided, so orkes-conductor's own Conductor version wins at runtime.
-6. **Standalone still works.** `conductor-agentspan-server` remains a runnable OSS distribution
-   (bootJar + Docker) that bundles an OSS Conductor runtime.
+Agentspan is a server-first agent execution platform built on [Conductor](https://conductor-oss.org). An SDK (Python is the reference; TypeScript, Java, Go, Kotlin, C#, Ruby mirror it) defines agents, tools, guardrails, and callbacks as language-native constructs, serializes them to a single **`AgentConfig` JSON**, and posts that to the server. The server **compiles** the config into a durable Conductor `WorkflowDef`, executes it on the Conductor engine, and streams events back over SSE. The SDK's remaining job at runtime is to run **workers** that the engine dispatches tool/guardrail/callback work to.
 
-### Non-Goals (for this effort)
-- Replacing Conductor with another execution engine, or a backend-neutral workflow IR. The
-  compilers keep emitting Conductor `WorkflowDef`/`WorkflowTask` (stable `conductor-common`
-  models). This is also why a separate engine-free "core" module buys nothing — see §3.
-- Rewriting the agent compilation logic. The split is structural; compiler internals are
-  untouched.
-- A separate SPI over Conductor execution. Conductor's `WorkflowService`/`MetadataService`/
-  `ExecutionService` already are that interface (see §4.1).
+```
+┌─────────────────────────────────────────────────┐
+│                 SDK (any language)               │
+│  Agent definition → serialize → AgentConfig JSON │
+│  Worker poll loop → tool execution → results     │
+│  SSE client → event stream → AgentStream         │
+└──────────────────────┬──────────────────────────┘
+                       │ REST + SSE (JSON)
+┌──────────────────────▼──────────────────────────┐
+│              Agentspan (Java, on Conductor)      │
+│  Compiler   → Conductor WorkflowDef              │
+│  Executor   → Conductor workflow engine          │
+│  Stream     → SSE events                         │
+│  Secrets    → AES-256-GCM store + exec tokens    │
+└─────────────────────────────────────────────────┘
+```
+
+**Everything is an agent.** There is one unifying domain object — the `Agent` — and a single serialization format (`AgentConfig`). A bare LLM call, a tool-using ReAct loop, a multi-agent swarm, a sequential pipeline, a router, and a plan-and-execute planner are all just `AgentConfig`s that differ in which fields are populated. Composition is recursive: the `agents` array of an `AgentConfig` holds nested `AgentConfig`s, and a nested agent invoked as a tool (`agent_tool`) compiles to a `SUB_WORKFLOW`. This recursion is what lets every orchestration strategy reduce to the same compile → execute → dispatch path.
+
+**No passthrough.** Framework agents (LangGraph, LangChain, OpenAI, Google ADK, Vercel AI SDK) are not run as black boxes. Each is decomposed into a proper `AgentConfig` and compiled through the same pipeline so that durability, per-tool observability, HITL, and distributed worker execution all apply. See [framework-integration.md](framework-integration.md).
+
+**Core principle for server features:** add no new Conductor primitives. HITL, signals, dynamic DAG injection, and context passing are all built on existing Conductor capabilities — `HUMAN` tasks, `updateVariables`, `SET_VARIABLE`/`INLINE`, `pause`/`resume`, `HTTP` tasks, and direct `ExecutionDAO` access.
 
 ---
 
-## 2. Current State (verified)
+## 2. Compilation Model (`AgentConfig` JSON → Conductor `WorkflowDef`)
 
-- **Single Gradle module** `agentspan-runtime`, Spring Boot `3.3.5`, Java 21, Conductor
-  `3.30.2` (`org.conductoross:conductor-*`). `bootJar` is the only output.
-- **~110 source files** under `dev.agentspan.runtime.*`. Beans are discovered through a wide
-  `@ComponentScan` over `com.netflix.conductor`, `io.orkes.conductor`,
-  `org.conductoross.conductor`, **and** `dev.agentspan.runtime` (`AgentRuntime.java`).
-- **No `META-INF/spring` auto-config** exists yet. Everything relies on the scan.
-- Conductor coupling is **not uniform** — it falls into three sharply different tiers:
+The SDK serializes an agent tree to `AgentConfig` JSON and posts it to `POST /agent/start` (compile + register + execute) or `POST /agent/compile` (compile only, returns the `WorkflowDef` without running). **Producing identical `AgentConfig` JSON for equivalent agent definitions across SDKs is the primary correctness criterion** — the wire JSON must match byte-for-byte for round-tripping with the server compiler.
 
-| Tier | Conductor artifact | Examples | Stability | Where it's used |
-|------|--------------------|----------|-----------|-----------------|
-| **A. Stable data models** | `conductor-common` | `WorkflowDef`, `WorkflowTask`, `Task`, `TaskDef`, `TaskResult`, `TaskExecLog`, `Workflow`, `WorkflowSummary`, `SearchResult`, `StartWorkflowRequest`, `RerunWorkflowRequest`, `SubWorkflowParams` | Serialized to DB; cross-version safe | **All compilers**, `AgentController`, `AgentService` |
-| **B. Engine internals** | `conductor-core` | `WorkflowExecutor`, `ExecutionDAO`, `MetadataDAO`, `WorkflowService`, `ExecutionService`, `WorkflowSystemTask`, `WorkflowModel`, `TaskModel`, `StartWorkflowInput`, `TaskMapperContext`, `ConductorProperties`, `HttpTask` | Version-coupled, no stable contract | `AgentService`, all custom system tasks, `Join`, `CredentialAwareHttpTask` |
-| **C. AI provider SPI** | `conductor-ai` (`org.conductoross.conductor.ai`) | `AIModelProvider`, `AIModelTaskMapper`, `LLMWorkerInput`, `ChatCompletion`, ... | Orkes-maintained extension point | `AgentspanAIModelProvider`, `AgentChatCompleteTaskMapper` |
+### 2.1 `AgentConfig` shape (abridged)
 
-**Key finding:** the **compilers** (`AgentCompiler`, `ToolCompiler`, `GuardrailCompiler`,
-`MultiAgentCompiler`, etc.) touch **only Tier A** (`conductor-common`). The tight Tier B
-coupling is concentrated in **`AgentService` + the custom system tasks + the credential-aware
-HTTP task**. This is what makes a clean split possible.
+All keys are camelCase; null-valued keys are omitted; `strategy` is set only when `agents` is non-empty.
 
-Verified `AgentService` Tier-B surface (lives in `conductor-agentspan`, used directly — §4.1):
-
-```
-ExecutionDAO       executionDAO;     // getWorkflow / updateWorkflow (WorkflowModel)
-MetadataDAO        metadataDAO;      // create/update/get/remove WorkflowDef & TaskDef
-WorkflowExecutor   workflowExecutor; // startWorkflow(StartWorkflowInput)
-WorkflowService    workflowService;  // pause/resume/terminate/restart/retry/rerun/search
-ExecutionService   executionService; // getExecutionStatus / updateTask / removeWorkflow / getTaskLogs
+```json
+{
+  "name": "agent_name",
+  "model": "provider/model_name",
+  "strategy": "handoff|sequential|parallel|router|round_robin|random|swarm|manual|plan_execute",
+  "maxTurns": 25,
+  "instructions": "string | { prompt_template } | null",
+  "tools": [ ToolConfig... ],
+  "agents": [ AgentConfig... ],
+  "router": "AgentConfig | { taskName }",
+  "guardrails": [ GuardrailConfig... ],
+  "outputType": { "schema": {...}, "className": "MyModel" },
+  "callbacks": [ { "position": "before_agent", "taskName": "..." } ],
+  "signalMode": "evaluate|auto_accept|disabled",
+  "credentials": ["GITHUB_TOKEN", "OPENAI_API_KEY"]
+}
 ```
 
-> **Secrets update (commit `c873e60b`):** the credentials feature was renamed to **secrets** for
-> Conductor API parity. The change is at the **API / DB-table / UI / SDK** layer — the internal
-> Java package is still `dev.agentspan.runtime.credentials` with `Credential*` class names. What
-> changed that matters for this design:
-> - **Bindings/aliases removed.** `CredentialBindingService` and the `credentials_binding` table
->   are gone; resolution is now a direct `(userId, name)` lookup with **dotted JSONPath** into a
->   JSON-valued secret (`GCP_SVC.project_id`) and **prefix-permissive declared-name bounding**.
-> - **Two REST surfaces with two auth boundaries** (Conductor parity): `SecretController`
->   `/api/secrets` (login-JWT / API-key, via `AuthFilter`) and `WorkerController`
->   `/api/workers/secrets` (HMAC **execution-token**, declared-name bounded, rate-limited).
-> - **New enterprise-override seam:** `CredentialOutputMasker` ships as an **OSS no-op**;
->   enterprise replaces it with disclosure-tracking masking (queries an enterprise-only
->   `credential_disclosures` table). Wired into responses by `CredentialMaskingResponseAdvice`
->   (`@ControllerAdvice`), which also masks the host's `/api/workflow/{id}` reads.
-> - `CredentialSchemaMigrator` — one-shot idempotent JDBC cleanup on `ApplicationReadyEvent`.
-> - `CredentialAwareMcpService` now **extends Conductor's `MCPService`** (`@Primary`) → it is
->   Conductor-coupled (resolves my earlier "verify" item).
+(Full field reference, `ToolConfig`/`GuardrailConfig` schemas, and per-SDK serialization rules: [sdk-design.md](sdk-design.md).)
 
-The split runs **interface vs implementation**. Interfaces (and the logic that calls them) go to
-the library; concrete impls go to the server.
+### 2.2 Compiler dispatch
 
-Already an interface (the impl just moves to the server):
-- `CredentialStoreProvider` — secret-store SPI → **lib**. Impl `EncryptedDbCredentialStoreProvider`
-  (JDBC over `credentials_store`, AES-256-GCM, atomic `INSERT ... ON CONFLICT`) → **server**.
-- `SkillPackageStore` → **lib**. Impls `FileSystemSkillPackageStore` /
-  `ConductorPayloadSkillPackageStore` (Conductor `ExternalPayloadStorage`) → **server**.
+The server-side `AgentCompiler` (plus `ToolCompiler`, `GuardrailCompiler`, `MultiAgentCompiler`) inspects the config and dispatches by shape:
 
-Concrete today — extract an interface (→ lib), impl → server:
-- `SkillRegistryService` metadata persistence → new `SkillMetadataDAO` (lib); filesystem-JSON impl
-  → server. (The *registry service logic* stays in the lib — it operates on the two skill SPIs.)
-- `MasterKeyConfig` → `MasterKeyProvider` (lib); file/env impl → server (enterprise: KMS/Vault).
-- `ExecutionTokenService` → `ExecutionTokenIssuer` (lib); HMAC impl → server.
-- `CredentialOutputMasker` → `SecretOutputMasker` (lib); OSS **no-op** impl → server (enterprise:
-  disclosure-tracking masker).
+| Config shape | Compiles to |
+|---|---|
+| No tools, no sub-agents | a single `LLM_CHAT_COMPLETE` task; output = `${llm.output.result}` |
+| Tools, no sub-agents | a `DO_WHILE` ReAct loop (§2.3) |
+| Sub-agents (`agents` set) | a multi-agent strategy graph (§5) |
+| Tools **and** sub-agents (hybrid) | a `DO_WHILE` loop whose tool set includes `transfer_to_{name}` handoff tools, followed by a `SWITCH` |
 
-Pure infra that goes to the server wholesale (not logic, not an SPI the lib calls): the JDBC
-`DataSource` config, `CredentialSchemaMigrator`, `CredentialEnvSeeder`, and the `schema-*.sql`.
+The compilers emit only stable `conductor-common` models (`WorkflowDef`, `WorkflowTask`, `TaskDef`) — no engine internals — which is what makes the library/server split in §4 clean.
 
-> **Auth is NOT an SPI.** `AuthFilter`/`UserRepository`/`ApiKeyRepository`/`AuthController`/
-> `AuthUserSeeder` exist but are **off by default** (`agentspan.auth.enabled=false` → `AuthFilter`
-> short-circuits to an anonymous admin user and never reads the repositories). They are optional
-> **standalone-only** scaffolding, so they live in `conductor-agentspan-server`, not the library.
-> Conductor OSS has no authN/authZ; orkes-conductor owns identity and API-key management and we
-> use the host's. The only thing the **library** needs is the current principal (`userId`) for
-> secret scoping, carried by `RequestContextHolder`/`RequestContext`/`User`; *who populates it* is
-> the host's job (`AuthFilter` standalone, an orkes security adapter when embedded).
+### 2.3 The ReAct loop (single agent with tools)
+
+The canonical compiled shape is a Conductor `DO_WHILE`:
+
+```
+[SET_VARIABLE: init messages]
+        │
+        ▼
+[DO_WHILE]
+  ├─ [LLM_CHAT_COMPLETE]  reads ${workflow.variables.messages}, json_output=true
+  ├─ [dispatch_worker]    routes tool calls, updates messages
+  │     llm_response=${llm.output.result}  messages=${workflow.variables.messages}
+  ├─ [SET_VARIABLE]       messages=${dispatch.output.messages}
+  └─ [stop_when_worker]   (optional)
+  condition: $.loop.iteration < maxTurns
+             && $.dispatch.continue_loop == true
+             [&& $.stop_when.should_continue == true]
+        │
+        ▼
+Output: ${dispatch.output.result}
+```
+
+> **Conductor quirk:** in `DO_WHILE` conditions, task references map directly to `outputData` with **no** `.output` wrapper — `$.dispatch.continue_loop`, not `$.dispatch.output.continue_loop`.
+
+Tool calls produced by the LLM are routed by an **enrichment script** (an `INLINE` GraalJS task) into a `FORK_JOIN_DYNAMIC` + `JOIN` so that all tool calls in a turn run in parallel, each mapped to its task type (`SIMPLE`/`HTTP`/`CALL_MCP_TOOL`/`SUB_WORKFLOW`/`INLINE`). Output guardrails compile into the loop body as durable tasks with a `SWITCH` on the result; input guardrails are an SDK-side pre-check. See [guardrails-design.md](guardrails-design.md).
+
+### 2.4 Task-def registration (server-side, at compile time)
+
+Conductor task definitions (timeout/retry config) are registered **by the server during compilation**, not by SDKs. After `compile()`, `AgentService.registerAllTaskDefs(WorkflowDef)` walks the entire workflow tree and registers a `TaskDef` for every `SIMPLE` task. This eliminated a class of bugs where the same timeout (`120s`) had been hardcoded independently in the Python SDK, the TS SDK, and the server.
+
+- **Per-tool override:** if a `ToolConfig` serializes `timeoutSeconds`, it is used for that task's `responseTimeoutSeconds`.
+- **Defaults:** `timeoutSeconds: 0` (no overall timeout), `responseTimeoutSeconds: 3600`, `retryCount: 2`, `retryDelaySeconds: 2`, `retryLogic: LINEAR_BACKOFF`.
+- **SDKs do not register task defs.** They only poll for and execute tasks (`register_task_def=False` in Python; the TS `registerTaskDef()` is a no-op kept for backward compat).
 
 ---
 
-## 3. Target Architecture
+## 3. Execution Model (Conductor workflows, worker dispatch, durability)
 
-### 3.1 Module graph
+Once compiled, an `AgentConfig` runs as a normal Conductor workflow — every benefit of durable execution comes for free.
+
+### 3.1 Runtime lifecycle
 
 ```
-   ┌──────────────────────────────────────────────────────────────────────┐
-   │                      conductor-agentspan-server                       │  (OSS runtime + standalone app)
-   │  DEFAULT SPI IMPLEMENTATIONS (the OSS defaults):                       │  bootJar + Docker
-   │   - EncryptedDbCredentialStoreProvider (JDBC secret store)            │
-   │   - FileSystemSkillPackageStore / ConductorPayloadSkillPackageStore   │
-   │   - FileSystemSkillMetadataDAO, file/env MasterKeyProvider,           │
-   │     HMAC ExecutionTokenIssuer, no-op SecretOutputMasker               │
-   │   - DataSource config, schema-*.sql, schema-migrator, env-seeder      │
-   │  + AgentRuntime (main), web/UI config, application.properties,        │
-   │    standalone auth enforcement, OSS Conductor RUNTIME (persistence,   │
-   │    scheduler, rest, http-task, json-jq-task) — the only real engine   │
-   └───────────────────────────────────┬──────────────────────────────────┘
-                                        │ depends on
-                                        ▼
-   ┌──────────────────────────────────────────────────────────────────────┐
-   │                          conductor-agentspan                          │  (plain jar — interfaces + logic)
-   │  SPI INTERFACES ONLY (no impls): CredentialStore, SkillPackageStore,   │
-   │    SkillMetadataDAO, MasterKeyProvider, ExecutionTokenIssuer,          │
-   │    SecretOutputMasker  (package dev.agentspan.runtime.spi)             │
-   │  CORE LOGIC that operates on those interfaces + on Conductor:          │
-   │   - model/, normalizer/, compiler/*                                    │
-   │   - AgentService, AgentDagService, AgentStreamRegistry (use Conductor's │
-   │     WorkflowService/MetadataService/ExecutionService directly — §4.1)  │
-   │   - System tasks (PlanAndCompile, ListApiTools, …, Join); AI provider  │
-   │   - CredentialResolutionService, CredentialMaskingResponseAdvice,      │
-   │     CredentialAwareHttpTask / McpService (call the SPIs, hold no store) │
-   │   - REST controllers (Agent, Secret, Worker, Skill)                    │
-   │   - principal carrier: RequestContextHolder/RequestContext/User        │
-   │   - AgentSpanAutoConfiguration (wires the logic beans; expects an impl  │
-   │     bean per SPI to be contributed by the host)                        │
-   │  Conductor deps (common + core + ai) = compileOnly → host supplies them │
-   └────────────────────────────────────────────────────────────────────────┘
+runtime.run/start/stream(agent, prompt)
+  └─ _compile_agent(agent)          # cached per agent.name
+       └─ serialize → POST /agent/compile  (server AgentCompiler dispatches by shape)
+  └─ ToolRegistry.register_tool_workers()  # start local Conductor workers
+  └─ POST /agent/start              # engine executes the WorkflowDef
+  └─ SSE / poll for events and result
 ```
 
-**Why two, not three.** An engine-free "core" module would only matter if something consumed the
-compilers *without* Conductor — but the compilers emit Conductor `WorkflowDef`/`WorkflowTask`, we
-killed the idea of a second backend, and no such consumer exists. So agent logic and Conductor
-integration always travel together; merging them removes a boundary nobody uses.
+A module-level **singleton `AgentRuntime`** is shared by `run`/`start`/`stream`/`run_async` so Conductor clients and worker processes are created once, not per call.
 
-**Embedding model & a key consequence.** `orkes-conductor` depends on `conductor-agentspan`
-directly (its own engine satisfies the `compileOnly` Conductor deps). Because the library carries
-**no default impls**, the host **must contribute one impl bean per SPI**:
-- `conductor-agentspan-server` ships the OSS defaults → standalone/OSS works out of the box.
-- orkes-conductor supplies its own (enterprise secret manager, KMS, etc.).
-- A context with no impl for an SPI **fails fast at startup** — that's intentional (a missing
-  secret store should not silently no-op).
+### 3.2 Worker dispatch
 
-> *Future option (non-goal now):* if Conductor OSS — not orkes — ever wants to embed AgentSpan and
-> reuse the JDBC/filesystem defaults *without* the full standalone app, lift those impls into a
-> small `conductor-agentspan-defaults` jar. Until there's a consumer, they live in the server.
+Native `@tool` functions (and guardrails/callbacks with local implementations) compile to `SIMPLE` tasks. The SDK runs a poll loop (thread/goroutine/fiber) that:
 
-### 3.2 What lives where
+1. Polls Conductor for tasks by name.
+2. Executes the registered worker function.
+3. Returns a `TaskResult`.
 
-Default is **`conductor-agentspan`** (the library = interfaces + logic). Rows marked **server** are
-the concrete impls + the standalone app, in `conductor-agentspan-server`.
+The universal **`dispatch_worker`** is the tool-execution router: it receives the LLM response, parses tool calls, invokes the matching local functions (handling approval flags, circuit-breaker error counts, `ToolContext`), updates the message history, and signals `continue_loop`. Because it is shared across all agents and registered once per task name, tool functions and per-tool state live in module-level registries (`_tool_registry`, `_tool_error_counts`, `_tool_approval_flags`).
 
-| Current package | → Module | Notes |
-|-----------------|----------|-------|
-| `model/`, `normalizer/`, `compiler/*`, `util/*` | library | agent domain + compilation (emits `conductor-common` models) |
-| `auth/{User,RequestContext,RequestContextHolder}` | library | principal carrier for secret scoping |
-| `auth/{AuthFilter,UserRepository,ApiKeyRepository,AuthController,AuthUserSeeder,AuthProperties}` | **server** | standalone-only auth (off by default); host owns identity when embedded |
-| `credentials/` SPI interfaces (`CredentialStoreProvider`, + new `MasterKeyProvider`/`ExecutionTokenIssuer`/`SecretOutputMasker`) | library | contracts only |
-| `credentials/CredentialResolutionService`, `CredentialMaskingResponseAdvice` | library | logic over the SPIs (resolution + JSONPath; masking advice calls `SecretOutputMasker`) |
-| `credentials/CredentialAwareHttpTask` (+ config), `CredentialAwareMcpService` | library | extend Conductor `HttpTask`/`MCPService`; resolve `#{NAME}` via the resolution service — hold no store (`@Primary`, opt-in — §5.2) |
-| `credentials/{EncryptedDbCredentialStoreProvider, MasterKeyConfig, ExecutionTokenService, CredentialOutputMasker(no-op), CredentialDataSourceConfig, CredentialSchemaMigrator, CredentialEnvSeeder}` | **server** | the OSS impls + JDBC `DataSource` + bootstrap |
-| `service/{AgentService,AgentDagService,AgentStreamRegistry}` | library | use Conductor `WorkflowService`/`MetadataService`/`ExecutionService` directly (§4.1) |
-| `service/SkillRegistryService` | library | registry **logic** — operates on `SkillPackageStore` + `SkillMetadataDAO` SPIs |
-| `service/skill/{SkillPackageStore (interface), StoredSkillPackage}` | library | contract + value type |
-| `service/skill/{FileSystemSkillPackageStore,ConductorPayloadSkillPackageStore}` + `SkillMetadataDAO` impl | **server** | FS default + `ExternalPayloadStorage`-backed + filesystem-JSON metadata |
-| `service/{PlanAndCompileTask,ListApiToolsTask,PlannerContextFetchTask,AgentHumanTask}`, `tasks/Join` | library | extend `WorkflowSystemTask` |
-| `ai/*` | library | `conductor-ai` provider + task mapper |
-| `controller/*` (`AgentController`, `SecretController` `/api/secrets`, `WorkerController` `/api/workers/secrets`, `SkillController`) | library | the REST API surface. `WorkerController` = execution-token boundary |
-| `controller/AuthController` | **server** | login endpoint — part of standalone auth |
-| `config/{Cors,UiRouting,StaticDocs,Shutdown}` | **server** | web/UI presentation — host controls these when embedded |
-| `AgentRuntime` (main) | **server** | standalone launcher |
-| `resources/application*.properties`, `static/` | **server** | runtime config + UI bundle |
-| `resources/schema-credentials*.sql` | **server** | DDL ships with the JDBC default store impl |
+**External / by-reference work:** when a `worker` tool (or guardrail/agent) has no local function, the SDK emits only the task name. A remote worker — possibly in another language on another machine — picks the task up off Conductor's queue. The SDK registers no local worker for it.
+
+### 3.3 Durability
+
+Because state lives in Conductor (workflow variables, task I/O, the message history in `${workflow.variables.messages}`), an agent execution survives worker crashes and restarts, is fully inspectable and replayable, and supports long pauses. HITL (`HUMAN` tasks) makes **long-paused executions routine, not rare** — an execution can sit paused for days awaiting human input and resume cleanly. This durability is the entire reason for the no-passthrough rule (§1): a black-box framework task would forfeit crash recovery, per-tool visibility, and HITL.
 
 ---
 
-## 4. The SPI Layer (the core of this design)
+## 4. Library / Server Split & SPIs
 
-All SPI **interfaces** live in `conductor-agentspan` (package `dev.agentspan.runtime.spi`); they
-cover **AgentSpan-owned data**, not Conductor execution (see §4.1). The library holds **no impls**.
-A host contributes one impl bean per SPI; the default impls below live in
-`conductor-agentspan-server` (or, for orkes, are replaced by enterprise beans). Whoever declares
-the impl uses `@ConditionalOnMissingBean` so a deployment can still override it — the same
-contribution pattern orkes uses for `http-task`/DAOs/security.
+Agentspan is structured as a **library that Conductor depends on**, not a standalone app that bundles Conductor. The dependency direction is inverted: `orkes-conductor` (and the OSS standalone) depend on the `conductor-agentspan` artifact; Agentspan compiles against Conductor APIs as `compileOnly`/provided so the **host owns the Conductor version**.
 
-| SPI (in library) | Default impl (in `conductor-agentspan-server`) | Enterprise impl (orkes) |
-|------------------|------------------------------------------------|--------------------------|
-| `CredentialStore` *(exists as `CredentialStoreProvider`)* | `EncryptedDbCredentialStoreProvider` (JDBC `credentials_store` + AES-GCM) | orkes Secrets Manager / Vault / KMS-backed |
-| `MasterKeyProvider` | `FileOrEnvMasterKeyProvider` | AWS KMS / Vault |
-| `ExecutionTokenIssuer` | `HmacExecutionTokenIssuer` (current `ExecutionTokenService`) | orkes JWT infra |
-| `SecretOutputMasker` *(exists as `CredentialOutputMasker`)* | **no-op** (returns payload unchanged) | disclosure-tracking masker (Jackson tree-walk over `credential_disclosures`) |
-| `SkillPackageStore` *(exists)* | `FileSystemSkillPackageStore` (or `ConductorPayloadSkillPackageStore`) | S3 / object store |
+### 4.1 Two modules
+
+- **`conductor-agentspan`** (plain jar) — **SPI interfaces + core logic only.** Agent domain (`model/`, `normalizer/`, `compiler/*`), the services that operate on Conductor and on the SPIs (`AgentService`, `AgentDagService`, `AgentStreamRegistry`), custom system tasks, the AI provider, REST controllers, and the credential-resolution/masking logic. **No concrete store/DAO/crypto implementations.**
+- **`conductor-agentspan-server`** (bootJar + Docker) — the OSS runtime and standalone app. Bundles the **default SPI implementations**, the OSS Conductor runtime (persistence, scheduler, rest, http-task, json-jq-task), the launcher (`AgentRuntime` main), web/UI config, and the standalone-only auth scaffolding.
+
+Why two and not three: the compilers emit Conductor `WorkflowDef`/`WorkflowTask`, and there is no consumer of the agent logic *without* an engine, so an engine-free "core" module buys nothing. Conductor execution is itself **not** an SPI — Conductor's `WorkflowService`/`MetadataService`/`ExecutionService` (and the DAOs beneath) already are that interface, and the engine is a non-goal to swap; wrapping them adds a redundant layer with no override value. `AgentService` injects them directly.
+
+### 4.2 The SPI layer
+
+Interfaces live in `conductor-agentspan` (`dev.agentspan.runtime.spi`); they cover **Agentspan-owned data**, not execution. The library holds no impls — a host contributes one impl bean per SPI (via `@ConditionalOnMissingBean`, the same pattern orkes uses for http-task/DAOs/security). A context missing an impl **fails fast at startup** — intentional, so a missing secret store cannot silently no-op.
+
+| SPI (library) | OSS default (`conductor-agentspan-server`) | Enterprise (orkes) |
+|---|---|---|
+| `CredentialStore` *(exists as `CredentialStoreProvider`)* | `EncryptedDbCredentialStoreProvider` (JDBC `credentials_store` + AES-256-GCM) | secrets manager / Vault / KMS |
+| `MasterKeyProvider` | file/env master key | AWS KMS / Vault |
+| `ExecutionTokenIssuer` | `HmacExecutionTokenIssuer` (HMAC) | orkes JWT infra |
+| `SecretOutputMasker` *(exists as `CredentialOutputMasker`)* | **no-op** (payload unchanged) | disclosure-tracking masker |
+| `SkillPackageStore` *(exists)* | `FileSystemSkillPackageStore` / `ConductorPayloadSkillPackageStore` | S3 / object store |
 | `SkillMetadataDAO` | `FileSystemSkillMetadataDAO` | DB-backed |
 
-> **No `UserStore` / `ApiKeyStore`.** AgentSpan's user/API-key management is off by default and
-> not enforced (see §2). Identity is the host's: orkes-conductor supplies user + API-key
-> management; Conductor OSS has none (→ anonymous, same as AgentSpan's default). The principal
-> reaches the library via `RequestContextHolder`; the enforcement stack ships only in
-> `conductor-agentspan-server`.
->
-> **Naming:** new storage SPIs follow Conductor's `*DAO` convention (`SkillMetadataDAO`). The two
-> pre-existing interfaces keep their current code names (`CredentialStoreProvider`,
-> `SkillPackageStore`) to avoid a churny rename; align them to `*DAO` later if desired.
-
-> **No `CredentialBindingStore`** — bindings/aliases were removed in `c873e60b`. Resolution is a
-> direct `(userId, name)` lookup with dotted JSONPath into JSON-valued secrets, implemented in
-> `CredentialResolutionService` on top of `CredentialStore`. Nothing to abstract there.
->
-> **`SecretOutputMasker` is the cleanest new enterprise seam.** The web wiring
-> (`CredentialMaskingResponseAdvice`, a `@ControllerAdvice`) lives in the **library** and calls the
-> SPI; the **no-op default impl** lives in the server, and the enterprise masker (disclosure
-> tracking + redaction) is contributed by orkes — exactly what the bean-contribution pattern is
-> for.
-
-### 4.1 Conductor execution is *not* an SPI
-
-There is **no** AgentSpan abstraction over workflow execution. Conductor's own
-`WorkflowService` / `MetadataService` / `ExecutionService` (and the DAOs beneath them) already
-**are** the interface, and we are not swapping the execution engine (non-goal). Wrapping them in
-a parallel `WorkflowExecutionBackend` would add a redundant layer with no override value.
-
-Therefore `AgentService` (and `AgentDagService`) just live in `conductor-agentspan` and depend on
-Conductor's service interfaces directly. The engine is `compileOnly`, so the host
-(orkes-conductor or `conductor-agentspan-server`) supplies the implementations and version. The
-five injected types — `WorkflowService`, `MetadataDAO`/`MetadataService`, `ExecutionService`,
-`WorkflowExecutor`, `ExecutionDAO` — remain as-is.
-
-> **Optional cleanup (not required):** where `AgentService` currently reaches for low-level DAOs
-> (`metadataDAO.updateWorkflowDef`, and the `executionDAO.getWorkflow`/`updateWorkflow`
-> `WorkflowModel` mutation at ~lines 619-636), consider routing through the higher-level
-> `MetadataService`/`WorkflowService` where an equivalent exists, so the coupling sits on the
-> stabler service layer. The `WorkflowModel` variable-mutation site can stay on the DAO if no
-> service method fits — it's internal to the library, so it leaks nowhere.
-
-### 4.2 Persistence SPIs (extracted from concrete services)
-
 ```java
-public interface MasterKeyProvider { byte[] masterKey(); }           // file/env default; KMS override
+public interface MasterKeyProvider { byte[] masterKey(); }
 
-public interface ExecutionTokenIssuer {                              // HMAC default; orkes JWT override
+public interface ExecutionTokenIssuer {
     String mint(String userId, String executionId, List<String> declaredNames, long timeoutSeconds);
     TokenPayload validate(String token);
     void revoke(String jti, long exp);
@@ -285,7 +183,7 @@ public interface ExecutionTokenIssuer {                              // HMAC def
 // OSS default returns payload unchanged; enterprise redacts disclosed secret values.
 public interface SecretOutputMasker { String mask(String executionId, String userId, String payload); }
 
-public interface SkillMetadataDAO {                                 // filesystem JSON default; DB override
+public interface SkillMetadataDAO {
     SkillDetail save(SkillDetail detail);
     List<SkillSummary> list(boolean allVersions, String ownerId);
     Optional<SkillDetail> get(String ownerId, String name, String version);
@@ -293,574 +191,159 @@ public interface SkillMetadataDAO {                                 // filesyste
 }
 ```
 
-`CredentialStoreProvider` and `SkillPackageStore` already exist — move the **interfaces** into the
-`spi` package; their impls go to the server. (No `User`/`ApiKey` SPI — see §4 note; identity is the
-host's.)
+> Secrets resolution is a direct `(userId, name)` lookup with dotted-JSONPath into JSON-valued secrets (`GCP_SVC.project_id`) and prefix-permissive declared-name bounding — implemented in `CredentialResolutionService` over `CredentialStore`. There is **no** binding/alias store. There is **no** `UserStore`/`ApiKeyStore`: identity is the host's (orkes supplies it; OSS Conductor has none → anonymous). The library only needs the current principal (`userId`) for secret scoping, carried by `RequestContextHolder`; *who populates it* is the host's job. Full secret/credential mechanics: [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md).
+
+### 4.3 Spring wiring
+
+The library registers via **Spring Boot auto-configuration** (`META-INF/spring/...AutoConfiguration.imports` → `AgentSpanAutoConfiguration`), not a component scan — orkes-conductor's `@ComponentScan` does not cover `dev.agentspan.*`. Two layers: (a) the library auto-config wires the *logic* beans, each `@ConditionalOnBean` on the SPIs it needs; (b) the host contributes one impl bean per SPI (`conductor-agentspan-server` ships the OSS `AgentSpanDefaultImplConfiguration`; orkes contributes its own).
+
+**`@Primary` landmines must become opt-in.** Beans that override Conductor's own (`CredentialAwareHttpTask` as `HTTP`, `CredentialAwareMcpService` extending `MCPService`, `AgentHumanTask` as `HUMAN`, the agent status listener, the JDBC `DataSource`) must be property-gated / `@ConditionalOnMissingBean` (default on standalone, off embedded) so they do not hijack host behavior. The JDBC `DataSource` is qualified (`agentspanDataSource`), never `@Primary`.
+
+### 4.4 Two auth boundaries
+
+1. **User boundary** — `/api/secrets`, `/api/agent/*`, `/api/skill`. Agentspan's own `AuthFilter` is **standalone-only** (ships in the server module, off by default); when embedded, the host owns authN/authZ and an adapter populates the principal.
+2. **Worker boundary** — `/api/workers/secrets`, gated by HMAC **execution tokens**, independent of user auth, so in-flight workers can always reach it. The host's security chain must not block `/api/workers/**`.
+
+### 4.5 Consumption modes & version alignment
+
+`compileOnly` means nothing bundles or enforces a Conductor version — the host's classpath wins. Drift is scoped to three modes:
+
+| Mode | Takes | Conductor version | Drift risk | Owner |
+|---|---|---|---|---|
+| **A — Standalone** | `conductor-agentspan-server` bootJar/Docker | fixed, bundled | none (one `conductorVersion` for lib+server) | us |
+| **B — Self-embed (external OSS)** | `conductor-agentspan` library | host-supplied | real | the host → **build from source** against your engine (eliminates drift), or take the jar + self-certify via the SDK conformance suite |
+| **C — Enterprise embed** | `orkes-conductor` | orkes pins | single certified pair | orkes |
+
+No declared compatibility *range* — an unverified range is a false promise; the SDK conformance suite (black-box HTTP, parameterized by server URL) is the only interoperability oracle, and the interop surface is kept tiny precisely because execution is not an SPI (§4.1).
 
 ---
 
-## 5. Spring Wiring Strategy
+## 5. Orchestration (multi-agent strategies + pipeline context)
 
-### 5.1 Auto-configuration instead of component scan
+`MultiAgentCompiler` compiles the strategies. All reduce to Conductor control-flow over `SUB_WORKFLOW`s, which is why composition is recursive.
 
-Replace the wide `@ComponentScan` with auto-configuration exported via the Spring Boot 3 imports
-file. This is mandatory: orkes-conductor's scan covers `com.netflix.conductor`,
-`io.orkes.conductor`, `org.conductoross` — **not** `dev.agentspan`.
+| Strategy | Compiled shape |
+|---|---|
+| `handoff` | router `LLM_CHAT_COMPLETE` → `SWITCH` → one sub-agent `SUB_WORKFLOW` per case |
+| `sequential` | chain of `SUB_WORKFLOW`s; each step's prompt = prior step's `output.result` |
+| `parallel` | `FORK` → N `SUB_WORKFLOW`s → `JOIN`; output namespaced by agent |
+| `router` | agent- or function-based selector → `SWITCH` → chosen `SUB_WORKFLOW` |
+| `swarm` / `manual` / `round_robin` / `random` | shared `DO_WHILE` loop; `active_agent` + `conversation` in `SET_VARIABLE`, agents handed off in place |
+| `plan_execute` (PAC/PAE) | planner agent emits a JSON DAG; the server compiles that JSON into a deterministic sub-workflow |
+| hybrid (tools + sub-agents) | tool `DO_WHILE` with `transfer_to_{name}` tools → `SWITCH` |
+
+### 5.1 Pipeline context passing
+
+Only LLM text used to flow between agents, so concrete artifacts (repo paths, branch names, PR URLs) produced by tools were lost across boundaries — a real failure mode (a 3-step pipeline once had 3 agents working on 3 different repos). The fix: a **context dict** flows alongside the text output through every boundary.
+
+- **Structure:** a single-level key-value map; values are any JSON-serializable type. No nested key-path resolution (`state["foo.bar"]` is a literal key). Well-known keys (`repo`, `branch`, `working_dir`, `issue_number`, `files_changed`, `tests_passed`, `pr_url`, `commit_sha`, …) reduce naming variance.
+- **What goes in:** concrete tool-produced artifacts a downstream agent must act on. **Not** reasoning, history, or large blobs (those flow via conversation/text).
+- **How tools write:** via `ToolContext.state` (`context.state["working_dir"] = dir`). The generic CLI `run_command` tool gains an optional `context_key` param that writes trimmed stdout to context on exit 0.
+
+**The `_agent_state` ↔ `context` bridge.** `_agent_state` persists `ToolContext.state` *within* one agent's `DO_WHILE` loop; `context` carries structured state *across* boundaries. They are the same data at different scopes, joined at the sub-workflow boundary:
 
 ```
-conductor-agentspan/src/main/resources/META-INF/spring/
-    org.springframework.boot.autoconfigure.AutoConfiguration.imports
-        → dev.agentspan.runtime.config.AgentSpanAutoConfiguration
+tool → _state_updates → _agent_state merge (INLINE) → SET_VARIABLE
+  ── SUB_WORKFLOW OUTPUT: context = ${workflow.variables._agent_state}
+  → parent reads step_N.output.context → merges into accumulated context
+  ── SUB_WORKFLOW INPUT: context = merged_context
+  → child inits _agent_state from ${workflow.input.context} (default {})
 ```
 
-There are **two** config layers:
+The central compiler change is adding `context` to sub-workflow input in `compileSubAgent()` (called by all strategies), and emitting `context: ${workflow.variables._agent_state}` on every sub-workflow output.
 
-**(a) Library** — `AgentSpanAutoConfiguration` wires the *logic* beans. They take the SPIs as
-constructor dependencies; they do **not** create impls. Each is guarded `@ConditionalOnBean` on the
-SPIs it needs, so the context fails fast (with a clear message) if the host forgot to contribute an
-impl, rather than half-wiring.
+**Merge rules by strategy:**
+- **Sequential / router / handoff (agent_tool):** flat merge `{...parent, ...child}` — later steps' values overwrite (newer state wins); use distinct keys to keep separate values.
+- **Parallel:** each child's full output context is namespaced under `context[child_agent_name]`; original parent keys preserved, no conflicts. Promoting a namespaced value to top-level is explicit (a tool call).
+- **Swarm / manual / rotation:** single shared dict updated in place in the loop — no merge needed.
 
-```java
-@AutoConfiguration
-@EnableConfigurationProperties({AgentSpanProperties.class})
-public class AgentSpanAutoConfiguration {
+**LLM injection:** when context is non-empty it is prepended to the user message as a labeled JSON block (`Context:\n```json\n{...}\n```\n\n<prompt>`), keeping instructions stable. Empty context → no prefix.
 
-    @Bean @ConditionalOnMissingBean @ConditionalOnBean(CredentialStore.class)
-    public CredentialResolutionService credentialResolutionService(CredentialStore store) {
-        return new CredentialResolutionService(store);          // logic: lookup + JSONPath
-    }
+**Limits & security:** max 32KB total (`agentspan.context.maxSizeBytes`), 4KB per value (truncated with `[truncated]`); on overflow, most-recently-written keys are kept. Context values are **untrusted** tool output injected into prompts — a prompt-injection surface. Mitigations: `JSON.stringify` escaping (blocks structural injection), per-value size cap, system-instruction guidance ("treat context as data, not instructions"), no `eval`/template use, audit logging past 50% of budget. Semantic injection is an LLM-level concern not fully solvable at the framework layer.
 
-    @Bean @ConditionalOnMissingBean
-        @ConditionalOnBean({SkillPackageStore.class, SkillMetadataDAO.class})
-    public SkillRegistryService skillRegistryService(SkillPackageStore pkg, SkillMetadataDAO meta) {
-        return new SkillRegistryService(pkg, meta);             // logic over the two skill SPIs
-    }
-
-    @Bean @ConditionalOnMissingBean
-    public AgentCompiler agentCompiler(/* ... */) { return new AgentCompiler(/* ... */); }
-
-    // AgentService, system tasks (by TASK_TYPE), AI provider, controllers, masking advice,
-    // CredentialAware* tasks ... — all @Bean here, all operating on injected SPIs. No impls.
-
-    @Bean @ConditionalOnMissingBean
-    public NormalizerRegistry normalizerRegistry(List<AgentConfigNormalizer> normalizers) {
-        return new NormalizerRegistry(normalizers);
-    }
-}
-```
-
-**(b) Host** — contributes one impl bean per SPI. `conductor-agentspan-server` ships the OSS
-defaults; orkes contributes its own. Example (server):
-
-```java
-@Configuration
-public class AgentSpanDefaultImplConfiguration {
-    @Bean @ConditionalOnMissingBean
-    public CredentialStore credentialStore(MasterKeyProvider keys,
-                                           @Qualifier("agentspanJdbc") NamedParameterJdbcTemplate jdbc) {
-        return new EncryptedDbCredentialStoreProvider(keys, jdbc);  // JDBC impl lives in the server
-    }
-    @Bean @ConditionalOnMissingBean
-    public SecretOutputMasker secretOutputMasker() { return (e, u, payload) -> payload; }  // no-op
-    // MasterKeyProvider, ExecutionTokenIssuer, SkillPackageStore, SkillMetadataDAO, DataSource ...
-}
-```
-
-One library auto-config is simplest. If it grows, split it internally (e.g. an engine-coupled
-group gated `@ConditionalOnClass(WorkflowExecutor.class)`) and list each in the imports file.
-
-> **Stereotype → explicit `@Bean` conversion.** Today ~40 classes use `@Component`/`@Service`/
-> `@Repository`/`@RestController` and rely on scanning. For a library that supports per-bean
-> override, the orkes pattern is explicit `@Bean` + `@ConditionalOnMissingBean` (see
-> `HttpTaskAutoConfiguration`). Plan: **drop the stereotype annotations** and declare them in the
-> auto-config. Controllers are the one wrinkle — `@RestController` beans can be declared via
-> `@Bean`, but if that proves awkward, register them through a single nested `@Configuration` with
-> a **narrowly scoped** `@ComponentScan("dev.agentspan.runtime.controller")` that the host imports
-> explicitly. Decide during Phase 2; prefer explicit `@Bean`.
-
-### 5.2 The `@Primary` landmines (must become opt-in)
-
-Several beans currently use `@Primary` to **override Conductor's own beans**. When embedded in
-orkes-conductor — which already provides these — `@Primary` will either conflict or silently
-hijack host behavior. Each must become **conditional/opt-in**. (The `CredentialAware*` integrations
-are library beans; the `DataSource` is now a **server**-module bean — in embedded orkes it isn't
-present at all, since orkes contributes its own `CredentialStore` impl.)
-
-| AgentSpan bean | Today | Conflict in orkes | Fix |
-|----------------|-------|-------------------|-----|
-| `credentialDataSource` (server module) | `@Primary DataSource` | orkes already has a `@Primary` Postgres `DataSource` | Rename to `@Qualifier("agentspanDataSource")`, **not** `@Primary`; `@ConditionalOnMissingBean(name=...)`. Only the server module declares it; orkes never sees it |
-| `CredentialAwareHttpTask` | `@Bean("HTTP") @Primary` | orkes has its own `http-task` `HTTP` handler | Gate behind `@ConditionalOnProperty(agentspan.tasks.http.override)` (default true standalone, false embedded) |
-| `CredentialAwareMcpService` | `@Component @Primary extends MCPService` | orkes may have its own `MCPService` | Same: property-gated / `@ConditionalOnMissingBean`, default off when embedded |
-| `AgentHumanTask` | `@Bean(HUMAN) @Primary` | orkes has a `human` module | Same: property-gated, default off when embedded |
-| `AgentEventListener` | `@Primary` status listener | `conductor.*-status-listener.type=agent` | Keep property-driven; document that the host sets the listener type |
-
-**DataSource policy:** in the embedded/enterprise case, the host overrides `CredentialStore`,
-`SkillMetadataDAO`, etc. entirely, so AgentSpan's JDBC `DataSource` is never created. In the OSS
-embedded case (orkes OSS without enterprise stores), AgentSpan's defaults activate against their
-**own qualified** `DataSource` — never `@Primary`, so they never collide with Conductor's.
-
-### 5.3 Auth / CORS / security coexistence
-
-AgentSpan now has **two distinct auth boundaries** (Conductor parity), and they coexist with the
-host differently:
-
-1. **User boundary** — `/api/secrets` (`SecretController`), `/api/agent/*`, `/api/skill`,
-   `/api/auth`. AgentSpan's own `AuthFilter` is **standalone-only** (ships in `conductor-agentspan-server`,
-   off by default) — it is **not on the embedded classpath**. When embedded, the host owns user
-   authn/authz; an orkes security adapter populates `RequestContextHolder` with the principal so
-   secret scoping works. `SecretController.listGrantable()` is already RBAC-shaped (OSS returns
-   all) — an enterprise `SecretAccessPolicy` can filter here.
-2. **Worker boundary** — `/api/workers/secrets` (`WorkerController`), guarded by HMAC
-   **execution tokens** (`ExecutionTokenService`), **independent of user auth**. This must stay
-   reachable by in-flight workers regardless of the host's user security. Ensure the host's
-   security chain does **not** block `/api/workers/**`, and that the execution-token check is the
-   only gate. Declared-name bounding + rate-limit are AgentSpan's, not the host's.
-
-Other web wiring:
-- `CredentialMaskingResponseAdvice` (`@ControllerAdvice`) wraps execution-read responses,
-  **including the host's `/api/workflow/{id}`**. In OSS the masker is a no-op so this is inert;
-  with an enterprise `SecretOutputMasker` it will redact the host's workflow-read payloads too.
-  That is almost certainly desired, but **flag it**: an advice from the AgentSpan jar mutating a
-  host endpoint's body is surprising. Make it `@ConditionalOnBean(SecretOutputMasker)` /
-  property-gated so the host opts in.
-- `CorsConfig`, `UiRoutingConfig`, `StaticDocsConfig` move to **`conductor-agentspan-server`** so
-  they never alter the host's web config. Embedded REST controllers still register; only the
-  presentation/UI/CORS wiring is standalone-only.
-- Confirm no REST path collisions: AgentSpan uses `/api/agent`, `/api/skill`, `/api/auth`,
-  `/api/secrets`, `/api/workers/secrets`; Conductor uses `/api/workflow`, `/api/metadata`, etc.
-  No overlap expected — **verify** against orkes' gateway.
+**Backward compatibility:** entirely additive and optional — context defaults to `{}`; older servers silently ignore it (graceful degradation, no capability negotiation).
 
 ---
 
-## 6. Conductor Version Alignment (top integration risk)
+## 6. Server Features
 
-orkes-conductor pins `revConductor = 3.30.0.rc8`, and its `subprojects` block **excludes**
-`com.netflix.conductor` (group) and `org.conductoross:conductor-core`, supplying the engine from
-its own modules. AgentSpan currently compiles against `org.conductoross:conductor-*:3.30.2`. If
-AgentSpan ships those as transitive `implementation` deps, we get a version clash on the host
-classpath.
+These three features are pure server-side endpoints plus a task registry, all built on existing Conductor primitives (§1).
 
-> This section covers the **build/classpath mechanics** of alignment. For *who owns* alignment in
-> each deployment, see the three-consumption-mode table in §9.2: Mode A (standalone) is drift-free
-> by construction, Mode C (orkes) is one host-pinned pair, and Mode B (external OSS self-embed) is
-> explicitly best-effort + self-certify.
+### 6.1 Human-in-the-Loop (HITL) endpoints
 
-**Strategy — `compileOnly`/provided for ALL Conductor artifacts:**
+Agentspan already supports HITL via Conductor's `HUMAN` task type: when an execution needs human input (tool approval, guardrail review, manual agent selection), it pauses and a `HUMAN` task enters `IN_PROGRESS`, carrying `response_schema`, `response_ui_schema`, `__humanTaskDefinition` (with `displayName`), and context fields. What was missing is a way to **discover** all executions waiting for input. A registry adds that.
 
-- `conductor-agentspan` declares `conductor-common`, `conductor-core`, `conductor-ai` (and
-  `conductor-http-task` for `CredentialAwareHttpTask`) as **`compileOnly`** (provided). The host
-  (orkes-conductor or `conductor-agentspan-server`) supplies the concrete engine at its own
-  version at runtime. This mirrors how orkes' `http-task` declares Spring as `compileOnly`.
-  - Note `conductor-common` types appear on the library's public API (`WorkflowDef` on compiler
-    methods). `compileOnly` is fine because **both** consumers — orkes and our own server — have
-    `conductor-common` on their classpath. Nobody consumes the library without an engine.
-- `conductor-agentspan-server` brings the **real** OSS Conductor runtime
-  (`conductor-common`, `-core`, `-ai`, `-rest`, `-sqlite-persistence`, `-postgres-persistence`,
-  `-scheduler-*`, `-http-task`, `-json-jq-task`) as `implementation` — the only module that ships
-  a runnable Conductor.
+**Constraint:** at most one `HUMAN` task is `IN_PROGRESS` per execution at a time (sequential LLM loop with `SWITCH` routing), so the registry keys on `executionId`.
 
-> ❗ **Must verify before coding:** which orkes module/artifact provides the
-> `com.netflix.conductor.core.*` engine classes (`WorkflowExecutor`, `WorkflowSystemTask`,
-> `ExecutionDAO`, `MetadataDAO`, `WorkflowModel`, `TaskModel`) and at exactly what version. The
-> custom system tasks and `AgentService` compile against those package names; they
-> must match the host's. Pin `compileOnly` to that version. Also confirm orkes' `conductor-ai`
-> coordinates/version for the AI provider.
+**Registry (`dev.agentspan.runtime.hitl`):**
+- `HitlTask` — value object built by `HitlTask.fromConductorTask(task, executionId)`. Derives `taskType` from full `inputData` (first present non-null key wins: `tool_calls`→`tool_approval`, `guardrail_message`→`guardrail_review`, `agent_options`→`agent_selection`, else `unknown`), `displayName` from `__humanTaskDefinition`, schemas from `response_schema`/`response_ui_schema`, and `context` = remaining inputData. Never throws — registration must not fail the Conductor task.
+- `HitlTaskDao` — `register`, `removeByExecutionId`, `removeByTaskId`, `listPending` (sorted by `registeredAt`), `findByTaskId`. Default `InMemoryHitlTaskDao` keeps three synchronized maps (executionId→task, taskId→executionId, executionId→taskId) for O(1) lookup both directions. A DB-backed impl is a future `@Profile`/`@ConditionalOnProperty` swap.
+
+**Lifecycle:**
+- **Register** in `AgentHumanTask.execute()`, after the SSE `"waiting"` event.
+- **Evict** on `POST /api/agent/{taskId}` (on both 200 and 404 — registry `taskId` == Conductor `taskId`; skip on 500), on `AgentService.respond()` success, and on `HitlWorkflowStatusListener.onWorkflowFinalised()` (fires on COMPLETED/FAILED/TIMED_OUT/TERMINATED). All `removeBy*` are no-ops on missing keys, so multiple eviction paths are safe.
+
+**Endpoints (on `AgentController`, `/api/agent`):**
+- `GET /api/agent/hitl` → `List<HitlTask>` sorted by `registeredAt`, `[]` when none. (Literal `/hitl` resolves before any `{taskId}` route.)
+- `POST /api/agent/{taskId}` — submit a Conductor `TaskResult`; 200/404 → evict, 500 → skip (listener cleans up). Intentionally flat (task IDs are UUIDs, no collision with named segments).
+
+### 6.2 Dynamic DAG task injection
+
+The SDK's Dynamic DAG feature needs to display tool/sub-agent activity in the Conductor DAG of a running execution. Two endpoints back this, served by `AgentDagService`, which injects `ExecutionDAO` **directly** to mutate live execution/task state — bypassing the `WorkflowExecutor` decide loop (injected tasks have no counterpart in the `WorkflowDef`; they are display-only, so calling `decide()` would try and fail to advance the execution). `ExecutionDAOFacade` is avoided because its external-payload logic is unneeded for small tool-arg inputs.
+
+- **`POST /api/agent/{executionId}/tasks`** → `injectTask`: loads the `WorkflowModel` (404 if absent), builds a `TaskModel` (`IN_PROGRESS`, `SIMPLE` or `SUB_WORKFLOW`, `seq = tasks.size()+1`, `subWorkflowId` from the param for sub-workflows), and `executionDAO.createTasks(...)`. The task appears in `getExecutionStatus` via its `workflowInstanceId`. When the SDK later completes it via native `POST /api/task`, `decide()` runs but the main worker task is still `IN_PROGRESS`, so the execution stays `RUNNING` — no disruption.
+- **`POST /api/agent/workflow`** → `createTrackingWorkflow`: builds a minimal `WorkflowDef` + a `RUNNING` `WorkflowModel` and `executionDAO.createWorkflow(...)`, returning the new executionId for sub-agent display. (Static segment resolves before `GET /api/agent/{name}`.)
+
+**Concurrency:** duplicate `seq` from concurrent hooks is harmless (no uniqueness constraint on display-only tasks). **Known limitation:** tracking executions stay `RUNNING` permanently (auto-completion deferred); injected task-def names (`Bash`, `Read`) need not be registered since the tasks are display-only.
+
+### 6.3 Agent signals (durable messages to running workflows)
+
+Signals let humans and agents send context/redirections to running agent workflows. They are delivered durably, evaluated by the receiving agent (accept/reject), and surfaced in the event stream — all on existing primitives (`updateVariables`, `SET_VARIABLE`/`INLINE`, `pause`/`resume`, `HTTP`).
+
+**Storage (workflow variables):** `_pending_signals`, `_processing_signals`, `_processed_signals`, plus `_signal_data`, `_signal_counts`, `_urgent_pause_requested`, and a transient `_signal_injection` (messages + tools handed from intake to the task mapper). All mutations go through Conductor tasks (`SET_VARIABLE`/`INLINE`), never direct Java writes; tasks execute serially within a workflow so reads/writes don't interleave.
+
+**Delivery (per DO_WHILE iteration):**
+1. **Pre-LLM intake** (`INLINE` + `SET_VARIABLE`) before the LLM task: reads `_pending_signals`; in `auto_accept` mode injects messages and moves signals straight to `_processed`; in `evaluate` mode injects messages **plus ephemeral `accept_signal`/`reject_signal`/`accept_all_signals` tools** and moves signals to `_processing`. No-op (near-zero overhead) when none pending.
+2. **Task mapper (read-only)** — `AgentChatCompleteTaskMapper` reads `_signal_injection` and appends signal messages (after history, as most-recent) and ephemeral tools to the `ChatCompletion`. It cannot write variables, which is why all mutation is task-based.
+3. **LLM** sees the signal messages and accept/reject tools alongside regular tools.
+4. **Enrichment** routes disposition tool calls to `INLINE` disposition scripts (baked in at compile time since the names are fixed), regular tools to their task types, all inside `FORK_JOIN_DYNAMIC` → `JOIN`.
+5. **Post-JOIN merge** (`INLINE` + `SET_VARIABLE`) reconciles parallel disposition outputs into authoritative state; **implicit acceptance** moves any still-`_processing` signals to `_processed` (`accepted_implicit`) at iteration end.
+
+**Urgent signals** set `_urgent_pause_requested`; `AgentEventListener.onTaskCompleted()` clears the flag (before pausing, to avoid double-pause), pauses the workflow, and schedules auto-resume after ~100ms — but only at **natural pause points** (`LLM_CHAT_COMPLETE`, `SIMPLE`, `HTTP`, `CALL_MCP_TOOL`, `SUB_WORKFLOW`), never internal system tasks, to avoid disturbing the engine's state machine. Urgent is best-effort-faster (acts after the current task), not guaranteed-immediate; a missed flag downgrades to normal next-iteration delivery.
+
+**Propagation:** a signal to a parent is also delivered recursively to active `SUB_WORKFLOW` children (each evaluates independently; best-effort if a child completes mid-delivery).
+
+**`signal_tool()`** (sending a signal) is distinct from the disposition tools (accepting one): it compiles to an `HTTP` task whose URL is chosen at runtime — `/api/agent/{id}/signal` for a UUID target or `/api/agent/signal?agentName=...` for a name.
+
+**SSE:** `signal_received` (emitted by `AgentService.signal()`), `signal_accepted` / `signal_rejected` (emitted by `AgentEventListener` when a signal `SET_VARIABLE` completes, read from the preceding INLINE's `newDispositions`).
+
+**Endpoints:**
+| Method & path | Purpose |
+|---|---|
+| `POST /agent/{executionId}/signal` | send to one execution → `202 {signalId, executionId, status:"queued"}` |
+| `POST /agent/signal?agentName=...` | send by name (resolved + broadcast) → `202 {receipts:[...]}` |
+| `GET /agent/signal/{signalId}/status` | poll disposition (`pending`/`accepted`/`rejected`/`accepted_implicit`) |
+| `GET /agent/resolve?name=...&status=RUNNING,PAUSED` | resolve agent name → executionIds |
+| `GET /agent/{wfId}/signals/pending` | list pending signals |
+
+**Known limitation:** a signal arriving during the few-ms intake window can be overwritten and must be re-sent (the simpler design over a compare-and-set on the pending count).
 
 ---
 
-## 7. Build / Gradle Restructure
+## 7. CLI Deploy
 
-### 7.1 `settings.gradle`
+`agentspan deploy` discovers agents from user code and registers them on the server, bridging the Go CLI with the Python/TS SDK `deploy()` paths.
 
-```groovy
-rootProject.name = 'agentspan'
-include 'conductor-agentspan'
-include 'conductor-agentspan-server'
+```
+agentspan deploy [--agents foo,bar] [--language python|typescript] [--package myapp] [--yes] [--json] [--server URL]
 ```
 
-Root `build.gradle` holds the version catalog (`conductorVersion`, etc.), Java toolchain,
-spotless, and the `subprojects {}` common config. `bootJar` disabled for `conductor-agentspan`,
-enabled for `conductor-agentspan-server`.
+**Flow:** auto-detect language (marker files: `pyproject.toml`/`setup.py`/`requirements.txt` vs `package.json`+`tsconfig.json`; `--language` overrides; ambiguous/none → error) → verify runtime (venv-preferred `python3`/`python`, or `npx`) → infer package (Python dotted module, TS directory; `--package` overrides) → **discover** → filter (`--agents`) → **confirm** (skipped by `--yes`) → **deploy** → format output. Exit 1 on any failure.
 
-### 7.2 `conductor-agentspan/build.gradle` (the library)
+**Shell-out design:** the Go CLI delegates discovery and deployment to the SDK via subprocess (`exec.CommandContext`, 120s timeout), forwarding `AGENTSPAN_SERVER_URL`, `AGENTSPAN_API_KEY`, and `AGENTSPAN_AUTH_KEY`/`_SECRET` as **environment variables** (not args, to avoid leaking secrets in process lists). The SDK entry points print JSON to stdout, stderr to the user:
+- **Discover** — `python -m agentspan.cli.discover --package <module>` / `npx tsx .../discover.ts --path <dir>` → `[{name, framework}]`. (Python uses a dotted module; TS uses a filesystem path.)
+- **Deploy** — `python -m agentspan.cli.deploy --package <module> [--agents ...]` / `.../deploy.ts --path <dir>` → `[{agent_name, registered_name, success, error}]`. Deployment calls `deploy()` **per agent** with individual try/except so one failure doesn't crash the batch — the Go CLI always gets parseable JSON.
 
-```groovy
-plugins { id 'java-library'; id 'maven-publish' }
-bootJar { enabled = false }; jar { enabled = true }
+Subprocess non-zero exit with valid JSON on stdout → partial-failure results; non-zero with no JSON → stderr is the error.
 
-dependencies {
-    // ALL Conductor artifacts are PROVIDED — host (orkes or our server) supplies the version.
-    compileOnly "org.conductoross:conductor-common:${conductorVersion}"   // on the public compiler API
-    compileOnly "org.conductoross:conductor-core:${conductorVersion}"
-    compileOnly "org.conductoross:conductor-ai:${conductorVersion}"
-    compileOnly "org.conductoross:conductor-http-task:${conductorVersion}" // CredentialAwareHttpTask extends HttpTask
-    compileOnly 'org.springframework.boot:spring-boot-starter-web'         // wiring/web, provided
-    compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
-
-    // Logic-only deps. No JDBC, no sqlite, no security-crypto — those belong to the impls (server).
-    implementation "com.networknt:json-schema-validator:${jsonSchemaVersion}"  // compiler/validation
-
-    compileOnly    "org.projectlombok:lombok:${lombokVersion}"
-    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
-
-    // Tests run against a REAL engine + Spring (and may use the server's default impls as fixtures):
-    testImplementation "org.conductoross:conductor-core:${conductorVersion}"
-    testImplementation "org.conductoross:conductor-common:${conductorVersion}"
-    testImplementation "org.conductoross:conductor-ai:${conductorVersion}"
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-}
-```
-
-### 7.3 `conductor-agentspan-server/build.gradle` (thin app)
-
-Essentially today's `build.gradle`, minus the source (now in the library), plus:
-
-```groovy
-plugins { id 'org.springframework.boot'; id 'java' }
-dependencies {
-    implementation project(':conductor-agentspan')
-    // SPI default IMPLEMENTATIONS live here — their infra deps come with them:
-    implementation 'org.springframework:spring-jdbc'                              // JDBC stores
-    implementation "org.xerial:sqlite-jdbc:${sqliteJdbcVersion}"
-    implementation "org.springframework.security:spring-security-crypto:${springSecVersion}" // BCrypt (auth)
-    // The ONLY module that ships a runnable Conductor (satisfies the library's compileOnly deps):
-    implementation "org.conductoross:conductor-common:${conductorVersion}"
-    implementation "org.conductoross:conductor-core:${conductorVersion}"
-    implementation "org.conductoross:conductor-ai:${conductorVersion}"
-    implementation "org.conductoross:conductor-rest:${conductorVersion}"
-    implementation "org.conductoross:conductor-sqlite-persistence:${conductorVersion}"
-    implementation "org.conductoross:conductor-postgres-persistence:${conductorVersion}"
-    implementation "org.conductoross:conductor-scheduler-core:${conductorVersion}"
-    implementation "org.conductoross:conductor-scheduler-sqlite-persistence:${conductorVersion}"
-    implementation "org.conductoross:conductor-scheduler-postgres-persistence:${conductorVersion}"
-    implementation "org.conductoross:conductor-http-task:${conductorVersion}"
-    implementation "org.conductoross:conductor-json-jq-task:${conductorVersion}"
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.6.0'
-    // web/UI/actuator/log4j2 as today; the UI build tasks (buildUi/syncUiStatic) move here
-}
-bootJar { archiveFileName = 'agentspan-runtime.jar' }
-```
-
-### 7.4 Publishing
-
-`conductor-agentspan` publishes as a plain JAR (`maven-publish`, `from components.java`) under
-`dev.agentspan:conductor-agentspan` (group is a positioning choice — could also live under the
-Conductor group). Match the artifact repo orkes consumes from (orkes uses an S3-backed maven
-repo; mirror that or publish to the shared registry the orkes build can resolve).
-`conductor-agentspan-server` is not published as a library (it's the app/Docker artifact).
-
----
-
-## 8. Implementation Plan (phased)
-
-Each phase is independently shippable and keeps the standalone server green. Per the repo's
-testing rule (**write a test, prove it fails, then implement**), every phase starts with a
-failing test that pins the target behavior.
-
-### Phase 0 — Two-module skeleton (no behavior change)
-1. Convert to a two-module `settings.gradle`; create `conductor-agentspan` and
-   `conductor-agentspan-server`.
-2. Move source: **everything into `conductor-agentspan`** except the thin launcher
-   (`AgentRuntime`), web/UI config (`config/*`), the auth-enforcement stack (`AuthFilter`,
-   `UserRepository`, `ApiKeyRepository`, `AuthController`, `AuthUserSeeder`, `AuthProperties`),
-   `application*.properties`, and `static/` → those go to `conductor-agentspan-server`.
-   - The concrete store/crypto impls (`EncryptedDbCredentialStoreProvider`, `MasterKeyConfig`,
-     `ExecutionTokenService`, `CredentialOutputMasker`, the FS skill stores, `DataSource` config,
-     schema, seeder, migrator) stay in the library **for now** — they can't move to the server
-     until their interfaces exist (the library can't depend upward on the server). Phase 1 moves
-     them.
-3. Conductor artifacts become `compileOnly` in the library; the server brings the real runtime.
-   **Transitional wiring:** leave `AgentRuntime`'s `@ComponentScan` over `dev.agentspan.runtime`
-   in place for now so the standalone app still wires the old way while we restructure.
-4. Verify: `./gradlew :conductor-agentspan-server:bootJar` produces the same runnable jar; the
-   existing suite passes unchanged.
-   - *Test-first:* a smoke test that boots the context and hits `/api/agent` health — green
-     before and after the move.
-
-### Phase 1 — Extract SPI interfaces (lib) and push impls to the server
-1. In the library, introduce `dev.agentspan.runtime.spi` interfaces: `MasterKeyProvider`,
-   `ExecutionTokenIssuer`, `SecretOutputMasker`, `SkillMetadataDAO`; move the existing
-   `CredentialStoreProvider` and `SkillPackageStore` interfaces in. (No binding store, and **no
-   `UserStore`/`ApiKeyStore`** — bindings removed in `c873e60b`, identity is the host's; see §4.)
-   Repoint all library logic (`CredentialResolutionService`, `SkillRegistryService`, masking
-   advice, `CredentialAware*`, controllers) at the **interfaces**.
-2. **Move the concrete impls to `conductor-agentspan-server`:** `EncryptedDbCredentialStoreProvider`,
-   `FileSystemSkillPackageStore`/`ConductorPayloadSkillPackageStore`, the `SkillMetadataDAO` impl,
-   `MasterKeyConfig`, `ExecutionTokenService` (HMAC), the no-op `CredentialOutputMasker`, the
-   `DataSource` config, `schema-*.sql`, `CredentialSchemaMigrator`, `CredentialEnvSeeder`. Declare
-   them as beans in a server `AgentSpanDefaultImplConfiguration` (each `@ConditionalOnMissingBean`).
-   - *Test-first:* a library-only test that wires the logic against **fake** in-memory SPI impls
-     and asserts behavior (resolution + JSONPath, skill register/list) — proves the lib needs no
-     concrete impls. Red before the interfaces exist.
-   - *Test-first:* a masking test in the server with a non-no-op `SecretOutputMasker` bean asserts
-     the advice (in the lib) redacts; with the no-op, payloads pass through.
-3. Qualify the server `DataSource` (`agentspanDataSource`), drop `@Primary`.
-
-### Phase 2 — Auto-configuration; drop `@ComponentScan` reliance
-1. Write the library `AgentSpanAutoConfiguration` (one class, or an internally-split pair) wiring
-   the **logic** beans via explicit `@Bean`, each `@ConditionalOnBean` on the SPIs it needs; add
-   the `AutoConfiguration.imports` file in `conductor-agentspan`. Register system tasks under their
-   `TASK_TYPE` bean names, the AI provider, `AgentService`, controllers, etc.
-2. Remove stereotype annotations from the library classes; decide controller registration (§5.1).
-   Then drop the transitional `@ComponentScan` from `AgentRuntime`.
-3. Convert the `@Primary` overrides (`CredentialAwareHttpTask`/`McpService`, `AgentHumanTask`,
-   event listener) to property-gated/conditional beans (§5.2).
-   - *Test-first:* a `@SpringBootTest` slice that loads the library auto-config **plus** the
-     server's default-impl config (no component scan) and asserts every expected bean is present
-     (incl. system tasks by `TASK_TYPE`); and that **omitting** an SPI impl makes the context fail
-     fast (the `@ConditionalOnBean` guard). Write it red, then add the auto-config.
-   - *Test-first:* a custom `CredentialStore` `@Bean` wins over the server default
-     (`@ConditionalOnMissingBean`); and `agentspan.tasks.http.override=false` ⇒ no
-     `CredentialAwareHttpTask` bean (host's HTTP task wins).
-
-### Phase 3 — Verify the thin server
-1. `conductor-agentspan-server` = the SPI default impls + `AgentRuntime` + web/UI config +
-   `application*.properties` + `static/` + UI gradle tasks + standalone auth stack + OSS Conductor
-   runtime deps.
-2. Verify the standalone bootJar and Docker image behave identically to today (same endpoints,
-   same e2e suite).
-   - *Test-first:* run the existing e2e/integration suite against the new server module —
-     **no LLM-based validation** (per `CLAUDE.md`); assert on deterministic compile/start/status.
-
-### Phase 4 — Integrate into orkes-conductor (separate repo/PR)
-1. After verifying §6 (engine artifact + version), add `dev.agentspan:conductor-agentspan` to
-   `orkes-conductor/server/build.gradle`.
-2. orkes contributes an **impl bean for every SPI** (secret store, master key/KMS, token issuer,
-   output masker, skill stores) — there is no bundled default to fall back on. Bridge orkes'
-   security context → `RequestContextHolder`.
-3. Smoke + integration test inside orkes: deploy an agent, start it, observe status, exercise a
-   tool call. Confirm no bean conflicts, no path collisions, scheduler/SSE intact, and that a
-   missing SPI impl fails startup loudly. See §9.1 for the two embedded-mode e2e layers
-   (in-orkes server e2e + reused SDK e2e) and the version-pinning requirement.
-
----
-
-## 9. Testing Strategy
-
-Honoring `CLAUDE.md`:
-- **No LLM in validation** except where we're explicitly judging quality/evals. All structural
-  tests assert on compiled `WorkflowDef`/`WorkflowTask`, bean presence, SPI delegation, and HTTP
-  responses — deterministic, no model calls.
-- **Prove each test fails first.** For every extraction (SPI seam, auto-config, backend
-  refactor), write the test against the *target* shape so it red-fails (missing interface/bean),
-  then implement to green.
-
-New test types introduced:
-1. **Library-purity check** — the `conductor-agentspan` jar contains **no** concrete store/crypto
-   impl and no JDBC/sqlite/persistence on its runtime classpath; all `conductor-*` artifacts are
-   `provided`/optional. An ArchUnit/POM assertion fails if an impl (e.g. `EncryptedDb*`) or a
-   `conductor-*-persistence`/JDBC dependency sneaks into the library.
-2. **Missing-impl fail-fast test** — the library context without an SPI impl bean fails startup
-   with a clear message (the `@ConditionalOnBean` guard), not a half-wired no-op.
-3. **SPI contribution/override tests** — the host's impl bean is picked up; a second custom
-   `@Bean` overrides the default (`@ConditionalOnMissingBean` contract).
-4. **Auto-config slice tests** — library auto-config + server default-impls load with **no**
-   component scan; all expected beans present; `@Primary`/conditional overrides behave.
-5. **`AgentService` tests** against mocked Conductor services (`WorkflowService`/`MetadataDAO`/
-   `ExecutionService`) — Conductor's own interfaces, no AgentSpan wrapper.
-6. **Embedded-mode conflict test** — a test context that simulates a host already providing
-   `DataSource`/HTTP task and asserts AgentSpan does not collide.
-7. **Secret masking seam test** — with a non-no-op `SecretOutputMasker`, assert
-   `CredentialMaskingResponseAdvice` redacts execution-read responses; with the no-op (OSS),
-   assert payloads pass through unchanged. No real secrets/LLM — deterministic fixtures.
-
-### 9.1 Embedded-mode e2e (orkes repo)
-
-Test types 1–7 above cover the **standalone** module and the library boundary *in this repo*. The
-**embedded** deployment (AgentSpan-as-a-library inside orkes-conductor) is verified in the
-**orkes-conductor repo**, because that's the only side that can depend on both — orkes depends on
-`conductor-agentspan`, never the reverse (§3.1). It splits into two layers:
-
-1. **Server e2e (in-JVM, host-specific) — lives in orkes.** The Phase-4 §8 smoke/integration
-   tests: a `@SpringBootTest` that boots orkes' context with the embedded library **plus orkes'
-   own SPI impl beans**, then asserts deploy → start → status → tool-call, no bean conflicts, no
-   `/api/...` path collisions, scheduler/SSE intact, and that **omitting** an SPI impl fails
-   startup loudly. These compile against orkes' application class and its impl beans, so they
-   *cannot* live here — the dependency direction forbids it.
-
-2. **SDK e2e (black-box HTTP) — reused, not rewritten.** The existing per-language suites
-   (`sdk/{java,python,ts,csharp}`) are pure HTTP clients parameterized only by
-   `AGENTSPAN_SERVER_URL`; they don't depend on either server at the code level. So the **same
-   suites** run against a booted orkes instance — the only delta is the URL (and orkes' base
-   path/port). This is the behavioral-equivalence oracle: if the suites that pass against
-   `agentspan-runtime.jar` also pass against orkes, the embedding behaves identically.
-
-**Where the pipeline lives.** The embedded-e2e workflow is configured in the **orkes repo** (its
-CI secrets, runners, backing services — Postgres/Redis/ES). It: builds orkes-with-lib → boots it →
-runs layer 1 (its own tests) and layer 2 (agentspan's suites). orkes *reads* the agentspan repo
-for layer 2 (`actions/checkout` of the suite, or a published test artifact) — that's test input,
-not a build dependency, so the direction stays clean.
-
-**Version pinning (required).** Layer 2 is only a valid oracle for the exact server version it was
-written against. The embedded library coordinate
-(`dev.agentspan:conductor-agentspan:vX`), the checked-out suite (`ref: vX`), **and** the SDK
-client package the suite imports (`agentspan==X` / `@agentspan-ai/sdk@X` / Maven / NuGet) must all
-be the **same `vX`** — drive them from one `AGENTSPAN_VERSION` variable so they can't drift.
-Mismatched versions yield false failures (suite expects a field the lib doesn't emit) or false
-passes (suite too old to cover a new path). This is distinct from the §6 *Conductor*-version pin.
-
-**Validation stays LLM-free** in both layers (compile/start/status/tool-call assertions), same as
-the standalone e2e.
-
-### 9.2 Interoperability & version drift (scoped to three consumption modes)
-
-Conductor-version alignment is an **ongoing** concern, not a one-time "verify before coding" item:
-`compileOnly` means **nothing bundles or enforces an engine version — the host's classpath wins**,
-so a mismatch is silent until runtime. Two failure classes:
-
-1. **Linkage (ABI)** — `NoSuchMethodError`/`ClassNotFoundException` the first time a path hits a
-   method that moved or a class the host repackaged. The surface is small and enumerable: the
-   injected Conductor services (`WorkflowService`, `MetadataDAO`/`MetadataService`,
-   `ExecutionService`, `WorkflowExecutor`, `ExecutionDAO`), the extended base classes
-   (`WorkflowSystemTask`, `HttpTask`, `MCPService`), and `conductor-common` models on the public API
-   (`WorkflowDef`/`WorkflowTask` — §10.8).
-2. **Semantic** — even when it links, engines may differ (JOIN, sub-workflow, HTTP task, scheduler,
-   SSE). No static check; the **SDK conformance suite (§9.1 layer 2) is the only oracle** — "is it
-   interoperable" = "does the same suite pass on each engine."
-
-Rather than reason about "any host at any version," scope the concern to the **three concrete ways
-a consumer actually picks an AgentSpan + Conductor pair**. Each mode has a different owner and a
-different (or zero) drift risk:
-
-| Mode | What the consumer takes | AgentSpan ver. | Conductor ver. | Drift risk | Owner |
-| --- | --- | --- | --- | --- | --- |
-| **A — Standalone** | `conductor-agentspan-server` bootJar / Docker | our release | **fixed**, bundled | **none** (consistent by construction) | us |
-| **B — Self-embed (external OSS)** | `conductor-agentspan` library | library ver. | host-supplied, arbitrary | **real, unbounded** | the host |
-| **C — Enterprise embed** | `orkes-conductor` (embeds the library) | orkes picks | orkes pins (`3.30.0.rc8`) | **real, but single pinned pair** | orkes |
-
-**Mode A — drift-free by construction.** The standalone bootJar reads the **single**
-`conductorVersion` (`server/build.gradle`) at the same commit for both lib and server (§7), so the
-lib is always compiled against the engine it ships with. This protection holds *only* while it stays
-one variable — **don't split it.** No extra handling needed; the boot/smoke test already links lib
-against the bundled engine.
-
-**Mode C — one pinned pair, host-certified.** orkes pins its engine (`3.30.0.rc8`, §6) and runs its
-own integration + conformance suite against that pair. Compatibility is proven at *its* one version,
-re-validated whenever orkes bumps the engine. No range, no matrix — exactly one certified pair, owned
-by orkes.
-
-**Mode B — the genuinely open case; both sides are OSS, so the host owns the pairing.** When the
-external host runs a Conductor version that differs from our pinned `conductorVersion`, there are two
-paths, and we recommend the first:
-
-1. **Build from source against your engine (recommended).** Clone the repo, set `conductorVersion`
-   to *your* engine version, and build `conductor-agentspan` yourself. The library is then compiled
-   against the exact engine you run — drift is eliminated **by construction**, the same guarantee
-   Mode A gets, because the `compileOnly` deps resolve to your version at compile time. No trust, no
-   breadcrumb, no self-certify guesswork. This is the right path for anyone off our pinned version,
-   and it's the natural OSS answer: the source is right there.
-2. **Take the published jar + self-certify (fallback).** `conductor-agentspan` publishes to Maven
-   Central, and `compileOnly` deps **don't appear in the POM**, so the published jar is compiled
-   against *our* pinned `conductorVersion` and carries **no version constraint**. Drop it onto a
-   different engine and you are trusting ABI compatibility you haven't verified. We **cannot** and
-   **do not** promise this works across arbitrary versions. If you go this route:
-   - **We state only the point fact we get for free:** "built/tested against `conductorVersion`"
-     (auto-derived, always true, nothing to maintain). Surface it where the POM can't — release
-     notes / README, and a `Conductor-Built-Against` jar-manifest breadcrumb so a mismatch is
-     diagnosable at a glance rather than a bare runtime `NoSuchMethodError`. It is **informational,
-     not a constraint** (deps stay `compileOnly`, host's version still wins — §6).
-   - **The host self-certifies**, exactly as a JDBC driver vendor certifies against the spec rather
-     than the spec enumerating drivers. Re-running the SDK conformance suite (§9.1 layer 2) against
-     their engine is the only honest proof; the burden sits with the implementor.
-
-**A declared *range* is out of scope either way.** "Compatible with 3.30.x" is only honest if we test
-across it and keep re-testing as Conductor moves — the matrix maintenance we are deliberately not
-signing up for. An unverified range is a false promise. Build-from-source sidesteps the question
-entirely; the published jar gets a point-fact, not a range.
-
-> Why the residual risk is *only* drift, not structure: §4.1 keeps the interop surface tiny (no
-> execution SPI). Modes A and C are each a single pinned pair re-checked on bump; Mode B's
-> recommended path (build from source) inherits Mode A's by-construction guarantee, with
-> take-the-jar + self-certify as the best-effort fallback. No maintained compatibility range, no new
-> abstraction.
-
-### 9.3 Upgrade & adoption
-
-Both paths consume **whole releases, never hand-swapped jars** — so API/ABI is the release
-producer's build-time concern (§9.2 self-certify), and the consuming customer's job is **data + ops
-only**.
-
-**Version upgrade** (existing AgentSpan deployment → newer release) — like any stateful app:
-
-- Two schema lifecycles migrate on startup: Conductor's (engine-owned) **and** AgentSpan's
-  `credentials_store`. Back up both datasources.
-- In-flight workflows must deserialize under the new engine — note **long-paused HITL**
-  (`AgentHumanTask`) makes such executions routine, not rare.
-- Rollback = **restore from backup** (Flyway is forward-only), not redeploy-old-artifact.
-
-**Adoption** (plain Conductor → +AgentSpan) is **additive**: it adds `credentials_store`, custom
-task types, and agent `WorkflowDef`s; existing Conductor data is untouched. Net-new concerns:
-
-- **Engine direction is `>=`, same major** (no downgrade: forward-only Flyway + model
-  serialization); *equal* = pure additive, no migration.
-  - **Mode A:** customer must pick a server release whose bundled engine `>=` theirs; if their
-    engine is ahead of every release, fall back to **Mode B**.
-  - **Mode B (build-from-source):** aligned to the host's own engine by construction.
-  - **Mode C:** `>=` auto-enforced by moving forward along orkes' release line; orkes owns it.
-- Host supplies one impl bean per SPI (no embedded default) — a missing one fails fast at startup.
-
-**Removal asymmetry:** backing AgentSpan out is clean *before* any agent runs (`credentials_store`
-is a harmless orphan); *after* agents exist, their custom `TASK_TYPE`s no longer resolve.
-
----
-
-## 10. Risks & Open Questions (verify before/while coding)
-
-1. **Engine artifact/version in orkes (highest risk).** Which module/artifact provides
-   `com.netflix.conductor.core.*`, `conductor-ai`, and Conductor's `MCPService` in
-   orkes-conductor, and at what version? The system tasks, `AgentService`,
-   `CredentialAwareHttpTask`, and `CredentialAwareMcpService` must compile against the same
-   package names and a compatible version. orkes excludes `com.netflix.conductor` group and
-   `org.conductoross:conductor-core` — confirm the replacement source. **Pin `compileOnly` to it.**
-2. **Masking advice on the host's route.** `CredentialMaskingResponseAdvice` matches
-   `/api/workflow/{id}` — i.e. it would wrap orkes' own workflow-read responses. Make it opt-in
-   (`@ConditionalOnBean(SecretOutputMasker)` / property), and confirm the host wants AgentSpan
-   redacting those payloads.
-3. **Worker-secrets endpoint reachability.** `/api/workers/secrets` is gated only by the
-   execution token. Verify orkes' security chain does **not** additionally block it and that
-   workers can reach it with just the token.
-4. **Controller registration without component scan** — confirm `@RestController` via `@Bean`
-   works cleanly, or fall back to a narrowly-scoped `@ComponentScan` for the controller package.
-5. **`@Primary` overrides** (`HTTP`, `MCPService`, `HUMAN`, status listener, `DataSource`) — every
-   one must become opt-in; verify orkes' equivalents and the intended default per mode.
-6. **REST path collisions** with orkes' API gateway (`/api/...`), incl. `/api/secrets`.
-7. **Scheduler** (`conductor-scheduler-*`) — currently AgentSpan bundles it; in embedded mode
-   the host owns scheduling. Confirm agent cron scheduling routes through the host's scheduler.
-8. **`conductor-common` version on AgentSpan's public API** — since it's `api`-scoped in core,
-   a host on a divergent `conductor-common` could see binary incompatibility on
-   `WorkflowDef`/`WorkflowTask`. Mitigated by orkes' force-resolution, but validate.
-9. **Enterprise-only tables.** `credential_disclosures` (masking) and any `secret_tags` (RBAC)
-   are not in OSS schema; the enterprise `SecretOutputMasker` / `SecretAccessPolicy` impls own
-   their own DDL. Keep OSS schema (`credentials_store`, `users`, `api_keys`) free of them.
-
----
-
-## 11. Appendix — File move map (summary)
-
-Two targets: **lib** = `conductor-agentspan`, **server** = `conductor-agentspan-server`.
-
-| From `dev.agentspan.runtime.*` | To | Notes |
-|--------------------------------|----|-------|
-| `model/**`, `normalizer/**`, `compiler/**`, `util/**` | lib | agent domain + compilation |
-| `auth/{User,RequestContext,RequestContextHolder}` | lib | principal carrier for secret scoping |
-| `auth/{AuthFilter,UserRepository,ApiKeyRepository,AuthController,AuthUserSeeder,AuthProperties}` | server | standalone-only auth (off by default); no SPI — host owns identity |
-| `credentials/{CredentialStoreProvider, SkillPackageStore→spi}` interfaces + new `MasterKeyProvider`/`ExecutionTokenIssuer`/`SecretOutputMasker` | lib | contracts only (→ `spi/`). Bindings removed |
-| `credentials/{CredentialResolutionService, CredentialMaskingResponseAdvice}` | lib | logic over the SPIs (resolution + JSONPath; masking advice) |
-| `credentials/CredentialAwareHttpTask*` | lib | extends `HttpTask`; resolves via the SPIs, holds no store |
-| `credentials/CredentialAwareMcpService` | lib | extends Conductor `MCPService` (`@Primary`, opt-in) |
-| `credentials/{EncryptedDbCredentialStoreProvider, MasterKeyConfig, ExecutionTokenService, CredentialOutputMasker(no-op), CredentialDataSourceConfig, CredentialSchemaMigrator, CredentialEnvSeeder}` | **server** | the OSS SPI impls + JDBC `DataSource` + bootstrap; qualify DataSource (drop `@Primary`) |
-| `service/{AgentService,AgentDagService,AgentStreamRegistry}` | lib | use Conductor services directly |
-| `service/SkillRegistryService` | lib | registry **logic** over `SkillPackageStore` + `SkillMetadataDAO` |
-| `service/skill/{SkillPackageStore (interface), StoredSkillPackage}` + new `SkillMetadataDAO` | lib | contract + value type |
-| `service/skill/{FileSystemSkillPackageStore,ConductorPayloadSkillPackageStore}` + `SkillMetadataDAO` impl | **server** | FS default + `ExternalPayloadStorage`-backed + filesystem-JSON metadata |
-| `service/{PlanAndCompileTask,ListApiToolsTask,PlannerContextFetchTask,AgentHumanTask}*`, `tasks/Join` | lib | `WorkflowSystemTask` |
-| `service/AgentEventListener`, `ai/**` | lib | event hooks; `conductor-ai` provider |
-| `controller/{AgentController,SecretController,WorkerController,SkillController}` | lib | REST API surface; `WorkerController` = execution-token boundary |
-| `controller/AuthController` | server | login endpoint — part of standalone auth |
-| `config/{Cors,UiRouting,StaticDocs,Shutdown}` | server | web/UI presentation |
-| `AgentRuntime` | server | main |
-| `resources/application*.properties`, `static/**`, `schema-credentials*.sql` | server | runtime config, UI bundle, DDL for the JDBC impls |
-| new `config/AgentSpanAutoConfiguration` + `META-INF/spring/...imports` | lib | wires logic beans; replaces `@ComponentScan` |
-| new `config/AgentSpanDefaultImplConfiguration` | server | declares the OSS SPI impl beans |
-| new `spi/**` | lib | the interfaces in §4 |
-```
+**Known TS limitations:** discovery finds only native `Agent` instances (no framework-agent discovery) and scans only the top-level directory (no recursion).

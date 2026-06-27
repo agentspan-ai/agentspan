@@ -5,7 +5,7 @@ more crons to a deployed agent in a single declarative call; the runtime's
 scheduler fires the agent on cadence and you watch the executions roll in.
 
 This page covers the user-facing API. For the design rationale see
-[`design/scheduling.md`](https://github.com/agentspan-ai/agentspan/blob/main/design/scheduling.md).
+[`design/sentinel-agents.md`](https://github.com/agentspan-ai/agentspan/blob/main/design/sentinel-agents.md).
 
 ## What you get
 

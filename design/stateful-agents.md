@@ -1,5 +1,13 @@
 # Stateful Agents — Task-to-Domain Routing
 
+**Status:** Consolidated 2026-06-26
+
+**Scope:** How Agentspan isolates tool-worker routing per concurrent agent
+execution so multiple running instances of the same agent script don't cross-route
+tasks. For the general execution/worker-dispatch model see
+[agentspan-design.md](agentspan-design.md); for always-on/scheduled execution see
+[sentinel-agents.md](sentinel-agents.md).
+
 ## Problem
 
 When multiple concurrent instances of the same agent script run simultaneously
