@@ -7,7 +7,7 @@ description: Agentspan documentation for building production AI agents.
 
 **Agentspan is a durable runtime for AI agents, built for Conductor. Your code runs in your process. Execution state lives on the server.**
 
-Run long-running agents (`timeout_seconds=0` by default), fire background jobs (`runtime.start()` returns immediately), schedule on cron (`deploy(agent, schedules=[…])`), or drive a running agent from any event source (`runtime.send_message()`). With Plan-Execute, the LLM plans what to do once and Conductor executes it deterministically. Write agents natively or wrap LangGraph, OpenAI Agents SDK, or Google ADK in one line.
+Write agents that run for minutes or hours with no timeout limit. Use Plan-Execute to let an LLM plan dynamically at runtime while Conductor executes the compiled, immutable plan deterministically — with no LLM randomness in orchestration or retries. Trigger agents from cron schedules, Kafka, SQS, webhooks, and any event source Conductor supports. Write agents natively or wrap LangGraph, OpenAI Agents SDK, or Google ADK in one line.
 
 ## Getting Started
 

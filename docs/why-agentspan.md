@@ -66,17 +66,27 @@ Your process can crash, restart, or be replaced. The agent keeps running.
 
 ## What this enables
 
+### Long-running agents
+
 **Crash recovery.** If your worker process dies mid-run, the server resumes execution when a new worker connects. No work is re-run from scratch — it picks up at the current step.
 
 **Durable human-in-the-loop.** Mark any tool with `approval_required=True`. The agent pauses server-side and waits indefinitely — no timeouts, no in-memory state at risk. Approve or deny via CLI, API, or the UI.
 
 **Full execution history.** Every run is stored with inputs, outputs, token usage, and per-step timing. Query via CLI, browse in the UI at `http://localhost:6767`, or replay any past run.
 
+### Dynamic agents (Plan-Execute)
+
+**LLM plans, Conductor executes.** Define a planner agent that emits a JSON DAG of operations at runtime — adapting the plan to the specific task and inputs. The server compiles it into an immutable Conductor sub-workflow: no LLM involved in orchestration, retries, parallelism, or validation. The plan is fixed once compiled — replay-safe and branch-stable. See [Plan-Execute](concepts/plan-execute.md).
+
+**Call existing Conductor workflows.** Plan steps can invoke any deployed Conductor workflow as a sub-workflow. This bridges dynamic AI planning with your existing deterministic business automation — the LLM decides when to call it; Conductor handles the execution.
+
+### Event-driven agents
+
 **Scheduled agents.** Attach one or more crons to any agent at deploy time. The server fires the agent on cadence, tracks every execution, and lets you pause, resume, or trigger ad-hoc — without touching application code. See [Scheduling](scheduling.md).
 
-**Background execution.** `runtime.start()` returns an `AgentHandle` immediately — the agent runs on the server. From any process, use the handle to check status, stream events, or push new inputs into the running agent with `runtime.send_message(execution_id, event)`. Works from webhook handlers, Kafka consumers, queue workers, or any event source.
+**Conductor event handlers.** Agentspan runs on Conductor, which has native integrations for Kafka, SQS, AMQP, webhooks, and database events. Any event source that can trigger a Conductor workflow can trigger an agent — with a full durable execution record for every event.
 
-**Plan-Execute: LLM plans, Conductor executes.** Define a planner agent that emits a JSON DAG of operations. The server compiles it into a Conductor sub-workflow — no LLM involved in orchestration, retries, parallelism, or validation. The planner runs once; the rest is deterministic and replay-safe. This is the defining superpower of Agentspan + Conductor. See [Plan-Execute](concepts/plan-execute.md).
+### Framework compatibility
 
 **Works with frameworks you already use.** Pass a LangGraph `StateGraph`, an OpenAI Agents SDK `Agent`, or a Google ADK pipeline directly to `runtime.run()`. Your definitions stay unchanged.
 

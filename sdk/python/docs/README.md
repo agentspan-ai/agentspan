@@ -2,7 +2,7 @@
 
 > Installed on PyPI as [`conductor-agent-sdk`](https://pypi.org/project/conductor-agent-sdk/) — you're in the right place.
 
-Long-running, background, scheduled, event-driven, and plan-execute AI agents in Python. You write plain Python; Agentspan compiles your agent into a Conductor workflow that runs on a server — with automatic retries, durable state, human-in-the-loop pauses, streaming, scheduling, dynamic plan-execute, and full execution history.
+Long-running, dynamic plan-execute, and event-driven AI agents in Python. You write plain Python; Agentspan compiles your agent into a Conductor workflow that runs on a server — with automatic retries, durable state, human-in-the-loop pauses, streaming, scheduling, dynamic plan-execute, and full execution history.
 
 ```python
 from conductor.ai.agents import Agent, AgentRuntime

@@ -38,15 +38,15 @@
 https://github.com/user-attachments/assets/dd4b720d-d11c-42e8-93a6-875c5a740fd8
 
 
-**Agentspan** runs the agents your application can't fit in an HTTP request — and with Plan-Execute, the LLM decides what to do while Conductor handles the rest.
+**Agentspan** is a durable runtime for AI agents, built for Conductor. Three pillars:
 
-| Pattern | What it means | How |
-|---|---|---|
-| **Long-running** | Minutes or hours, not seconds. State is server-side; crashes don't restart from zero. | `timeout_seconds=0` by default — no execution limit |
-| **Background** | Fire and forget. Get a handle; check status, stream events, or inspect results from any process. | `runtime.start()` returns an `AgentHandle` immediately |
-| **Scheduled** | Cron on any agent in one line. Daily digest, weekly reports, hourly syncs. | `deploy(agent, schedules=[Schedule(cron=…)])` |
-| **Event-driven** | Drive a running agent from Kafka, webhooks, queues, or any event source. | `runtime.send_message(execution_id, event)` |
-| **Plan-Execute** | LLM plans what to do once. Conductor executes deterministically — no LLM randomness in orchestration, retries, or parallelism. | `Strategy.PLAN_EXECUTE` — the Conductor superpower |
+**Long-running agents** — Write an agent; it runs as long as it needs to. Minutes, hours, or until a human approves the next step. No timeout by default. If your worker process crashes, the server resumes from the last completed step when a new worker connects.
+
+**Dynamic agents (Plan-Execute)** — The LLM decides what to do at runtime; Conductor locks it in and executes it deterministically. The planner emits a JSON plan once; the server compiles it into an immutable Conductor sub-workflow — no LLM randomness in orchestration, retries, or parallelism. Dynamic agents can call existing Conductor workflows as steps, bridging AI with your existing automation.
+→ `Strategy.PLAN_EXECUTE` · works across Python, TypeScript, Java, C#
+
+**Event-driven agents** — Trigger agents from cron schedules, Kafka topics, SQS queues, AMQP messages, webhooks, and database events. Agentspan runs on Conductor, so every event source Conductor supports is available to agents. Each trigger is a durable execution with full history.
+→ `deploy(agent, schedules=[Schedule(cron="0 0 9 * * MON-FRI")])` · Conductor event handlers
 
 ## Quickstart (60 seconds)
 
