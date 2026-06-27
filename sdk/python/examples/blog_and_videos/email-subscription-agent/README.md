@@ -2,7 +2,7 @@
 
 An AI agent that scans your email inbox for recurring charges, flags unused or duplicate subscriptions, and tells you exactly what to cancel and where — with a running total of how much you'd save.
 
-Built with [Agentspan](https://agentspan.ai/).
+Built with [Conductor Agents](https://agentspan.ai/).
 
 ---
 
@@ -28,10 +28,10 @@ By default it runs on sample inbox data so you can try it immediately with no se
 
 ## Setup
 
-**1. Install Agentspan**
+**1. Install Conductor Agents**
 
 ```bash
-pip install agentspan
+pip install conductor-agent-sdk
 ```
 
 **2. Set your API key**
@@ -40,9 +40,9 @@ pip install agentspan
 export ANTHROPIC_API_KEY=your_key_here
 ```
 
-**3. Start the Agentspan server**
+**3. Start the Conductor Agents server**
 
-Agentspan runs on top of Conductor, which needs a local server process running in the background.
+Conductor Agents runs on top of Conductor, which needs a local server process running in the background.
 
 ```bash
 agentspan server start

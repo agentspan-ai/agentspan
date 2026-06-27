@@ -5,7 +5,7 @@ description: All 8 coordination strategies — sequential, parallel, handoff, ro
 
 # Multi-Agent Strategies
 
-Every multi-agent system in Agentspan is built from one primitive: `Agent`. Set `agents=[...]` and choose a `strategy` to coordinate them.
+Every multi-agent system in Conductor Agents is built from one primitive: `Agent`. Set `agents=[...]` and choose a `strategy` to coordinate them.
 
 ## Overview
 
@@ -27,7 +27,7 @@ Sub-agents run in order. Each agent's output becomes the next agent's input.
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant R as Researcher
     participant W as Writer
     participant E as Editor
@@ -50,7 +50,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 researcher = Agent(name="researcher", model="openai/gpt-4o",
                    instructions="Research the topic and provide key facts.")
@@ -82,7 +82,7 @@ All sub-agents run concurrently. Results are aggregated into `result.sub_results
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant M as Market Analyst
     participant R as Risk Analyst
     participant F as Financial Analyst
@@ -110,7 +110,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 market = Agent(name="market", model="openai/gpt-4o",
                instructions="Analyze market size, growth, and key players.")
@@ -140,7 +140,7 @@ The orchestrator LLM decides which sub-agent handles the request. Sub-agents can
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant LLM
     participant B as Billing
     participant T as Technical
@@ -160,7 +160,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def check_balance(account_id: str) -> dict:
@@ -192,7 +192,7 @@ A dedicated router agent or function selects which sub-agent runs:
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant Cls as Classifier
     participant B as Billing
     participant T as Technical
@@ -212,7 +212,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 classifier = Agent(
     name="classifier",
@@ -267,7 +267,7 @@ Condition-based handoffs between agents. Each agent can trigger a handoff based 
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant T as Triage
     participant Ref as Refund Specialist
     participant Esc as Escalation
@@ -287,8 +287,8 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, Strategy
-from agentspan.agents import TextMentionTermination
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import TextMentionTermination
 
 triage = Agent(name="triage", model="openai/gpt-4o",
                instructions="Triage support requests. Say 'BILLING' for billing, 'TECH' for technical.")
@@ -316,7 +316,7 @@ Agents take turns in a fixed rotation:
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant O as Optimist
     participant P as Pessimist
     participant R as Realist
@@ -366,7 +366,7 @@ A random sub-agent is selected each turn. Useful for load balancing across model
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant G as GPT-4o
     participant C as Claude
     participant Ge as Gemini
@@ -404,7 +404,7 @@ Execution pauses between turns waiting for explicit human selection of the next 
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant A as Agent A
     participant B as Agent B
     participant C as Agent C
@@ -427,7 +427,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, start
+from conductor.ai.agents import Agent, AgentRuntime, start
 
 workflow = Agent(
     name="manual_workflow",
@@ -449,7 +449,7 @@ with AgentRuntime() as runtime:
 Control when multi-agent loops stop:
 
 ```python
-from agentspan.agents import (
+from conductor.ai.agents import (
     MaxMessageTermination,
     TextMentionTermination,
     StopMessageTermination,
@@ -472,7 +472,7 @@ TokenUsageTermination(max_total_tokens=10000)
 Combine multiple conditions:
 
 ```python
-from agentspan.agents import Agent
+from conductor.ai.agents import Agent
 
 agent = Agent(
     name="team",
@@ -490,7 +490,7 @@ Strategies compose freely — a parallel agent can contain sequential pipelines:
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant M as Market Agent
     participant T as Tech Agent
     participant Reg as Regulatory Agent

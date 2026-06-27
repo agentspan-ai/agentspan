@@ -18,7 +18,7 @@ Three agents run in sequence:
 Each agent's output becomes the next agent's input.
 
 !!! info "Prerequisites"
-    - A running Agentspan server: `agentspan server start`
+    - A running Conductor Agents server: `agentspan server start`
     - Environment variables set:
     
     ```bash
@@ -31,7 +31,7 @@ Each agent's output becomes the next agent's input.
 
 ```python
 import os
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 researcher = Agent(
     name="researcher",
@@ -83,7 +83,7 @@ topic → [researcher] → research brief → [writer] → draft article → [ed
  
 **Multi-agent pipeline (`>>`)**: The three agents run sequentially. Each agent sees only the output of the previous one, not the raw prompt. The researcher's output is the writer's input; the writer's output is the editor's input.
  
-**Crash recovery**: The pipeline runs on the Agentspan server. If your process dies mid-run, the server resumes from the current agent when you restart. Nothing reruns from scratch.
+**Crash recovery**: The pipeline runs on the Conductor Agents server. If your process dies mid-run, the server resumes from the current agent when you restart. Nothing reruns from scratch.
  
 **Run history**: Every execution is stored with inputs, outputs, token usage, and timing. Open `http://localhost:6767` to browse execution history and replay past runs.
  
@@ -104,7 +104,7 @@ editor     = Agent(name="editor",     model="openai/gpt-4o", ...)
 Use `start` instead of `run` to kick off multiple pipelines without waiting for each to finish.
  
 ```python
-from agentspan.agents import start
+from conductor.ai.agents import start
  
 topics = [
     "Multi-agent frameworks reshaping software development",
@@ -122,7 +122,7 @@ results = [h.stream().get_result() for h in handles]
  
 ```python
 import schedule, time
-from agentspan.agents import start
+from conductor.ai.agents import start
  
 def run_daily():
     for topic in WATCH_LIST:

@@ -264,7 +264,7 @@ agent = Agent(guardrails=[Guardrail(name="compliance_checker", on_fail=OnFail.RE
 - **CLI is a native binary, not Python.** The `agentspan` console script (`cli/__init__.py:main`) locates/downloads a platform-specific native binary (`server.py` / `_ensure_binary()`, honoring `AGENTSPAN_FORCE_DOWNLOAD`) and execs it. The Python modules under `cli/` (`deploy.py`, `discover.py`) are *invoked by* that native CLI — `discover.py` scans `.py` files for module-level `Agent` instances; `deploy.py` deploys them.
 - **`from __future__ import annotations` is conditional**, file by file — required to be *absent* in `_dispatch.py` (worker type resolution), fine elsewhere.
 - **Tracer name is `conductor.ai.agents`** (OTel), distinct from the `agentspan` wire/operator surface — tracing only activates if `opentelemetry-api` is installed.
-- **OpenAI/Claude/LangChain/LangGraph compatibility** is provided via adapters (`openai_compat.py`, `frameworks/*`) that convert foreign agent/tool objects into Agentspan agents; the runtime marks the resulting callables `_agentspan_framework_callable` so the dispatch worker normalizes their I/O. See [`../../framework-integration.md`](../../framework-integration.md).
+- **OpenAI/Claude/LangChain/LangGraph compatibility** is provided via adapters (`openai_compat.py`, `frameworks/*`) that convert foreign agent/tool objects into Conductor Agents `Agent` objects; the runtime marks the resulting callables `_agentspan_framework_callable` so the dispatch worker normalizes their I/O. See [`../../framework-integration.md`](../../framework-integration.md).
 
 ---
 

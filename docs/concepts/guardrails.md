@@ -10,7 +10,7 @@ Guardrails validate agent input or output. On failure, you choose how to respond
 ## Import
 
 ```python
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent, AgentRuntime, Guardrail, GuardrailResult, guardrail,
     OnFail, Position, RegexGuardrail, LLMGuardrail,
 )
@@ -19,7 +19,7 @@ from agentspan.agents import (
 ## Basic Usage
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, Guardrail, GuardrailResult, guardrail
+from conductor.ai.agents import Agent, AgentRuntime, Guardrail, GuardrailResult, guardrail
 
 @guardrail
 def word_limit(content: str) -> GuardrailResult:
@@ -103,7 +103,7 @@ agent = Agent(
 Block or allow responses based on regex patterns:
 
 ```python
-from agentspan.agents import RegexGuardrail
+from conductor.ai.agents import RegexGuardrail
 
 # Block responses containing profanity
 agent = Agent(
@@ -129,7 +129,7 @@ agent = Agent(
 Use a second LLM as a judge:
 
 ```python
-from agentspan.agents import LLMGuardrail
+from conductor.ai.agents import LLMGuardrail
 
 factual_check = LLMGuardrail(
     model="openai/gpt-4o-mini",

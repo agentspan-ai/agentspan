@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Agentspan" width="400">
-  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Agentspan" width="400">
+  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-light.png#gh-light-mode-only" alt="Conductor Agents" width="400">
+  <img src="https://github.com/agentspan-ai/agentspan/raw/main/assets/logo-dark.png#gh-dark-mode-only" alt="Conductor Agents" width="400">
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 ---
 
-# Agentspan Server
+# Conductor Agents Server
 
 The durable runtime server that executes AI agents. Compiles agent definitions into orchestrated executions, manages LLM interactions, tool execution, streaming, and human-in-the-loop approvals — independently of the client process.
 
@@ -438,7 +438,7 @@ server/
 - **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
 - **[Contributing Guide](../CONTRIBUTING.md)** — How to contribute
 
-If Agentspan is useful to you, help others find it:
+If Conductor Agents is useful to you, help others find it:
 
 - [Star the repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
 - [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network

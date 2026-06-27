@@ -1,11 +1,11 @@
-# OpenAI Agents SDK + Agentspan
+# OpenAI Agents SDK + Conductor Agents
 
 The OpenAI Agent format is natively recognized. Swap `run()` for `runtime.run()` — agent and tools stay identical.
 
 ## Before / After
 
 <table>
-<tr><th>Before (vanilla OpenAI Agents)</th><th>After (agentspan)</th></tr>
+<tr><th>Before (vanilla OpenAI Agents)</th><th>After (Conductor Agents)</th></tr>
 <tr><td>
 
 ```typescript

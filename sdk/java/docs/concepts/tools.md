@@ -1,6 +1,6 @@
 # Tools
 
-Tools give agents the ability to take actions. In Conductor Agent, each tool invocation runs as a Conductor task — distributed, retryable, and observable in the workflow audit log.
+Tools give agents the ability to take actions. In Conductor Agents, each tool invocation runs as a Conductor task — distributed, retryable, and observable in the workflow audit log.
 
 ## Java method tools (`@Tool`)
 

@@ -1,11 +1,11 @@
 ---
 title: Self-Hosting
-description: Run the Agentspan server on your own infrastructure — single VM, multi-node, or managed cloud
+description: Run the Conductor Agents server on your own infrastructure — single VM, multi-node, or managed cloud
 ---
 
 # Self-Hosting
 
-Self-hosting Agentspan means running the Agentspan server on your own infrastructure. The server is a Spring Boot application backed by PostgreSQL. Workers are stateless Python processes that connect to it.
+Self-hosting Conductor Agents means running the Conductor Agents server on your own infrastructure. The server is a Spring Boot application backed by PostgreSQL. Workers are stateless Python processes that connect to it.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ Self-hosting Agentspan means running the Agentspan server on your own infrastruc
 sequenceDiagram
     participant W1 as Python Worker 1 (your code)
     participant W2 as Python Worker 2 (your code)
-    participant S as Agentspan Server :6767
+    participant S as Conductor Agents Server :6767
     participant DB as PostgreSQL
     Note over S: UI (React dashboard) + REST API + Conductor engine
     W1->>S: poll for tasks
@@ -81,7 +81,7 @@ python my_agent.py
 Your agent code uses `AgentRuntime` as usual:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def process_data(input: str) -> str:
@@ -115,7 +115,7 @@ export AGENTSPAN_AUTH_SECRET=your-app-secret
 Or configure in code:
 
 ```python
-from agentspan.agents import configure
+from conductor.ai.agents import configure
 
 configure(
     server_url="https://your-server.example.com",
@@ -158,7 +158,7 @@ All LLM provider keys follow the same pattern — set the key, the server auto-e
 
 ## Backup and Recovery
 
-Agentspan stores all execution state in PostgreSQL. Back up regularly using standard PostgreSQL tools:
+Conductor Agents stores all execution state in PostgreSQL. Back up regularly using standard PostgreSQL tools:
 
 ```bash
 pg_dump agentspan > backup.sql

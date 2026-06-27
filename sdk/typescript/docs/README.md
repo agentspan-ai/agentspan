@@ -1,6 +1,6 @@
-# Conductor Agent TypeScript SDK — Documentation
+# Conductor Agents TypeScript SDK — Documentation
 
-The official TypeScript/Node SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
+The official TypeScript/Node SDK for [Conductor Agents](https://agentspan.ai) — durable, scalable, observable AI agents.
 
 - **Package:** `@conductoross/conductor-agent-sdk` (npm)
 - **Runtime:** Node.js >= 18
@@ -36,4 +36,4 @@ try {
 }
 ```
 
-You need a running Agentspan server (default `http://localhost:6767/api`). See [getting-started.md](getting-started.md).
+You need a running Conductor Agents server (default `http://localhost:6767/api`). See [getting-started.md](getting-started.md).

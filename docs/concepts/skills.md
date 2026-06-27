@@ -1,12 +1,12 @@
 ---
 title: Skills
-description: Load, register, run, and test agentskills.io skill folders with Agentspan
+description: Load, register, run, and test agentskills.io skill folders with Conductor Agents
 ---
 
 # Skills
 
 Skills let you package a reusable agent as a folder. A skill can include
-instructions, sub-agents, scripts, examples, references, and assets. Agentspan
+instructions, sub-agents, scripts, examples, references, and assets. Conductor Agents
 loads that folder as a durable `Agent`, compiles it to Conductor, and makes each
 component visible in the execution graph.
 
@@ -27,7 +27,7 @@ my-skill/
 +-- assets/
 ```
 
-Agentspan discovers files by convention:
+Conductor Agents discovers files by convention:
 
 | File or directory | Runtime behavior |
 |---|---|
@@ -109,7 +109,7 @@ git status/diff. The CLI enforces configured root boundaries.
 ### Python
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, agent_tool, skill
+from conductor.ai.agents import Agent, AgentRuntime, agent_tool, skill
 
 reviewer = skill("~/.claude/skills/dg", model="openai/gpt-4o")
 
@@ -128,7 +128,7 @@ lead = Agent(
 ### TypeScript
 
 ```typescript
-import { Agent, AgentRuntime, agentTool, skill } from "@agentspan-ai/sdk";
+import { Agent, AgentRuntime, agentTool, skill } from "@conductoross/conductor-agent-sdk";
 
 const reviewer = skill("~/.claude/skills/dg", {
   model: "openai/gpt-4o",
@@ -149,11 +149,11 @@ const lead = new Agent({
 ### Java
 
 ```java
-import ai.agentspan.Agent;
-import ai.agentspan.AgentTool;
-import ai.agentspan.Agentspan;
-import ai.agentspan.model.AgentResult;
-import ai.agentspan.skill.Skill;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.tools.AgentTool;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.skill.Skill;
 
 import java.nio.file.Paths;
 import java.util.List;
@@ -161,8 +161,10 @@ import java.util.List;
 Agent reviewer = Skill.skill(Paths.get(System.getProperty("user.home"), ".claude", "skills", "dg"),
     "openai/gpt-4o");
 
-AgentResult direct = Agentspan.run(reviewer, "Review auth.py");
-direct.printResult();
+try (AgentRuntime runtime = new AgentRuntime()) {
+    AgentResult direct = runtime.run(reviewer, "Review auth.py");
+    direct.printResult();
+}
 
 Agent lead = Agent.builder()
     .name("tech_lead")
@@ -175,7 +177,7 @@ Agent lead = Agent.builder()
 ### .NET
 
 ```csharp
-using Agentspan;
+using Conductor.AI;
 
 var reviewer = Skill.Load("~/.claude/skills/dg", "openai/gpt-4o");
 
@@ -214,7 +216,7 @@ Package storage is configurable:
 
 ## Testing
 
-Skills should have deterministic end-to-end tests against a real Agentspan
+Skills should have deterministic end-to-end tests against a real Conductor Agents
 server. The repository includes skill e2e suites for Python, TypeScript, Java,
 and .NET:
 

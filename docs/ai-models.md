@@ -1,6 +1,6 @@
 # AI Model Configuration
 
-Agentspan supports 12+ AI providers out of the box. Configure them by setting environment variables before starting the server.
+Conductor Agents supports 12+ AI providers out of the box. Configure them by setting environment variables before starting the server.
 
 ## Quick Setup
 

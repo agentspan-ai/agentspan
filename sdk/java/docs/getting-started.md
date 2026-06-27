@@ -4,7 +4,7 @@
 
 - Java 21+
 - Gradle 7+ or Maven 3.6+
-- A running Agentspan server — see the [Agentspan repo](https://github.com/agentspan-ai/agentspan) or start one locally:
+- A running Conductor Agents server — see the [Conductor Agents repo](https://github.com/agentspan-ai/agentspan) or start one locally:
 
 ```bash
 docker run -p 6767:6767 agentspan/server:latest

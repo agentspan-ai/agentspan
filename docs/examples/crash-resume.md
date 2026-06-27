@@ -1,20 +1,20 @@
 ---
 title: Crash and resume
-description: How Agentspan keeps agents running through process crashes, restarts, and reconnects
+description: How Conductor Agents keeps agents running through process crashes, restarts, and reconnects
 ---
 
 # Crash and resume
 
 **The problem:** Most agent frameworks run the agent loop inside your process. If your process crashes — or you deploy a new version, restart a pod, or lose a network connection — the agent's in-flight work is gone.
 
-**How Agentspan solves it:** The agent loop runs on the Agentspan server, not in your process. Your worker registers tools and polls for tasks. The agent state lives on the server. Your process can die and restart freely.
+**How Conductor Agents solves it:** The agent loop runs on the Conductor Agents server, not in your process. Your worker registers tools and polls for tasks. The agent state lives on the server. Your process can die and restart freely.
 
 ---
 
 ## How it works
 
 ```
-Your process                Agentspan server
+Your process                Conductor Agents server
 ──────────────             ────────────────────────────
 start(agent, prompt)  ──►  Creates workflow, starts agent loop
                            LLM call → tool scheduled → worker executes
@@ -27,7 +27,7 @@ Worker restarts ◄──────    Task is still queued, picked up on reco
                            Agent loop resumes from where it was
 ```
 
-The Conductor engine underlying Agentspan has durable execution built in — the same engine that powers workflows at Netflix, LinkedIn, and Tesla.
+The Conductor engine underlying Conductor Agents has durable execution built in — the same engine that powers workflows at Netflix, LinkedIn, and Tesla.
 
 ---
 
@@ -36,7 +36,7 @@ The Conductor engine underlying Agentspan has durable execution built in — the
 This example uses two scripts to show the full crash-resume cycle. Run them in order.
 
 !!! info "Prerequisites"
-    - A running Agentspan server: `agentspan server start`
+    - A running Conductor Agents server: `agentspan server start`
     - Environment variables set:
     
     ```bash
@@ -49,7 +49,7 @@ Run this script. It starts the agent, prints the execution ID, checks status, th
 
 ```python
 # start.py
-from agentspan.agents import Agent, tool, start
+from conductor.ai.agents import Agent, tool, start
 
 @tool
 def analyze_chunk(chunk_id: int, data: str) -> dict:
@@ -84,7 +84,7 @@ Paste the execution ID from Step 1 and run this script. It re-registers the tool
 
 ```python
 # reconnect.py
-from agentspan.agents import Agent, tool, AgentRuntime, AgentHandle
+from conductor.ai.agents import Agent, tool, AgentRuntime, AgentHandle
 
 # Same agent and tools as start.py — workers need to be registered to handle tool calls
 @tool
@@ -136,7 +136,7 @@ The execution ID is all you need to reconnect from any process, any machine.
 **If your agent has no `@tool` functions** (LLM-only agent), reconnecting is straightforward:
 
 ```python
-from agentspan.agents import AgentRuntime, AgentHandle
+from conductor.ai.agents import AgentRuntime, AgentHandle
 
 with AgentRuntime() as runtime:
     handle = AgentHandle(execution_id="<execution-id>", runtime=runtime)
@@ -162,7 +162,7 @@ In production, keep the worker process (which handles tool calls) separate from 
 
 ```python
 # worker.py — runs continuously, handles tool execution
-from agentspan.agents import Agent, tool, AgentRuntime
+from conductor.ai.agents import Agent, tool, AgentRuntime
 
 @tool
 def analyze_chunk(chunk_id: int, data: str) -> dict:
@@ -182,7 +182,7 @@ with AgentRuntime() as runtime:
 
 ```python
 # invoker.py — runs once per job (REST endpoint, cron, CLI, etc.)
-from agentspan.agents import Agent, tool, start
+from conductor.ai.agents import Agent, tool, start
 
 @tool
 def analyze_chunk(chunk_id: int, data: str) -> dict:
@@ -208,7 +208,7 @@ print(f"Job ID: {handle.execution_id}")
 Use `get_status()` to skip work that's already done before starting a new run:
 
 ```python
-from agentspan.agents import Agent, start, AgentRuntime, AgentHandle
+from conductor.ai.agents import Agent, start, AgentRuntime, AgentHandle
 
 def ensure_analysis_running(execution_id: str | None, agent, prompt: str):
     """Start a new run or reconnect to an existing one."""
@@ -233,7 +233,7 @@ def ensure_analysis_running(execution_id: str | None, agent, prompt: str):
 Stream events from a run — whether it's new or already in progress:
 
 ```python
-from agentspan.agents import Agent, tool, AgentRuntime, AgentHandle
+from conductor.ai.agents import Agent, tool, AgentRuntime, AgentHandle
 
 # Re-define (or import) agent and tools so workers can be registered
 @tool

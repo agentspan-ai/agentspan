@@ -18,7 +18,7 @@ A single agent handles each ticket end-to-end:
 5. Returns a structured `Resolution` with what happened
 
 !!! info "Prerequisites"
-    - A running Agentspan server: `agentspan server start`
+    - A running Conductor Agents server: `agentspan server start`
     - Environment variables set:
     
     ```bash
@@ -30,7 +30,7 @@ A single agent handles each ticket end-to-end:
 ## Full code
 
 ```python
-from agentspan.agents import Agent, AgentHandle, AgentRuntime, tool, start
+from conductor.ai.agents import Agent, AgentHandle, AgentRuntime, tool, start
 from pydantic import BaseModel
 from enum import Enum
 

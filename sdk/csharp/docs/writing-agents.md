@@ -1,6 +1,6 @@
 # Writing Agents
 
-Everything you need to author agents with the native Conductor Agent API. For agents
+Everything you need to author agents with the native Conductor Agents API. For agents
 written against the OpenAI / Google ADK / Semantic Kernel shapes, see
 [framework-agents.md](framework-agents.md).
 

@@ -1,16 +1,16 @@
 ---
 title: Quickstart
-description: Install Agentspan and run your first durable AI agent in under 60 seconds.
+description: Install Conductor Agents and run your first durable AI agent in under 60 seconds.
 ---
 
 # Quickstart
 
-Get Agentspan running locally in under 60 seconds.
+Get Conductor Agents running locally in under 60 seconds.
 
 ## Step 1 — Install
 
 ```bash
-pip install agentspan
+pip install conductor-agent-sdk
 ```
 
 This installs the Python SDK and the `agentspan` CLI — everything you need as a Python developer.
@@ -21,7 +21,7 @@ Verify your setup:
 agentspan doctor
 ```
 
-> **uv:** `uv pip install agentspan` also works.
+> **uv:** `uv pip install conductor-agent-sdk` also works.
 >
 > **CLI only (no Python SDK):** `npm install -g @agentspan-ai/agentspan` — downloads the binary eagerly at install time, no Python required.
 
@@ -43,7 +43,7 @@ See [Providers](/docs/providers) for all supported models and environment variab
 agentspan server start
 ```
 
-On first run, this downloads the Agentspan server JAR (~50 MB) and starts it on `http://localhost:6767`. Subsequent starts use the cached JAR. Open `http://localhost:6767` in your browser to see the visual execution UI.
+On first run, this downloads the Conductor Agents server JAR (~50 MB) and starts it on `http://localhost:6767`. Subsequent starts use the cached JAR. Open `http://localhost:6767` in your browser to see the visual execution UI.
 
 > **Local default:** The server uses SQLite with WAL mode — no external database needed for local development. Data is stored in `agent-runtime.db` in the working directory.
 
@@ -52,7 +52,7 @@ On first run, this downloads the Agentspan server JAR (~50 MB) and starts it on 
 Save this as `hello.py` and run `python hello.py`:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -78,7 +78,7 @@ You should see the answer printed, and the execution visible in the UI at `http:
 
 When you called `runtime.run()`, the SDK:
 
-1. Compiled your `Agent` into a durable execution on the Agentspan server
+1. Compiled your `Agent` into a durable execution on the Conductor Agents server
 2. Started a worker process to handle `@tool` function calls
 3. Executed the workflow on the server — not in-process
 4. Returned the result when complete
@@ -96,7 +96,7 @@ See [Tools](/docs/concepts/tools) for all tool types.
 If you prefer not to use the context manager, module-level functions are available. They use a shared singleton runtime under the hood:
 
 ```python
-from agentspan.agents import Agent, tool, run
+from conductor.ai.agents import Agent, tool, run
 
 @tool
 def get_weather(city: str) -> str:

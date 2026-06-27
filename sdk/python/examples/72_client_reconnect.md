@@ -4,7 +4,7 @@ This demo proves that an agent execution survives a hard kill of the local SDK p
 
 ## Prerequisites
 
-Start the Agentspan server with Docker Compose from the deployment branch or worktree:
+Start the Conductor Agents server with Docker Compose from the deployment branch or worktree:
 
 ```bash
 cd deployment/docker-compose
@@ -20,7 +20,7 @@ cd sdk/python/examples
 python3 -m venv .venv-pypi
 source .venv-pypi/bin/activate
 pip install --upgrade pip
-pip install agentspan
+pip install conductor-agent-sdk
 ```
 
 Set the server URL and model:

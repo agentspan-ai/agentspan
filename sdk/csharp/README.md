@@ -1,6 +1,6 @@
-# Conductor Agent .NET SDK
+# Conductor Agents .NET SDK
 
-The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
+The official .NET SDK for [Conductor Agents](https://agentspan.ai) — durable, scalable, observable AI agents.
 
 - **Target**: .NET 10
 - **Dependencies**: `conductor-csharp` (worker polling / Conductor client) and `Newtonsoft.Json`; agent I/O uses `System.Text.Json`
@@ -10,7 +10,7 @@ The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalabl
 ### 1. Prerequisites
 
 - .NET 10 SDK (`dotnet --version` should show `10.x.x`)
-- Agentspan server running (default: `http://localhost:6767`)
+- Conductor Agents server running (default: `http://localhost:6767`)
 
 ### 2. Add the package
 
@@ -46,7 +46,7 @@ result.PrintResult();
 
 | Variable | Default | Description |
 |---|---|---|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Agentspan server URL |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Conductor Agents server URL |
 | `AGENTSPAN_LLM_MODEL` | `openai/gpt-4o-mini` | Default LLM model |
 | `AGENTSPAN_AUTH_KEY` | — | Auth key (no-auth mode if unset) |
 | `AGENTSPAN_AUTH_SECRET` | — | Auth secret |
@@ -214,7 +214,7 @@ sdk/csharp/
 
 ## Wire Format
 
-The SDK serializes agents to the format the Agentspan server expects:
+The SDK serializes agents to the format the Conductor Agents server expects:
 
 ```json
 {

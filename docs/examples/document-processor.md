@@ -19,7 +19,7 @@ For each contract:
 Contracts run in parallel on the server. Already-completed ones are skipped on restart.
 
 !!! info "Prerequisites"
-    - A running Agentspan server: `agentspan server start`
+    - A running Conductor Agents server: `agentspan server start`
     - Environment variables set:
     
     ```bash
@@ -33,7 +33,7 @@ Contracts run in parallel on the server. Already-completed ones are skipped on r
     The `CONTRACTS` dict uses hardcoded text for demonstration. Replace it with file reads or database queries for production use.
 
 ```python
-from agentspan.agents import Agent, tool, start
+from conductor.ai.agents import Agent, tool, start
 from pydantic import BaseModel, Field
 from pathlib import Path
 from enum import Enum
@@ -246,7 +246,7 @@ Or open `http://localhost:6767` to browse executions visually. Re-run any failed
 Use `stream()` instead of `start()` to log each tool call as it happens:
 
 ```python
-from agentspan.agents import stream
+from conductor.ai.agents import stream
 
 for event in stream(contract_reviewer, filename):
     if event.type == "tool_call":

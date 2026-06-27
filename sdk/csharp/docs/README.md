@@ -1,6 +1,6 @@
-# Conductor Agent .NET SDK — Documentation
+# Conductor Agents .NET SDK — Documentation
 
-The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
+The official .NET SDK for [Conductor Agents](https://agentspan.ai) — durable, scalable, observable AI agents.
 
 - **Package:** `conductor-agent-sdk` (NuGet)
 - **Target:** .NET 10
@@ -32,5 +32,5 @@ var result = await runtime.RunAsync(agent, "Say hello!");
 result.PrintResult();
 ```
 
-You need a running Agentspan server (default `http://localhost:6767/api`). See [getting-started.md](getting-started.md).
+You need a running Conductor Agents server (default `http://localhost:6767/api`). See [getting-started.md](getting-started.md).
 </content>

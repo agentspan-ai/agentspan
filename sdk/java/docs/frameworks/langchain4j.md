@@ -1,6 +1,6 @@
 # LangChain4j
 
-Use LangChain4j `@Tool`-annotated POJOs directly with Conductor Agent. The bridge reflects your annotated methods, builds a JSON Schema from the parameter types, and registers each method as a Conductor worker task.
+Use LangChain4j `@Tool`-annotated POJOs directly with Conductor Agents. The bridge reflects your annotated methods, builds a JSON Schema from the parameter types, and registers each method as a Conductor worker task.
 
 ## Dependency
 
@@ -57,7 +57,7 @@ boolean isTools = LangChain4jAgent.isLangChain4jTools(new Object());           /
 
 ## What gets mapped
 
-| LangChain4j annotation | Conductor Agent mapping |
+| LangChain4j annotation | Conductor Agents mapping |
 |---|---|
 | `@Tool("description")` | Tool name = method name; description = annotation value |
 | `@Tool(name="x", value="desc")` | Tool name = `x`; description = `desc` |

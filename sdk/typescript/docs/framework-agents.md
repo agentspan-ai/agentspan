@@ -1,6 +1,6 @@
 # Framework Agents
 
-You don't have to rewrite agents authored with another framework to run them on Conductor Agent. The runtime **detects** the framework object you pass to `run()` / `deploy()` / `stream()`, serializes it to an agent config, and runs it on the server — same call you'd make with a native `Agent`.
+You don't have to rewrite agents authored with another framework to run them on Conductor Agents. The runtime **detects** the framework object you pass to `run()` / `deploy()` / `stream()`, serializes it to an agent config, and runs it on the server — same call you'd make with a native `Agent`.
 
 ```ts
 const runtime = new AgentRuntime();

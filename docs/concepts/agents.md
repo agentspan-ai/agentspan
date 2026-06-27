@@ -5,18 +5,18 @@ description: The Agent class — constructor, parameters, results, handles, and 
 
 # Agents
 
-`Agent` is the single orchestration primitive in Agentspan. A single agent wraps an LLM with tools. An agent with sub-agents IS a multi-agent system. There are no separate Team, Network, or Crew classes.
+`Agent` is the single orchestration primitive in Conductor Agents. A single agent wraps an LLM with tools. An agent with sub-agents IS a multi-agent system. There are no separate Team, Network, or Crew classes.
 
 ## Agent execution at runtime
 
-The following diagrams show how the Agentspan server orchestrates different runtime behaviors — guardrail validation with retry and escalation, and human-in-the-loop approval.
+The following diagrams show how the Conductor Agents server orchestrates different runtime behaviors — guardrail validation with retry and escalation, and human-in-the-loop approval.
 
 
 **1. Retry** — the guardrail fails and the server re-invokes the same tool automatically.
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant LLM
     participant Tool as Order Search Tool
     participant Guard as Guardrail
@@ -53,7 +53,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant LLM
     participant Tool as Order Search Tool
     participant Guard as Guardrail
@@ -92,7 +92,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Agentspan Server
+    participant Server as Conductor Agents Server
     participant LLM
     participant Tool as Process Refund
     participant Human as HITL (Human-in-the-Loop)
@@ -122,7 +122,7 @@ sequenceDiagram
 ## Import
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, run, start, stream
+from conductor.ai.agents import Agent, AgentRuntime, run, start, stream
 ```
 
 ## Constructor
@@ -182,7 +182,7 @@ Agent(name="bot", model="openai/gpt-4o",
 
 ```python
 from pydantic import BaseModel
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 class Report(BaseModel):
     title: str
@@ -215,7 +215,7 @@ agent = Agent(
 ### `AgentRuntime` context manager (recommended)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="assistant", model="openai/gpt-4o")
 
@@ -235,7 +235,7 @@ with AgentRuntime() as runtime:
 ### Module-level functions
 
 ```python
-from agentspan.agents import run, start, stream
+from conductor.ai.agents import run, start, stream
 
 result = run(agent, "Hello")       # Uses a shared singleton runtime
 handle = start(agent, "Hello")
@@ -245,7 +245,7 @@ for event in stream(agent, "Hi"): ...
 ### Async variants
 
 ```python
-from agentspan.agents import run_async, start_async, stream_async
+from conductor.ai.agents import run_async, start_async, stream_async
 
 result = await run_async(agent, "Hello")
 handle = await start_async(agent, "Hello")
@@ -272,7 +272,7 @@ with AgentRuntime() as runtime:
     result = runtime.run(agent, "Summarize this")
 
 print(result.output)           # The answer
-print(result.workflow_id)     # Track in the Agentspan UI at http://localhost:6767
+print(result.workflow_id)     # Track in the Conductor Agents UI at http://localhost:6767
 print(result.status)           # "COMPLETED"
 print(result.token_usage)      # TokenUsage(prompt_tokens=..., completion_tokens=..., total_tokens=...)
 ```
@@ -312,7 +312,7 @@ elif status.is_complete:
 ### Reconnect to an existing execution
 
 ```python
-from agentspan.agents import AgentHandle, AgentRuntime
+from conductor.ai.agents import AgentHandle, AgentRuntime
 
 runtime = AgentRuntime()
 runtime.serve(agent, blocking=False)   # Start workers for @tool functions
@@ -347,7 +347,7 @@ with AgentRuntime() as runtime:
 Compile the agent without executing it:
 
 ```python
-from agentspan.agents import plan
+from conductor.ai.agents import plan
 
 workflow = plan(agent)
 print(workflow)    # Compiled workflow definition (server-side execution graph)
@@ -357,4 +357,4 @@ print(workflow)    # Compiled workflow definition (server-side execution graph)
 
 ## Execution engine
 
-Agentspan compiles agent definitions into [Conductor](https://conductor-oss.org/) workflows — an open-source orchestration engine that has run billions of executions in production at Netflix, LinkedIn, and Tesla. Durable state, per-step retries, replay, and full execution history are Conductor primitives. `AgentRuntime`, `Agent`, and `@tool` are the Agentspan API on top of that foundation.
+Conductor Agents compiles agent definitions into [Conductor](https://conductor-oss.org/) workflows — an open-source orchestration engine that has run billions of executions in production at Netflix, LinkedIn, and Tesla. Durable state, per-step retries, replay, and full execution history are Conductor primitives. `AgentRuntime`, `Agent`, and `@tool` are the Conductor Agents API on top of that foundation.

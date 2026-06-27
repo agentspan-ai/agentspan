@@ -5,7 +5,7 @@ description: Pause agents at risky steps, hold state indefinitely, and resume af
 
 # Human-in-the-loop
 
-Agents are great at finding the right action. Humans are better at authorizing risky ones. Agentspan lets you pause an agent at any tool call, hold state indefinitely on the server (no timeouts, no data loss), and resume after a human approves or rejects.
+Agents are great at finding the right action. Humans are better at authorizing risky ones. Conductor Agents lets you pause an agent at any tool call, hold state indefinitely on the server (no timeouts, no data loss), and resume after a human approves or rejects.
 
 ---
 
@@ -14,7 +14,7 @@ Agents are great at finding the right action. Humans are better at authorizing r
 Add `approval_required=True` to any `@tool` decorator. That's it.
 
 ```python
-from agentspan.agents import tool
+from conductor.ai.agents import tool
 
 @tool(approval_required=True)
 def process_refund(order_id: str, amount: float) -> dict:
@@ -22,7 +22,7 @@ def process_refund(order_id: str, amount: float) -> dict:
     return billing_api.refund(order_id, amount)
 ```
 
-When the LLM calls this tool, Agentspan automatically:
+When the LLM calls this tool, Conductor Agents automatically:
 1. Pauses the agent workflow
 2. Sets `handle.get_status().is_waiting = True`
 3. Holds the full agent state on the server (no timeout)
@@ -33,7 +33,7 @@ When the LLM calls this tool, Agentspan automatically:
 ## Complete example: refund agent
 
 !!! info "Prerequisites"
-    - A running Agentspan server: `agentspan server start`
+    - A running Conductor Agents server: `agentspan server start`
     - Environment variables set:
     
     ```bash
@@ -42,7 +42,7 @@ When the LLM calls this tool, Agentspan automatically:
 
 ```python
 import time
-from agentspan.agents import Agent, tool, start
+from conductor.ai.agents import Agent, tool, start
 
 # Tools that run automatically
 @tool
@@ -134,7 +134,7 @@ notify_approver(handle.execution_id)
 
 ```python
 # Later — your approval endpoint (FastAPI, Flask, Lambda, etc.)
-from agentspan.agents import AgentRuntime, AgentHandle
+from conductor.ai.agents import AgentRuntime, AgentHandle
 
 # In a web app, the agent (with its tools) must already be served.
 # Call runtime.serve(agent, blocking=False) at app startup, then reconnect here.
@@ -177,7 +177,7 @@ Each time the agent calls one of these tools, it pauses and waits for a fresh `h
 ## Stream events including approval pauses
 
 ```python
-from agentspan.agents import stream
+from conductor.ai.agents import stream
 
 agent_stream = stream(agent, customer_message)
 for event in agent_stream:
@@ -199,7 +199,7 @@ for event in agent_stream:
 `MockEvent.waiting()` simulates the approval pause, then `MockEvent.done()` simulates the post-approval response:
 
 ```python
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 
 result = mock_run(
     agent,

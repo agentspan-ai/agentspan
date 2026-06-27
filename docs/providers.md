@@ -5,7 +5,7 @@ description: All supported LLM providers, model strings, and API key configurati
 
 # LLM Providers
 
-Agentspan supports 15+ AI providers. Set the environment variables for the providers you want to use before starting the server. The server auto-enables each provider when its key is present — no manual integration setup needed.
+Conductor Agents supports 15+ AI providers. Set the environment variables for the providers you want to use before starting the server. The server auto-enables each provider when its key is present — no manual integration setup needed.
 
 ## Quick Setup
 

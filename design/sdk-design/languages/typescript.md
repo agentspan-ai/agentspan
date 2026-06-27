@@ -1043,7 +1043,7 @@ class AgentStream implements AsyncIterable<AgentEvent> {
 TypeScript errors extend the built-in `Error` class. Each error type provides structured information for programmatic handling.
 
 ```typescript
-/** Base error for all Agentspan SDK errors */
+/** Base error for all Conductor Agents SDK errors */
 export class AgentspanError extends Error {
   constructor(message: string, public readonly cause?: Error) {
     super(message);
@@ -1228,7 +1228,7 @@ The testing module provides utilities for unit testing agents without a running 
 
 ### mockRun() -- Serverless Testing
 
-`mockRun()` executes an agent locally without connecting to the Agentspan server. It simulates the Conductor execution loop, dispatching tools and guardrails in-process.
+`mockRun()` executes an agent locally without connecting to the Conductor Agents server. It simulates the Conductor execution loop, dispatching tools and guardrails in-process.
 
 ```typescript
 import { mockRun } from "agentspan/testing";

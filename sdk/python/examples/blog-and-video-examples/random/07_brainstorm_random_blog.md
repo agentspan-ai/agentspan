@@ -2,7 +2,7 @@
 
 *By Deepti Reddy | May 2026*
 
-*This is Part 6 of an 8-part series covering every multi-agent strategy in AgentSpan. Today: the random strategy — a random agent is selected each turn. No rotation, no decision — pure randomness.*
+*This is Part 6 of an 8-part series covering every multi-agent strategy in Conductor Agents. Today: the random strategy — a random agent is selected each turn. No rotation, no decision — pure randomness.*
 
 ---
 
@@ -12,12 +12,12 @@ But what if predictability is the problem? In brainstorming, you do not want a f
 
 That is the random strategy. Each turn, a random agent is selected. No pattern. No schedule. The same agent might go twice in a row, or not at all for three turns. The randomness creates variety in perspective that a fixed rotation cannot.
 
-## What is AgentSpan
+## What is Conductor Agents
 
-AgentSpan is an orchestration layer for building, bringing, and observing AI agents as durable workflows.
+Conductor Agents is an orchestration layer for building, bringing, and observing AI agents as durable workflows.
 
-- **Build**: define agents with the AgentSpan SDK using Agent, @tool, and 8 multi-agent strategies. Compiles to server-side workflows that survive crashes.
-- **Bring**: already using an agent framework such as LangGraph, OpenAI Agents SDK, or Google ADK? Pass your agents directly to run(). AgentSpan adds durability and orchestration on top.
+- **Build**: define agents with the Conductor Agents SDK using Agent, @tool, and 8 multi-agent strategies. Compiles to server-side workflows that survive crashes.
+- **Bring**: already using an agent framework such as LangGraph, OpenAI Agents SDK, or Google ADK? Pass your agents directly to run(). Conductor Agents adds durability and orchestration on top.
 - **Observe**: every execution is inspectable in the dashboard. See agent flows, inputs/outputs, tool calls, and token usage. Debug failures, replay runs.
 
 ## Setup
@@ -25,11 +25,11 @@ AgentSpan is an orchestration layer for building, bringing, and observing AI age
 Two commands:
 
 ```bash
-pip install agentspan
+pip install conductor-agent-sdk
 agentspan server start
 ```
 
-This gives you a local AgentSpan server with a visual dashboard at localhost:6767.
+This gives you a local Conductor Agents server with a visual dashboard at localhost:6767.
 
 ## What we are building
 
@@ -220,7 +220,7 @@ Random generates ideas. Round robin reviews them. The summarizer produces the fi
 ## Try it
 
 ```bash
-pip install agentspan
+pip install conductor-agent-sdk
 agentspan server start
 python 07_brainstorm_random.py
 ```

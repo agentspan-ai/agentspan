@@ -30,8 +30,8 @@ This page covers the user-facing API. For the design rationale see
 ### Python
 
 ```python
-from agentspan.agents import Agent, deploy, schedules
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents import Agent, deploy, schedules
+from conductor.ai.agents.schedule import Schedule
 
 agent = Agent(name="daily_digest", model="openai/gpt-4o-mini",
               instructions="Summarize today's eng activity.")
@@ -69,7 +69,7 @@ A full working example is in `sdk/python/examples/hello_world_agent_schedule.py`
 ```ts
 import {
   Agent, AgentRuntime, Schedule, schedules,
-} from "@agentspan-ai/sdk";
+} from "@conductoross/conductor-agent-sdk";
 
 const agent = new Agent({
   name: "dailyDigest",
@@ -105,9 +105,9 @@ const nextTimes = await schedules.previewNext("0 0 9 * * MON-FRI", { n: 5 });
 ### Java
 
 ```java
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.schedule.Schedule;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.schedule.Schedule;
 
 Agent agent = Agent.builder()
         .name("daily_digest")
@@ -141,8 +141,8 @@ try (AgentRuntime runtime = new AgentRuntime()) {
 ### C#
 
 ```csharp
-using Agentspan;
-using Agentspan.Scheduling;
+using Conductor.AI;
+using Conductor.AI.Scheduling;
 
 var agent = new Agent
 {
@@ -275,8 +275,8 @@ These are future-phase items, not blockers:
 ### Run a hello-world agent every 5 seconds
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.schedule import Schedule
 
 agent = Agent(name="hello", model="openai/gpt-4o-mini",
               instructions="Say 'Hello, world!' and the current UTC time.")

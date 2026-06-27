@@ -1,11 +1,11 @@
 ---
 title: Deployment
-description: Deploy Agentspan locally with SQLite, with Docker Compose, or on Kubernetes
+description: Deploy Conductor Agents locally with SQLite, with Docker Compose, or on Kubernetes
 ---
 
 # Deployment
 
-Agentspan runs on a persistent server that manages durable execution. Your Python workers connect to the server and execute tools as distributed tasks.
+Conductor Agents runs on a persistent server that manages durable execution. Your Python workers connect to the server and execute tools as distributed tasks.
 
 ## Local Development (SQLite — zero setup)
 
@@ -31,7 +31,7 @@ docker compose up -d
 ```
 
 The compose stack starts two services:
-- `agentspan` — the Agentspan server (port 6767)
+- `agentspan` — the Conductor Agents server (port 6767)
 - `postgres` — PostgreSQL 16
 
 Open `http://localhost:6767` for the UI. Health check: `http://localhost:6767/actuator/health`.
@@ -121,7 +121,7 @@ Worker pods connect via `AGENTSPAN_SERVER_URL`:
 import os
 os.environ["AGENTSPAN_SERVER_URL"] = "http://agentspan-server:6767"
 
-from agentspan.agents import Agent, run
+from conductor.ai.agents import Agent, run
 agent = Agent(name="my_agent", model="openai/gpt-4o")
 result = run(agent, "Hello")
 ```
@@ -141,7 +141,7 @@ export AGENTSPAN_AUTH_SECRET=my-secret
 Or via code:
 
 ```python
-from agentspan.agents import configure
+from conductor.ai.agents import configure
 
 configure(
     server_url="https://my-server.example.com",
@@ -180,4 +180,4 @@ Before going to production:
 - [ ] Add guardrails for all user-facing agents
 - [ ] Test agents with `mock_run` before deploying
 - [ ] Use `AgentHandle.get_status()` to monitor long-running executions
-- [ ] Set up alerting via the Agentspan UI or Prometheus metrics
+- [ ] Set up alerting via the Conductor Agents UI or Prometheus metrics

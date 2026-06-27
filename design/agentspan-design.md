@@ -1,14 +1,14 @@
-# Agentspan Design
+# Conductor Agents Design
 
 **Status:** Consolidated 2026-06-26
 
-**Scope:** This is the canonical platform architecture and server-feature reference for Agentspan. It covers the core model ("everything is an agent"), how an `AgentConfig` compiles to a Conductor `WorkflowDef`, how those workflows execute (worker dispatch, durability), the library/server module split and its SPIs, multi-agent orchestration with pipeline context passing, and the server-side feature endpoints (HITL, dynamic DAG injection, agent signals) plus the `agentspan deploy` CLI. SDK-authoring detail (per-language idioms, serialization rules, worker registration mechanics) lives in [sdk-design.md](sdk-design.md); the REST/SSE contract in [api-design.md](api-design.md); and adjacent subsystems in [guardrails-design.md](guardrails-design.md), [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md), [framework-integration.md](framework-integration.md), [sentinel-agents.md](sentinel-agents.md), and [stateful-agents.md](stateful-agents.md).
+**Scope:** This is the canonical platform architecture and server-feature reference for Conductor Agents. It covers the core model ("everything is an agent"), how an `AgentConfig` compiles to a Conductor `WorkflowDef`, how those workflows execute (worker dispatch, durability), the library/server module split and its SPIs, multi-agent orchestration with pipeline context passing, and the server-side feature endpoints (HITL, dynamic DAG injection, agent signals) plus the `agentspan deploy` CLI. SDK-authoring detail (per-language idioms, serialization rules, worker registration mechanics) lives in [sdk-design.md](sdk-design.md); the REST/SSE contract in [api-design.md](api-design.md); and adjacent subsystems in [guardrails-design.md](guardrails-design.md), [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md), [framework-integration.md](framework-integration.md), [sentinel-agents.md](sentinel-agents.md), and [stateful-agents.md](stateful-agents.md).
 
 ---
 
 ## 1. Overview & "Everything Is an Agent"
 
-Agentspan is a server-first agent execution platform built on [Conductor](https://conductor-oss.org). An SDK (Python is the reference; TypeScript, Java, Go, Kotlin, C#, Ruby mirror it) defines agents, tools, guardrails, and callbacks as language-native constructs, serializes them to a single **`AgentConfig` JSON**, and posts that to the server. The server **compiles** the config into a durable Conductor `WorkflowDef`, executes it on the Conductor engine, and streams events back over SSE. The SDK's remaining job at runtime is to run **workers** that the engine dispatches tool/guardrail/callback work to.
+Conductor Agents is a server-first agent execution platform built on [Conductor](https://conductor-oss.org). An SDK (Python is the reference; TypeScript, Java, Go, Kotlin, C#, Ruby mirror it) defines agents, tools, guardrails, and callbacks as language-native constructs, serializes them to a single **`AgentConfig` JSON**, and posts that to the server. The server **compiles** the config into a durable Conductor `WorkflowDef`, executes it on the Conductor engine, and streams events back over SSE. The SDK's remaining job at runtime is to run **workers** that the engine dispatches tool/guardrail/callback work to.
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -19,7 +19,7 @@ Agentspan is a server-first agent execution platform built on [Conductor](https:
 └──────────────────────┬──────────────────────────┘
                        │ REST + SSE (JSON)
 ┌──────────────────────▼──────────────────────────┐
-│              Agentspan (Java, on Conductor)      │
+│           Conductor Agents (Java, on Conductor)  │
 │  Compiler   → Conductor WorkflowDef              │
 │  Executor   → Conductor workflow engine          │
 │  Stream     → SSE events                         │
@@ -147,7 +147,7 @@ Because state lives in Conductor (workflow variables, task I/O, the message hist
 
 ## 4. Library / Server Split & SPIs
 
-Agentspan is structured as a **library that Conductor depends on**, not a standalone app that bundles Conductor. The dependency direction is inverted: `orkes-conductor` (and the OSS standalone) depend on the `conductor-agentspan` artifact; Agentspan compiles against Conductor APIs as `compileOnly`/provided so the **host owns the Conductor version**.
+Conductor Agents is structured as a **library that Conductor depends on**, not a standalone app that bundles Conductor. The dependency direction is inverted: `orkes-conductor` (and the OSS standalone) depend on the `conductor-agentspan` artifact; Conductor Agents compiles against Conductor APIs as `compileOnly`/provided so the **host owns the Conductor version**.
 
 ### 4.1 Two modules
 
@@ -158,7 +158,7 @@ Why two and not three: the compilers emit Conductor `WorkflowDef`/`WorkflowTask`
 
 ### 4.2 The SPI layer
 
-Interfaces live in `conductor-agentspan` (`dev.agentspan.runtime.spi`); they cover **Agentspan-owned data**, not execution. The library holds no impls — a host contributes one impl bean per SPI (via `@ConditionalOnMissingBean`, the same pattern orkes uses for http-task/DAOs/security). A context missing an impl **fails fast at startup** — intentional, so a missing secret store cannot silently no-op.
+Interfaces live in `conductor-agentspan` (`dev.agentspan.runtime.spi`); they cover **Conductor Agents-owned data**, not execution. The library holds no impls — a host contributes one impl bean per SPI (via `@ConditionalOnMissingBean`, the same pattern orkes uses for http-task/DAOs/security). A context missing an impl **fails fast at startup** — intentional, so a missing secret store cannot silently no-op.
 
 The directory (`dev.agentspan.runtime.spi`) contains exactly five interfaces:
 
@@ -193,7 +193,7 @@ The library registers via **Spring Boot auto-configuration** (`META-INF/spring/.
 
 ### 4.4 Two auth boundaries
 
-1. **User boundary** — `/api/secrets`, `/api/agent/*`, `/api/skill`. Agentspan's own `AuthFilter` is **standalone-only** (ships in the server module, off by default); when embedded, the host owns authN/authZ and an adapter populates the principal.
+1. **User boundary** — `/api/secrets`, `/api/agent/*`, `/api/skill`. Conductor Agents' own `AuthFilter` is **standalone-only** (ships in the server module, off by default); when embedded, the host owns authN/authZ and an adapter populates the principal.
 2. **Worker boundary** — `/api/workers/secrets`, gated by HMAC **execution tokens**, independent of user auth, so in-flight workers can always reach it. The host's security chain must not block `/api/workers/**`.
 
 ### 4.5 Consumption modes & version alignment
@@ -263,7 +263,7 @@ These features are pure server-side endpoints, all built on existing Conductor p
 
 ### 6.1 Human-in-the-Loop (HITL)
 
-Agentspan supports HITL via Conductor's `HUMAN` task type: when an execution needs human input (tool approval, guardrail review, manual agent selection), it pauses and a `HUMAN` task enters `IN_PROGRESS`, carrying `response_schema`, `response_ui_schema`, `__humanTaskDefinition` (with `displayName`), and context fields. The SDK learns of this via the `"waiting"` SSE event (`AgentSSEEvent.waiting(...)`), which carries the pending tool/context, and then submits the human's response.
+Conductor Agents supports HITL via Conductor's `HUMAN` task type: when an execution needs human input (tool approval, guardrail review, manual agent selection), it pauses and a `HUMAN` task enters `IN_PROGRESS`, carrying `response_schema`, `response_ui_schema`, `__humanTaskDefinition` (with `displayName`), and context fields. The SDK learns of this via the `"waiting"` SSE event (`AgentSSEEvent.waiting(...)`), which carries the pending tool/context, and then submits the human's response.
 
 **Endpoint (on `AgentController`, `/api/agent`):**
 - `POST /api/agent/{executionId}/respond` — body is the response `output` map; calls `AgentService.respond(executionId, output)` to complete the paused `HUMAN` task and resume the execution. Returns void.

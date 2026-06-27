@@ -1,11 +1,11 @@
 ---
 title: CLI Reference
-description: Agentspan CLI commands for server, credentials, agents, skills, status, and execution history
+description: Conductor Agents CLI commands for server, credentials, agents, skills, status, and execution history
 ---
 
 # CLI Reference
 
-**Python developers:** `pip install agentspan` gives you the SDK and the CLI. The pip package registers the `agentspan` command as a console script; on first invocation it downloads the Go binary from S3 and caches it.
+**Python developers:** `pip install conductor-agent-sdk` gives you the SDK and the CLI. The pip package registers the `agentspan` command as a console script; on first invocation it downloads the Go binary from S3 and caches it.
 
 **CLI only (no Python SDK):** `npm install -g @agentspan-ai/agentspan` — downloads the Go binary eagerly at install time. Useful if you don't have Python or want the binary pre-fetched.
 
@@ -22,7 +22,7 @@ agentspan server stop     # Stop the server
 agentspan server logs     # View server logs
 ```
 
-`agentspan server start` downloads the Agentspan server JAR on first run (~50 MB) and starts it as a local process. The JAR is cached — subsequent starts are instant. The server runs on port `6767`. The UI and API are both served from the same port — open `http://localhost:6767` in your browser to see the visual execution UI.
+`agentspan server start` downloads the Conductor Agents server JAR on first run (~50 MB) and starts it as a local process. The JAR is cached — subsequent starts are instant. The server runs on port `6767`. The UI and API are both served from the same port — open `http://localhost:6767` in your browser to see the visual execution UI.
 
 ## Diagnostics
 
@@ -157,7 +157,7 @@ export AGENTSPAN_AUTH_SECRET=your-secret
 Or configure in Python code:
 
 ```python
-from agentspan.agents import configure
+from conductor.ai.agents import configure
 
 configure(
     server_url="https://your-server.example.com",

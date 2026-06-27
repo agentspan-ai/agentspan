@@ -1,6 +1,6 @@
-# Conductor Agent Python SDK
+# Conductor Agents Python SDK
 
-Durable, scalable, observable AI agents. You write plain Python; Conductor Agent compiles
+Durable, scalable, observable AI agents. You write plain Python; Conductor Agents compiles
 your agent into a Conductor workflow that runs on a server — with automatic retries,
 durable state, human-in-the-loop pauses, streaming, and scheduling.
 

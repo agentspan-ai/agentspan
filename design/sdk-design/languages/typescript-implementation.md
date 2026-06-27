@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-The TypeScript SDK lets you define agents, tools, guardrails, memory, and multi-agent strategies in TypeScript, compile them to the Agentspan wire format (`AgentConfig` JSON), and run them on Agentspan's durable Conductor-backed runtime. It also runs native framework agents — Vercel AI SDK, LangGraph.js, LangChain.js, OpenAI Agents, Google ADK — on the same runtime via auto-detection and drop-in wrappers.
+The TypeScript SDK lets you define agents, tools, guardrails, memory, and multi-agent strategies in TypeScript, compile them to the Conductor Agents wire format (`AgentConfig` JSON), and run them on Conductor Agents' durable Conductor-backed runtime. It also runs native framework agents — Vercel AI SDK, LangGraph.js, LangChain.js, OpenAI Agents, Google ADK — on the same runtime via auto-detection and drop-in wrappers.
 
 ### 1.1 Design choices (as built)
 
@@ -24,7 +24,7 @@ The TypeScript SDK lets you define agents, tools, guardrails, memory, and multi-
 | Test runner | Vitest (unit + e2e suites) |
 | API style | Options-object pattern; composition via `.and()`/`.or()`/`.pipe()` methods (no operator overloading) |
 
-> **Worker transport note:** Earlier drafts proposed dropping `@io-orkes/conductor-javascript` and polling with raw `fetch`. The shipped implementation keeps the Conductor JS client for *task polling* (`WorkerManager` wraps its `TaskManager`), because it provides lease extension, concurrency control, and retry handling for free. The Agentspan-specific middleware (ToolContext extraction, credential injection, state capture, circuit breaker, error mapping) runs inside each worker's `execute()` callback. The control plane (`/agent/start`, `/agent/compile`, status, respond, schedules) uses the SDK's own `fetch`-based `AgentClient`.
+> **Worker transport note:** Earlier drafts proposed dropping `@io-orkes/conductor-javascript` and polling with raw `fetch`. The shipped implementation keeps the Conductor JS client for *task polling* (`WorkerManager` wraps its `TaskManager`), because it provides lease extension, concurrency control, and retry handling for free. The Conductor Agents-specific middleware (ToolContext extraction, credential injection, state capture, circuit breaker, error mapping) runs inside each worker's `execute()` callback. The control plane (`/agent/start`, `/agent/compile`, status, respond, schedules) uses the SDK's own `fetch`-based `AgentClient`.
 
 ### 1.2 Runtime contracts (intentional, kept stable)
 
@@ -235,7 +235,7 @@ Enums are string unions (`Strategy`, `EventType`, `Status`, `FinishReason`, `OnF
 
 ### 6.2 Tools (superset)
 
-`tool(fn, options)` returns a callable `ToolFunction` carrying a hidden `_toolDef`. `inputSchema`/`outputSchema` accept Zod or JSON Schema. `normalizeToolInput` accepts (a) Agentspan `ToolDef`s, (b) Vercel AI SDK `tool()` objects (Zod `inputSchema` + `execute`), and (c) raw `{name, description, inputSchema}` objects — so all three coexist in one `tools` array. `external: true` emits schema only (no local worker). Server-side constructors (no local worker): `httpTool`, `apiTool`, `mcpTool`, `agentTool`, `humanTool`, `imageTool`, `audioTool`, `videoTool`, `pdfTool`, `searchTool`, `indexTool`, `waitForMessageTool`. Class-method form: `@Tool` decorator + `toolsFrom(instance)`.
+`tool(fn, options)` returns a callable `ToolFunction` carrying a hidden `_toolDef`. `inputSchema`/`outputSchema` accept Zod or JSON Schema. `normalizeToolInput` accepts (a) Conductor Agents `ToolDef`s, (b) Vercel AI SDK `tool()` objects (Zod `inputSchema` + `execute`), and (c) raw `{name, description, inputSchema}` objects — so all three coexist in one `tools` array. `external: true` emits schema only (no local worker). Server-side constructors (no local worker): `httpTool`, `apiTool`, `mcpTool`, `agentTool`, `humanTool`, `imageTool`, `audioTool`, `videoTool`, `pdfTool`, `searchTool`, `indexTool`, `waitForMessageTool`. Class-method form: `@Tool` decorator + `toolsFrom(instance)`.
 
 ### 6.3 Guardrails (`guardrail.ts`)
 

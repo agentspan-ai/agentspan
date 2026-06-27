@@ -110,7 +110,7 @@ agentspan-dotnet/
     <RootNamespace>Agentspan</RootNamespace>
     <PackageId>Agentspan</PackageId>
     <Version>0.1.0</Version>
-    <Description>Agentspan SDK for .NET</Description>
+    <Description>Conductor Agents SDK for .NET</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -1046,7 +1046,7 @@ var retryPolicy = Policy
 ### Exception Hierarchy
 
 ```csharp
-/// <summary>Base exception for all Agentspan errors.</summary>
+/// <summary>Base exception for all Conductor Agents errors.</summary>
 public class AgentspanException : Exception
 {
     public AgentspanException(string message) : base(message) { }

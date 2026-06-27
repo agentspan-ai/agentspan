@@ -1,11 +1,11 @@
 ---
-title: Why Agentspan
-description: Why agents fail in production, and how Agentspan's server-side execution model solves it.
+title: Why Conductor Agents
+description: Why agents fail in production, and how Conductor Agents's server-side execution model solves it.
 ---
 
-# Why Agentspan
+# Why Conductor Agents
 
-**Agentspan is a durable runtime for AI agents. Your code runs in your process. Execution state lives on the server — so crashes, restarts, and deployments don't lose work.**
+**Conductor Agents is a durable runtime for AI agents. Your code runs in your process. Execution state lives on the server — so crashes, restarts, and deployments don't lose work.**
 
 ---
 
@@ -38,12 +38,12 @@ This works fine on your laptop. In production, it breaks in predictable ways.
 
 ---
 
-## How Agentspan works differently
+## How Conductor Agents works differently
 
-Agentspan separates where your code runs from where execution state lives.
+Conductor Agents separates where your code runs from where execution state lives.
 
 ```
-Your process                    Agentspan server
+Your process                    Conductor Agents server
 └── worker                      └── agent execution
     ├── registers tools             ├── tracks current step
     └── executes tool calls ←──────── delegates tool work
@@ -52,7 +52,7 @@ Your process                    Agentspan server
                                     └── stores full history
 ```
 
-Your agent definition compiles into a durable workflow on the Agentspan server. The server orchestrates execution — calling your worker to run tools, tracking state at every step, and resuming from the last completed step if anything goes wrong.
+Your agent definition compiles into a durable workflow on the Conductor Agents server. The server orchestrates execution — calling your worker to run tools, tracking state at every step, and resuming from the last completed step if anything goes wrong.
 
 Your process can crash, restart, or be replaced. The agent keeps running.
 
@@ -72,17 +72,17 @@ Your process can crash, restart, or be replaced. The agent keeps running.
 
 ## Frequently asked questions
 
-**What makes Agentspan different from LangGraph?**
-LangGraph is a graph framework for defining agent routing logic — nodes, edges, conditional branching. Agentspan is an execution runtime. You can pass a compiled LangGraph app directly to `runtime.run()` and it gains crash recovery, HITL, and execution history without changing a single node. They work together.
+**What makes Conductor Agents different from LangGraph?**
+LangGraph is a graph framework for defining agent routing logic — nodes, edges, conditional branching. Conductor Agents is an execution runtime. You can pass a compiled LangGraph app directly to `runtime.run()` and it gains crash recovery, HITL, and execution history without changing a single node. They work together.
 
-**What makes Agentspan different from the OpenAI Agents SDK?**
-The OpenAI Agents SDK defines agents, handoffs, and tools. Its execution model is in-process. Agentspan wraps that execution so it runs server-side — your agent definitions, handoffs, and tools stay exactly as written.
+**What makes Conductor Agents different from the OpenAI Agents SDK?**
+The OpenAI Agents SDK defines agents, handoffs, and tools. Its execution model is in-process. Conductor Agents wraps that execution so it runs server-side — your agent definitions, handoffs, and tools stay exactly as written.
 
-**When should I use Agentspan?**
+**When should I use Conductor Agents?**
 Whenever agents need to run reliably in production: long-running tasks, human approval steps, jobs that must survive process restarts, or situations where you need a queryable history of what every agent did.
 
-**Does Agentspan replace my existing framework?**
+**Does Conductor Agents replace my existing framework?**
 No. If you use LangGraph, the OpenAI Agents SDK, or Google ADK, pass your existing agent directly to `runtime.run()`. If you write agents natively, use the `Agent` class — one Python object with tools, instructions, and strategy.
 
-**What model providers does Agentspan support?**
+**What model providers does Conductor Agents support?**
 Any provider with an OpenAI-compatible API. Set the model with one string: `"openai/gpt-4o"`, `"anthropic/claude-sonnet-4-6"`, `"google_gemini/gemini-2.0-flash"`. See [LLM Providers](/docs/providers) for the full list.

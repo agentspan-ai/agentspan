@@ -166,7 +166,7 @@ See [Guardrails](guardrails.md).
 
 ### Credentials
 
-Declare which secrets the agent's tools require. The SDK fetches them from the Agentspan secrets store at runtime and injects them into tool context.
+Declare which secrets the agent's tools require. The SDK fetches them from the Conductor Agents secrets store at runtime and injects them into tool context.
 
 ```java
 Agent agent = Agent.builder()

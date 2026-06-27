@@ -2,7 +2,7 @@
 
 **Status:** Consolidated 2026-06-26
 
-**Scope.** This is the canonical guide to authoring an Agentspan SDK in any language. It defines the contract every SDK must satisfy — the public API surface (Agent, tools, guardrails, strategies, memory, handoffs, termination, results, streaming), the `AgentConfig` JSON wire format, worker registration, the control-plane REST/SSE API, skills, and framework bridges — plus the ~89-feature parity matrix, per-language idiom guides, and acceptance testing. It is authoritative for *what* an SDK must do; it links to siblings ([api-design.md](api-design.md), [agentspan-design.md](agentspan-design.md), [guardrails-design.md](guardrails-design.md), [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md), [framework-integration.md](framework-integration.md)) for the wire/platform detail, and to per-language docs for *how* to do it idiomatically.
+**Scope.** This is the canonical guide to authoring a Conductor Agents SDK in any language. It defines the contract every SDK must satisfy — the public API surface (Agent, tools, guardrails, strategies, memory, handoffs, termination, results, streaming), the `AgentConfig` JSON wire format, worker registration, the control-plane REST/SSE API, skills, and framework bridges — plus the ~89-feature parity matrix, per-language idiom guides, and acceptance testing. It is authoritative for *what* an SDK must do; it links to siblings ([api-design.md](api-design.md), [agentspan-design.md](agentspan-design.md), [guardrails-design.md](guardrails-design.md), [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md), [framework-integration.md](framework-integration.md)) for the wire/platform detail, and to per-language docs for *how* to do it idiomatically.
 
 ---
 
@@ -35,7 +35,7 @@ Each SDK's job is identical:
 └──────────────────────┬──────────────────────────┘
                        │ REST + SSE (JSON)
 ┌──────────────────────▼──────────────────────────┐
-│              Agentspan Server (Java)             │
+│          Conductor Agents Server (Java)          │
 │  Compiler → Conductor WorkflowDef                │
 │  Executor → Conductor Workflow Engine            │
 │  StreamRegistry → SSE Events                     │
@@ -47,7 +47,7 @@ Each SDK's job is identical:
 
 ### Build on the Conductor SDK
 
-Agentspan runs on Conductor. Every SDK extends the equivalent Conductor SDK (`https://github.com/conductor-oss/{lang}-sdk` — java, go, python, csharp, javascript, rust, ruby, …) rather than rolling its own transport.
+Conductor Agents runs on Conductor. Every SDK extends the equivalent Conductor SDK (`https://github.com/conductor-oss/{lang}-sdk` — java, go, python, csharp, javascript, rust, ruby, …) rather than rolling its own transport.
 
 - Do **not** implement custom HTTP transport. Use Conductor's `ApiClient` for all remote calls — it owns token management, auth, timeouts, and config.
 - Do **not** redefine connection properties already in the Conductor SDK config.
@@ -614,7 +614,7 @@ The **kitchen sink** is the single acceptance test — one mega-workflow (9 stag
 
 Each SDK ships a **testing framework** mirroring Python: `mock_run()` (no server), an `expect()` fluent API (`expect(result).completed().outputContains("article")`), `assert_*` helpers (`assertToolUsed`, `assertGuardrailPassed`), `record()`/`replay()`, strategy validators, and an LLM-judge eval runner. Per CLAUDE.md, **do not use an LLM for validation except when judging output quality/evals**; structural and behavioral assertions must be deterministic.
 
-A **validation framework** (concurrent runner, TOML config, example groups, LLM judge, HTML report, resume/retry) runs every ported example against multiple models and — validation-only, never a runtime dependency — compares Agentspan-compiled vs. native-framework execution for semantic equivalence. Designs: see the [validation methodology overview](validation/README.md) and the per-SDK docs — [python](validation/python-validation.md), [typescript](validation/typescript-validation.md), [java](validation/java-validation.md), [csharp](validation/csharp-validation.md).
+A **validation framework** (concurrent runner, TOML config, example groups, LLM judge, HTML report, resume/retry) runs every ported example against multiple models and — validation-only, never a runtime dependency — compares Conductor Agents-compiled vs. native-framework execution for semantic equivalence. Designs: see the [validation methodology overview](validation/README.md) and the per-SDK docs — [python](validation/python-validation.md), [typescript](validation/typescript-validation.md), [java](validation/java-validation.md), [csharp](validation/csharp-validation.md).
 
 **Example parity:** every SDK ports **all** Python examples — ~97 native + framework examples (LangGraph 44, LangChain 25, OpenAI 10, ADK 35; Vercel AI 10 for TS) — using the same numbering, translated to idiomatic patterns. **Hard rule:** framework examples must import and use the **real** native SDK (never mocks); if a package can't be installed, omit the example entirely and file a tracking issue — a missing example is honest, a mock is misleading.
 

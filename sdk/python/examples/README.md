@@ -1,6 +1,6 @@
 # Examples
 
-Runnable examples demonstrating every feature of the Agentspan SDK.
+Runnable examples demonstrating every feature of the Conductor Agents SDK.
 
 ---
 
@@ -19,7 +19,7 @@ In production, the three concerns are separated:
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  1. DEPLOY (once, during CI/CD)                              │
-│     Registers the agent definition with the Agentspan server │
+│     Registers the agent definition with the Conductor Agents server │
 │                                                              │
 │     runtime.deploy(agent)                                    │
 │     # or CLI: agentspan deploy --package my_agents           │
@@ -51,10 +51,10 @@ See [63_deploy.py](63_deploy.py), [63b_serve.py](63b_serve.py), and
 
 ### 1. Install dependencies
 
-The core examples (numbered files in this directory) only need the `agentspan` SDK:
+The core examples (numbered files in this directory) only need the `conductor-agent-sdk` package:
 
 ```bash
-uv pip install agentspan
+uv pip install conductor-agent-sdk
 ```
 
 Framework-specific examples require additional packages. Install only what you need:
