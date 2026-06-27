@@ -58,8 +58,14 @@ class TestGuardrailCreation:
 
         guard = Guardrail(func=check)
         assert guard.position == "output"
-        assert guard.on_fail == "retry"
+        assert guard.on_fail == "raise"
         assert guard.name == "check"
+
+    def test_default_on_fail_is_raise(self):
+        """Default on_fail is RAISE (standardized across all SDKs)."""
+        guard = Guardrail(func=lambda c: GuardrailResult(passed=True))
+        assert guard.on_fail == "raise"
+        assert guard.on_fail == OnFail.RAISE
 
     def test_input_guardrail(self):
         def validate_input(content: str) -> GuardrailResult:
@@ -278,7 +284,7 @@ class TestLLMGuardrail:
         )
         assert guard.name == "safety"
         assert guard.position == "output"
-        assert guard.on_fail == "retry"
+        assert guard.on_fail == "raise"
         assert guard._model == "openai/gpt-4o-mini"
         assert guard._policy == "No harmful content."
 

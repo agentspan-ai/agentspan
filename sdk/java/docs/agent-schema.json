@@ -157,7 +157,7 @@
         "description": { "type": "string" },
         "inputSchema": { "type": "object", "additionalProperties": true },
         "outputSchema": { "type": "object", "additionalProperties": true },
-        "toolType": { "type": "string", "description": "worker | http | mcp | agent_tool | …" },
+        "toolType": { "type": "string", "description": "worker | http | mcp | api | agent_tool | …" },
         "approvalRequired": { "type": "boolean" },
         "stateful": { "type": "boolean" },
         "timeoutSeconds": { "type": "integer" },

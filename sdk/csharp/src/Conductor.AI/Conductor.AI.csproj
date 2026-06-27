@@ -32,6 +32,7 @@
   <ItemGroup>
     <!-- Allow the e2e/test assembly to exercise internal types (e.g. AgentAuthHandler). -->
     <InternalsVisibleTo Include="AgentspanE2eTests" />
+    <InternalsVisibleTo Include="Conductor.AI.Tests" />
   </ItemGroup>
 
   <ItemGroup>

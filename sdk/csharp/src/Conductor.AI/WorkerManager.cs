@@ -114,10 +114,18 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
                     resolvedCredentials[k] = v;
             }
 
-            object? result = await CredentialInjection.InjectViaEnvAsync<object?>(
-                resolvedCredentials,
-                () => _handler(handlerInput, toolCtx),
-                ct);
+            // Tier-1 (explicit accessor): populate the ambient credential scope so
+            // tool code can read resolved credentials via ToolContext.GetCredential /
+            // Secrets.Get without relying on process-env injection. Tier-2 (env
+            // injection) below remains for framework-passthrough tools.
+            object? result;
+            using (CredentialScope.Begin(resolvedCredentials))
+            {
+                result = await CredentialInjection.InjectViaEnvAsync<object?>(
+                    resolvedCredentials,
+                    () => _handler(handlerInput, toolCtx),
+                    ct);
+            }
 
             // Wrap primitives — Conductor expects outputData as an object
             object outputData = result switch

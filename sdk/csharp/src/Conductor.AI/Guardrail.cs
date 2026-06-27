@@ -33,8 +33,70 @@ public sealed class GuardrailDef
     public OnFail   OnFail    { get; init; } = OnFail.Raise;
     public int      MaxRetries { get; init; } = 3;
 
+    /// <summary>
+    /// Wire <c>guardrailType</c> — "custom" (default), "regex", "llm", or "external".
+    /// Mirrors Python's <c>_serialize_guardrail</c>.
+    /// </summary>
+    internal string GuardrailType { get; init; } = "custom";
+
+    /// <summary>
+    /// <c>true</c> if this guardrail references an external worker running
+    /// elsewhere (no local handler). Mirrors Python <c>Guardrail.external</c>.
+    /// </summary>
+    public bool External => Handler is null && GuardrailType == "external";
+
     // Handler receives the content string and returns a GuardrailResult.
     internal Func<string, Task<GuardrailResult>>? Handler { get; init; }
+
+    /// <summary>
+    /// Validate the position/on_fail combination, mirroring Python's
+    /// <c>Guardrail.__init__</c>: <c>on_fail=human</c> is only valid for
+    /// <c>position=output</c> (input guardrails are client-side and cannot
+    /// pause a workflow).
+    /// </summary>
+    internal static void ValidatePositionOnFail(Position position, OnFail onFail)
+    {
+        if (onFail == OnFail.Human && position == Position.Input)
+            throw new ArgumentException(
+                "on_fail='human' is only valid for position='output' " +
+                "(input guardrails are client-side and cannot pause a workflow)");
+    }
+}
+
+// ── Guardrail (external reference factory) ─────────────────
+
+/// <summary>
+/// Factory for referenced-by-name (external) guardrails — a guardrail that runs
+/// as a Conductor worker task elsewhere, with no local handler. Mirrors Python
+/// <c>Guardrail(name=...)</c> and TS <c>guardrail.external()</c>.
+/// </summary>
+public static class Guardrail
+{
+    /// <summary>
+    /// Create an external guardrail definition (no local handler). The task is
+    /// dispatched by name to a remote worker. Emits <c>guardrailType:"external"</c>.
+    /// </summary>
+    /// <param name="name">The Conductor task name of the external guardrail worker.</param>
+    /// <param name="position">Where the guardrail runs — input or output (default output).</param>
+    /// <param name="onFail">What to do when the guardrail fails (default raise).</param>
+    /// <param name="maxRetries">Max retry attempts for on_fail=retry (default 3).</param>
+    public static GuardrailDef External(
+        string   name,
+        Position position   = Position.Output,
+        OnFail   onFail     = OnFail.Raise,
+        int      maxRetries = 3)
+    {
+        GuardrailDef.ValidatePositionOnFail(position, onFail);
+        return new GuardrailDef
+        {
+            Name          = name,
+            Position      = position,
+            OnFail        = onFail,
+            MaxRetries    = maxRetries,
+            GuardrailType = "external",
+            Handler       = null,
+        };
+    }
 }
 
 // ── GuardrailRegistry ──────────────────────────────────────
@@ -96,21 +158,23 @@ public static class RegexGuardrail
         string? name       = null,
         string? message    = null,
         Position position  = Position.Output,
-        OnFail  onFail     = OnFail.Retry,
+        OnFail  onFail     = OnFail.Raise,
         int     maxRetries = 3)
     {
         if (mode != "block" && mode != "allow")
             throw new ArgumentException($"Invalid mode '{mode}'. Must be 'block' or 'allow'.", nameof(mode));
+        GuardrailDef.ValidatePositionOnFail(position, onFail);
 
         var compiled = patterns.Select(p => new Regex(p, RegexOptions.Compiled)).ToList();
         var guardrailName = name ?? "regex_guardrail";
 
         return new GuardrailDef
         {
-            Name       = guardrailName,
-            Position   = position,
-            OnFail     = onFail,
-            MaxRetries = maxRetries,
+            Name          = guardrailName,
+            Position      = position,
+            OnFail        = onFail,
+            MaxRetries    = maxRetries,
+            GuardrailType = "regex",
             Handler    = content =>
             {
                 bool matched = compiled.Any(rx => rx.IsMatch(content));
@@ -137,7 +201,7 @@ public static class RegexGuardrail
         string? name       = null,
         string? message    = null,
         Position position  = Position.Output,
-        OnFail  onFail     = OnFail.Retry,
+        OnFail  onFail     = OnFail.Raise,
         int     maxRetries = 3)
         => Create([pattern], mode, name, message, position, onFail, maxRetries);
 }
@@ -161,18 +225,20 @@ public static class LLMGuardrail
         string? name       = null,
         int?    maxTokens  = null,
         Position position  = Position.Output,
-        OnFail  onFail     = OnFail.Retry,
+        OnFail  onFail     = OnFail.Raise,
         int     maxRetries = 3,
         string? apiKey     = null)
     {
+        GuardrailDef.ValidatePositionOnFail(position, onFail);
         var guardrailName = name ?? "llm_guardrail";
 
         return new GuardrailDef
         {
-            Name       = guardrailName,
-            Position   = position,
-            OnFail     = onFail,
-            MaxRetries = maxRetries,
+            Name          = guardrailName,
+            Position      = position,
+            OnFail        = onFail,
+            MaxRetries    = maxRetries,
+            GuardrailType = "llm",
             Handler    = async content =>
             {
                 try

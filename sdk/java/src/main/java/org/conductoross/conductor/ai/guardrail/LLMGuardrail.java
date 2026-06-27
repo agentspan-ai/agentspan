@@ -38,7 +38,7 @@ public class LLMGuardrail {
         private String model;
         private String policy;
         private Position position = Position.OUTPUT;
-        private OnFail onFail = OnFail.RETRY;
+        private OnFail onFail = OnFail.RAISE;
         private int maxRetries = 3;
         private Integer maxTokens;
 

@@ -92,6 +92,85 @@ public sealed class Schedules
         return node?.ToString().Trim('"') ?? "";
     }
 
+    /// <summary>
+    /// Fire a schedule's agent once by <strong>wire name</strong> using the
+    /// schedule's stored input. Fetches the <see cref="ScheduleInfo"/> first,
+    /// then triggers it. Returns the workflow execution id. Mirrors Python
+    /// <c>run_now(name)</c> / TS.
+    /// </summary>
+    public async Task<string> RunNowAsync(string wireName, CancellationToken ct = default)
+    {
+        var info = await GetAsync(wireName, ct);
+        return await RunNowAsync(info, ct);
+    }
+
+    /// <summary>
+    /// Fire a schedule's agent once by wire name and, when <paramref name="wait"/>
+    /// is <c>true</c>, block until the triggered execution reaches a terminal
+    /// state, returning the <see cref="AgentResult"/>. Mirrors Python
+    /// <c>run_now(name, wait=True)</c>.
+    /// </summary>
+    /// <param name="wireName">The prefixed schedule wire name.</param>
+    /// <param name="wait">If true, poll the triggered execution to completion.</param>
+    /// <param name="timeoutMs">Max time to wait before throwing (default 600000).</param>
+    /// <param name="pollIntervalMs">Polling interval (default 1000).</param>
+    public async Task<AgentResult> RunNowAsync(
+        string wireName,
+        bool wait,
+        int timeoutMs = 600_000,
+        int pollIntervalMs = 1000,
+        CancellationToken ct = default)
+    {
+        var executionId = await RunNowAsync(wireName, ct);
+        if (!wait)
+            return new AgentResult { ExecutionId = executionId };
+
+        var deadline = DateTimeOffset.UtcNow.AddMilliseconds(timeoutMs);
+        while (true)
+        {
+            var node = await RequestAsync(HttpMethod.Get,
+                $"/workflow/{Uri.EscapeDataString(executionId)}?includeTasks=false", null, ct);
+
+            var statusStr = (node as JsonObject)?["status"]?.GetValue<string>();
+            if (statusStr is "COMPLETED" or "FAILED" or "TERMINATED" or "TIMED_OUT")
+                return BuildResult(executionId, statusStr, node as JsonObject);
+
+            if (DateTimeOffset.UtcNow >= deadline)
+                throw new ScheduleException(
+                    $"RunNowAsync('{wireName}') did not finish within {timeoutMs}ms");
+
+            await Task.Delay(pollIntervalMs, ct);
+        }
+    }
+
+    private static AgentResult BuildResult(string executionId, string statusStr, JsonObject? node)
+    {
+        var status = statusStr switch
+        {
+            "COMPLETED"  => Status.Completed,
+            "FAILED"     => Status.Failed,
+            "TERMINATED" => Status.Terminated,
+            "TIMED_OUT"  => Status.TimedOut,
+            _            => Status.Failed,
+        };
+
+        Dictionary<string, object>? output = null;
+        if (node?["output"] is JsonObject outObj)
+        {
+            output = new Dictionary<string, object>();
+            foreach (var kv in outObj)
+                if (kv.Value is not null)
+                    output[kv.Key] = kv.Value.GetValue<object>();
+        }
+
+        return new AgentResult
+        {
+            ExecutionId = executionId,
+            Status      = status,
+            Output      = output,
+        };
+    }
+
     public async Task<IReadOnlyList<long>> PreviewNextAsync(
         string cron, int n = 5, long? startAt = null, long? endAt = null, CancellationToken ct = default)
     {

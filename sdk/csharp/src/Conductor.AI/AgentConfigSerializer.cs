@@ -552,7 +552,7 @@ internal static class AgentConfigSerializer
         return hMap;
     }
 
-    private static JsonObject SerializeGuardrail(GuardrailDef g) => new()
+    internal static JsonObject SerializeGuardrail(GuardrailDef g) => new()
     {
         ["name"]          = g.Name,
         ["position"]      = g.Position == Position.Input ? "input" : "output",
@@ -564,7 +564,10 @@ internal static class AgentConfigSerializer
             _            => "raise",
         },
         ["maxRetries"]    = g.MaxRetries,
-        ["guardrailType"] = "custom",
+        // External guardrails reference a remote worker by name. Regex/LLM/custom
+        // guardrails run as locally-registered worker tasks, so they serialize as
+        // "custom" (the server treats them identically — a named task).
+        ["guardrailType"] = g.External ? "external" : "custom",
         ["taskName"]      = g.Name,  // Conductor task name = guardrail name
     };
 }

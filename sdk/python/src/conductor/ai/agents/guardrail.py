@@ -127,7 +127,7 @@ class Guardrail:
             Default ``"output"``.
         on_fail: What to do when the guardrail fails.  Accepts
             :class:`OnFail` enum values or plain strings.  Default
-            ``"retry"``.
+            ``"raise"``.
         name: Optional name for the guardrail (defaults to the function name).
         max_retries: Maximum retry attempts for ``on_fail="retry"``.
             Default ``3``.
@@ -137,7 +137,7 @@ class Guardrail:
         self,
         func: Optional[Callable[[str], GuardrailResult]] = None,
         position: Union[str, Position] = Position.OUTPUT,
-        on_fail: Union[str, OnFail] = OnFail.RETRY,
+        on_fail: Union[str, OnFail] = OnFail.RAISE,
         name: Optional[str] = None,
         max_retries: int = 3,
     ) -> None:
@@ -236,7 +236,7 @@ class RegexGuardrail(Guardrail):
         *,
         mode: str = "block",
         position: Union[str, Position] = Position.OUTPUT,
-        on_fail: Union[str, OnFail] = OnFail.RETRY,
+        on_fail: Union[str, OnFail] = OnFail.RAISE,
         name: Optional[str] = None,
         message: Optional[str] = None,
         max_retries: int = 3,
@@ -310,7 +310,7 @@ class LLMGuardrail(Guardrail):
         policy: str,
         *,
         position: Union[str, Position] = Position.OUTPUT,
-        on_fail: Union[str, OnFail] = OnFail.RETRY,
+        on_fail: Union[str, OnFail] = OnFail.RAISE,
         name: Optional[str] = None,
         max_retries: int = 3,
         max_tokens: Optional[int] = None,

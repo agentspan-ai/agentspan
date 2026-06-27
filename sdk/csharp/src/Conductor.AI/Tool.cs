@@ -35,6 +35,15 @@ public record ToolContext
     [JsonPropertyName("state")]        public Dictionary<string, object>? State        { get; init; }
     // Server sends "execution_token" (snake_case); also accept camelCase alias
     [JsonPropertyName("execution_token")] public string? ExecutionToken { get; init; }
+
+    /// <summary>
+    /// Tier-1 credential accessor. Returns the resolved value of the declared
+    /// credential <paramref name="name"/> for the current tool invocation, or
+    /// <c>null</c> if not present. The worker populates the ambient credential
+    /// scope immediately before invoking the tool. Mirrors Java
+    /// <c>ToolContext.getCredential</c> and TS <c>getCredential</c>.
+    /// </summary>
+    public static string? GetCredential(string name) => Secrets.Get(name);
 }
 
 // ── PromptTemplate ─────────────────────────────────────────
@@ -660,6 +669,24 @@ public static class ApiTools
         int                         maxTools    = 64,
         string[]?                   credentials = null)
     {
+        var credList = credentials ?? [];
+
+        // Validate: any ${NAME} placeholder in headers must be declared in
+        // credentials. Mirrors Python api_tool / TS — fail fast at construction.
+        if (headers is { Count: > 0 })
+        {
+            var headerText = string.Join("", headers.Select(kv => $"{kv.Key}={kv.Value}"));
+            var placeholders = System.Text.RegularExpressions.Regex
+                .Matches(headerText, @"\$\{(\w+)\}")
+                .Select(m => m.Groups[1].Value)
+                .ToHashSet();
+            var missing = placeholders.Where(p => !credList.Contains(p)).ToList();
+            if (missing.Count > 0)
+                throw new ArgumentException(
+                    $"Header placeholder(s) {{{string.Join(", ", missing)}}} not declared in " +
+                    $"credentials=[{string.Join(", ", credList)}]. Add them to the credentials list.");
+        }
+
         var config = new Dictionary<string, object> { ["url"] = url };
         if (headers    is not null) config["headers"]    = headers;
         if (toolNames  is not null) config["tool_names"] = toolNames;
@@ -671,7 +698,7 @@ public static class ApiTools
             Description = description ?? $"API tools from {url}",
             ToolType    = "api",
             Config      = config,
-            Credentials = credentials ?? [],
+            Credentials = credList,
         };
     }
 }
