@@ -2,7 +2,7 @@
 
 **Status:** Consolidated 2026-06-26
 
-**Scope.** This is the single canonical reference for running agents authored in third-party frameworks on the Conductor Agents platform. Framework graphs and agents become Conductor tasks: depending on what the SDK can introspect, a framework agent either decomposes into native server-side tasks (model + tool tasks, nodes/edges) or runs **passthrough** — the whole graph/agent executes inside one durable Conductor SIMPLE worker while pushing thinking/tool-call/tool-result events to the server non-blocking. Either way the user keeps their framework's authoring API and the call is always the same: `runtime.run(frameworkAgentOrGraph, prompt)`. This doc covers the passthrough execution model, the serialization reference for each framework (LangGraph being the definitive one), and the OCG retrieval integration.
+**Scope.** This is the single canonical reference for running agents authored in third-party frameworks on the Agentspan platform. Framework graphs and agents become Conductor tasks: depending on what the SDK can introspect, a framework agent either decomposes into native server-side tasks (model + tool tasks, nodes/edges) or runs **passthrough** — the whole graph/agent executes inside one durable Conductor SIMPLE worker while pushing thinking/tool-call/tool-result events to the server non-blocking. Either way the user keeps their framework's authoring API and the call is always the same: `runtime.run(frameworkAgentOrGraph, prompt)`. This doc covers the passthrough execution model, the serialization reference for each framework (LangGraph being the definitive one), and the OCG retrieval integration.
 
 **Siblings.** Platform model: [agentspan-design.md](agentspan-design.md). SDK surface: [sdk-design.md](sdk-design.md). HTTP API: [api-design.md](api-design.md). Credential resolution and tool dispatch: [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md). Per-SDK usage docs: [Python framework-agents.md](../sdk/python/docs/framework-agents.md), [TypeScript framework-agents.md](../sdk/typescript/docs/framework-agents.md).
 
@@ -15,7 +15,7 @@ A framework agent reaches the server as a `raw_config` dict plus a set of worker
 - **Decomposed** — the SDK introspects the agent and the server compiles native tasks: an AI_MODEL agentic loop with one SIMPLE task per tool, or a node/edge workflow of typed tasks. The server controls model selection, tool dispatch, retries, and step-level orchestration.
 - **Passthrough** — the SDK cannot (or should not) decompose the agent, so the entire framework runtime runs inside one SIMPLE worker. The server sees a single durable task; the worker forwards events so observability and durability still apply, but step-level orchestration does not.
 
-The detection rule is per-framework (see each section), and the exact mechanism differs by SDK — but the shared property is: **no framework is imported by Conductor Agents, and framework packages are optional peer dependencies.** In the **Python** SDK (`serializer.py`), LangGraph/LangChain/Claude are detected by **type-name** checks (`type(obj).__name__` in `{CompiledStateGraph, Pregel, CompiledGraph}`, `AgentExecutor`, `{ClaudeCodeOptions, ClaudeAgentOptions}`) and OpenAI/ADK by **module-prefix** matching (`_FRAMEWORK_DETECTION = {"agents": "openai", "google.adk": "google_adk"}`). Only the **TypeScript** SDK uses **duck-typed marker** detection (`detect.ts`) for OpenAI/ADK. Whichever path is chosen, events are pushed non-blocking from the worker to the server so the calling code never waits on instrumentation.
+The detection rule is per-framework (see each section), and the exact mechanism differs by SDK — but the shared property is: **no framework is imported by Agentspan, and framework packages are optional peer dependencies.** In the **Python** SDK (`serializer.py`), LangGraph/LangChain/Claude are detected by **type-name** checks (`type(obj).__name__` in `{CompiledStateGraph, Pregel, CompiledGraph}`, `AgentExecutor`, `{ClaudeCodeOptions, ClaudeAgentOptions}`) and OpenAI/ADK by **module-prefix** matching (`_FRAMEWORK_DETECTION = {"agents": "openai", "google.adk": "google_adk"}`). Only the **TypeScript** SDK uses **duck-typed marker** detection (`detect.ts`) for OpenAI/ADK. Whichever path is chosen, events are pushed non-blocking from the worker to the server so the calling code never waits on instrumentation.
 
 | Framework | SDK availability | Primary path | Falls back to |
 |---|---|---|---|
@@ -39,7 +39,7 @@ All passthrough bridges share the same shape, so it is documented once here and 
 
 **Worker closure, not JSON.** Framework objects often contain callables (hooks, custom tools, compiled graphs) that cannot be JSON-serialized. The SDK therefore keeps the object in a worker closure and sends only a minimal `raw_config = {name, _worker_name}` to the server. `_build_passthrough_func()` builds the worker per framework; `_register_passthrough_worker()` registers it as a Conductor task def (default 600s timeout).
 
-**Callback handlers → SSE events.** Each framework exposes an instrumentation hook (LangChain/LangGraph callback handler, Claude Agent SDK hooks, etc.). Conductor Agents attaches its own handler that maps framework events to Conductor Agents stream events and pushes them via fire-and-forget HTTP `POST /api/agent/events/{executionId}` using a module-level `ThreadPoolExecutor(max_workers=4)`. User-supplied handlers/hooks are preserved and run first; Conductor Agents handlers are additive and defensive (try/except — instrumentation must never crash the agent). Typical event types: `tool_call`, `tool_result`, `tool_error`, `thinking`, `subagent_start`/`subagent_stop`, `notification`, `agent_stop`.
+**Callback handlers → SSE events.** Each framework exposes an instrumentation hook (LangChain/LangGraph callback handler, Claude Agent SDK hooks, etc.). Agentspan attaches its own handler that maps framework events to Agentspan stream events and pushes them via fire-and-forget HTTP `POST /api/agent/events/{executionId}` using a module-level `ThreadPoolExecutor(max_workers=4)`. User-supplied handlers/hooks are preserved and run first; Agentspan handlers are additive and defensive (try/except — instrumentation must never crash the agent). Typical event types: `tool_call`, `tool_result`, `tool_error`, `thinking`, `subagent_start`/`subagent_stop`, `notification`, `agent_stop`.
 
 **Credential injection contract.** The passthrough worker resolves execution-level credentials from the `_workflow_credentials` registry by execution token, injects them into `os.environ` before running, and removes them in a `finally` block. This is the same contract every tool worker follows — see [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md) for the full credential resolution model (names never leave the server, placeholders resolved at dispatch). Credentials are declared per-agent (`credentials=[...]`) or per-run.
 
@@ -49,7 +49,7 @@ All passthrough bridges share the same shape, so it is documented once here and 
 
 ## 3. LangGraph (definitive serialization reference)
 
-Conductor Agents compiles LangGraph `StateGraph` and `create_react_agent`/`create_agent` graphs into Conductor workflow definitions. Three phases:
+Agentspan compiles LangGraph `StateGraph` and `create_react_agent`/`create_agent` graphs into Conductor workflow definitions. Three phases:
 
 1. **Serialization** (Python SDK) — introspect the graph, extract nodes/edges/tools, produce a `raw_config` dict + worker functions.
 2. **Normalization** (Server) — convert `raw_config` into a canonical `AgentConfig`.
@@ -447,7 +447,7 @@ StateGraph / create_agent    serialize_langgraph()
 
 ## 4. LangChain (passthrough via LangGraph)
 
-Modern LangChain (v1.2+) uses `create_agent()` from `langchain.agents`, which returns a `CompiledStateGraph`. Conductor Agents detects this as a LangGraph object and routes it through the LangGraph pipeline (§3) — so LangChain agents get the same server-side LLM orchestration, tool extraction, and system-prompt support as native LangGraph agents.
+Modern LangChain (v1.2+) uses `create_agent()` from `langchain.agents`, which returns a `CompiledStateGraph`. Agentspan detects this as a LangGraph object and routes it through the LangGraph pipeline (§3) — so LangChain agents get the same server-side LLM orchestration, tool extraction, and system-prompt support as native LangGraph agents.
 
 ```
 create_agent(llm, tools=[...], system_prompt="...")
@@ -472,7 +472,7 @@ create_agent(llm, tools=[...], system_prompt="...")
 - **Tools** — `@tool` functions and `StructuredTool` objects are extracted and registered as individual workers; the server orchestrates tool calling through the AI_MODEL loop. Name, description, and JSON schema (type hints or Pydantic `args_schema`) are included.
 - **Structured output** — `with_structured_output()` works inside `@tool` functions; the structured LLM call runs locally within the tool worker while the outer loop is server-side.
 - **Prompt templates** — `ChatPromptTemplate`/`PromptTemplate` work by formatting the system prompt before passing it to `create_agent`; the formatted string is sent as `instructions`.
-- **Multi-turn** — handled via Conductor Agents session management; each `runtime.run()` call is independent (no checkpointer).
+- **Multi-turn** — handled via Agentspan session management; each `runtime.run()` call is independent (no checkpointer).
 
 Since `create_agent` returns a `CompiledStateGraph`, LangChain agents are a subset of the LangGraph integration — all §3 features and limitations apply.
 
@@ -493,21 +493,21 @@ Inherited: all §3.4 limitations (custom reducers, `Command`, functional API, ti
 | `AgentExecutor` | Deprecated | No longer importable; use `create_agent`. |
 | LCEL chains (non-agent) | Not supported | Only `CompiledStateGraph` is detected. Wrap plain LCEL (`prompt \| llm \| parser`) in a `@tool` or use inside `create_agent`. |
 | `ConversationBufferMemory` | Not applicable | Legacy memory classes don't apply to `create_agent`; use tool-based memory. |
-| LangServe | Not applicable | Conductor Agents replaces LangServe for deployment. |
+| LangServe | Not applicable | Agentspan replaces LangServe for deployment. |
 | LangSmith tracing | Compatible | LangSmith callbacks work inside tool workers alongside `AgentspanCallbackHandler`. |
 
 ---
 
 ## 5. OpenAI Agents SDK and Google ADK
 
-Both are first-class bridges that **decompose** to native server-side tasks, in **both the Python and TypeScript SDKs** via the generic serializer. No framework is imported by Conductor Agents, and the framework packages are optional peer dependencies. Detection differs by SDK: Python uses **module-prefix** matching (`agents` → openai, `google.adk` → google_adk in `_FRAMEWORK_DETECTION`); TypeScript uses **duck-typed marker** detection (`detect.ts`). See [Python framework-agents.md](../sdk/python/docs/framework-agents.md) and [TypeScript framework-agents.md](../sdk/typescript/docs/framework-agents.md) for full usage.
+Both are first-class bridges that **decompose** to native server-side tasks, in **both the Python and TypeScript SDKs** via the generic serializer. No framework is imported by Agentspan, and the framework packages are optional peer dependencies. Detection differs by SDK: Python uses **module-prefix** matching (`agents` → openai, `google.adk` → google_adk in `_FRAMEWORK_DETECTION`); TypeScript uses **duck-typed marker** detection (`detect.ts`). See [Python framework-agents.md](../sdk/python/docs/framework-agents.md) and [TypeScript framework-agents.md](../sdk/typescript/docs/framework-agents.md) for full usage.
 
 ### 5.1 OpenAI Agents SDK
 
 An `@openai/agents` (TS) / `agents` (Python) `Agent` is extracted into an AI_MODEL agentic loop plus one SIMPLE task per tool — identical to LangGraph full extraction. Detection (TS): `name` + string/function `instructions` + string `model` + `tools[]` + an OpenAI marker (`handoffs[]`, `inputGuardrails[]`, `asTool()`, `toolUseBehavior`, ...).
 
 Two authoring styles:
-- **Drop-in `Runner`** (Python) — change one import to `from conductor.ai import Runner` and keep your existing `agents.Agent`. `Runner.run` / `run_sync` / `run_streamed` accept an OpenAI-Agents `Agent` or a native Conductor Agents `Agent`; `RunResult` exposes `.final_output` and `.execution_id` (`context` is accepted for compatibility and ignored). `from conductor.ai import function_tool` aliases `@tool`.
+- **Drop-in `Runner`** (Python) — change one import to `from conductor.ai import Runner` and keep your existing `agents.Agent`. `Runner.run` / `run_sync` / `run_streamed` accept an OpenAI-Agents `Agent` or a native Agentspan `Agent`; `RunResult` exposes `.final_output` and `.execution_id` (`context` is accepted for compatibility and ignored). `from conductor.ai import function_tool` aliases `@tool`.
 - **Pass to `runtime.run(...)`** (TS and Python) — hand the `Agent` straight to the runtime; same entry point as every other framework.
 
 ### 5.2 Google ADK
@@ -530,9 +530,9 @@ const result = await runtime.run(agent, 'Say hello and a fun fact about ML.');
 
 ## 6. Claude Agent SDK (passthrough by design)
 
-The Claude Agent SDK (PyPI package `claude-code-sdk`, imported as `claude_code_sdk`) is a full runtime — built-in tools (Read, Edit, Bash, ...), hooks, sessions, permissions. Extracting individual tools would lose most of its value, so Conductor Agents runs it **passthrough**: the full `query()` runs in one durable Conductor SIMPLE worker (the §2 passthrough architecture), instrumented through the SDK's hook system. This is **Python only** (TypeScript has only the native `ClaudeCode` *model* usable on a native Agent — there is no Claude framework bridge in TS). Users pass `ClaudeCodeOptions` / `ClaudeAgentOptions` (or use the native `ClaudeCode` model on a Conductor Agents `Agent`) to `runtime.run()` / `runtime.start()`.
+The Claude Agent SDK (PyPI package `claude-code-sdk`, imported as `claude_code_sdk`) is a full runtime — built-in tools (Read, Edit, Bash, ...), hooks, sessions, permissions. Extracting individual tools would lose most of its value, so Agentspan runs it **passthrough**: the full `query()` runs in one durable Conductor SIMPLE worker (the §2 passthrough architecture), instrumented through the SDK's hook system. This is **Python only** (TypeScript has only the native `ClaudeCode` *model* usable on a native Agent — there is no Claude framework bridge in TS). Users pass `ClaudeCodeOptions` / `ClaudeAgentOptions` (or use the native `ClaudeCode` model on a Agentspan `Agent`) to `runtime.run()` / `runtime.start()`.
 
-**Use cases:** (A) bring existing Claude Agent SDK agents in for durability/orchestration/observability; (C) invoke a Claude Agent SDK agent as a worker tool inside a larger Conductor Agents workflow.
+**Use cases:** (A) bring existing Claude Agent SDK agents in for durability/orchestration/observability; (C) invoke a Claude Agent SDK agent as a worker tool inside a larger Agentspan workflow.
 
 ### 6.1 Execution model
 
@@ -589,7 +589,7 @@ The exact hook callback signature must be verified against the installed `claude
 
 Key decisions: passthrough over extraction (full runtime — extraction loses value); hooks for observability (exact instrumentation points, additive, defensive); `asyncio.run()` in the sync worker (fresh loop per worker thread); options in closure not JSON (callables); user hooks run first.
 
-**Use case C.** Phase 1 (ships with A): wrap the SDK in a Conductor Agents `@tool` that drives `query()` — works today, but no SUB_WORKFLOW and no inner-agent streaming. Phase 2 (follow-up): `runtime.register(options, name=...)` registers the agent by name for native handoffs (`HandoffCondition(target="claude_reviewer")`) with full SUB_WORKFLOW composition and streaming.
+**Use case C.** Phase 1 (ships with A): wrap the SDK in a Agentspan `@tool` that drives `query()` — works today, but no SUB_WORKFLOW and no inner-agent streaming. Phase 2 (follow-up): `runtime.register(options, name=...)` registers the agent by name for native handoffs (`HandoffCondition(target="claude_reviewer")`) with full SUB_WORKFLOW composition and streaming.
 
 **Limitations.** `asyncio.run()` fails inside an already-running loop (Jupyter) — use `nest_asyncio` or a separate thread. Phase 1 `@tool` produces no SUB_WORKFLOW / inner events. Hooks capture tool-level events but not individual LLM API calls (the SDK exposes no LLM-call hook). TypeScript support is a follow-up (Python first).
 
@@ -599,7 +599,7 @@ Key decisions: passthrough over extraction (full runtime — extraction loses va
 
 OCG (Open Context Graph) is a retrieval engine over a knowledge graph of entities — messages, channels, people, tickets — linked by claims and relationships. It is embedding/keyword search exposed as an HTTP API, **not** an LLM.
 
-The integration lives **entirely in the Python SDK** (`conductor.ai.agents.ocg`): the retrieval system prompt, tool schemas, endpoint routing, and instance binding. The tools compile to plain Conductor HTTP tasks, so **any Conductor Agents server runs them with zero OCG-specific configuration** — no properties, no task types. OCG is opt-in per agent; an agent that doesn't declare OCG tools never makes an OCG call.
+The integration lives **entirely in the Python SDK** (`conductor.ai.agents.ocg`): the retrieval system prompt, tool schemas, endpoint routing, and instance binding. The tools compile to plain Conductor HTTP tasks, so **any Agentspan server runs them with zero OCG-specific configuration** — no properties, no task types. OCG is opt-in per agent; an agent that doesn't declare OCG tools never makes an OCG call.
 
 ### 7.1 Two shapes
 
@@ -654,7 +654,7 @@ SDK: ToolDef(tool_type="http", config={url, method, pathTemplate, queryParams,
 Key properties:
 - **Per-tool instance binding.** `url=` is required — every OCG tool set binds the instance it talks to. Different agents can target different graphs (e.g. a US retriever and a Canada retriever in one router agent); agents bound to different instances must have distinct `name`s.
 - **Secrets never leave the server.** `credential="OCG_PUBLIC_KEY"` is a *name*; it compiles to a standard HTTP-tool header placeholder resolved from the server's secrets store at execution. Store it once (`PUT /api/secrets/OCG_PUBLIC_KEY`). This is the same credential contract as every other tool — see [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md).
-- **Path templating is generic.** `pathTemplate`/`queryParams` on an `http` tool config is a general Conductor Agents capability; OCG is its first user.
+- **Path templating is generic.** `pathTemplate`/`queryParams` on an `http` tool config is a general Agentspan capability; OCG is its first user.
 
 ### 7.3 The tools
 

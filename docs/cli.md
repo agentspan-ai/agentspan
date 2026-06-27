@@ -1,6 +1,6 @@
 ---
 title: CLI Reference
-description: Conductor Agents CLI commands for server, credentials, agents, skills, status, and execution history
+description: Agentspan CLI commands for server, credentials, agents, skills, status, and execution history
 ---
 
 # CLI Reference
@@ -22,7 +22,7 @@ agentspan server stop     # Stop the server
 agentspan server logs     # View server logs
 ```
 
-`agentspan server start` downloads the Conductor Agents server JAR on first run (~50 MB) and starts it as a local process. The JAR is cached — subsequent starts are instant. The server runs on port `6767`. The UI and API are both served from the same port — open `http://localhost:6767` in your browser to see the visual execution UI.
+`agentspan server start` downloads the Agentspan server JAR on first run (~50 MB) and starts it as a local process. The JAR is cached — subsequent starts are instant. The server runs on port `6767`. The UI and API are both served from the same port — open `http://localhost:6767` in your browser to see the visual execution UI.
 
 ## Diagnostics
 

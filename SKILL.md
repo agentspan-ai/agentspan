@@ -1,6 +1,6 @@
-# Conductor Agents — Build Durable AI Agents
+# Agentspan — Build Durable AI Agents
 
-Conductor Agents is a distributed, durable runtime for AI agents. Agents survive crashes, scale across machines, and pause for human approval. Use Python SDK.
+Agentspan is a distributed, durable runtime for AI agents. Agents survive crashes, scale across machines, and pause for human approval. Use Python SDK.
 
 ## Two Use Cases
 

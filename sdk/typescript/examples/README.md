@@ -1,6 +1,6 @@
 # Examples
 
-Runnable examples demonstrating every feature of the Conductor Agents TypeScript SDK.
+Runnable examples demonstrating every feature of the Agentspan TypeScript SDK.
 
 ---
 
@@ -19,7 +19,7 @@ In production, the three concerns are separated:
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  1. DEPLOY (once, during CI/CD)                              │
-│     Registers the agent definition with the Conductor Agents server │
+│     Registers the agent definition with the Agentspan server │
 │                                                              │
 │     await runtime.deploy(agent);                             │
 │     // or CLI: agentspan deploy --package my-agents          │
@@ -237,4 +237,4 @@ cd openai && npx tsx 01-basic-agent.ts
 | [langgraph/](langgraph/) | LangGraph | 45 examples — state graphs, react agents, memory, RAG |
 | [openai/](openai/) | OpenAI Agents SDK | 10 examples — agents, tools, handoffs, guardrails |
 | [vercel-ai/](vercel-ai/) | Vercel AI SDK | 10 examples — agents, tools, streaming, HITL |
-| [quickstart/](quickstart/) | Conductor Agents Quickstart | 5 examples — minimal getting-started guides |
+| [quickstart/](quickstart/) | Agentspan Quickstart | 5 examples — minimal getting-started guides |

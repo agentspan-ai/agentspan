@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/agentspan-logo-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/assets/agentspan-logo-light.png">
-    <img src="docs/assets/agentspan-logo-light.png" alt="Conductor Agents" width="360">
+    <img src="docs/assets/agentspan-logo-light.png" alt="Agentspan" width="360">
   </picture>
 </p>
 
@@ -31,14 +31,14 @@
 
 ---
 
-> ⭐ If you find Conductor Agents useful, [give us a star](https://github.com/agentspan-ai/agentspan) — it helps others find the project!
+> ⭐ If you find Agentspan useful, [give us a star](https://github.com/agentspan-ai/agentspan) — it helps others find the project!
 
 ---
 
 https://github.com/user-attachments/assets/dd4b720d-d11c-42e8-93a6-875c5a740fd8
 
 
-**Conductor Agents** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
+**Agentspan** is a distributed, durable runtime for AI agents, built for Conductor. It runs agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
 ## Quickstart (60 seconds)
 
@@ -51,6 +51,9 @@ irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps
 ```
 
 ## Install SDKs
+
+Build on Agentspan with the Conductor agent SDK, available for Python, TypeScript/JavaScript, and C#/.NET:
+
 ```bash
 # Python
 pip install conductor-agent-sdk
@@ -127,11 +130,11 @@ agentspan doctor
 
 ---
 
-## Why Conductor Agents?
+## Why Agentspan?
 
-Conductor Agents is the execution layer, not the replacement. Use native Conductor Agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
+Agentspan is the execution layer, not the replacement. Use native Agentspan, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
-| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Conductor Agents** |
+| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
 |---|---|---|---|---|---|
 | **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side executions** |
 | **Crash recovery** | Manual replay | Checkpointer (Postgres) | None | None | **Automatic resume** |
@@ -689,7 +692,7 @@ Full deployment guide → **[deployment/README.md](deployment/README.md)**
 ## CLI Reference
 
 ```bash
-agentspan server start     # Start the Conductor Agents server
+agentspan server start     # Start the Agentspan server
 agentspan server stop      # Stop the server
 agentspan server logs      # View server logs
 agentspan doctor           # Check system dependencies
@@ -697,7 +700,7 @@ agentspan doctor           # Check system dependencies
 
 ## Community
 
-We're building Conductor Agents in the open and would love your help.
+We're building Agentspan in the open and would love your help.
 
 - **[Discord](https://discord.com/invite/ajcA66JcKq)** — Ask questions, share what you're building, get help
 - **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
@@ -717,7 +720,7 @@ We welcome PRs of all sizes — from typo fixes to new examples to core features
 
 ### Spread the Word
 
-If Conductor Agents is useful to you, help others find it:
+If Agentspan is useful to you, help others find it:
 
 - [Star this repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
 - [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network

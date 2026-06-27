@@ -1,6 +1,6 @@
 # API Reference
 
-The public surface of the Conductor Agents package, one section per type. Snippets in
+The public surface of the Agentspan package, one section per type. Snippets in
 the other docs show usage; this is the lookup table.
 
 - [AgentRuntime](#agentruntime)

@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../../assets/logo-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="../../assets/logo-light.svg">
-    <img src="../../assets/logo-light.svg" alt="Conductor Agents" width="400">
+    <img src="../../assets/logo-light.svg" alt="Agentspan" width="400">
   </picture>
 </p>
 
@@ -27,9 +27,9 @@
 
 ---
 
-**Conductor Agents** is a distributed, durable runtime for running AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
+**Agentspan** is a distributed, durable runtime for running AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
 
-Conductor Agents is the execution layer, not the replacement. Use native agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
+Agentspan is the execution layer, not the replacement. Use native agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 ```python
 from conductor.ai.agents import Agent, AgentRuntime, tool
@@ -46,13 +46,13 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-## Why Conductor Agents?
+## Why Agentspan?
 
-Other frameworks give you a Python library. Conductor Agents gives you a **production runtime**.
+Other frameworks give you a Python library. Agentspan gives you a **production runtime**.
 
 Your agent code compiles to a durable, server-side execution. The server manages execution, retries, scaling, and state — so your agents keep running even when your process doesn't.
 
-| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Conductor Agents**                                                   |
+| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan**                                                   |
 |---|---|---|---|---|------------------------------------------------------------------------|
 | **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Durable executions**                                                 |
 | **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None | **Automatic — execution resumes exactly where it left off**            |
@@ -68,7 +68,7 @@ Your agent code compiles to a durable, server-side execution. The server manages
 
 ### What makes it different
 
-1. **True durable execution** — Not checkpoints. Not client-side loops. Your agent compiles to a server-side execution that the Conductor Agents server executes independently of your process. Deploy new code, restart your machine, kill the process — the agent keeps running. When it finishes, poll for the result from anywhere. This is the same execution model that powers mission-critical systems at scale.
+1. **True durable execution** — Not checkpoints. Not client-side loops. Your agent compiles to a server-side execution that the Agentspan server executes independently of your process. Deploy new code, restart your machine, kill the process — the agent keeps running. When it finishes, poll for the result from anywhere. This is the same execution model that powers mission-critical systems at scale.
 
 2. **Cross-process agent access** — Every running agent has an execution ID. Any process, on any machine, can use that ID to check status, stream events, approve or reject tool calls, pause, resume, or cancel the agent. No graph rebuilding, no checkpointer setup — just the ID and a runtime connection. LangGraph requires re-instantiating the graph and checkpointer; CrewAI and AutoGen have no cross-process access at all.
 
@@ -88,7 +88,7 @@ Your agent code compiles to a durable, server-side execution. The server manages
 
 10. **Full observability** — OpenTelemetry spans, Prometheus metrics, visual execution UI, execution history, and token/cost tracking — all built in.
 
-11. **Framework agnostic** — Use Google ADK, Langchain, OpenAI, CrewAI etc to write agents, run on Conductor Agents' durable execution runtime.
+11. **Framework agnostic** — Use Google ADK, Langchain, OpenAI, CrewAI etc to write agents, run on Agentspan' durable execution runtime.
 
 ## Quickstart
 
@@ -121,13 +121,13 @@ export OPENAI_API_KEY=sk-...          # For OpenAI models (gpt-4o, gpt-4o-mini, 
 # export ANTHROPIC_API_KEY=sk-ant-... # For Anthropic models (claude-sonnet, etc.)
 # export GOOGLE_API_KEY=...           # For Google models (gemini, etc.)
 
-agentspan server start   # Start the Conductor Agents server
+agentspan server start   # Start the Agentspan server
 agentspan server stop    # Stop the server
 agentspan server logs    # View server logs
 ```
 
 
-<details><summary>Configure remote Conductor Agents server connection</summary>
+<details><summary>Configure remote Agentspan server connection</summary>
 
 ```bash
 export AGENTSPAN_SERVER_URL=http://localhost:6767/api
@@ -532,7 +532,7 @@ pipeline = SequentialAgent(name="pipeline", sub_agents=[researcher, writer])
 
 ## Community
 
-We're building Conductor Agents in the open and would love your help.
+We're building Agentspan in the open and would love your help.
 
 - **[Discord](https://discord.gg/agentspan)** — Ask questions, share what you're building, get help
 - **[GitHub Issues](https://github.com/agentspan-ai/agentspan/issues)** — Bug reports and feature requests
@@ -552,7 +552,7 @@ We welcome PRs of all sizes — from typo fixes to new examples to core features
 
 ### Spread the Word
 
-If Conductor Agents is useful to you, help others find it:
+If Agentspan is useful to you, help others find it:
 
 - [Star this repo](https://github.com/agentspan-ai/agentspan) — it helps more than you think
 - [Share on LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https://github.com/agentspan-ai/agentspan) — tell your network

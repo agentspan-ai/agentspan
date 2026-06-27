@@ -1,4 +1,4 @@
-# Conductor Agents Java SDK
+# Agentspan Java SDK
 
 Build durable AI agents in Java, backed by [Conductor](https://conductor.netflix.com/) workflows. Your agents survive process crashes, tool calls scale independently, and human approvals can take days — all without managing state yourself.
 
@@ -39,7 +39,7 @@ The docs are organized into five areas:
 
 ### c) Framework agents
 
-Run agents authored in another framework on the durable Conductor Agents runtime.
+Run agents authored in another framework on the durable Agentspan runtime.
 
 - **[OpenAI Agents SDK](frameworks/openai.md)** · **[Google ADK](frameworks/google-adk.md)** · **[LangChain4j](frameworks/langchain4j.md)** · **[LangGraph4j](frameworks/langgraph4j.md)**.
 
@@ -73,11 +73,11 @@ Run agents authored in another framework on the durable Conductor Agents runtime
     </dependency>
     ```
 
-**Requirements:** Java 21+ · a Conductor Agents server (see [Getting Started](getting-started.md)).
+**Requirements:** Java 21+ · a Agentspan server (see [Getting Started](getting-started.md)).
 
 ## What makes it different
 
-| Feature | Conductor Agents | Thread-based SDKs |
+| Feature | Agentspan | Thread-based SDKs |
 |---|---|---|
 | Survives crashes | ✅ Conductor workflow | ❌ State lost |
 | Tool workers | ✅ Distributed tasks | ❌ In-process only |

@@ -5,18 +5,18 @@ description: The Agent class — constructor, parameters, results, handles, and 
 
 # Agents
 
-`Agent` is the single orchestration primitive in Conductor Agents. A single agent wraps an LLM with tools. An agent with sub-agents IS a multi-agent system. There are no separate Team, Network, or Crew classes.
+`Agent` is the single orchestration primitive in Agentspan. A single agent wraps an LLM with tools. An agent with sub-agents IS a multi-agent system. There are no separate Team, Network, or Crew classes.
 
 ## Agent execution at runtime
 
-The following diagrams show how the Conductor Agents server orchestrates different runtime behaviors — guardrail validation with retry and escalation, and human-in-the-loop approval.
+The following diagrams show how the Agentspan server orchestrates different runtime behaviors — guardrail validation with retry and escalation, and human-in-the-loop approval.
 
 
 **1. Retry** — the guardrail fails and the server re-invokes the same tool automatically.
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant LLM
     participant Tool as Order Search Tool
     participant Guard as Guardrail
@@ -53,7 +53,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant LLM
     participant Tool as Order Search Tool
     participant Guard as Guardrail
@@ -92,7 +92,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant LLM
     participant Tool as Process Refund
     participant Human as HITL (Human-in-the-Loop)
@@ -272,7 +272,7 @@ with AgentRuntime() as runtime:
     result = runtime.run(agent, "Summarize this")
 
 print(result.output)           # The answer
-print(result.workflow_id)     # Track in the Conductor Agents UI at http://localhost:6767
+print(result.workflow_id)     # Track in the Agentspan UI at http://localhost:6767
 print(result.status)           # "COMPLETED"
 print(result.token_usage)      # TokenUsage(prompt_tokens=..., completion_tokens=..., total_tokens=...)
 ```
@@ -357,4 +357,4 @@ print(workflow)    # Compiled workflow definition (server-side execution graph)
 
 ## Execution engine
 
-Conductor Agents compiles agent definitions into [Conductor](https://conductor-oss.org/) workflows — an open-source orchestration engine that has run billions of executions in production at Netflix, LinkedIn, and Tesla. Durable state, per-step retries, replay, and full execution history are Conductor primitives. `AgentRuntime`, `Agent`, and `@tool` are the Conductor Agents API on top of that foundation.
+Agentspan compiles agent definitions into [Conductor](https://conductor-oss.org/) workflows — an open-source orchestration engine that has run billions of executions in production at Netflix, LinkedIn, and Tesla. Durable state, per-step retries, replay, and full execution history are Conductor primitives. `AgentRuntime`, `Agent`, and `@tool` are the Agentspan API on top of that foundation.

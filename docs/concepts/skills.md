@@ -1,12 +1,12 @@
 ---
 title: Skills
-description: Load, register, run, and test agentskills.io skill folders with Conductor Agents
+description: Load, register, run, and test agentskills.io skill folders with Agentspan
 ---
 
 # Skills
 
 Skills let you package a reusable agent as a folder. A skill can include
-instructions, sub-agents, scripts, examples, references, and assets. Conductor Agents
+instructions, sub-agents, scripts, examples, references, and assets. Agentspan
 loads that folder as a durable `Agent`, compiles it to Conductor, and makes each
 component visible in the execution graph.
 
@@ -27,7 +27,7 @@ my-skill/
 +-- assets/
 ```
 
-Conductor Agents discovers files by convention:
+Agentspan discovers files by convention:
 
 | File or directory | Runtime behavior |
 |---|---|
@@ -216,7 +216,7 @@ Package storage is configurable:
 
 ## Testing
 
-Skills should have deterministic end-to-end tests against a real Conductor Agents
+Skills should have deterministic end-to-end tests against a real Agentspan
 server. The repository includes skill e2e suites for Python, TypeScript, Java,
 and .NET:
 

@@ -1,7 +1,7 @@
 # Framework Agents
 
-Conductor Agents ships thin adapters that let you author agents in the shape of three
-popular frameworks and run them on the Conductor Agents runtime unchanged. Each adapter
+Agentspan ships thin adapters that let you author agents in the shape of three
+popular frameworks and run them on the Agentspan runtime unchanged. Each adapter
 builds a normal `Agent` (or attaches tools to one), so everything in
 [writing-agents.md](writing-agents.md) and [advanced.md](advanced.md) still
 applies — you run them with the same `AgentRuntime`.

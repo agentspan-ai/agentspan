@@ -1,13 +1,19 @@
-site_name: Conductor Agents Docs
-site_description: Documentation for building durable AI agents with Conductor Agents.
+site_name: Agentspan Docs
+site_description: Agentspan — the durable agent runtime for Conductor.
 site_url: https://agentspan.ai/docs/
 repo_url: https://github.com/agentspan-ai/agentspan
 repo_name: agentspan-ai/agentspan
 edit_uri: edit/main/docs/
 
-docs_dir: docs
-site_dir: site
+# This config lives inside docs/, so docs_dir is the config's own directory and
+# site_dir is pushed up one level to keep the build output out of the docs tree.
+docs_dir: .
+site_dir: ../site
 strict: true
+
+# The config file shares docs_dir; keep it out of the built site.
+exclude_docs: |
+  mkdocs.yml
 
 theme:
   name: material
@@ -41,7 +47,7 @@ markdown_extensions:
 nav:
   - Overview: index.md
   - Getting Started:
-      - Why Conductor Agents: why-agentspan.md
+      - Why Agentspan: why-agentspan.md
       - Quickstart: quickstart.md
   - Concepts:
       - Agents: concepts/agents.md

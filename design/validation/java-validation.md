@@ -2,7 +2,7 @@
 
 **Status:** Created 2026-06-26
 
-**Scope:** How the Java SDK is validated end-to-end. Unlike the Python and TypeScript SDKs — which add a TOML-driven, LLM-judged *examples-quality* validation framework on top of their deterministic suites — **Java validation is the deterministic e2e suite only**: a set of JUnit 5 `@Tag("e2e")` test classes under `sdk/java/e2e/`, run against a live Conductor Agents server, locally and in CI. There is **no** separate examples-quality / LLM-judge harness for Java. Per `CLAUDE.md`, the e2e suites are deterministic: assertions are on compiled-workflow JSON structure, workflow task status, or in-process side effects (e.g. an `AtomicBoolean`/`AtomicReference` set inside a tool body) — never on LLM output text, except where the task is itself an eval.
+**Scope:** How the Java SDK is validated end-to-end. Unlike the Python and TypeScript SDKs — which add a TOML-driven, LLM-judged *examples-quality* validation framework on top of their deterministic suites — **Java validation is the deterministic e2e suite only**: a set of JUnit 5 `@Tag("e2e")` test classes under `sdk/java/e2e/`, run against a live Agentspan server, locally and in CI. There is **no** separate examples-quality / LLM-judge harness for Java. Per `CLAUDE.md`, the e2e suites are deterministic: assertions are on compiled-workflow JSON structure, workflow task status, or in-process side effects (e.g. an `AtomicBoolean`/`AtomicReference` set inside a tool body) — never on LLM output text, except where the task is itself an eval.
 
 Related:
 - Methodology / framework spec: [`README.md`](README.md) (Python-centric; the LLM-judge orchestrator described there does **not** apply to Java)

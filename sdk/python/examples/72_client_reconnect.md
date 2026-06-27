@@ -4,7 +4,7 @@ This demo proves that an agent execution survives a hard kill of the local SDK p
 
 ## Prerequisites
 
-Start the Conductor Agents server with Docker Compose from the deployment branch or worktree:
+Start the Agentspan server with Docker Compose from the deployment branch or worktree:
 
 ```bash
 cd deployment/docker-compose

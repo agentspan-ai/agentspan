@@ -7,7 +7,7 @@ description: Building tools with @tool, http_tool, mcp_tool, api_tool — plus c
 
 Tools are functions the LLM can call during execution.
 
-**Conductor Agents ships built-in tools for the most common cases — HTTP endpoints, full OpenAPI specs, and MCP servers — so you don't have to write code for them.** When you need custom logic, decorate any Python function with `@tool` and it's available to the LLM automatically.
+**Agentspan ships built-in tools for the most common cases — HTTP endpoints, full OpenAPI specs, and MCP servers — so you don't have to write code for them.** When you need custom logic, decorate any Python function with `@tool` and it's available to the LLM automatically.
 
 | Type | Who writes the code | How it runs | Use when |
 |---|---|---|---|
@@ -16,7 +16,7 @@ Tools are functions the LLM can call during execution.
 | `api_tool()` | Nobody — configure only | Server-side, auto-discovered | Full OpenAPI/Swagger/Postman spec |
 | `mcp_tool()` | Nobody — configure only | Server-side MCP task | MCP server |
 
-For `http_tool`, `api_tool`, and `mcp_tool`, you provide a URL and optionally credentials. Conductor Agents handles execution entirely on the server — no worker process, no Python code, nothing to maintain.
+For `http_tool`, `api_tool`, and `mcp_tool`, you provide a URL and optionally credentials. Agentspan handles execution entirely on the server — no worker process, no Python code, nothing to maintain.
 
 ## `@tool` — Custom Python Functions
 

@@ -18,7 +18,7 @@ A single agent handles each ticket end-to-end:
 5. Returns a structured `Resolution` with what happened
 
 !!! info "Prerequisites"
-    - A running Conductor Agents server: `agentspan server start`
+    - A running Agentspan server: `agentspan server start`
     - Environment variables set:
     
     ```bash

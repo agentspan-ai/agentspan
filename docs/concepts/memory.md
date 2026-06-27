@@ -5,7 +5,7 @@ description: ConversationMemory for chat history, SemanticMemory for long-term k
 
 # Memory
 
-Conductor Agents provides two memory systems: **ConversationMemory** for managing chat history and **SemanticMemory** for long-term knowledge retrieval. They serve different purposes and can be used together.
+Agentspan provides two memory systems: **ConversationMemory** for managing chat history and **SemanticMemory** for long-term knowledge retrieval. They serve different purposes and can be used together.
 
 ## Import
 

@@ -1,25 +1,25 @@
 ---
 title: Google ADK — research assistant
-description: Multi-agent research assistant built with Google ADK and Gemini, wrapped with Conductor Agents
+description: Multi-agent research assistant built with Google ADK and Gemini, wrapped with Agentspan
 ---
 
 # Google ADK — Research Assistant
 
-This example shows how to wrap an existing Google ADK multi-agent pipeline with Conductor Agents. A sequential pipeline chains a web researcher, a data analyst, and a writer — with crash recovery and full step visibility added by replacing the runner setup with one line.
+This example shows how to wrap an existing Google ADK multi-agent pipeline with Agentspan. A sequential pipeline chains a web researcher, a data analyst, and a writer — with crash recovery and full step visibility added by replacing the runner setup with one line.
 
-## What Conductor Agents adds to Google ADK
+## What Agentspan adds to Google ADK
 
-Google ADK handles your agent pipeline — `LlmAgent`, `SequentialAgent`, tools, and instructions. Conductor Agents adds a production execution layer without changing any of that:
+Google ADK handles your agent pipeline — `LlmAgent`, `SequentialAgent`, tools, and instructions. Agentspan adds a production execution layer without changing any of that:
 
-- **Crash recovery**: Pipeline execution runs on the Conductor Agents server; a process restart resumes from the current sub-agent
-- **No session management**: Conductor Agents replaces `InMemorySessionService` and `Runner` setup; your pipeline definition is unchanged
+- **Crash recovery**: Pipeline execution runs on the Agentspan server; a process restart resumes from the current sub-agent
+- **No session management**: Agentspan replaces `InMemorySessionService` and `Runner` setup; your pipeline definition is unchanged
 - **Per-agent step visibility**: Every tool call and sub-agent handoff is logged and browsable in the UI at `http://localhost:6767`
 - **Execution history**: Every research run is stored with inputs, outputs, and timing
 
 Your agent definitions, sub-agent structure, tools, and instructions stay exactly as written.
 
 !!! info "Prerequisites"
-    - A running Conductor Agents server: `agentspan server start`
+    - A running Agentspan server: `agentspan server start`
     - Additional dependencies: `pip install google-adk httpx markdownify`
     - Environment variables set:
     
@@ -140,7 +140,7 @@ print(result)
 
 ---
 
-## After: wrapped with Conductor Agents
+## After: wrapped with Agentspan
 
 Three things change from the plain ADK version: `LlmAgent` → `Agent`, model strings use the `google_gemini/` provider prefix, and the runner setup is replaced with `runtime.run()`. Tools are passed as plain functions — no `FunctionTool` wrapper needed.
 
@@ -223,7 +223,7 @@ print(result.output)
 print(f"Run ID: {result.execution_id}")
 ```
 
-`runtime.run()` registers the full pipeline execution — including every sub-agent step and tool call — as a single managed run on the Conductor Agents server.
+`runtime.run()` registers the full pipeline execution — including every sub-agent step and tool call — as a single managed run on the Agentspan server.
 
 ---
 
@@ -243,11 +243,11 @@ python research_assistant.py
 topic → [research_pipeline] → [researcher] → [analyst] → [writer] → final report
 ```
 
-**Sequential pipeline, Conductor Agents runtime**: The sub-agent chain (`researcher → analyst → writer`) runs exactly as defined. Replace the runner setup with `runtime.run` and the entire pipeline runs on the Conductor Agents server.
+**Sequential pipeline, Agentspan runtime**: The sub-agent chain (`researcher → analyst → writer`) runs exactly as defined. Replace the runner setup with `runtime.run` and the entire pipeline runs on the Agentspan server.
 
 **Per-agent step visibility**: Every tool call and sub-agent handoff is a logged step. Open `http://localhost:6767` to see which agent was active at each step, what tools it called, and what it produced.
 
-**Crash recovery**: If your process dies mid-pipeline (network timeout, OOM, deploy restart), Conductor Agents resumes from the current sub-agent when a new worker connects. The research run isn't dropped.
+**Crash recovery**: If your process dies mid-pipeline (network timeout, OOM, deploy restart), Agentspan resumes from the current sub-agent when a new worker connects. The research run isn't dropped.
 
 **Run history**: Every execution is stored with inputs, outputs, token usage, and timing.
 
@@ -301,7 +301,7 @@ topics = [
     "Serverless vs container deployments for AI agent workloads",
 ]
 
-# All three run concurrently on the Conductor Agents server
+# All three run concurrently on the Agentspan server
 handles = [start(pipeline, t) for t in topics]
 results = [h.stream().get_result() for h in handles]
 
@@ -338,7 +338,7 @@ result = mock_run(
     events=[
         MockEvent.handoff("researcher"),
         MockEvent.tool_call("search_web", {"query": "durable execution AI agents 2026"}),
-        MockEvent.tool_result("search_web", "Conductor Agents, LangGraph, and OpenAI Agents SDK lead..."),
+        MockEvent.tool_result("search_web", "Agentspan, LangGraph, and OpenAI Agents SDK lead..."),
         MockEvent.handoff("analyst"),
         MockEvent.handoff("writer"),
         MockEvent.done("# Final Report\nDurable execution has become..."),

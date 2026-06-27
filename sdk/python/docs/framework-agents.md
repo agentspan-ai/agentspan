@@ -1,7 +1,7 @@
 # Framework agents
 
-Conductor Agents can run agents authored in other frameworks by bridging them onto its
-durable runtime. You keep your framework's authoring API; Conductor Agents handles
+Agentspan can run agents authored in other frameworks by bridging them onto its
+durable runtime. You keep your framework's authoring API; Agentspan handles
 durability, retries, streaming, and observability.
 
 Supported bridges: **OpenAI Agents SDK**, **LangChain**, **LangGraph**, **Claude
@@ -21,7 +21,7 @@ SDK's `Runner` with a native `Agent`.
 ### Drop-in `Runner`
 
 Change one import — `from conductor.ai import Runner` instead of `from agents import
-Runner` — and run your existing OpenAI-Agents agent on Conductor Agents:
+Runner` — and run your existing OpenAI-Agents agent on Agentspan:
 
 ```python
 from conductor.ai import Runner            # the one line that changes
@@ -86,7 +86,7 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-Conductor Agents also provides a thin wrapper, `conductor.ai.agents.langchain.create_agent`,
+Agentspan also provides a thin wrapper, `conductor.ai.agents.langchain.create_agent`,
 that captures the model, tools, and system prompt up front so they compile to native
 server-side model + tool tasks (rather than running the whole agent in one opaque
 worker).
@@ -157,4 +157,4 @@ functions are not yet supported there.
 
 You can also bring `ClaudeCodeOptions` / a Claude Agent SDK agent directly; the bridge
 runs the full `query()` in one durable worker with instrumentation hooks that stream
-tool-use and lifecycle events back to Conductor Agents.
+tool-use and lifecycle events back to Agentspan.

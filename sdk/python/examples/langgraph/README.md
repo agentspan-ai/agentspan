@@ -1,6 +1,6 @@
 # LangGraph Examples
 
-46 examples demonstrating LangGraph integration with Conductor Agents, from hello-world to advanced multi-agent systems.
+46 examples demonstrating LangGraph integration with Agentspan, from hello-world to advanced multi-agent systems.
 
 ## Prerequisites
 
@@ -185,5 +185,5 @@ with AgentRuntime() as runtime:
 
 - Python 3.11+
 - `uv` package manager
-- `AGENTSPAN_SERVER_URL` — Conductor Agents server endpoint
+- `AGENTSPAN_SERVER_URL` — Agentspan server endpoint
 - `OPENAI_API_KEY` — OpenAI API key for `ChatOpenAI`

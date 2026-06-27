@@ -1,17 +1,17 @@
 ---
 title: LangGraph — code review bot
-description: Wrap an existing LangGraph agent with Conductor Agents for crash recovery, run history, and human-in-the-loop
+description: Wrap an existing LangGraph agent with Agentspan for crash recovery, run history, and human-in-the-loop
 ---
 
 # LangGraph — Code Review Bot
 
-This example shows how to wrap an existing LangGraph agent with Conductor Agents. The agent reads a GitHub pull request diff, analyses it for bugs, security issues, and style problems, and posts inline review comments — with crash recovery and full run history added by changing one line.
+This example shows how to wrap an existing LangGraph agent with Agentspan. The agent reads a GitHub pull request diff, analyses it for bugs, security issues, and style problems, and posts inline review comments — with crash recovery and full run history added by changing one line.
 
-## What Conductor Agents adds to LangGraph
+## What Agentspan adds to LangGraph
 
-LangGraph handles your graph — nodes, edges, conditional branching, typed state. Conductor Agents adds a production execution layer without changing any of that:
+LangGraph handles your graph — nodes, edges, conditional branching, typed state. Agentspan adds a production execution layer without changing any of that:
 
-- **Crash recovery**: Graph execution runs on the Conductor Agents server; a process restart picks up the run without re-running completed steps
+- **Crash recovery**: Graph execution runs on the Agentspan server; a process restart picks up the run without re-running completed steps
 - **Human-in-the-loop**: Pause at any tool call for human approval, hold state indefinitely server-side, resume cleanly
 - **Execution history**: Every run is logged with full inputs, outputs, and timing, browsable at `http://localhost:6767` or via CLI
 - **Re-run from history**: Replay any past run with the same input from the UI
@@ -19,7 +19,7 @@ LangGraph handles your graph — nodes, edges, conditional branching, typed stat
 Your graph definition, nodes, edges, and typed state schema stay exactly as written.
 
 !!! info "Prerequisites"
-    - A running Conductor Agents server: `agentspan server start`
+    - A running Agentspan server: `agentspan server start`
     - Additional dependencies: `pip install langgraph langchain-anthropic httpx`
     - Environment variables set:
     
@@ -134,9 +134,9 @@ print(result["messages"][-1].content)
 
 ---
 
-## After: wrapped with Conductor Agents
+## After: wrapped with Agentspan
 
-Replace `app.invoke({...})` with `runtime.run(app, {...})`. That's the only change. Conductor Agents auto-detects LangGraph apps — no extra imports or graph modifications needed.
+Replace `app.invoke({...})` with `runtime.run(app, {...})`. That's the only change. Agentspan auto-detects LangGraph apps — no extra imports or graph modifications needed.
 
 ```python
 from conductor.ai.agents import AgentRuntime
@@ -150,13 +150,13 @@ print(result.output["messages"][-1].content)
 print(f"Run ID: {result.execution_id}")
 ```
 
-`runtime.run()` registers the graph execution as a managed run on the Conductor Agents server. The graph logic stays identical — Conductor Agents wraps the execution lifecycle around it.
+`runtime.run()` registers the graph execution as a managed run on the Agentspan server. The graph logic stays identical — Agentspan wraps the execution lifecycle around it.
 
 ---
 
 ## What you gain
 
-**Crash recovery**: If your process dies mid-review (network timeout, OOM, deploy restart), Conductor Agents restarts the graph run when a new worker connects. The run is not lost.
+**Crash recovery**: If your process dies mid-review (network timeout, OOM, deploy restart), Agentspan restarts the graph run when a new worker connects. The run is not lost.
 
 **Run history**: Every PR review is stored with its full input, output, tool calls, and timing. Open `http://localhost:6767` to browse executions and inspect what the model did on each run.
 
@@ -237,7 +237,7 @@ results = [h.stream().get_result() for h in handles]
 
 ## Checkpointing and LangSmith
 
-**LangGraph checkpointing** (`MemorySaver`, `PostgresSaver`) saves graph state after each node so a run can resume from where it left off if interrupted. When you wrap with Conductor Agents, do not use a checkpointer — Conductor Agents manages the execution lifecycle and the two mechanisms conflict:
+**LangGraph checkpointing** (`MemorySaver`, `PostgresSaver`) saves graph state after each node so a run can resume from where it left off if interrupted. When you wrap with Agentspan, do not use a checkpointer — Agentspan manages the execution lifecycle and the two mechanisms conflict:
 
 ```python
 # Correct: compile without a checkpointer
@@ -247,9 +247,9 @@ app = workflow.compile()
 # app = workflow.compile(checkpointer=MemorySaver())
 ```
 
-Conductor Agents handles crash recovery at the run level. If your worker dies, the graph run restarts from the beginning when a new worker connects. Use Conductor Agents's recovery instead of LangGraph's node-level checkpointing when the graph is wrapped.
+Agentspan handles crash recovery at the run level. If your worker dies, the graph run restarts from the beginning when a new worker connects. Use Agentspan's recovery instead of LangGraph's node-level checkpointing when the graph is wrapped.
 
-**LangSmith** continues to work as usual. LLM call traces (prompts, completions, token counts) still fire inside the wrapped graph. Conductor Agents adds run-level tracking on top — execution IDs, full input/output, timing, and status across all your agents — but does not replace per-call LLM traces.
+**LangSmith** continues to work as usual. LLM call traces (prompts, completions, token counts) still fire inside the wrapped graph. Agentspan adds run-level tracking on top — execution IDs, full input/output, timing, and status across all your agents — but does not replace per-call LLM traces.
 
 ---
 

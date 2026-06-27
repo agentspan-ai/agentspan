@@ -5,7 +5,7 @@ description: Test agents without an LLM — mock_run, MockEvent, expect, record/
 
 # Testing
 
-Conductor Agents has a first-class testing module that lets you test agent behavior without making LLM API calls or running a server. Tests are deterministic, fast, and runnable in CI.
+Agentspan has a first-class testing module that lets you test agent behavior without making LLM API calls or running a server. Tests are deterministic, fast, and runnable in CI.
 
 ## Import
 
@@ -38,12 +38,12 @@ result = mock_run(
     events=[
         MockEvent.thinking("I should search for information about agentspan."),
         MockEvent.tool_call("search_web", {"query": "agentspan Python agent runtime"}),
-        MockEvent.tool_result("search_web", "Conductor Agents is an open source Python runtime for AI agents."),
-        MockEvent.done("Conductor Agents is an open source Python runtime for building AI agents."),
+        MockEvent.tool_result("search_web", "Agentspan is an open source Python runtime for AI agents."),
+        MockEvent.done("Agentspan is an open source Python runtime for building AI agents."),
     ]
 )
 
-expect(result).completed().output_contains("Conductor Agents").used_tool("search_web")
+expect(result).completed().output_contains("Agentspan").used_tool("search_web")
 ```
 
 `mock_run` signature:
@@ -301,7 +301,7 @@ pytest tests/ -m integration
 ## Real Server SDK E2E Tests
 
 Runtime features that cross the SDK/server boundary should have deterministic
-e2e tests against a real Conductor Agents server. Skills are covered this way in every
+e2e tests against a real Agentspan server. Skills are covered this way in every
 SDK:
 
 ```bash

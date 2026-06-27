@@ -1,11 +1,11 @@
-# Google ADK + Conductor Agents
+# Google ADK + Agentspan
 
 The `LlmAgent` and `FunctionTool` formats are natively recognized. Replace the ADK runner with `runtime.run()` — agent and tools stay identical.
 
 ## Before / After
 
 <table>
-<tr><th>Before (vanilla Google ADK)</th><th>After (Conductor Agents)</th></tr>
+<tr><th>Before (vanilla Google ADK)</th><th>After (Agentspan)</th></tr>
 <tr><td>
 
 ```typescript

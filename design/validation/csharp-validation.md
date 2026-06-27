@@ -2,7 +2,7 @@
 
 **Status:** Created 2026-06-26
 
-**Scope:** How the C# SDK is validated end-to-end against a real Conductor Agents server. Unlike the Python and TypeScript SDKs — which add a separate *examples-quality* validation framework (model matrix runs + LLM-as-judge scoring; see [`python-validation.md`](python-validation.md) and [`typescript-validation.md`](typescript-validation.md)) — C# has **no examples-quality / LLM-judge framework**. C# validation is a single **deterministic** xUnit e2e suite (`AgentspanE2eTests`) plus one standalone guardrail-matrix example program (`90_GuardrailE2eTests`). Per `CLAUDE.md`, the e2e suite never uses an LLM to *judge* output; assertions are JSON-path / object-graph / status checks (the only LLM calls are the agent runs themselves). Related: [`README.md`](README.md) (methodology), [`../sdk-design/languages/csharp-implementation.md`](../sdk-design/languages/csharp-implementation.md) (implementation), [`../sdk-design.md`](../sdk-design.md) (cross-SDK design).
+**Scope:** How the C# SDK is validated end-to-end against a real Agentspan server. Unlike the Python and TypeScript SDKs — which add a separate *examples-quality* validation framework (model matrix runs + LLM-as-judge scoring; see [`python-validation.md`](python-validation.md) and [`typescript-validation.md`](typescript-validation.md)) — C# has **no examples-quality / LLM-judge framework**. C# validation is a single **deterministic** xUnit e2e suite (`AgentspanE2eTests`) plus one standalone guardrail-matrix example program (`90_GuardrailE2eTests`). Per `CLAUDE.md`, the e2e suite never uses an LLM to *judge* output; assertions are JSON-path / object-graph / status checks (the only LLM calls are the agent runs themselves). Related: [`README.md`](README.md) (methodology), [`../sdk-design/languages/csharp-implementation.md`](../sdk-design/languages/csharp-implementation.md) (implementation), [`../sdk-design.md`](../sdk-design.md) (cross-SDK design).
 
 ---
 
@@ -88,7 +88,7 @@ Suites split tests into two tiers, called out in file-header comments:
 
 ## 3. How to run locally
 
-Prerequisites: .NET 10 SDK; a running Conductor Agents server on `:6767`; `OPENAI_API_KEY` for tests that actually run an agent. Without a reachable server, `[SkippableFact]` tests skip and `[Fact]` tests still run.
+Prerequisites: .NET 10 SDK; a running Agentspan server on `:6767`; `OPENAI_API_KEY` for tests that actually run an agent. Without a reachable server, `[SkippableFact]` tests skip and `[Fact]` tests still run.
 
 Start the server (from a built jar):
 

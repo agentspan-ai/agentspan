@@ -5,7 +5,7 @@ description: Pause agents at risky steps, hold state indefinitely, and resume af
 
 # Human-in-the-loop
 
-Agents are great at finding the right action. Humans are better at authorizing risky ones. Conductor Agents lets you pause an agent at any tool call, hold state indefinitely on the server (no timeouts, no data loss), and resume after a human approves or rejects.
+Agents are great at finding the right action. Humans are better at authorizing risky ones. Agentspan lets you pause an agent at any tool call, hold state indefinitely on the server (no timeouts, no data loss), and resume after a human approves or rejects.
 
 ---
 
@@ -22,7 +22,7 @@ def process_refund(order_id: str, amount: float) -> dict:
     return billing_api.refund(order_id, amount)
 ```
 
-When the LLM calls this tool, Conductor Agents automatically:
+When the LLM calls this tool, Agentspan automatically:
 1. Pauses the agent workflow
 2. Sets `handle.get_status().is_waiting = True`
 3. Holds the full agent state on the server (no timeout)
@@ -33,7 +33,7 @@ When the LLM calls this tool, Conductor Agents automatically:
 ## Complete example: refund agent
 
 !!! info "Prerequisites"
-    - A running Conductor Agents server: `agentspan server start`
+    - A running Agentspan server: `agentspan server start`
     - Environment variables set:
     
     ```bash

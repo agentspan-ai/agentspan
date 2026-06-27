@@ -1,4 +1,4 @@
-# Conductor Agents Worker Types
+# Agentspan Worker Types
 
 Workers are functions registered as Conductor task pollers. They execute locally (SDK-side)
 while execution orchestration happens server-side. Both Python and TypeScript SDKs implement

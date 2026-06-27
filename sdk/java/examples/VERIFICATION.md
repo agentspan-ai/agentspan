@@ -1,7 +1,7 @@
 # Java Examples — Verification Report
 
 End-to-end verification of every example in this module, run against a
-live Conductor Agents server and inspected at the Conductor workflow level to
+live Agentspan server and inspected at the Conductor workflow level to
 confirm LLM calls, tool calls, sub-agent orchestration, and guardrails
 all execute **server-side**.
 
@@ -16,7 +16,7 @@ all execute **server-side**.
 > **Note on OpenAI Agents:** Unlike ADK / LangChain4j / LangGraph4j, there
 > is **no native OpenAI Agents Java SDK** at the time of this writing —
 > only the raw `com.openai:openai-java` HTTP client, which has zero agent
-> abstractions. The OpenAI examples therefore use Conductor Agents' own
+> abstractions. The OpenAI examples therefore use Agentspan' own
 > `OpenAIAgent.builder()` (in `org.conductoross.conductor.ai.frameworks`) — that builder
 > IS the Java equivalent of the Python `openai-agents` library, not a
 > bridge over something native. The same bug-bounty fixes applied to
@@ -49,7 +49,7 @@ each verified row landed with the expected shape.
 ## How to reproduce
 
 ```bash
-# 1. Start the Conductor Agents server (separate terminal)
+# 1. Start the Agentspan server (separate terminal)
 cd server && ./gradlew bootJar
 java -jar build/libs/agentspan-runtime.jar
 

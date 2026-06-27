@@ -1,11 +1,11 @@
 ---
 title: Quickstart
-description: Install Conductor Agents and run your first durable AI agent in under 60 seconds.
+description: Install Agentspan and run your first durable AI agent in under 60 seconds.
 ---
 
 # Quickstart
 
-Get Conductor Agents running locally in under 60 seconds.
+Get Agentspan running locally in under 60 seconds.
 
 ## Step 1 — Install
 
@@ -43,7 +43,7 @@ See [Providers](/docs/providers) for all supported models and environment variab
 agentspan server start
 ```
 
-On first run, this downloads the Conductor Agents server JAR (~50 MB) and starts it on `http://localhost:6767`. Subsequent starts use the cached JAR. Open `http://localhost:6767` in your browser to see the visual execution UI.
+On first run, this downloads the Agentspan server JAR (~50 MB) and starts it on `http://localhost:6767`. Subsequent starts use the cached JAR. Open `http://localhost:6767` in your browser to see the visual execution UI.
 
 > **Local default:** The server uses SQLite with WAL mode — no external database needed for local development. Data is stored in `agent-runtime.db` in the working directory.
 
@@ -78,7 +78,7 @@ You should see the answer printed, and the execution visible in the UI at `http:
 
 When you called `runtime.run()`, the SDK:
 
-1. Compiled your `Agent` into a durable execution on the Conductor Agents server
+1. Compiled your `Agent` into a durable execution on the Agentspan server
 2. Started a worker process to handle `@tool` function calls
 3. Executed the workflow on the server — not in-process
 4. Returned the result when complete

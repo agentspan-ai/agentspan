@@ -1,6 +1,6 @@
 # Examples
 
-Runnable examples demonstrating every feature of the Conductor Agents SDK.
+Runnable examples demonstrating every feature of the Agentspan SDK.
 
 ---
 
@@ -19,7 +19,7 @@ In production, the three concerns are separated:
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  1. DEPLOY (once, during CI/CD)                              │
-│     Registers the agent definition with the Conductor Agents server │
+│     Registers the agent definition with the Agentspan server │
 │                                                              │
 │     runtime.deploy(agent)                                    │
 │     # or CLI: agentspan deploy --package my_agents           │

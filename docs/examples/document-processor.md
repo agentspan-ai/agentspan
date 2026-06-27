@@ -19,7 +19,7 @@ For each contract:
 Contracts run in parallel on the server. Already-completed ones are skipped on restart.
 
 !!! info "Prerequisites"
-    - A running Conductor Agents server: `agentspan server start`
+    - A running Agentspan server: `agentspan server start`
     - Environment variables set:
     
     ```bash

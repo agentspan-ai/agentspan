@@ -1,20 +1,20 @@
 ---
 title: Crash and resume
-description: How Conductor Agents keeps agents running through process crashes, restarts, and reconnects
+description: How Agentspan keeps agents running through process crashes, restarts, and reconnects
 ---
 
 # Crash and resume
 
 **The problem:** Most agent frameworks run the agent loop inside your process. If your process crashes — or you deploy a new version, restart a pod, or lose a network connection — the agent's in-flight work is gone.
 
-**How Conductor Agents solves it:** The agent loop runs on the Conductor Agents server, not in your process. Your worker registers tools and polls for tasks. The agent state lives on the server. Your process can die and restart freely.
+**How Agentspan solves it:** The agent loop runs on the Agentspan server, not in your process. Your worker registers tools and polls for tasks. The agent state lives on the server. Your process can die and restart freely.
 
 ---
 
 ## How it works
 
 ```
-Your process                Conductor Agents server
+Your process                Agentspan server
 ──────────────             ────────────────────────────
 start(agent, prompt)  ──►  Creates workflow, starts agent loop
                            LLM call → tool scheduled → worker executes
@@ -27,7 +27,7 @@ Worker restarts ◄──────    Task is still queued, picked up on reco
                            Agent loop resumes from where it was
 ```
 
-The Conductor engine underlying Conductor Agents has durable execution built in — the same engine that powers workflows at Netflix, LinkedIn, and Tesla.
+The Conductor engine underlying Agentspan has durable execution built in — the same engine that powers workflows at Netflix, LinkedIn, and Tesla.
 
 ---
 
@@ -36,7 +36,7 @@ The Conductor engine underlying Conductor Agents has durable execution built in 
 This example uses two scripts to show the full crash-resume cycle. Run them in order.
 
 !!! info "Prerequisites"
-    - A running Conductor Agents server: `agentspan server start`
+    - A running Agentspan server: `agentspan server start`
     - Environment variables set:
     
     ```bash

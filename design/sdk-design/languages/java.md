@@ -6,7 +6,7 @@
 **Reference Implementation:** `sdk/python/examples/kitchen_sink.py`
 **As-built internals:** [java-implementation.md](java-implementation.md)
 
-This guide covers implementing the Conductor Agents SDK in Java with full feature parity against the Python reference. It addresses **two** target audiences simultaneously: projects on Java 16+ (records, sealed interfaces, pattern matching) and projects constrained to Java 8+ (POJOs, Lombok optional). Every section shows both styles side-by-side.
+This guide covers implementing the Agentspan SDK in Java with full feature parity against the Python reference. It addresses **two** target audiences simultaneously: projects on Java 16+ (records, sealed interfaces, pattern matching) and projects constrained to Java 8+ (POJOs, Lombok optional). Every section shows both styles side-by-side.
 
 ---
 
@@ -1037,7 +1037,7 @@ public class GuardrailFailedException extends AgentspanException {
 
 ### 7.2 Checked vs. Unchecked Strategy
 
-All Conductor Agents exceptions are **unchecked** (`RuntimeException`). Rationale:
+All Agentspan exceptions are **unchecked** (`RuntimeException`). Rationale:
 
 1. `CompletableFuture` wraps checked exceptions in `CompletionException`, forcing awkward unwrapping.
 2. Most callers cannot meaningfully recover from server errors or missing credentials.

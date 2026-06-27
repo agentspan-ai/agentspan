@@ -2,7 +2,7 @@
 
 **Status:** Consolidated 2026-06-26
 
-**Scope:** This is the canonical design for two coupled subsystems in Conductor Agents. The first half covers **tool and code execution** — how an agent's LLM runs code via the `execute_code` tool, the executor types (local, Docker, Jupyter, serverless), the interpreter table, command validation, timeouts, and how tools register as Conductor workers. The second half covers **credentials and secrets** — the encrypted-at-rest store, execution-token auth for distributed workers, per-user LLM keys, output masking on the read path, the SDK secret-injection contract every SDK must honor, and the **Secrets** management UI. The two halves meet at secret injection into tools: a tool declares the secrets it needs, and the credentials pipeline resolves and injects them at execution time. Siblings: [agentspan-design.md](agentspan-design.md) (overall architecture), [api-design.md](api-design.md) (REST surface), [sdk-design.md](sdk-design.md) (cross-SDK contracts), [framework-integration.md](framework-integration.md) (framework passthrough). Framework-passthrough credential injection detail is shared with [framework-integration.md](framework-integration.md).
+**Scope:** This is the canonical design for two coupled subsystems in Agentspan. The first half covers **tool and code execution** — how an agent's LLM runs code via the `execute_code` tool, the executor types (local, Docker, Jupyter, serverless), the interpreter table, command validation, timeouts, and how tools register as Conductor workers. The second half covers **credentials and secrets** — the encrypted-at-rest store, execution-token auth for distributed workers, per-user LLM keys, output masking on the read path, the SDK secret-injection contract every SDK must honor, and the **Secrets** management UI. The two halves meet at secret injection into tools: a tool declares the secrets it needs, and the credentials pipeline resolves and injects them at execution time. Siblings: [agentspan-design.md](agentspan-design.md) (overall architecture), [api-design.md](api-design.md) (REST surface), [sdk-design.md](sdk-design.md) (cross-SDK contracts), [framework-integration.md](framework-integration.md) (framework passthrough). Framework-passthrough credential injection detail is shared with [framework-integration.md](framework-integration.md).
 
 ---
 
@@ -376,7 +376,7 @@ credentials_store(
 )
 ```
 
-There are **no** `users`, `api_keys`, `secret_tags`, or `secret_disclosures` tables in OSS. (Conductor Agents' standalone server runs anonymous; tag-based RBAC and per-execution disclosure tracking for output masking are **Enterprise** features. The schema file's own comment notes that `credential_disclosures` is enterprise-only and not in the OSS schema.)
+There are **no** `users`, `api_keys`, `secret_tags`, or `secret_disclosures` tables in OSS. (Agentspan' standalone server runs anonymous; tag-based RBAC and per-execution disclosure tracking for output masking are **Enterprise** features. The schema file's own comment notes that `credential_disclosures` is enterprise-only and not in the OSS schema.)
 
 The earlier `credentials_binding` table (logical-key → store-name indirection) was removed for parity with Conductor's flat-name secrets API. `credentials_store` is the canonical table name; a transient dev name (`secrets_store`) was never the canonical form.
 
@@ -464,7 +464,7 @@ Mirrors `io.orkes.conductor.server.rest.SecretResource`.
 
 `GET /{key}` returns plaintext (Conductor parity). Every read is audit-logged. RBAC will gate this in Enterprise; in OSS, anyone with management auth can read or overwrite, so hiding plaintext on GET would be theater.
 
-### V2 listing (Conductor Agents extension, mirrors Conductor V2)
+### V2 listing (Agentspan extension, mirrors Conductor V2)
 
 | Method | Path | Returns |
 |---|---|---|
@@ -472,9 +472,9 @@ Mirrors `io.orkes.conductor.server.rest.SecretResource`.
 
 `partial` follows the OpenAI/GitHub convention: first-4 + `…` + last-4. The UI uses this endpoint for the secrets table; the v1 `POST /api/secrets` is reserved for strict-parity callers.
 
-### Worker secret fetch (Conductor Agents-only)
+### Worker secret fetch (Agentspan-only)
 
-Conductor has no equivalent — its workers receive substituted plaintext at task dispatch. Conductor Agents workers are out-of-process (often user-written, sometimes on untrusted infra), so they pull declared secrets at runtime using the execution token embedded in `__agentspan_ctx__`.
+Conductor has no equivalent — its workers receive substituted plaintext at task dispatch. Agentspan workers are out-of-process (often user-written, sometimes on untrusted infra), so they pull declared secrets at runtime using the execution token embedded in `__agentspan_ctx__`.
 
 Lives at `/api/workers/secrets` (not `/api/secrets/resolve`) because its auth model — execution token, not login session — is fundamentally different from the other `/api/secrets/*` endpoints. The path makes the boundary visible.
 
@@ -600,7 +600,7 @@ Key properties (Enterprise masker):
 - **Literal substring replace** (not regex) — safe for values containing metacharacters.
 - **JSON-aware** — values containing `"`, `\`, newlines, or other characters that JSON serialization escapes are still masked because the masker matches against unescaped text-node values, not the wire payload.
 - **Best effort.** If anything fails (parse error, no user context, no disclosures), the body passes through unchanged. Masking should never block a response.
-- **Conductor Agents-owned paths only by default.** The advice always masks Conductor Agents' own `/api/agent/*` reads. The raw Conductor `/api/workflow/{id}` read is host-owned, so masking it is **opt-in** via `agentspan.credentials.mask-workflow-reads=true` (default `false`) — this keeps the library from mutating an embedding host's workflow responses just by being on the classpath.
+- **Agentspan-owned paths only by default.** The advice always masks Agentspan' own `/api/agent/*` reads. The raw Conductor `/api/workflow/{id}` read is host-owned, so masking it is **opt-in** via `agentspan.credentials.mask-workflow-reads=true` (default `false`) — this keeps the library from mutating an embedding host's workflow responses just by being on the classpath.
 - **Bounded retention.** Enterprise prunes disclosure rows on a retention schedule; older execution payloads remain readable but will not be masked — by design, a long-since-disclosed token should have been rotated anyway.
 
 What this does **not** cover:
@@ -608,8 +608,8 @@ What this does **not** cover:
 - **List endpoints** (`GET /api/agent/list`, `GET /api/agent/executions`, `GET /api/agent/executions/search`) — these return aggregate metadata, not per-execution payload bodies. The advice intentionally does **not** activate on list responses: there is no single execution id to scope the disclosure set against, and list rows surface summary fields (status, timestamps, names) rather than task outputs. If a secret can appear in a *list-row* field (e.g. an agent name shaped like an env-var template), file it as a separate masking gap.
 - **POST / mutation endpoints** that echo input (e.g. `/{executionId}/respond`, `/{executionId}/signal`) — the input body is what the caller already supplied, so masking it would help nothing; the *task output* it triggers is still masked when read back through the GET path.
 - **Live SSE streams** (`/api/agent/stream/{id}`) — events flow through the streaming converter, which the advice doesn't intercept. Follow-up work.
-- **Bypassing Conductor Agents to hit Conductor directly** — Conductor is internal-only per the existing security model.
-- **Off-server log files** — worker stdout captured by the orchestrator. Conductor Agents can't reach into those.
+- **Bypassing Agentspan to hit Conductor directly** — Conductor is internal-only per the existing security model.
+- **Off-server log files** — worker stdout captured by the orchestrator. Agentspan can't reach into those.
 
 ## 3.6 Developer experience tiers
 
@@ -665,7 +665,7 @@ Enterprise plugs in via the same `CredentialStoreProvider`, `SecretOutputMasker`
 **Status:** Required for every SDK that supports framework passthrough.
 **Audience:** SDK implementors (Python, .NET, TypeScript, Java, future languages). See [sdk-design.md](sdk-design.md) for the broader cross-SDK contract.
 
-This part defines the contract every Conductor Agents SDK must follow when injecting resolved secrets into third-party framework agents (LangChain, LangGraph, OpenAI Agents, Claude Agent SDK, Google ADK, Semantic Kernel, etc.). The contract exists because the obvious-looking implementation — mutate process environment, run framework, restore — is fundamentally unsafe under concurrency and has burned every SDK that's tried it.
+This part defines the contract every Agentspan SDK must follow when injecting resolved secrets into third-party framework agents (LangChain, LangGraph, OpenAI Agents, Claude Agent SDK, Google ADK, Semantic Kernel, etc.). The contract exists because the obvious-looking implementation — mutate process environment, run framework, restore — is fundamentally unsafe under concurrency and has burned every SDK that's tried it.
 
 ## 4.1 The problem
 
@@ -831,14 +831,14 @@ Race tests run with raw `Thread.Start()` and `assertEventually` are flaky — th
 
 ## 4.6 Embedded deployments — the contract assumes a dedicated worker process
 
-Everything in §4.1–§4.5 assumes the SDK runs in a **dedicated Conductor Agents worker process** — a process whose only job is to poll Conductor and execute agent tools. Under that assumption, tier-2 (env-injection with a process-wide lock) is correct: the only code that reads `os.environ` during the injection window is the framework SDK itself, and concurrent agent invocations serialize via the lock.
+Everything in §4.1–§4.5 assumes the SDK runs in a **dedicated Agentspan worker process** — a process whose only job is to poll Conductor and execute agent tools. Under that assumption, tier-2 (env-injection with a process-wide lock) is correct: the only code that reads `os.environ` during the injection window is the framework SDK itself, and concurrent agent invocations serialize via the lock.
 
 The contract **breaks** when you embed the SDK inside a host application that also runs unrelated code in the same process: Django, FastAPI, Flask, Rails, ASP.NET, a long-running CLI, anything where third-party libraries might read `os.environ` at unpredictable times. The reason isn't subtle:
 
 ### The cross-tenant leak in an embedded process
 
 ```
-Thread A (Conductor Agents worker)       Thread B (e.g. Django request handler)
+Thread A (Agentspan worker)       Thread B (e.g. Django request handler)
 ─────────────────────────────             ───────────────────────────────────────
 inject_via_env({OPENAI_API_KEY: "userA"})
 os.environ["OPENAI_API_KEY"] = "userA"
@@ -850,9 +850,9 @@ restore: pop OPENAI_API_KEY
                                           another request reads env → no key
 ```
 
-The lock prevents Conductor Agents-vs-Conductor Agents races. It cannot synchronize with arbitrary host-app code reading `os.environ`. Every Django middleware, signal handler, ORM connection initializer, Celery worker bootstrap, third-party library doing lazy env reads — any of them observing env during the injection window picks up the wrong tenant's secret. **This is a real cross-tenant credential leak** in any multi-tenant embedded deployment.
+The lock prevents Agentspan-vs-Agentspan races. It cannot synchronize with arbitrary host-app code reading `os.environ`. Every Django middleware, signal handler, ORM connection initializer, Celery worker bootstrap, third-party library doing lazy env reads — any of them observing env during the injection window picks up the wrong tenant's secret. **This is a real cross-tenant credential leak** in any multi-tenant embedded deployment.
 
-The lock is the only safety mechanism for tier-2. It's local to Conductor Agents code paths. It is fundamentally insufficient when the surrounding process runs code Conductor Agents doesn't control.
+The lock is the only safety mechanism for tier-2. It's local to Agentspan code paths. It is fundamentally insufficient when the surrounding process runs code Agentspan doesn't control.
 
 ### Recommended architecture for embedded use cases
 
@@ -890,7 +890,7 @@ The contextvars accessor is per-async-task / per-thread, so it doesn't suffer fr
 
 | Host app | Multi-tenant? | Recommended deployment |
 |---|---|---|
-| Standalone Conductor Agents worker (no other code in the process) | n/a | tier-1 preferred, tier-2 acceptable |
+| Standalone Agentspan worker (no other code in the process) | n/a | tier-1 preferred, tier-2 acceptable |
 | Single-user CLI tool, no concurrent users | n/a | tier-1 or tier-2; either fine |
 | Django / FastAPI / Flask / Rails, single tenant | no | tier-1 only; run server separately if possible |
 | Django / FastAPI / Flask / Rails, multi-tenant | **yes** | **Run server separately.** If embedding, tier-1 only + `AGENTSPAN_DISALLOW_ENV_INJECTION=1`. |
@@ -933,7 +933,7 @@ The contract applies everywhere an SDK injects resolved secrets into a shared mu
 
 # Part 5 — Secrets Management UI
 
-A **Secrets** management page in the Conductor Agents UI lets users store, view, update, and delete per-user secrets. It follows the existing React 18 + MUI 7 + React Query design language. The page is flat-name only (no bindings UI — the logical-key → store-name indirection was removed backend-side for Conductor parity, see §3.1).
+A **Secrets** management page in the Agentspan UI lets users store, view, update, and delete per-user secrets. It follows the existing React 18 + MUI 7 + React Query design language. The page is flat-name only (no bindings UI — the logical-key → store-name indirection was removed backend-side for Conductor parity, see §3.1).
 
 > **Naming:** the page and route are *Secrets*, matching the `/api/secrets` REST surface. (Internally the server classes are named `Credential*`; see §3.1.)
 
@@ -949,7 +949,7 @@ React Query via `useFetchContext` + a thin `secretFetch` wrapper. Same pattern a
 
 ### Auth — none in OSS
 
-The standalone Conductor Agents server runs **anonymous**, so the Secrets page sends **no per-request token**. There is **no** `useCredentialAuth` hook, **no** `LoginDialog`, **no** `credentialFetch`/login flow, and **no** `POST /auth/login`. The page passes `{ token: null, onUnauthorized: () => {} }` to its API hooks; auth, when present, is the embedding host's concern.
+The standalone Agentspan server runs **anonymous**, so the Secrets page sends **no per-request token**. There is **no** `useCredentialAuth` hook, **no** `LoginDialog`, **no** `credentialFetch`/login flow, and **no** `POST /auth/login`. The page passes `{ token: null, onUnauthorized: () => {} }` to its API hooks; auth, when present, is the embedding host's concern.
 
 ## 5.2 File structure
 

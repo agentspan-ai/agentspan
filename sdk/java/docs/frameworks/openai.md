@@ -1,6 +1,6 @@
 # OpenAI Agents SDK
 
-Use the Conductor Agents Java SDK with OpenAI Agents SDK-style tool definitions. The `OpenAIAgent` bridge accepts `@Tool`-annotated POJOs and registers them as Conductor worker tasks, routing the agent through the server's `OpenAINormalizer`.
+Use the Agentspan Java SDK with OpenAI Agents SDK-style tool definitions. The `OpenAIAgent` bridge accepts `@Tool`-annotated POJOs and registers them as Conductor worker tasks, routing the agent through the server's `OpenAINormalizer`.
 
 ## Dependency
 

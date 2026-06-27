@@ -1,12 +1,12 @@
-# Conductor Agents Java SDK
+# Agentspan Java SDK
 
-Java SDK for the [Conductor Agents](https://agentspan.dev) agent orchestration platform. Build, deploy, and run AI agents backed by Conductor workflows.
+Java SDK for the [Agentspan](https://agentspan.dev) agent orchestration platform. Build, deploy, and run AI agents backed by Conductor workflows.
 
 ## Requirements
 
 - Java 21+
 - Maven 3.6+ or Gradle 7+
-- A running Conductor Agents server
+- A running Agentspan server
 
 ## Installation
 

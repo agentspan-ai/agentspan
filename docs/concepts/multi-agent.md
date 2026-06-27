@@ -5,7 +5,7 @@ description: All 8 coordination strategies — sequential, parallel, handoff, ro
 
 # Multi-Agent Strategies
 
-Every multi-agent system in Conductor Agents is built from one primitive: `Agent`. Set `agents=[...]` and choose a `strategy` to coordinate them.
+Every multi-agent system in Agentspan is built from one primitive: `Agent`. Set `agents=[...]` and choose a `strategy` to coordinate them.
 
 ## Overview
 
@@ -27,7 +27,7 @@ Sub-agents run in order. Each agent's output becomes the next agent's input.
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant R as Researcher
     participant W as Writer
     participant E as Editor
@@ -82,7 +82,7 @@ All sub-agents run concurrently. Results are aggregated into `result.sub_results
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant M as Market Analyst
     participant R as Risk Analyst
     participant F as Financial Analyst
@@ -140,7 +140,7 @@ The orchestrator LLM decides which sub-agent handles the request. Sub-agents can
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant LLM
     participant B as Billing
     participant T as Technical
@@ -192,7 +192,7 @@ A dedicated router agent or function selects which sub-agent runs:
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant Cls as Classifier
     participant B as Billing
     participant T as Technical
@@ -267,7 +267,7 @@ Condition-based handoffs between agents. Each agent can trigger a handoff based 
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant T as Triage
     participant Ref as Refund Specialist
     participant Esc as Escalation
@@ -316,7 +316,7 @@ Agents take turns in a fixed rotation:
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant O as Optimist
     participant P as Pessimist
     participant R as Realist
@@ -366,7 +366,7 @@ A random sub-agent is selected each turn. Useful for load balancing across model
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant G as GPT-4o
     participant C as Claude
     participant Ge as Gemini
@@ -404,7 +404,7 @@ Execution pauses between turns waiting for explicit human selection of the next 
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant A as Agent A
     participant B as Agent B
     participant C as Agent C
@@ -490,7 +490,7 @@ Strategies compose freely — a parallel agent can contain sequential pipelines:
 ```mermaid
 sequenceDiagram
     participant Code as Your Code
-    participant Server as Conductor Agents Server
+    participant Server as Agentspan Server
     participant M as Market Agent
     participant T as Tech Agent
     participant Reg as Regulatory Agent

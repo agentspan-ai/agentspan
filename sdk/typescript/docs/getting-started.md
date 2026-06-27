@@ -18,11 +18,11 @@ npm install zod
 
 ## 2. Point at a server
 
-You need a running Conductor Agents server. The defaults assume a local one at `http://localhost:6767/api` (the SDK auto-appends `/api` if you omit it).
+You need a running Agentspan server. The defaults assume a local one at `http://localhost:6767/api` (the SDK auto-appends `/api` if you omit it).
 
 | Variable | Default | Description |
 |---|---|---|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Conductor Agents server URL. |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Agentspan server URL. |
 | `AGENTSPAN_AUTH_KEY` | — | Auth key. Unset = no-auth mode (local / OSS). |
 | `AGENTSPAN_AUTH_SECRET` | — | Auth secret. Set together with the key for Orkes Cloud. |
 | `AGENTSPAN_API_KEY` | — | Pre-minted bearer token (alternative to key/secret). |

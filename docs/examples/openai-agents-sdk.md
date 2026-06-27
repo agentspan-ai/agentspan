@@ -1,17 +1,17 @@
 ---
 title: OpenAI Agents SDK — customer support
-description: Multi-agent handoff system built with the OpenAI Agents SDK, wrapped with Conductor Agents
+description: Multi-agent handoff system built with the OpenAI Agents SDK, wrapped with Agentspan
 ---
 
 # OpenAI Agents SDK — Customer Support
 
-This example shows how to wrap an existing OpenAI Agents SDK multi-agent system with Conductor Agents. A triage agent routes customer support tickets to billing, technical, or account specialists using the SDK's native handoff feature — with crash recovery and full handoff tracing added by changing one line.
+This example shows how to wrap an existing OpenAI Agents SDK multi-agent system with Agentspan. A triage agent routes customer support tickets to billing, technical, or account specialists using the SDK's native handoff feature — with crash recovery and full handoff tracing added by changing one line.
 
-## What Conductor Agents adds to the OpenAI Agents SDK
+## What Agentspan adds to the OpenAI Agents SDK
 
-The OpenAI Agents SDK handles your agent definitions, handoffs, and tool routing. Conductor Agents adds a production execution layer without changing any of that:
+The OpenAI Agents SDK handles your agent definitions, handoffs, and tool routing. Agentspan adds a production execution layer without changing any of that:
 
-- **Crash recovery**: If your process dies during a multi-step resolution, Conductor Agents resumes when a worker reconnects
+- **Crash recovery**: If your process dies during a multi-step resolution, Agentspan resumes when a worker reconnects
 - **Full handoff trace**: Every handoff between agents is a logged step, visible in the UI at `http://localhost:6767`
 - **Human approval on tools**: Add `approval_required=True` to any tool to pause execution for human sign-off
 - **Execution history**: Every ticket run is stored with inputs, outputs, and timing
@@ -19,7 +19,7 @@ The OpenAI Agents SDK handles your agent definitions, handoffs, and tool routing
 Your agent definitions, handoff configurations, and tool implementations stay exactly as written.
 
 !!! info "Prerequisites"
-    - A running Conductor Agents server: `agentspan server start`
+    - A running Agentspan server: `agentspan server start`
     - Additional dependencies: `pip install openai-agents`
     - Environment variables set:
     
@@ -143,9 +143,9 @@ print(result.final_output)
 
 ---
 
-## After: wrapped with Conductor Agents
+## After: wrapped with Agentspan
 
-Replace `Runner.run_sync(triage_agent, message)` with `runtime.run(triage_agent, message)`. That's the only change. Conductor Agents auto-detects OpenAI Agents SDK agents — no extra imports or agent modifications needed.
+Replace `Runner.run_sync(triage_agent, message)` with `runtime.run(triage_agent, message)`. That's the only change. Agentspan auto-detects OpenAI Agents SDK agents — no extra imports or agent modifications needed.
 
 ```python
 from conductor.ai.agents import AgentRuntime
@@ -160,7 +160,7 @@ print(result.output)
 print(f"Run ID: {result.execution_id}")
 ```
 
-`runtime.run()` registers the full multi-agent execution — including every handoff — as a single managed run on the Conductor Agents server.
+`runtime.run()` registers the full multi-agent execution — including every handoff — as a single managed run on the Agentspan server.
 
 ---
 
@@ -180,11 +180,11 @@ python support_bot.py
 ticket → [support_triage] → handoff → [billing_specialist] → tools → final response
 ```
 
-**Native handoffs, Conductor Agents runtime**: The triage agent, specialist agents, and handoff configuration stay exactly as written. Replace `Runner.run_sync` with `runtime.run` and the entire multi-agent execution runs on the Conductor Agents server.
+**Native handoffs, Agentspan runtime**: The triage agent, specialist agents, and handoff configuration stay exactly as written. Replace `Runner.run_sync` with `runtime.run` and the entire multi-agent execution runs on the Agentspan server.
 
 **Full handoff trace**: Every handoff is a logged step. Open `http://localhost:6767` to see exactly which specialist handled the ticket, what tools they called, and what they returned.
 
-**Crash recovery**: If your process dies during a complex multi-step billing resolution, Conductor Agents resumes when a worker reconnects. The customer's ticket isn't dropped.
+**Crash recovery**: If your process dies during a complex multi-step billing resolution, Agentspan resumes when a worker reconnects. The customer's ticket isn't dropped.
 
 **Run history**: Every execution is stored with inputs, outputs, token usage, and timing.
 
@@ -240,7 +240,7 @@ for event in stream(triage_agent, customer_message):
 
 ## Adding human approval for large refunds
 
-Wrap any sensitive tool with Conductor Agents's `@tool` decorator and set `approval_required=True`. Execution pauses at that tool call until a human approves or rejects it in the UI.
+Wrap any sensitive tool with Agentspan's `@tool` decorator and set `approval_required=True`. Execution pauses at that tool call until a human approves or rejects it in the UI.
 
 ```python
 from conductor.ai.agents import tool

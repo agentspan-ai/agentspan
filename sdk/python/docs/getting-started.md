@@ -8,7 +8,7 @@ The package is named `conductor-agent-sdk` (see `pyproject.toml`). This project 
 uv add conductor-agent-sdk
 ```
 
-Point the SDK at a running Conductor Agents server (defaults to `http://localhost:6767/api`):
+Point the SDK at a running Agentspan server (defaults to `http://localhost:6767/api`):
 
 ```bash
 export AGENTSPAN_SERVER_URL=http://localhost:6767/api

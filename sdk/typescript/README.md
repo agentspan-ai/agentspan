@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/@conductoross/conductor-agent-sdk)](https://www.npmjs.com/package/@conductoross/conductor-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 
-TypeScript SDK for building and running AI agents on [Conductor Agents](https://agentspan.dev). Define agents and tools in TypeScript, run them durably on the platform with crash recovery, distributed workers, and human-in-the-loop approval.
+TypeScript SDK for building and running AI agents on [Agentspan](https://agentspan.dev). Define agents and tools in TypeScript, run them durably on the platform with crash recovery, distributed workers, and human-in-the-loop approval.
 
 ## Quick Start
 
@@ -45,9 +45,9 @@ One import change. Your code stays identical.
 +import { generateText } from '@conductoross/conductor-agent-sdk/vercel-ai';
 ```
 
-That's it. `generateText` and `streamText` are intercepted, compiled to an agent execution, and run on Conductor Agents. Tools, model, prompt, result shape -- all unchanged.
+That's it. `generateText` and `streamText` are intercepted, compiled to an agent execution, and run on Agentspan. Tools, model, prompt, result shape -- all unchanged.
 
-When you need Conductor Agents–specific features (guardrails, termination, multi-agent handoff), switch to the Agent API. See [`examples/vercel-ai/README.md`](examples/vercel-ai/README.md) for the full before/after.
+When you need Agentspan–specific features (guardrails, termination, multi-agent handoff), switch to the Agent API. See [`examples/vercel-ai/README.md`](examples/vercel-ai/README.md) for the full before/after.
 
 ## Already using another framework?
 

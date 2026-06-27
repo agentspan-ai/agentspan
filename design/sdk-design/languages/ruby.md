@@ -69,7 +69,7 @@ agentspan-ruby/
 Gem::Specification.new do |s|
   s.name        = "agentspan"
   s.version     = Agentspan::VERSION
-  s.summary     = "Conductor Agents SDK for Ruby"
+  s.summary     = "Agentspan SDK for Ruby"
   s.authors     = ["Agentspan"]
   s.license     = "MIT"
   s.required_ruby_version = ">= 3.2.0"
@@ -1183,7 +1183,7 @@ end
 
 ```ruby
 module Agentspan
-  # Base error — all Conductor Agents exceptions inherit from this
+  # Base error — all Agentspan exceptions inherit from this
   class AgentspanError < StandardError; end
 
   # Server returned an HTTP error
