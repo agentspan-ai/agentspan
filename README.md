@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/agentspan-logo-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/agentspan-logo-light.png">
-    <img src="assets/agentspan-logo-light.png" alt="Agentspan" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/agentspan-logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/agentspan-logo-light.png">
+    <img src="docs/assets/agentspan-logo-light.png" alt="Agentspan" width="360">
   </picture>
 </p>
 
@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <video src="assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
+  <video src="docs/assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
 </p>
 
 ---
