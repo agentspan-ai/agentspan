@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-23
 **Status:** Draft
-**Reference:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md` (base spec)
+**Reference:** `design/sdk-design.md` (base spec)
 **Kitchen Sink Reference:** `sdk/python/examples/kitchen_sink.py`
 
 ---

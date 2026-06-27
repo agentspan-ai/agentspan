@@ -1,7 +1,7 @@
 # Ruby SDK Translation Guide
 
 **Date:** 2026-03-23
-**Base spec:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md`
+**Base spec:** `design/sdk-design.md`
 **Reference implementation:** `sdk/python/examples/kitchen_sink.py`
 **Target:** Ruby 3.2+
 

@@ -2,8 +2,9 @@
 
 **Date:** 2026-03-23
 **Status:** Draft
-**Base Spec:** `design/sdk-design/2026-03-23-multi-language-sdk-design.md`
+**Base Spec:** `design/sdk-design.md`
 **Reference Implementation:** `sdk/python/examples/kitchen_sink.py`
+**As-built internals:** [csharp-implementation.md](csharp-implementation.md)
 
 ---
 

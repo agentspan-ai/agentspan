@@ -2,7 +2,7 @@
 
 ## Overview
 
-A single mega-workflow that processes an article request through a complete publishing pipeline, exercising every Agentspan SDK feature (89 features per the traceability matrix in `2026-03-23-multi-language-sdk-design.md` Section 11).
+A single mega-workflow that processes an article request through a complete publishing pipeline, exercising every Agentspan SDK feature (89 features per the traceability matrix in `design/sdk-design.md` Section 11).
 
 **Reference implementation:** `sdk/python/examples/kitchen_sink.py`
 

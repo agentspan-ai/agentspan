@@ -578,7 +578,7 @@ Guides: [java](sdk-design/languages/java.md) · [typescript](sdk-design/language
 
 ### Concrete implementation references
 
-Two SDKs have detailed implementation write-ups (source layout, serializer, worker manager, SSE client, gotchas): [python-implementation.md](sdk-design/python-implementation.md) and [typescript-implementation.md](sdk-design/typescript-implementation.md). The TypeScript audit surfaced the recurring risks every new SDK should check:
+All four shipped SDKs have detailed reference-implementation write-ups (source layout, serializer, worker manager, SSE client, language-specific gotchas): [python](sdk-design/languages/python-implementation.md) (the reference SDK), [typescript](sdk-design/languages/typescript-implementation.md), [java](sdk-design/languages/java-implementation.md), and [csharp](sdk-design/languages/csharp-implementation.md). The TypeScript audit surfaced the recurring risks every new SDK should check:
 
 1. **Worker-registration parity is the #1 risk** — every `taskName` the serializer emits must have a registered worker. After writing the serializer, grep all `taskName` references and verify each has a matching registration (termination, custom guardrail, stop_when, callbacks, gate, router_fn were all initially missed).
 2. **Normalize class instances** before serializing (call `toGuardrailDef()` etc.).
