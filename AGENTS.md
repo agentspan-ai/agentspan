@@ -180,9 +180,9 @@ When a test reveals non-determinism that the test itself caused (timing-sensitiv
 ### Docs
 - Public docs live in `docs/` and are built with MkDocs.
 - If a change modifies public SDK behavior, CLI behavior, server API behavior, integrations, examples, supported configuration, or deployment behavior, update the relevant docs in `docs/` in the same PR or explicitly state why no docs update is needed.
-- Run `mkdocs build --strict -f docs/mkdocs.yml` before merging docs changes.
+- Run `mkdocs build --strict` before merging docs changes.
 - Use `./serve-docs.sh` to preview docs locally.
-- Keep `docs/mkdocs.yml` navigation curated. Do not add every Markdown file automatically; only user-facing docs should appear in the public site navigation.
+- Keep `mkdocs.yml` navigation curated. Do not add every Markdown file automatically; only user-facing docs should appear in the public site navigation.
 
 ## Validation Checklist
 
@@ -193,7 +193,7 @@ Before merging any change:
 3. **Type check clean:** `mypy src/conductor/ai/agents/ --ignore-missing-imports --no-strict-optional`
 4. **Public API unchanged** (or intentionally extended): check `__init__.py` `__all__`
 5. **Examples still work** for affected features (run against a live Agentspan server)
-6. **Docs updated when needed:** `mkdocs build --strict -f docs/mkdocs.yml`
+6. **Docs updated when needed:** `mkdocs build --strict`
 
 ## Common Patterns
 

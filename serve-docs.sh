@@ -3,4 +3,4 @@ set -euo pipefail
 
 PORT="${1:-8000}"
 
-mkdocs serve -f docs/mkdocs.yml -a "127.0.0.1:${PORT}"
+mkdocs serve -a "127.0.0.1:${PORT}"
