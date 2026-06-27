@@ -1,6 +1,6 @@
 # Agentspan Java SDK
 
-Java SDK for the [Agentspan](https://agentspan.dev) agent orchestration platform. Build, deploy, and run AI agents backed by Conductor workflows.
+Java SDK for [Agentspan](https://agentspan.ai) — a durable runtime for AI agents, built for Conductor. Build, deploy, and run agents that survive crashes, scale across machines, and pause for human approval.
 
 ## Requirements
 

@@ -1,5 +1,5 @@
 site_name: Agentspan Docs
-site_description: Agentspan — the durable agent runtime for Conductor.
+site_description: Agentspan — a durable agent runtime for Conductor.
 site_url: https://agentspan.ai/docs/
 repo_url: https://github.com/agentspan-ai/agentspan
 repo_name: agentspan-ai/agentspan

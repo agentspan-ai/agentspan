@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/agentspan-ai/agentspan">Main Repo</a> &bull;
-  <a href="https://docs.agentspan.dev">Docs</a> &bull;
+  <a href="https://agentspan.ai/docs">Docs</a> &bull;
   <a href="https://discord.gg/agentspan">Discord</a> &bull;
   <a href="../sdk/python/">Python SDK</a> &bull;
   <a href="../cli/">CLI</a>

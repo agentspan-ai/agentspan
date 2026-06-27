@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://docs.agentspan.dev">Docs</a> &bull;
+  <a href="https://agentspan.ai/docs">Docs</a> &bull;
   <a href="#quickstart">Quickstart</a> &bull;
   <a href="#examples">52+ Examples</a> &bull;
   <a href="https://discord.gg/agentspan">Discord</a> &bull;

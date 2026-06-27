@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/@conductoross/conductor-agent-sdk)](https://www.npmjs.com/package/@conductoross/conductor-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 
-TypeScript SDK for building and running AI agents on [Agentspan](https://agentspan.dev). Define agents and tools in TypeScript, run them durably on the platform with crash recovery, distributed workers, and human-in-the-loop approval.
+TypeScript SDK for building and running AI agents on [Agentspan](https://agentspan.ai). Define agents and tools in TypeScript, run them durably on the platform with crash recovery, distributed workers, and human-in-the-loop approval.
 
 ## Quick Start
 
