@@ -270,6 +270,8 @@ agent = Agent(guardrails=[Guardrail(name="compliance_checker", on_fail=OnFail.RE
 
 ## 9. Testing
 
+> Full validation & e2e design: [python-validation.md](../../validation/python-validation.md)
+
 Layout under `sdk/python/tests/` (`testpaths = ["tests"]`, 120s per-test timeout):
 
 | Location | Scope |

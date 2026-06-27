@@ -2,7 +2,7 @@
 
 **Status:** Refreshed 2026-06-26
 
-**Scope:** This document describes the TypeScript SDK *as built* — the shipped code under `sdk/typescript/`, published to npm as **`@conductoross/conductor-agent-sdk`**. It is a reference for how the SDK is structured and how it behaves at runtime, not a plan for future work. It is present-tense and maps directly to source files. For the cross-language contract and feature set, see the shared design docs ([`../../sdk-design.md`](../../sdk-design.md), [`../../agentspan-design.md`](../../agentspan-design.md), [`../../api-design.md`](../../api-design.md), [`../../framework-integration.md`](../../framework-integration.md), [`../../tool-execution-and-credentials-design.md`](../../tool-execution-and-credentials-design.md)). For language idioms and ergonomics, see the sibling guide [`typescript.md`](./typescript.md). For the validation harness, see [`../../validation/typescript-validation-framework-design.md`](../../validation/typescript-validation-framework-design.md).
+**Scope:** This document describes the TypeScript SDK *as built* — the shipped code under `sdk/typescript/`, published to npm as **`@conductoross/conductor-agent-sdk`**. It is a reference for how the SDK is structured and how it behaves at runtime, not a plan for future work. It is present-tense and maps directly to source files. For the cross-language contract and feature set, see the shared design docs ([`../../sdk-design.md`](../../sdk-design.md), [`../../agentspan-design.md`](../../agentspan-design.md), [`../../api-design.md`](../../api-design.md), [`../../framework-integration.md`](../../framework-integration.md), [`../../tool-execution-and-credentials-design.md`](../../tool-execution-and-credentials-design.md)). For language idioms and ergonomics, see the sibling guide [`typescript.md`](./typescript.md). For the validation harness, see [`../../validation/typescript-validation.md`](../../validation/typescript-validation.md).
 
 ---
 
@@ -330,9 +330,11 @@ Wrappers infer the `provider/model` string from LLM class/model names (Anthropic
 
 ## 10. Testing
 
+> Full validation & e2e design: [typescript-validation.md](../../validation/typescript-validation.md)
+
 Vitest, configured in `vitest.config.ts` (decorator support, 60s timeout, `forks` pool with up to 3 workers, JUnit reporter to `e2e-results/junit-ts.xml`). The package import is aliased to `src/index.ts` for in-tree testing.
 
 - **Unit** (`tests/unit/`, ~45 files): per-module coverage — agent, tool, serializer, worker, runtime, stream, guardrail, termination, handoff, memory, credentials, callback, code-execution, cli-config, schedule, plans, skill, config, result, agent-client-auth, concurrent-injection, context-passing, planner-context, swarm-workers, kitchen-sink-structural, plus `frameworks/`, `wrappers/`, `testing/`, and `validation/` subtrees.
-- **E2E** (`tests/e2e/`, ~24 suites, require a running server): basic validation, tool/CLI/MCP/HTTP/PDF/media tools, guardrails (+ matrix), handoffs, multi-agent matrix, LangGraph, termination/gates, callbacks, lease extension, stateful domain, behavioral correctness, skills, streaming, token usage, plan-execute, scheduling, wait-for-message tool, and the agent client. Per-language e2e wiring is documented in [`../../validation/typescript-validation-framework-design.md`](../../validation/typescript-validation-framework-design.md).
+- **E2E** (`tests/e2e/`, ~24 suites, require a running server): basic validation, tool/CLI/MCP/HTTP/PDF/media tools, guardrails (+ matrix), handoffs, multi-agent matrix, LangGraph, termination/gates, callbacks, lease extension, stateful domain, behavioral correctness, skills, streaming, token usage, plan-execute, scheduling, wait-for-message tool, and the agent client. Per-language e2e wiring is documented in [`../../validation/typescript-validation.md`](../../validation/typescript-validation.md).
 - **Testing utilities** (`./testing` export): `mockRun()`, `expectResult()` fluent assertions, individual `assert*` helpers, `record()`/`replay()` fixtures, `validateStrategy()`, and a `CorrectnessEval` LLM judge.
 - **Fixtures:** `tests/_configs/*.json` hold expected wire-format snapshots; `tests/fixtures/skills/` provide sample SKILL.md trees.

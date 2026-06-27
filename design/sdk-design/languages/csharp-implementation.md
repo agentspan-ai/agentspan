@@ -251,6 +251,8 @@ For `openai`/`google_adk`, `SerializeFrameworkAgent` emits tools as `{ _worker_r
 
 ## 10. Testing
 
+> Full validation & e2e design: [csharp-validation.md](../../validation/csharp-validation.md)
+
 Tests live under `sdk/csharp/tests/`, split by concern (xUnit `[Fact]`/`[Theory]`):
 
 | Project | Scope | Approx. test count |

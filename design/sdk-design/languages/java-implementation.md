@@ -243,6 +243,8 @@ Crucially, the `ApiClient` (server URL + auth) is **not** created here — it co
 
 ## 11. Testing
 
+> Full validation & e2e design: [java-validation.md](../../validation/java-validation.md)
+
 Test layout under `sdk/java/`:
 
 | Location | Files | Approx. `@Test` |
