@@ -52,7 +52,8 @@ public class InMemoryStore implements MemoryStore {
 
         return scoredEntries.stream()
                 .filter(e -> scores.get(e.getId()) > 0.0)
-                .sorted(Comparator.comparingDouble((MemoryEntry e) -> scores.get(e.getId())).reversed())
+                .sorted(Comparator.comparingDouble((MemoryEntry e) -> scores.get(e.getId()))
+                        .reversed())
                 .limit(Math.max(0, topK))
                 .collect(java.util.stream.Collectors.toList());
     }
@@ -95,8 +96,7 @@ public class InMemoryStore implements MemoryStore {
     private static String generateId(String content) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hash =
-                    md.digest((content + System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
+            byte[] hash = md.digest((content + System.currentTimeMillis()).getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) {
                 sb.append(String.format("%02x", b));

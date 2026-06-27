@@ -92,7 +92,8 @@ public class LocalCodeExecutor extends CodeExecutor {
         } catch (IOException e) {
             // Most commonly: interpreter binary not on PATH.
             String msg = e.getMessage() != null ? e.getMessage() : e.toString();
-            if (msg.toLowerCase().contains("cannot run program") || msg.toLowerCase().contains("no such file")) {
+            if (msg.toLowerCase().contains("cannot run program")
+                    || msg.toLowerCase().contains("no such file")) {
                 return new ExecutionResult("", "Interpreter not found: " + interpreter.get(0), 127, false);
             }
             return new ExecutionResult("", msg, 1, false);

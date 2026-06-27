@@ -98,10 +98,8 @@ class ApiToolTest {
     @Test
     @SuppressWarnings("unchecked")
     void apiToolMaxToolsOverride() {
-        ToolDef t = ApiTool.builder()
-                .url("https://example.com/spec")
-                .maxTools(20)
-                .build();
+        ToolDef t =
+                ApiTool.builder().url("https://example.com/spec").maxTools(20).build();
         Agent agent = Agent.builder()
                 .name("api_agent2")
                 .model("openai/gpt-4o-mini")
@@ -109,21 +107,19 @@ class ApiToolTest {
                 .tools(List.of(t))
                 .build();
         Map<String, Object> out = ser.serialize(agent);
-        Map<String, Object> config = (Map<String, Object>) tool(out, "api_tools").get("config");
+        Map<String, Object> config =
+                (Map<String, Object>) tool(out, "api_tools").get("config");
         assertEquals(20, config.get("max_tools"));
     }
 
     @Test
     void apiToolHeaderPlaceholderRequiresDeclaredCredential() {
         // ${NAME} in headers must be declared in credentials (Python parity).
-        assertTrue(
-                assertThrows(
-                                IllegalArgumentException.class,
-                                () -> ApiTool.builder()
-                                        .url("https://example.com/spec")
-                                        .header("Authorization", "Bearer ${MISSING}")
-                                        .build())
-                        .getMessage()
-                        .contains("MISSING"));
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> ApiTool.builder()
+                        .url("https://example.com/spec")
+                        .header("Authorization", "Bearer ${MISSING}")
+                        .build())
+                .getMessage()
+                .contains("MISSING"));
     }
 }

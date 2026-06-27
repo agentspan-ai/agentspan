@@ -210,8 +210,7 @@ public class Schedules {
                 return AgentHandle.fromWorkflow(wf);
             }
             if (System.currentTimeMillis() >= deadline) {
-                throw new ScheduleException.Timeout(
-                        "runNow('" + name + "') did not finish within " + timeoutMs + "ms");
+                throw new ScheduleException.Timeout("runNow('" + name + "') did not finish within " + timeoutMs + "ms");
             }
             if (pollIntervalMs > 0) {
                 try {

@@ -109,8 +109,7 @@ public class JupyterCodeExecutor extends CodeExecutor {
                 .build();
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() >= 400) {
-            throw new IllegalStateException(
-                    "kernel start returned HTTP " + resp.statusCode() + ": " + resp.body());
+            throw new IllegalStateException("kernel start returned HTTP " + resp.statusCode() + ": " + resp.body());
         }
         JsonNode node = JsonMapper.get().readTree(resp.body());
         JsonNode id = node.get("id");

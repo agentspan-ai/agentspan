@@ -7,11 +7,14 @@ package dev.agentspan.runtime.compiler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+
 import dev.agentspan.runtime.model.AgentConfig;
 import dev.agentspan.runtime.model.ToolConfig;
-import java.util.List;
-import org.junit.jupiter.api.Test;
 
 /**
  * Regression test: {@link AgentConfig#getMaskedFields()} must be applied to the

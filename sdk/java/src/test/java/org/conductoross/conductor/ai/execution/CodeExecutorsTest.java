@@ -86,8 +86,7 @@ class CodeExecutorsTest {
 
     @Test
     void jupyter_configSurface() {
-        JupyterCodeExecutor exec =
-                new JupyterCodeExecutor("http://127.0.0.1:1/", "python3", 12);
+        JupyterCodeExecutor exec = new JupyterCodeExecutor("http://127.0.0.1:1/", "python3", 12);
         // trailing slash is normalized away
         assertEquals("http://127.0.0.1:1", exec.getUrl());
         assertEquals("python3", exec.getKernelName());
@@ -100,8 +99,7 @@ class CodeExecutorsTest {
     void jupyter_unavailableGateway_returnsStructuredErrorNoThrow() {
         // Port 1 / 127.0.0.1 is not a Jupyter gateway: must produce a structured
         // error result, never throw.
-        JupyterCodeExecutor exec =
-                new JupyterCodeExecutor("http://127.0.0.1:1/", "python3", 2);
+        JupyterCodeExecutor exec = new JupyterCodeExecutor("http://127.0.0.1:1/", "python3", 2);
         ExecutionResult result = exec.execute("print('x')");
         assertFalse(result.isSuccess());
         assertEquals(1, result.getExitCode());

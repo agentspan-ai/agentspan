@@ -30,8 +30,23 @@ class ScheduleRunNowTest {
 
     private static ScheduleInfo info(String agent) {
         return new ScheduleInfo(
-                agent + "-daily", "daily", agent, "0 0 9 * * ?", "UTC",
-                Map.of("k", "v"), false, null, false, null, null, null, null, null, null, null, null);
+                agent + "-daily",
+                "daily",
+                agent,
+                "0 0 9 * * ?",
+                "UTC",
+                Map.of("k", "v"),
+                false,
+                null,
+                false,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     /** A WorkflowClient that records start requests and serves canned getWorkflow results. */
