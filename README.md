@@ -38,14 +38,15 @@
 https://github.com/user-attachments/assets/dd4b720d-d11c-42e8-93a6-875c5a740fd8
 
 
-**Agentspan** runs the agents your application can't fit in an HTTP request — long-running jobs, background tasks, scheduled workflows, and event-triggered pipelines — all backed by Conductor for durability, observability, and scale.
+**Agentspan** runs the agents your application can't fit in an HTTP request — and with Plan-Execute, the LLM decides what to do while Conductor handles the rest.
 
-| Pattern | What it means |
-|---|---|
-| **Long-running** | Agents that take minutes or hours, not seconds. State is server-side; crashes don't restart from zero. |
-| **Background** | Fire an agent and move on. Poll for results, stream events, or check the UI. |
-| **Scheduled** | Attach a cron to any agent in one line. Daily digest, weekly reports, hourly syncs. |
-| **Event-driven** | Trigger agents from webhooks, queues, or database events. Each run is a durable execution. |
+| Pattern | What it means | How |
+|---|---|---|
+| **Long-running** | Minutes or hours, not seconds. State is server-side; crashes don't restart from zero. | `timeout_seconds=0` by default — no execution limit |
+| **Background** | Fire and forget. Get a handle; check status, stream events, or inspect results from any process. | `runtime.start()` returns an `AgentHandle` immediately |
+| **Scheduled** | Cron on any agent in one line. Daily digest, weekly reports, hourly syncs. | `deploy(agent, schedules=[Schedule(cron=…)])` |
+| **Event-driven** | Drive a running agent from Kafka, webhooks, queues, or any event source. | `runtime.send_message(execution_id, event)` |
+| **Plan-Execute** | LLM plans what to do once. Conductor executes deterministically — no LLM randomness in orchestration, retries, or parallelism. | `Strategy.PLAN_EXECUTE` — the Conductor superpower |
 
 ## Quickstart (60 seconds)
 

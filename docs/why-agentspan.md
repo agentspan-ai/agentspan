@@ -40,7 +40,7 @@ This works fine on your laptop. In production, it breaks in predictable ways.
 
 **No scheduling without external infrastructure.** Running an agent on a cron means maintaining a separate scheduler, handling missed fires, and managing overlap. Any of those can fail silently — and there's no execution history tied to your agent when it does.
 
-**Background jobs block or disappear.** Firing an agent asynchronously in-process — via threading or asyncio — means the job dies when your process does. There's no record, no retry, and no way to check what happened.
+**Background jobs block or disappear.** Firing an agent asynchronously in-process — via threading or asyncio — means the job dies when your process does. There's no durable handle, no execution record, and no way to push new events into it from another process.
 
 ---
 
@@ -74,7 +74,9 @@ Your process can crash, restart, or be replaced. The agent keeps running.
 
 **Scheduled agents.** Attach one or more crons to any agent at deploy time. The server fires the agent on cadence, tracks every execution, and lets you pause, resume, or trigger ad-hoc — without touching application code. See [Scheduling](scheduling.md).
 
-**Background execution.** `runtime.run()` returns when the agent finishes; `runtime.deploy()` registers the agent so any external trigger — webhook handler, queue consumer, cron, database event — can call `runtime.run()` and get a durable background execution with full history.
+**Background execution.** `runtime.start()` returns an `AgentHandle` immediately — the agent runs on the server. From any process, use the handle to check status, stream events, or push new inputs into the running agent with `runtime.send_message(execution_id, event)`. Works from webhook handlers, Kafka consumers, queue workers, or any event source.
+
+**Plan-Execute: LLM plans, Conductor executes.** Define a planner agent that emits a JSON DAG of operations. The server compiles it into a Conductor sub-workflow — no LLM involved in orchestration, retries, parallelism, or validation. The planner runs once; the rest is deterministic and replay-safe. This is the defining superpower of Agentspan + Conductor. See [Plan-Execute](concepts/plan-execute.md).
 
 **Works with frameworks you already use.** Pass a LangGraph `StateGraph`, an OpenAI Agents SDK `Agent`, or a Google ADK pipeline directly to `runtime.run()`. Your definitions stay unchanged.
 

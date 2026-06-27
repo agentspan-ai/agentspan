@@ -7,7 +7,7 @@ description: Agentspan documentation for building production AI agents.
 
 **Agentspan is a durable runtime for AI agents, built for Conductor. Your code runs in your process. Execution state lives on the server.**
 
-Run long-running agents, fire background jobs, schedule agents on cron, or trigger them from webhooks and events — all with server-side execution state that survives crashes, restarts, and deployments. Write agents natively or wrap an existing LangGraph, OpenAI Agents SDK, or Google ADK agent in one line.
+Run long-running agents (`timeout_seconds=0` by default), fire background jobs (`runtime.start()` returns immediately), schedule on cron (`deploy(agent, schedules=[…])`), or drive a running agent from any event source (`runtime.send_message()`). With Plan-Execute, the LLM plans what to do once and Conductor executes it deterministically. Write agents natively or wrap LangGraph, OpenAI Agents SDK, or Google ADK in one line.
 
 ## Getting Started
 
@@ -20,6 +20,7 @@ Run long-running agents, fire background jobs, schedule agents on cron, or trigg
 - [Tools](concepts/tools.md) - `@tool`, `http_tool()`, `api_tool()`, `mcp_tool()`, credentials, and approval-required tools.
 - [Skills](concepts/skills.md) - Load, register, run, and test agentskills.io skill folders.
 - [Multi-Agent Strategies](concepts/multi-agent.md) - Sequential, parallel, handoff, router, and nested agent coordination.
+- [Plan-Execute (PAC/PAE)](concepts/plan-execute.md) - LLM plans, Conductor executes. The deterministic superpower of Agentspan + Conductor.
 - [Guardrails](concepts/guardrails.md) - Input and output safety, retry, block, and fix behavior.
 - [Memory](concepts/memory.md) - Conversation history and semantic search across sessions.
 - [Streaming](concepts/streaming.md) - Runtime events, async execution, and HITL with streams.

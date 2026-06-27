@@ -1,6 +1,6 @@
 # Agentspan Java SDK
 
-Build long-running, background, scheduled, and event-driven AI agents in Java on [Agentspan](https://agentspan.ai) — a durable runtime built for Conductor. Your agents survive process crashes, run on cron, trigger from events, and scale tool calls independently — all without managing state yourself.
+Build long-running, background, scheduled, event-driven, and plan-execute AI agents in Java on [Agentspan](https://agentspan.ai) — a durable runtime built for Conductor. Your agents survive process crashes, run on cron, trigger from events, and execute dynamic plans deterministically — all without managing state yourself.
 
 ```java
 Agent agent = Agent.builder()
