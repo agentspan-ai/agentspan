@@ -302,7 +302,7 @@ Tri-state reconcile: `null` = leave untouched, empty list = purge, non-empty = u
 
 The full contract is **~89 features**, each traceable: concept → Python reference module → wire-format key → server handler → kitchen-sink stage. There is no single authoritative per-row matrix in the repo; the grouped summary below is the working inventory.
 
-**SDK parity status.** All four SDKs (Python, TypeScript, Java, C#) are now at **essentially complete parity** — the recent cross-SDK fixes closed the former Java/C# gaps, leaving only two honest open items (the server `maskedFields` no-op and the provider/framework asymmetries, both below). The fixes:
+**SDK parity status.** All four SDKs (Python, TypeScript, Java, C#) are now at **essentially complete parity** — the recent cross-SDK fixes closed the former Java/C# gaps, leaving only one honest open item (the language-driven provider/framework asymmetries, below). The fixes:
 
 - **SemanticMemory** — now in **all four SDKs** (Java added). Reminder: it is a client-side keyword (Jaccard-overlap) store, not a vector DB; not serialized to the wire (§2.8).
 - **ConversationMemory** — now in **all four SDKs** (C# added); wire shape `{messages, maxMessages}`.
@@ -313,13 +313,13 @@ The full contract is **~89 features**, each traceable: concept → Python refere
 
 - **Code-execution executors** — now **full across all four SDKs**: Local / Docker / Jupyter / Serverless ship in Python, TS, Java, and C#. The only difference is the Jupyter *mechanism* (Python in-process `jupyter_client`; TS `jupyter run` CLI; Java/C# Jupyter Kernel Gateway over HTTP); the executor itself is present everywhere. See [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md) §2.10.
 - **Optional config-field gaps — closed.** C# now emits `synthesize`, `prefillTools`, `cliConfig` (with `workingDir`), `reasoningEffort`, `contextWindowBudget`, and `maskedFields`; TS now emits `reasoningEffort`, `contextWindowBudget`, and `maskedFields`. All four SDKs now emit the full optional-field set.
+- **Server `maskedFields` — now applied.** All four SDKs emit `maskedFields`, and the server now wires it into the compiled `WorkflowDef` (in `AgentCompiler.compile()`'s shared post-processing step, so it covers every compile shape; recursively-compiled sub-agents carry their own masked fields). The named input/output fields are redacted in execution history/UI. (Previously the field was accepted but dropped.)
 
-The two remaining honest open items:
+The one remaining honest open item:
 
-- **Server `maskedFields` no-op (unchanged):** all four SDKs now *emit* `maskedFields`, but the server accepts it and never wires it into the compiled WorkflowDef (0 callers) — credential masking in history/UI silently no-ops across all SDKs. This is a server-side gap, not an SDK gap.
-- **Provider/framework asymmetries (unchanged, language-support driven):** the `claude-code` model + `ClaudeCode` config are Python/TS only; the Claude Agent SDK framework is Python-only; Vercel AI SDK is TS-only; OCG is Python-only.
+- **Provider/framework asymmetries (language-support driven):** the `claude-code` model + `ClaudeCode` config are Python/TS only; the Claude Agent SDK framework is Python-only; Vercel AI SDK is TS-only; OCG is Python-only.
 
-Treat the matrix below as the shared reference set; the only remaining deltas are the two open items above.
+Treat the matrix below as the shared reference set; the only remaining delta is the open item above.
 
 | Group | Features (count) | Examples |
 |---|---|---|
@@ -340,7 +340,7 @@ Treat the matrix below as the shared reference set; the only remaining deltas ar
 | Validation (4) | runner, judge, native execution, HTML report | #84–87 |
 | Distributed | external agent | #88 |
 
-A new SDK is **feature-complete** when all ~89 are implemented (parity across the four shipped SDKs is now essentially complete — see the parity-status note above; the only standing caveats are the server-side `maskedFields` no-op and the language-driven provider/framework asymmetries, neither an SDK feature gap), the kitchen sink produces identical `AgentConfig` JSON and executes end-to-end, both sync and async APIs work, the validation report generates, and all Python examples are ported (§5).
+A new SDK is **feature-complete** when all ~89 are implemented (parity across the four shipped SDKs is now essentially complete — see the parity-status note above; the only standing caveat is the language-driven provider/framework asymmetries, not an SDK feature gap), the kitchen sink produces identical `AgentConfig` JSON and executes end-to-end, both sync and async APIs work, the validation report generates, and all Python examples are ported (§5).
 
 ---
 
