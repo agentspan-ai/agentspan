@@ -47,7 +47,10 @@ public sealed partial class Agent
     public List<Agent> Agents { get; set; } = [];
     public Strategy? Strategy { get; set; }
     public Agent? Router { get; set; }
-    public int? MaxTurns { get; set; }
+    /// <summary>Maximum agent loop iterations. Defaults to 25, matching
+    /// Python/TS/Java; always emitted on the wire so the server does not apply
+    /// its own (larger) default.</summary>
+    public int? MaxTurns { get; set; } = 25;
     public int? MaxTokens { get; set; }
     public double? Temperature { get; set; }
     public int? TimeoutSeconds { get; set; }

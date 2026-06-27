@@ -102,14 +102,14 @@ class OnFail(str, Enum):
     HUMAN = "human"    # Pause for human review (output only)
 ```
 
-**Default `on_fail` varies by SDK.** It is **not** uniform: Python and Java default to `retry` for every guardrail kind; TypeScript defaults to `raise` for every kind (`guardrail()`, `guardrail.external()`, `@Guardrail`, `RegexGuardrail`, `LLMGuardrail`); C# is internally mixed — custom/attribute guardrails default to `Raise` while `RegexGuardrail`/`LLMGuardrail` factories default to `Retry`. (The server's routing falls back to `raise` only when `on_fail` is null, but every SDK serializes an explicit value.)
+**Default `on_fail` is now uniform `raise` across all four SDKs** (Python, TypeScript, Java, C#) — for every guardrail kind (`guardrail()`/custom, `guardrail.external()`, the `@Guardrail`/`[Guardrail]` decorator/attribute, `RegexGuardrail`, `LLMGuardrail`). This matches the server's routing, which also falls back to `raise` when `on_fail` is null. (Earlier divergence — Python/Java defaulting to `retry`, C# mixed — has been removed; every SDK serializes an explicit `raise` unless overridden.)
 
 | Mode | Behavior | Best for |
 |------|----------|----------|
 | `retry` | Feedback appended to the conversation; the LLM retries. After `max_retries` is exhausted, escalates to `raise`. | Quality/format/PII issues the LLM can self-correct. |
 | `fix` | Uses `GuardrailResult.fixed_output` directly — no LLM retry. | Deterministic corrections (regex substitution, sanitization). Faster and cheaper. |
 | `raise` | Terminates the execution with `FAILED` status and the guardrail message as the reason. | Hard security blocks, zero-tolerance policies, input validation. |
-| `human` | Pauses at a HumanTask; a human approves, edits, or rejects. **Only valid for `position="output"`** — input guardrails run client-side and cannot pause an execution. (This constraint is enforced with a `ValueError` **only in the Python SDK**; TypeScript, Java, and C# do not guard the `human`+`input` combination.) | Compliance review, content moderation, sensitive decisions. |
+| `human` | Pauses at a HumanTask; a human approves, edits, or rejects. **Only valid for `position="output"`** — input guardrails run client-side and cannot pause an execution. (This constraint is now enforced at construction in **all four SDKs** — Python, TypeScript, Java, and C# — each rejecting the `human`+`input` combination.) | Compliance review, content moderation, sensitive decisions. |
 
 **Retry escalation.** `max_retries` controls how many times `retry` attempts before escalating to `raise` (default `3`). The minimum is `1`: the Python SDK rejects `max_retries < 1` with a `ValueError`, so `0` is **invalid**, not "equivalent to raise". Each guardrail carries its own `max_retries`. For client-side guardrails (simple agents without tools), the runtime uses the maximum across all output guardrails. This prevents infinite retry loops.
 
@@ -152,7 +152,7 @@ with AgentRuntime() as runtime:
 guard = Guardrail(
     func=check_length,
     position="output",   # "input" or "output"
-    on_fail="retry",     # "retry", "raise", "fix", or "human"
+    on_fail="retry",     # "retry", "raise" (default), "fix", or "human"
     name="length_check", # Optional, defaults to function name
     max_retries=3,
 )
@@ -162,7 +162,7 @@ guard = Guardrail(
 |-----------|------|---------|-------------|
 | `func` | `Callable[[str], GuardrailResult]` | *required* (unless external) | Validation function |
 | `position` | `str` | `"output"` | `"input"` or `"output"` |
-| `on_fail` | `str` | `"retry"` | `"retry"`, `"raise"`, `"fix"`, `"human"` |
+| `on_fail` | `str` | `"raise"` | `"retry"`, `"raise"`, `"fix"`, `"human"` (default uniform `raise` across all four SDKs) |
 | `name` | `str` | function name | Human-readable identifier |
 | `max_retries` | `int` | `3` | Max retries for `on_fail="retry"` |
 
@@ -200,7 +200,7 @@ json_only = RegexGuardrail(
 | `mode` | `str` | `"block"` | `"block"` (reject matches) or `"allow"` (reject non-matches) |
 | `message` | `str` | auto-generated | Custom failure message |
 | `position` | `str` | `"output"` | `"input"` or `"output"` |
-| `on_fail` | `str` | `"retry"` | Failure strategy |
+| `on_fail` | `str` | `"raise"` | Failure strategy (default uniform `raise` across all four SDKs) |
 | `max_retries` | `int` | `3` | Max retries |
 
 #### `LLMGuardrail`
@@ -226,7 +226,7 @@ The judge LLM receives the policy + content and returns `{"passed": true/false, 
 | `model` | `str` | *required* | `"provider/model"` format |
 | `policy` | `str` | *required* | Natural-language policy for the judge |
 | `position` | `str` | `"output"` | `"input"` or `"output"` |
-| `on_fail` | `str` | `"retry"` | Failure strategy |
+| `on_fail` | `str` | `"raise"` | Failure strategy (default uniform `raise` across all four SDKs) |
 | `max_retries` | `int` | `3` | Max retries |
 | `max_tokens` | `int` | SDK default | Max tokens for the judge LLM response (supported in Python, TypeScript, C#, and the server `GuardrailCompiler`) |
 
@@ -269,7 +269,7 @@ class Guardrail:
         self,
         func: Optional[Callable[[str], GuardrailResult]] = None,
         position: str = "output",
-        on_fail: str = "retry",
+        on_fail: str = "raise",          # uniform default across all four SDKs
         name: Optional[str] = None,
         max_retries: int = 3,
     ) -> None: ...
@@ -278,11 +278,11 @@ class Guardrail:
 
 class RegexGuardrail(Guardrail):
     def __init__(self, patterns, *, mode="block", position="output",
-                 on_fail="retry", name=None, message=None, max_retries=3): ...
+                 on_fail="raise", name=None, message=None, max_retries=3): ...
 
 class LLMGuardrail(Guardrail):
     def __init__(self, model, policy, *, position="output",
-                 on_fail="retry", name=None, max_retries=3, max_tokens=None): ...
+                 on_fail="raise", name=None, max_retries=3, max_tokens=None): ...
 ```
 
 ```python

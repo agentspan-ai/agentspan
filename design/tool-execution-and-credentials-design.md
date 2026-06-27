@@ -316,14 +316,14 @@ The four-executor family above is the contract, **not** a uniform reality. Cover
 | **Python** | ✓ | ✓ | ✓ | ✓ | ✓ | All four real. Validator in `code_execution_config.py`. |
 | **TypeScript** | ✓ | ✓ | **stub** | ✓ | ✓ | Jupyter executor is a stub ("Not yet implemented"). |
 | **Java** | — | ✓ | — | — | inline | **Docker only.** No Local/Jupyter/Serverless executor classes; command validation is inline in `CliCommandExecutor`. |
-| **C# / .NET** | inline | — | — | — | — | **No executor classes in the library.** Local execution is inline `ExecuteLocalCodeAsync` in `WorkerManager`; an `LocalCodeExecutor` exists only in the `24_CodeExecution` example. |
+| **C# / .NET** | inline | ✓ | — | — | inline | **Docker only (executor class).** C# now ships a `DockerCodeExecutor`; no Local/Jupyter/Serverless executor classes. Local execution remains inline `ExecuteLocalCodeAsync` in `WorkerManager`; command validation is inline. |
 
 Source locations:
 
 - Python: `sdk/python/src/conductor/ai/agents/code_executor.py` (+ `code_execution_config.py`).
 - TypeScript: `sdk/typescript/src/code-execution.ts`.
 - Java: `sdk/java/.../execution/{CodeExecutor,DockerCodeExecutor,CliCommandExecutor}.java`.
-- C#: `sdk/csharp/src/Conductor.AI/WorkerManager.cs` (inline) + `sdk/csharp/examples/24_CodeExecution/Program.cs` (example).
+- C#: `sdk/csharp/src/Conductor.AI/DockerCodeExecutor.cs` + inline `ExecuteLocalCodeAsync` in `sdk/csharp/src/Conductor.AI/WorkerManager.cs`.
 
 ---
 
@@ -873,7 +873,7 @@ The Python SDK supports this today — construct `AgentRuntime(server_url=…, a
 
 If running a separate server isn't an option (single-binary deployment, edge-case constraints), the only safe pattern is **tier-1 explicit-key for every tool, with tier-2 hard-disabled**:
 
-1. **Every tool reads secrets via the contextvars accessor** (`get_secret(name)` in Python, `getCredential(name)` in TS, `ToolContext.getCredential(name)` in Java) — never `os.environ` / `process.env`. **Caveat for C#/.NET:** there is currently **no** tier-1 accessor (no `IToolContext.Secret`/`Secrets.Get`); the .NET SDK is tier-2 only (`Conductor.AI.CredentialInjection.InjectViaEnvAsync`), so the strict embedded discipline below cannot be fully satisfied on .NET today — pass keys explicitly to clients and run the server separately.
+1. **Every tool reads secrets via the contextvars/thread-local accessor** (`get_secret(name)` in Python, `getCredential(name)` in TS, `ToolContext.getCredential(name)` in Java, `ToolContext.GetCredential(name)` / `Secrets.Get(name)` in C#) — never `os.environ` / `process.env` / `Environment`. The tier-1 accessor is now present in **all four SDKs** (C# added), so the strict embedded discipline can be satisfied in every SDK. (Tier-2 env injection remains available as a fallback — C# `Conductor.AI.CredentialInjection.InjectViaEnvAsync`.)
 2. **Every secret value is passed explicitly to the underlying client**: `OpenAI(api_key=key)`, `ChatAnthropic(api_key=...)`, etc. No client construction relies on env-var auto-discovery.
 3. **Framework passthrough integrations that require env-only configuration are unsupported in embedded mode.** Specifically: Claude Agent SDK CLI mode, Google ADK `genai.configure`, anything that reads env at module-import time. Use only frameworks that accept an explicit `api_key=` parameter.
 4. **Hard-disable tier-2 with a config flag** (planned: `AGENTSPAN_DISALLOW_ENV_INJECTION=1`). When set, `inject_via_env` (and equivalents) raise instead of mutating env. Provides loud failure instead of silent leak.

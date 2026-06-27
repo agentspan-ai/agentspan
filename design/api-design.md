@@ -91,10 +91,10 @@ type-specific settings. `toolType` is one of `worker | http | mcp | api | agent_
 `additionalProperties: true` because `config` is freeform and the Java serializer may emit
 extra retry fields (`retryCount`, `retryDelaySeconds`, `retryPolicy`).
 
-> **Note.** `toolType` is a free `string` in the schema (it has no `enum`), so `api` validates
-> fine even though the schema's `toolType` *description* string
-> (`"worker | http | mcp | agent_tool | …"`) does not list it. `api` is the real wire literal
-> emitted by `api_tool` (see §3 / §4.1); the description string is illustrative, not exhaustive.
+> **Note.** `toolType` is a free `string` in the schema (it has no `enum`), so any value
+> validates. The schema's `toolType` *description* string now lists `api` explicitly
+> (`"worker | http | mcp | api | agent_tool | …"`); `api` is the real wire literal emitted by
+> `api_tool` (see §3 / §4.1). The description remains illustrative, not exhaustive.
 
 **Guardrails.** A guardrail (`$defs.guardrail`) has a `guardrailType`
 (`regex | llm | custom | external | …`), a `position` (`input | output`), an `onFail` policy
@@ -142,9 +142,10 @@ discriminator and a `config` map.
 - **Auto-discovered kinds** (`mcp_tool`, `api_tool`) support a `max_tools` cap; when the
   discovered set exceeds it, a filter LLM selects the most relevant subset at startup.
 
-> **SDK availability.** `api_tool` ships in the **Python, TypeScript, and C#** SDKs but is
-> **not present in the Java SDK** (which has `tool` / `httpTool` / `mcpTool` only). The other
-> three tool factories (`tool` / `http_tool` / `mcp_tool`) are available in all four SDKs.
+> **SDK availability.** `api_tool` now ships in **all four SDKs** (Python, TypeScript, Java,
+> and C#) — Java added the factory, and C# gained the `${NAME}` credential-placeholder
+> validation it previously lacked. All four tool factories (`tool` / `http_tool` /
+> `mcp_tool` / `api_tool`) are available in every SDK.
 
 ```python
 from conductor.ai.agents import Agent, api_tool, http_tool, mcp_tool, tool

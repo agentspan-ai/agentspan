@@ -32,10 +32,10 @@ Root package `org.conductoross.conductor.ai` (99 main source files):
 | Package | Contents |
 |---|---|
 | *(root)* | `Agent`, `Agent.Builder`, `AgentRuntime`, `AgentConfig`, `CallbackHandler` |
-| `tools` | Server-side tool factories: `HttpTool`, `McpTool`, `AgentTool`, `HumanTool`, `MediaTools`, `PdfTool`, `RagTools`, `WaitForMessageTool` |
+| `tools` | Server-side tool factories: `HttpTool`, `ApiTool` (OpenAPI/Swagger/Postman discovery, `${NAME}` credential validation), `McpTool`, `AgentTool`, `HumanTool`, `MediaTools`, `PdfTool`, `RagTools`, `WaitForMessageTool` |
 | `annotations` | `@Tool`, `@AgentDef`, `@GuardrailDef` (declarative POJO style) |
 | `guardrail` | `Guardrail`, `LLMGuardrail`, `RegexGuardrail` (server-side built-ins) |
-| `model` | DTOs/value types: `AgentResult`, `AgentHandle`, `AgentStream`, `AgentEvent`, `ToolDef`, `GuardrailDef`, `GuardrailResult`, `ToolContext`, `ConversationMemory`, `PromptTemplate`, `TokenUsage`, `CompileResponse`, `DeploymentInfo`, `PendingToolCall`, `PrefillToolCall`, `CredentialFile` |
+| `model` | DTOs/value types: `AgentResult`, `AgentHandle`, `AgentStream`, `AgentEvent`, `ToolDef`, `GuardrailDef`, `GuardrailResult`, `ToolContext`, `ConversationMemory`, `SemanticMemory` (client-side keyword/Jaccard-overlap store; not serialized to the wire), `PromptTemplate`, `TokenUsage`, `CompileResponse`, `DeploymentInfo`, `PendingToolCall`, `PrefillToolCall`, `CredentialFile` |
 | `enums` | `Strategy`, `EventType`, `AgentStatus`, `OnFail`, `Position`, `Framework` |
 | `internal` | The plumbing: `AgentConfigSerializer`, `AgentClient`, `AgentRequest`, `WorkerManager`, `ToolRegistry`, `AgentRegistry`, `SseClient`, `JsonMapper`, `WorkerCredentialFetcher`, `CredentialContext`, response DTOs (`StartResponse`, `CompileResponse`, `AgentStatusResponse`), `RespondBody`, `PendingTool` |
 | `handoff` | `Handoff`, `OnTextMention`, `OnToolResult`, `OnCondition` (SWARM triggers) |
@@ -161,7 +161,7 @@ Walking the agent tree, the runtime registers local Java handlers for:
 
 `ToolRegistry.fromInstance(Object)` reflects over `@Tool`-annotated public methods. For each it: reads annotation metadata (name/description/credentials/retry); generates a JSON Schema from the method parameters (`-parameters`-retained names, `typeToJsonSchema`); wraps the method in a `Function<Map,Object>` that coerces inputData → args, injects `ToolContext` if declared, and returns the result; and builds a `ToolDef` with **`toolType = "worker"`**. The server compiles each into a Conductor `SIMPLE` task; the SDK's `WorkerManager` polls and runs the handler. See [`../../tool-execution-and-credentials-design.md`](../../tool-execution-and-credentials-design.md).
 
-**Tool types** (the `toolType` wire strings): `worker`, `http`, `mcp`, `agent_tool`, `human`, `generate_image`/`generate_audio`/`generate_video`/`generate_pdf`, `rag_search`/`rag_index`, `pull_workflow_messages`. Only `worker` (and injected code/CLI workers) execute locally; the rest are server-side task types.
+**Tool types** (the `toolType` wire strings): `worker`, `http`, `api`, `mcp`, `agent_tool`, `human`, `generate_image`/`generate_audio`/`generate_video`/`generate_pdf`, `rag_search`/`rag_index`, `pull_workflow_messages`. Only `worker` (and injected code/CLI workers) execute locally; the rest are server-side task types.
 
 ---
 

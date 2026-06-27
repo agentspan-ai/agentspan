@@ -201,7 +201,7 @@ Input/output validation attached to an agent (or a tool). All produce a `Guardra
 | LLM | Server-side LLM call | `LLMGuardrail.builder().model(…).policy(…)` |
 | External | Remote worker (no local worker) | `Guardrail.external(name)` |
 
-`GuardrailResult`: `passed` (bool), `message` (failure reason), `fixedOutput` (for `onFail=fix`). **OnFail semantics:** `RETRY` re-runs the LLM with feedback (DO_WHILE loop); `RAISE` fails the execution; `FIX` uses `fixedOutput`; `HUMAN` pauses for review (HUMAN task). Guardrails attach at **two levels** — `agent.guardrails` and `tool.guardrails`; the runtime must register workers for both.
+`GuardrailResult`: `passed` (bool), `message` (failure reason), `fixedOutput` (for `onFail=fix`). **OnFail semantics:** `RETRY` re-runs the LLM with feedback (DO_WHILE loop); `RAISE` fails the execution; `FIX` uses `fixedOutput`; `HUMAN` pauses for review (HUMAN task). The default `onFail` is now **`raise` uniformly across all four SDKs**. `human`+`input` is rejected at construction time in **all four SDKs** (an input guardrail runs client-side and cannot pause an execution). Guardrails attach at **two levels** — `agent.guardrails` and `tool.guardrails`; the runtime must register workers for both.
 
 ### 2.5 Results & Streaming
 
@@ -273,7 +273,7 @@ Restrict reachability with `allowedTransitions` (source → allowed targets), en
 
 **ConversationMemory** — session history: `addUser/Assistant/SystemMessage`, `addToolCall`, `addToolResult`, `toChatMessages`, `clear`. With `maxMessages` set, trim oldest but always preserve system messages. Serializes as `{"messages": [...], "maxMessages": N}`.
 
-**SemanticMemory** — cross-session vector recall (SDK-side): `add`, `search(query, topK)`, `delete`, `clear`, `listAll`. Pluggable `MemoryStore`; SDK must ship at least `InMemoryStore` (keyword-overlap similarity).
+**SemanticMemory** — cross-session recall (SDK-side, all four SDKs): `add`, `search(query, topK)`, `delete`, `clear`, `listAll`. This is a **client-side keyword (Jaccard-overlap) store** — it is **not** a vector DB / embedding feature, and is **not serialized to the wire**. Pluggable `MemoryStore`; SDK must ship at least `InMemoryStore` (keyword-overlap similarity).
 
 ### 2.9 Callbacks
 
@@ -302,14 +302,22 @@ Tri-state reconcile: `null` = leave untouched, empty list = purge, non-empty = u
 
 The full contract is **~89 features**, each traceable: concept → Python reference module → wire-format key → server handler → kitchen-sink stage. There is no single authoritative per-row matrix in the repo; the grouped summary below is the working inventory.
 
-**SDK parity status.** Only **Python and TypeScript** are at the full feature set below; **Java and C# have real gaps**:
+**SDK parity status.** All four SDKs (Python, TypeScript, Java, C#) are now at **near-full parity**. The recent cross-SDK fixes closed most of the former Java/C# gaps:
 
-- **SemanticMemory** — Python + TS only; **missing in Java and C#**. C# additionally has **no ConversationMemory** (only `SemanticMemory.cs`); Java **has** ConversationMemory.
-- **Code-execution executors** — Python + TS ship all four (Local / Docker / Jupyter [stub in TS] / Serverless); **Java = Docker only**; **C# = none in the library** (config flag + inline only).
-- **`api_tool`** (OpenAPI/Swagger/Postman discovery) — Python / TS / C#; **missing in Java**.
-- **External guardrail** (`Guardrail.external`) — Python / TS / Java; **missing in C#**.
+- **SemanticMemory** — now in **all four SDKs** (Java added). Reminder: it is a client-side keyword (Jaccard-overlap) store, not a vector DB; not serialized to the wire (§2.8).
+- **ConversationMemory** — now in **all four SDKs** (C# added); wire shape `{messages, maxMessages}`.
+- **`api_tool`** (OpenAPI/Swagger/Postman discovery) — now in **all four SDKs** (Java added; C# also gained the `${NAME}` credential-placeholder validation).
+- **External guardrail** (`Guardrail.external`) — now in **all four SDKs** (C# added).
+- **Tier-1 credential accessor** — now in **all four SDKs** (Python `get_secret`, TS `getCredential`, Java `ToolContext.getCredential`, C# `ToolContext.GetCredential` / `Secrets.Get`).
+- **Default guardrail `onFail`** is now **`raise` uniformly** across all four; `human`+`input` is rejected at construction in all four.
 
-Treat the matrix below as the Python/TS reference set; subtract the rows above for Java and C#.
+Remaining nuances (not blockers, but kept honest):
+
+- **Code-execution executors** are **not** uniform: Python + TS ship Local / Docker / Jupyter [stub in TS] / Serverless; **Java = Docker only**; **C# = Docker only** (C# gained a `DockerCodeExecutor`; Local/Jupyter/Serverless still absent in Java and C#).
+- **Optional config-field gaps:** C# still omits `synthesize`, `prefillTools`, `cliConfig`, `reasoningEffort`, `contextWindowBudget`, `maskedFields`; TS omits `reasoningEffort`, `contextWindowBudget`, `maskedFields`. (Separately, the server accepts `maskedFields` but never wires it into the compiled WorkflowDef — credential masking in history/UI silently no-ops across all SDKs.)
+- **Provider/framework asymmetries (unchanged):** the `claude-code` model + `ClaudeCode` config are Python/TS only; the Claude Agent SDK framework is Python-only; Vercel AI SDK is TS-only; OCG is Python-only.
+
+Treat the matrix below as the shared reference set; subtract the code-exec and optional-field nuances above for Java/C#.
 
 | Group | Features (count) | Examples |
 |---|---|---|
@@ -330,7 +338,7 @@ Treat the matrix below as the Python/TS reference set; subtract the rows above f
 | Validation (4) | runner, judge, native execution, HTML report | #84–87 |
 | Distributed | external agent | #88 |
 
-A new SDK is **feature-complete** when all ~89 are implemented (see the parity-status caveats above for Java/C#), the kitchen sink produces identical `AgentConfig` JSON and executes end-to-end, both sync and async APIs work, the validation report generates, and all Python examples are ported (§5).
+A new SDK is **feature-complete** when all ~89 are implemented (see the parity-status nuances above — code-exec executors and a few optional config fields are the only remaining Java/C# deltas), the kitchen sink produces identical `AgentConfig` JSON and executes end-to-end, both sync and async APIs work, the validation report generates, and all Python examples are ported (§5).
 
 ---
 

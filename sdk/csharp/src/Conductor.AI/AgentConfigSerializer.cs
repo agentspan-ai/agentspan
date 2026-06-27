@@ -80,7 +80,15 @@ internal static class AgentConfigSerializer
         if (agent.MaxTokens        .HasValue)   cfg["maxTokens"]        = agent.MaxTokens.Value;
         if (agent.Temperature      .HasValue)   cfg["temperature"]      = agent.Temperature.Value;
         if (agent.TimeoutSeconds   .HasValue)   cfg["timeoutSeconds"]   = agent.TimeoutSeconds.Value;
-        if (agent.ThinkingBudgetTokens.HasValue)cfg["thinkingBudgetTokens"] = agent.ThinkingBudgetTokens.Value;
+        // Thinking budget nests under `thinkingConfig` — the server only reads
+        // the nested {enabled, budgetTokens} object (AgentConfig#thinkingConfig).
+        // Matches Python/Java/TS. The flat `thinkingBudgetTokens` key is dropped.
+        if (agent.ThinkingBudgetTokens.HasValue)
+            cfg["thinkingConfig"] = new JsonObject
+            {
+                ["enabled"]     = true,
+                ["budgetTokens"] = agent.ThinkingBudgetTokens.Value,
+            };
         if (agent.IncludeContents  is not null) cfg["includeContents"]  = agent.IncludeContents;
         if (agent.Introduction     is not null) cfg["introduction"]     = agent.Introduction;
         if (agent.External)                     cfg["external"]         = true;
@@ -153,19 +161,28 @@ internal static class AgentConfigSerializer
             cfg["requiredTools"] = arr;
         }
 
+        // Prompt template nests under `instructions` as a typed object — the
+        // server reads prompt templates only from `instructions`
+        // ({type: prompt_template, name, variables?, version?}). Matches
+        // Python/Java/TS; the top-level `promptTemplate` key is dropped. This
+        // overwrites any string `instructions` set above.
         if (agent.PromptTemplateInstructions is not null)
         {
-            var pt = new JsonObject { ["name"] = agent.PromptTemplateInstructions.Name };
-            if (agent.PromptTemplateInstructions.Version.HasValue)
-                pt["version"] = agent.PromptTemplateInstructions.Version.Value;
-            if (agent.PromptTemplateInstructions.Variables is not null)
+            var pt = new JsonObject
+            {
+                ["type"] = "prompt_template",
+                ["name"] = agent.PromptTemplateInstructions.Name,
+            };
+            if (agent.PromptTemplateInstructions.Variables is { Count: > 0 })
             {
                 var vars = new JsonObject();
                 foreach (var (k, v) in agent.PromptTemplateInstructions.Variables)
                     vars[k] = v;
                 pt["variables"] = vars;
             }
-            cfg["promptTemplate"] = pt;
+            if (agent.PromptTemplateInstructions.Version.HasValue)
+                pt["version"] = agent.PromptTemplateInstructions.Version.Value;
+            cfg["instructions"] = pt;
         }
 
         // Inject execute_code worker tool when local code execution is on, so
