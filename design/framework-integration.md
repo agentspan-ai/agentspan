@@ -15,16 +15,19 @@ A framework agent reaches the server as a `raw_config` dict plus a set of worker
 - **Decomposed** — the SDK introspects the agent and the server compiles native tasks: an AI_MODEL agentic loop with one SIMPLE task per tool, or a node/edge workflow of typed tasks. The server controls model selection, tool dispatch, retries, and step-level orchestration.
 - **Passthrough** — the SDK cannot (or should not) decompose the agent, so the entire framework runtime runs inside one SIMPLE worker. The server sees a single durable task; the worker forwards events so observability and durability still apply, but step-level orchestration does not.
 
-The detection rule is per-framework (see each section), but the shared property is: **detection is duck-typed in the SDK, no framework is imported by AgentSpan, and framework packages are optional peer dependencies.** Whichever path is chosen, events are pushed non-blocking from the worker to the server so the calling code never waits on instrumentation.
+The detection rule is per-framework (see each section), and the exact mechanism differs by SDK — but the shared property is: **no framework is imported by AgentSpan, and framework packages are optional peer dependencies.** In the **Python** SDK (`serializer.py`), LangGraph/LangChain/Claude are detected by **type-name** checks (`type(obj).__name__` in `{CompiledStateGraph, Pregel, CompiledGraph}`, `AgentExecutor`, `{ClaudeCodeOptions, ClaudeAgentOptions}`) and OpenAI/ADK by **module-prefix** matching (`_FRAMEWORK_DETECTION = {"agents": "openai", "google.adk": "google_adk"}`). Only the **TypeScript** SDK uses **duck-typed marker** detection (`detect.ts`) for OpenAI/ADK. Whichever path is chosen, events are pushed non-blocking from the worker to the server so the calling code never waits on instrumentation.
 
-| Framework | Primary path | Falls back to |
-|---|---|---|
-| OpenAI Agents SDK | Full extraction (AI_MODEL + tools) | — |
-| LangGraph | Full extraction / graph-structure | Passthrough |
-| LangChain (`create_agent`) | Full extraction via LangGraph | Passthrough (legacy `AgentExecutor`) |
-| Google ADK | Full extraction (AI_MODEL + tools / orchestration agents) | — |
-| Claude Agent SDK | Passthrough (by design) | — |
-| OCG retrieval | HTTP tasks (SDK-baked) | — |
+| Framework | SDK availability | Primary path | Falls back to |
+|---|---|---|---|
+| OpenAI Agents SDK | Python & TS | Full extraction (AI_MODEL + tools) | — |
+| LangGraph | Python & TS | Full extraction / graph-structure | Passthrough |
+| LangChain (`create_agent`) | Python & TS | Full extraction via LangGraph | Passthrough (legacy `AgentExecutor`) |
+| Google ADK | Python & TS | Full extraction (AI_MODEL + tools / orchestration agents) | — |
+| Claude Agent SDK | **Python only** | Passthrough with injected per-tool/subagent tasks | — |
+| Vercel AI SDK | **TypeScript only** | Full extraction (`tool()` → native tool defs) | — |
+| OCG retrieval | **Python only** | HTTP tasks (SDK-baked) | — |
+
+> **Per-SDK availability.** LangGraph, LangChain, OpenAI Agents SDK, and Google ADK are bridged in **both** the Python and TypeScript SDKs. The **Claude Agent SDK** framework bridge is **Python only** (TypeScript exposes only the native `ClaudeCode` *model* on a native Agent — no Claude framework bridge). The **Vercel AI SDK** bridge is **TypeScript only**. **OCG** retrieval is **Python only**.
 
 ---
 
@@ -497,7 +500,7 @@ Inherited: all §3.4 limitations (custom reducers, `Command`, functional API, ti
 
 ## 5. OpenAI Agents SDK and Google ADK
 
-Both are first-class bridges that **decompose** to native server-side tasks. Detection is duck-typed; no framework is imported by AgentSpan, and the framework packages are optional peer dependencies. See [Python framework-agents.md](../sdk/python/docs/framework-agents.md) and [TypeScript framework-agents.md](../sdk/typescript/docs/framework-agents.md) for full usage.
+Both are first-class bridges that **decompose** to native server-side tasks, in **both the Python and TypeScript SDKs** via the generic serializer. No framework is imported by AgentSpan, and the framework packages are optional peer dependencies. Detection differs by SDK: Python uses **module-prefix** matching (`agents` → openai, `google.adk` → google_adk in `_FRAMEWORK_DETECTION`); TypeScript uses **duck-typed marker** detection (`detect.ts`). See [Python framework-agents.md](../sdk/python/docs/framework-agents.md) and [TypeScript framework-agents.md](../sdk/typescript/docs/framework-agents.md) for full usage.
 
 ### 5.1 OpenAI Agents SDK
 
@@ -527,7 +530,7 @@ const result = await runtime.run(agent, 'Say hello and a fun fact about ML.');
 
 ## 6. Claude Agent SDK (passthrough by design)
 
-The Claude Agent SDK (`claude_agent_sdk`) is a full runtime — built-in tools (Read, Edit, Bash, ...), hooks, sessions, permissions. Extracting individual tools would lose most of its value, so AgentSpan runs it **passthrough**: the full `query()` runs in one durable Conductor SIMPLE worker (the §2 passthrough architecture), instrumented through the SDK's hook system. Users pass `ClaudeAgentOptions` (or use the native `ClaudeCode` model on an AgentSpan `Agent`) to `runtime.run()` / `runtime.start()`.
+The Claude Agent SDK (PyPI package `claude-code-sdk`, imported as `claude_code_sdk`) is a full runtime — built-in tools (Read, Edit, Bash, ...), hooks, sessions, permissions. Extracting individual tools would lose most of its value, so AgentSpan runs it **passthrough**: the full `query()` runs in one durable Conductor SIMPLE worker (the §2 passthrough architecture), instrumented through the SDK's hook system. This is **Python only** (TypeScript has only the native `ClaudeCode` *model* usable on a native Agent — there is no Claude framework bridge in TS). Users pass `ClaudeCodeOptions` / `ClaudeAgentOptions` (or use the native `ClaudeCode` model on an AgentSpan `Agent`) to `runtime.run()` / `runtime.start()`.
 
 **Use cases:** (A) bring existing Claude Agent SDK agents in for durability/orchestration/observability; (C) invoke a Claude Agent SDK agent as a worker tool inside a larger AgentSpan workflow.
 
@@ -535,7 +538,7 @@ The Claude Agent SDK (`claude_agent_sdk`) is a full runtime — built-in tools (
 
 ```
 runtime.run(options, prompt)
-  ├─ detect_framework() → "claude_agent_sdk"   (type-name check on ClaudeAgentOptions)
+  ├─ detect_framework() → "claude_agent_sdk"   (type-name check accepting both ClaudeCodeOptions and ClaudeAgentOptions)
   ├─ serialize_claude_agent_sdk(options) → (raw_config={name,_worker_name}, [WorkerInfo])
   ├─ _build_passthrough_func() → make_claude_agent_sdk_worker()   (closure: options, server_url, auth)
   ├─ _register_passthrough_worker() → Conductor task def (600s timeout)
@@ -557,6 +560,8 @@ runtime.run(options, prompt)
             7. return TaskResult {result, tools_used, ...metadata, token_usage}
 ```
 
+Although the agent runs in one durable worker, the Claude passthrough is **not opaque**: the worker dynamically injects child tasks as the run progresses, so the server gets per-tool and per-subagent visibility rather than a single black-box step. On `SubagentStart`, `_subagent_start` injects a SUB_WORKFLOW task for the subagent (`_create_tracking_workflow` builds the tracking workflow def); per-tool tracking tasks are injected via `_inject_tool_task`. These are added at runtime to the running execution (see `claude_agent_sdk.py`).
+
 ### 6.2 Hooks (observability + metadata)
 
 All agentspan hooks are defensive (try/except) and return `{}` (no interference). User hooks run first; agentspan hooks are appended. Event delivery is fire-and-forget via the shared `ThreadPoolExecutor` (§2).
@@ -571,15 +576,15 @@ All agentspan hooks are defensive (try/except) and return `{}` (no interference)
 | `Notification` | `{type: "notification", message}` | — |
 | `Stop` | `{type: "agent_stop"}` | — |
 
-The exact hook callback signature must be verified against the installed `claude-agent-sdk` version (PyPI: `claude-agent-sdk`; imports `query`, `ClaudeAgentOptions`, `AssistantMessage`, `ResultMessage`). `ClaudeAgentOptions` is kept in the worker closure, never JSON-serialized (it may contain callables).
+The exact hook callback signature must be verified against the installed `claude-code-sdk` version (PyPI: `claude-code-sdk`, imported as `claude_code_sdk`; imports `query`, `ClaudeCodeOptions`, `AssistantMessage`, `ResultMessage`). The options object is kept in the worker closure, never JSON-serialized (it may contain callables).
 
 ### 6.3 Components, design decisions, limitations
 
 | Component | File |
 |---|---|
-| Detection + serialize short-circuit | `sdk/python/src/agentspan/agents/frameworks/serializer.py` |
-| Serializer, worker, hooks | `sdk/python/src/agentspan/agents/frameworks/claude_agent_sdk.py` (new) |
-| `_build_passthrough_func()` branch | `sdk/python/src/agentspan/agents/runtime/runtime.py` |
+| Detection + serialize short-circuit | `sdk/python/src/conductor/ai/agents/frameworks/serializer.py` |
+| Serializer, worker, hooks | `sdk/python/src/conductor/ai/agents/frameworks/claude_agent_sdk.py` (new) |
+| `_build_passthrough_func()` branch | `sdk/python/src/conductor/ai/agents/runtime/runtime.py` |
 | Passthrough normalizer | `server/.../normalizer/ClaudeAgentSdkNormalizer.java` (new) |
 
 Key decisions: passthrough over extraction (full runtime — extraction loses value); hooks for observability (exact instrumentation points, additive, defensive); `asyncio.run()` in the sync worker (fresh loop per worker thread); options in closure not JSON (callables); user hooks run first.
@@ -594,7 +599,7 @@ Key decisions: passthrough over extraction (full runtime — extraction loses va
 
 OCG (Open Context Graph) is a retrieval engine over a knowledge graph of entities — messages, channels, people, tickets — linked by claims and relationships. It is embedding/keyword search exposed as an HTTP API, **not** an LLM.
 
-The integration lives **entirely in the Python SDK** (`agentspan.agents.ocg`): the retrieval system prompt, tool schemas, endpoint routing, and instance binding. The tools compile to plain Conductor HTTP tasks, so **any AgentSpan server runs them with zero OCG-specific configuration** — no properties, no task types. OCG is opt-in per agent; an agent that doesn't declare OCG tools never makes an OCG call.
+The integration lives **entirely in the Python SDK** (`conductor.ai.agents.ocg`): the retrieval system prompt, tool schemas, endpoint routing, and instance binding. The tools compile to plain Conductor HTTP tasks, so **any AgentSpan server runs them with zero OCG-specific configuration** — no properties, no task types. OCG is opt-in per agent; an agent that doesn't declare OCG tools never makes an OCG call.
 
 ### 7.1 Two shapes
 
@@ -667,8 +672,8 @@ Path params (`{entity_id}`, `{key}`) are filled from the LLM's arguments and URL
 ### 7.4 Keeping the LLM honest
 
 OCG responses are injected verbatim into the calling LLM's context, so schemas and the canned prompt enforce discipline:
-- `max_results` carries a schema-level `maximum: 100` (default 10); the prompt recommends ≤ 25.
-- `traversal_level` defaults to `0` (citations only) — each level multiplies response size.
+- `max_results` is **fixed at 100** — the schema pins `default: 100`, `minimum: 100`, `maximum: 100`, and the prompt says to ALWAYS use 100 (it is both the hard maximum and the floor for decent context).
+- `traversal_level` is **fixed at 1** — the schema pins `default: 1`, `minimum: 1`, `maximum: 1`; the prompt says ALWAYS 1 (pulls each citation's immediate neighborhood), never 0 (too shallow) and never higher.
 - `start_time`/`end_time` must be full RFC3339 (`2026-06-04T00:00:00Z`); the OCG API rejects bare dates, and the schemas say so to prevent retry loops.
 - The canned retrieval prompt budgets at most 3 distinct keyword queries per request, forbids rephrasing (embedding search returns the same results for the same intent), anchors relative dates on an execution-time `__today__`, and instructs keyword-style queries under ~15 content words.
 

@@ -16,11 +16,11 @@ A guardrail answers one question: **"Should this content be allowed to proceed?"
 
 Guardrails attach to an **agent** (validate LLM input/output) or to a **tool** (validate tool I/O — the highest-risk checkpoint, because tools take real-world actions).
 
-Code samples below use the Python SDK; the model is identical across SDKs (see [sdk-design.md](sdk-design.md)).
+Code samples below use the Python SDK. The model has **identical enums/types** across SDKs (`OnFail`, `Position`, `GuardrailResult`), but **construction is idiomatic per SDK**: Python `Guardrail(func, ...)`; Java `Guardrail.of(name, func)...build()` plus `Guardrail.external(name)`; TypeScript `guardrail(fn, {...})` plus `guardrail.external()` and the `@Guardrail` decorator; C# `[Guardrail]` attribute / options-style `Create(...)` factories (see [sdk-design.md](sdk-design.md)).
 
 ```python
 import re
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent, AgentRuntime, Guardrail, GuardrailResult,
     OnFail, Position, guardrail, tool,
 )
@@ -96,20 +96,22 @@ class Position(str, Enum):
 
 ```python
 class OnFail(str, Enum):
-    RETRY = "retry"    # Ask the LLM to try again with feedback (default)
+    RETRY = "retry"    # Ask the LLM to try again with feedback
     RAISE = "raise"    # Fail the execution immediately
     FIX   = "fix"      # Use GuardrailResult.fixed_output
     HUMAN = "human"    # Pause for human review (output only)
 ```
 
+**Default `on_fail` varies by SDK.** It is **not** uniform: Python and Java default to `retry` for every guardrail kind; TypeScript defaults to `raise` for every kind (`guardrail()`, `guardrail.external()`, `@Guardrail`, `RegexGuardrail`, `LLMGuardrail`); C# is internally mixed — custom/attribute guardrails default to `Raise` while `RegexGuardrail`/`LLMGuardrail` factories default to `Retry`. (The server's routing falls back to `raise` only when `on_fail` is null, but every SDK serializes an explicit value.)
+
 | Mode | Behavior | Best for |
 |------|----------|----------|
-| `retry` (default) | Feedback appended to the conversation; the LLM retries. After `max_retries` is exhausted, escalates to `raise`. | Quality/format/PII issues the LLM can self-correct. |
+| `retry` | Feedback appended to the conversation; the LLM retries. After `max_retries` is exhausted, escalates to `raise`. | Quality/format/PII issues the LLM can self-correct. |
 | `fix` | Uses `GuardrailResult.fixed_output` directly — no LLM retry. | Deterministic corrections (regex substitution, sanitization). Faster and cheaper. |
 | `raise` | Terminates the execution with `FAILED` status and the guardrail message as the reason. | Hard security blocks, zero-tolerance policies, input validation. |
-| `human` | Pauses at a HumanTask; a human approves, edits, or rejects. **Only valid for `position="output"`** — input guardrails run client-side and cannot pause an execution. | Compliance review, content moderation, sensitive decisions. |
+| `human` | Pauses at a HumanTask; a human approves, edits, or rejects. **Only valid for `position="output"`** — input guardrails run client-side and cannot pause an execution. (This constraint is enforced with a `ValueError` **only in the Python SDK**; TypeScript, Java, and C# do not guard the `human`+`input` combination.) | Compliance review, content moderation, sensitive decisions. |
 
-**Retry escalation.** `max_retries` controls how many times `retry` attempts before escalating to `raise` (default `3`; `0` is equivalent to `raise`). Each guardrail carries its own `max_retries`. For client-side guardrails (simple agents without tools), the runtime uses the maximum across all output guardrails. This prevents infinite retry loops.
+**Retry escalation.** `max_retries` controls how many times `retry` attempts before escalating to `raise` (default `3`). The minimum is `1`: the Python SDK rejects `max_retries < 1` with a `ValueError`, so `0` is **invalid**, not "equivalent to raise". Each guardrail carries its own `max_retries`. For client-side guardrails (simple agents without tools), the runtime uses the maximum across all output guardrails. This prevents infinite retry loops.
 
 #### `human` usage with `start()`
 
@@ -139,7 +141,7 @@ with AgentRuntime() as runtime:
 
 | Type | What it does | Compiles to (see §3) | Output path |
 |------|--------------|----------------------|-------------|
-| `Guardrail` (custom fn) | Wrap any Python function | Worker task | `${ref}.output.*` |
+| `Guardrail` (custom fn) | Wrap any Python function | SIMPLE worker + normalize InlineTask | `${ref}.output.result.*` |
 | `RegexGuardrail` | Pattern block/allow lists | InlineTask (JavaScript, GraalVM) | `${ref}.output.result.*` |
 | `LLMGuardrail` | Judge content with a second LLM against a policy | `LlmChatComplete` + InlineTask parser | `${ref}.output.result.*` |
 | External | Reference a remote worker by name | SimpleTask | `${ref}.output.*` |
@@ -226,6 +228,7 @@ The judge LLM receives the policy + content and returns `{"passed": true/false, 
 | `position` | `str` | `"output"` | `"input"` or `"output"` |
 | `on_fail` | `str` | `"retry"` | Failure strategy |
 | `max_retries` | `int` | `3` | Max retries |
+| `max_tokens` | `int` | SDK default | Max tokens for the judge LLM response (supported in Python, TypeScript, C#, and the server `GuardrailCompiler`) |
 
 > When compiled (§3.4) the judge call runs **server-side** as an `LlmChatComplete` task and needs no client dependency. When run client-side it uses `litellm` (`pip install litellm`); pick a fast model either way to avoid slowing the agent loop.
 
@@ -279,7 +282,7 @@ class RegexGuardrail(Guardrail):
 
 class LLMGuardrail(Guardrail):
     def __init__(self, model, policy, *, position="output",
-                 on_fail="retry", name=None, max_retries=3): ...
+                 on_fail="retry", name=None, max_retries=3, max_tokens=None): ...
 ```
 
 ```python
@@ -336,8 +339,10 @@ The SwitchTask reads `on_fail` from a type-dependent path (tracked by an `is_inl
 | Guardrail type | Output path |
 |----------------|-------------|
 | RegexGuardrail / LLMGuardrail (InlineTask) | `$.{ref}.result.on_fail` |
-| Custom function (Worker) | `$.{ref}.on_fail` |
+| Custom function (SIMPLE worker + normalize INLINE) | `$.{ref}.result.on_fail` |
 | External (SimpleTask) | `$.{ref}.on_fail` |
+
+Custom guardrails compile to a **SIMPLE worker task plus a normalize INLINE task**; the routing SWITCH reads the INLINE task's output, so the path is `output.result.on_fail` (not `output.on_fail`).
 
 **Retry via feedback injection.** On `on_fail="retry"` the guardrail returns:
 
@@ -389,21 +394,24 @@ Tool calls are the highest-risk checkpoint because they take **real-world action
 def run_query(query: str) -> str: ...
 ```
 
-Tool guardrails execute **inside the tool worker process** (Python-level wrapping in `make_tool_worker()`), not as separate workflow tasks — the check happens within the existing tool task:
+Tool guardrails have **two execution paths**, and both exist in the codebase:
+
+**1. Client-side, in-process (Python-run tools).** When the tool runs as a Python worker, its guardrails are wrapped **inside the tool worker process** by `make_tool_worker()` (`runtime/_dispatch.py`) — the check happens within the existing tool task, not as a separate workflow task:
 
 - **`position="input"`** — runs before the tool. Receives a JSON string of all input kwargs. On failure with `raise`, raises `ValueError`; otherwise returns `{error: ..., blocked: True}` and the tool is skipped.
 - **`position="output"`** — runs after the tool. Receives the result as a string. On `fix`, replaces the result with `fixed_output`; on `raise`, raises `ValueError`.
 
-Compiled into the tool-dispatch branch this looks like:
+**2. Server-compiled gate tasks (separate workflow tasks).** Python serializes each tool's guardrails into the tool config (`config_serializer.py`), so the **server compiler builds them as real, separate workflow tasks**. `ToolCompiler.java` (`collectToolGuardrails`, `buildToolGuardrailGate`, with `compileToolGuardrailTasks` in `GuardrailCompiler.java`) prepends a **guardrail gate before the `DynamicFork`** of tool workers. The gate is:
 
 ```
-SwitchTask (toolCalls present?):
-  -> tool_call:
-      [Pre-tool guardrail]  -> [Switch] -> pass: DynamicFork(tool workers)
-                                           block: SetVariable(blocked message), skip tool
-      [Post-tool guardrail] -> [Switch] -> pass: merge -> SetVariable
-                                           fix:  use sanitized output -> SetVariable
+tool_call branch:
+  [format INLINE: _format_tool_calls]   <-- build guardrail input from tool calls
+  [guardrail task(s)]                    <-- SIMPLE/INLINE/LLM per guardrail kind
+  [routing SWITCH]                       <-- pass / raise / fix per on_fail
+  -> pass: [DynamicFork(tool workers)]   <-- the gate runs BEFORE the fork
 ```
+
+So the same authoring API maps to client-side in-process checks for Python-run tools, and to server-compiled gate tasks (durable, visible in the Conductor UI) otherwise.
 
 ### 3.4 Server-side vs client-side LLM guardrails
 
@@ -485,7 +493,7 @@ The API is backward-compatible: the `@guardrail` decorator, `OnFail`/`Position` 
 
 ```python
 import re
-from agentspan.agents import Agent, Guardrail, GuardrailResult
+from conductor.ai.agents import Agent, Guardrail, GuardrailResult
 
 def no_pii(content: str) -> GuardrailResult:
     patterns = {
@@ -507,7 +515,7 @@ agent = Agent(name="safe_agent", model="openai/gpt-4o", tools=[...],
 
 ```python
 import re
-from agentspan.agents import Agent, Guardrail, GuardrailResult
+from conductor.ai.agents import Agent, Guardrail, GuardrailResult
 
 def redact_all_pii(content: str) -> GuardrailResult:
     patterns = [
@@ -531,7 +539,7 @@ agent = Agent(name="redacting_agent", model="openai/gpt-4o", tools=[...],
 ### JSON-only output enforcement
 
 ```python
-from agentspan.agents import Agent, RegexGuardrail
+from conductor.ai.agents import Agent, RegexGuardrail
 
 agent = Agent(
     name="json_agent", model="openai/gpt-4o",
@@ -547,7 +555,7 @@ agent = Agent(
 ### Layered guardrails (lenient + strict)
 
 ```python
-from agentspan.agents import Agent, Guardrail, GuardrailResult, RegexGuardrail
+from conductor.ai.agents import Agent, Guardrail, GuardrailResult, RegexGuardrail
 
 length_guard = Guardrail(
     lambda c: GuardrailResult(passed=len(c) <= 1000, message="Too long. Be concise."),
@@ -563,7 +571,7 @@ agent = Agent(name="layered_agent", model="openai/gpt-4o", tools=[...],
 ### Compliance review with human escalation
 
 ```python
-from agentspan.agents import Agent, Guardrail, GuardrailResult
+from conductor.ai.agents import Agent, Guardrail, GuardrailResult
 
 def compliance_check(content: str) -> GuardrailResult:
     flagged = ["guaranteed returns", "risk-free", "investment advice"]
@@ -585,7 +593,7 @@ with AgentRuntime() as runtime:
 
 ```python
 import re
-from agentspan.agents import Guardrail, GuardrailResult, tool
+from conductor.ai.agents import Guardrail, GuardrailResult, tool
 
 def no_sql_injection(content: str) -> GuardrailResult:
     dangerous = [r"DROP\s+TABLE", r"DELETE\s+FROM", r";\s*--", r"UNION\s+SELECT"]
@@ -604,7 +612,7 @@ def run_query(query: str) -> str:
 
 ```python
 import re
-from agentspan.agents import Guardrail, GuardrailResult, tool
+from conductor.ai.agents import Guardrail, GuardrailResult, tool
 
 def redact_secrets(content: str) -> GuardrailResult:
     pattern = r"sk-[a-zA-Z0-9]{40,}"

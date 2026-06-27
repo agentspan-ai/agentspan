@@ -273,8 +273,7 @@ schedules.pause(name, reason=None)
 schedules.resume(name)
 schedules.delete(name)
 schedules.run_now(name)               # bypasses scheduler; returns execution id immediately
-schedules.run_now(name, wait=True)    # opt-in: block until completion (returns AgentResult)
-schedules.executions(name, limit=20)  # past runs of this schedule
+schedules.run_now(name, wait=True)    # Python-only opt-in: block until completion (returns AgentResult)
 schedules.preview_next(cron, n=5)     # for UI / drawer
 ```
 
@@ -307,8 +306,8 @@ Same semantics, idiomatic shape per language. All four wrap the same Conductor R
 #### Python
 
 ```python
-from agentspan.agents import Agent, deploy, schedules
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents import Agent, deploy, schedules
+from conductor.ai.agents.schedule import Schedule
 
 agent = Agent(name="daily_digest", ...)
 
@@ -367,10 +366,10 @@ Constructor takes a single options object (camelCase). Field renames: `timezone`
 #### Java
 
 ```java
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.schedule.Schedule;
-import ai.agentspan.schedule.Schedules;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.schedule.Schedule;
+import org.conductoross.conductor.ai.schedule.Schedules;
 
 Agent agent = Agent.builder().name("daily_digest")./*...*/.build();
 
@@ -394,7 +393,7 @@ Schedules schedules = runtime.schedules();
 schedules.list("daily_digest");
 schedules.pause("weekday-9am", "rate limit cooldown");
 schedules.resume("weekday-9am");
-schedules.runNow("weekday-9am");
+schedules.runNow(schedules.get("weekday-9am"));   // Java runNow takes a ScheduleInfo, not a name string
 schedules.delete("weekday-9am");
 schedules.previewNext("0 9 * * MON-FRI", 5);
 ```
@@ -433,7 +432,7 @@ var schedules = runtime.Schedules;
 await schedules.ListAsync(agent: "daily_digest");
 await schedules.PauseAsync("weekday-9am", reason: "rate limit cooldown");
 await schedules.ResumeAsync("weekday-9am");
-await schedules.RunNowAsync("weekday-9am");
+await schedules.RunNowAsync(await schedules.GetAsync("weekday-9am"));   // C# RunNowAsync takes a ScheduleInfo, not a name string
 await schedules.DeleteAsync("weekday-9am");
 await schedules.PreviewNextAsync("0 9 * * MON-FRI", n: 5);
 ```
@@ -505,8 +504,8 @@ Cron preview uses `GET /api/scheduler/nextFewSchedules` and the existing `cronEx
 
 ### 3.8 Resolved design questions (Phase 1)
 
-1. **Module path** → `agentspan.agents.schedule.Schedule`. Ships only what exists today; if/when Webhook/Event triggers land, they get their own modules and we revisit a `triggers/` umbrella.
-2. **`run_now` blocking** → returns the execution id immediately. Agents can run for minutes; blocking is the wrong default for a UI button or scripted invocation. Opt-in `wait=True` (Python/TS) / overloaded `runNowAndWait` (Java/C#) for sync use.
+1. **Module path** → `conductor.ai.agents.schedule.Schedule`. Ships only what exists today; if/when Webhook/Event triggers land, they get their own modules and we revisit a `triggers/` umbrella.
+2. **`run_now` blocking** → returns the execution id immediately. Agents can run for minutes; blocking is the wrong default for a UI button or scripted invocation. **Python alone** offers an opt-in synchronous wait (`run_now(name, wait=True)` returns an `AgentResult`); TS `runNow` has no `wait` option, and Java/C# expose only the fire-and-return `runNow` / `RunNowAsync` (no `runNowAndWait` overload). The Java/C# `runNow` also takes a `ScheduleInfo` (fetch it via `get`), not a name string.
 3. **`nextRunTime` when paused-on-create** → verified against Conductor source (`scheduler/core/.../SchedulerService.java:732`): `setNextRunTimeInEpoch(...)` is called unconditionally on save; the `isPaused()` check only gates the queue-message push that triggers the fire. The UI's "Next: ..." column is reliable for paused schedules. No SDK or UI accommodation needed.
 4. **Schedule name scoping** → unique **per agent**, not globally. The SDK auto-prefixes the wire name to `{agent.name}-{name}` at `deploy()` time so users write `Schedule(name="daily")` ergonomically while Conductor's org-wide uniqueness is satisfied. The prefixed name is the canonical identifier returned by `list()`/`get()` and accepted by `pause`/`resume`/`delete`/`run_now`. The `ScheduleInfo` dataclass exposes both `name` (prefixed, wire) and `short_name` (the user's original) for display.
 

@@ -15,8 +15,8 @@ This guide covers implementing the Agentspan SDK in Java with full feature parit
 ### 1.1 Module Coordinates
 
 ```
-groupId:    dev.agentspan
-artifactId: agentspan-sdk
+groupId:    org.conductoross.conductor
+artifactId: conductor-agent-sdk
 version:    0.1.0
 ```
 
@@ -24,8 +24,8 @@ version:    0.1.0
 
 ```xml
 <project>
-  <groupId>dev.agentspan</groupId>
-  <artifactId>agentspan-sdk</artifactId>
+  <groupId>org.conductoross.conductor</groupId>
+  <artifactId>conductor-agent-sdk</artifactId>
   <version>0.1.0</version>
 
   <properties>

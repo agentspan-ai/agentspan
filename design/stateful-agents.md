@@ -29,6 +29,16 @@ Mark tools — or a whole agent — as **stateful**.  At execution time:
 Non-stateful tools (HTTP, MCP, or `@tool` without `stateful=True` on a
 non-stateful agent) are unaffected — they continue to use the default domain.
 
+> **Cross-SDK note.** The `stateful` flag's domain-routing semantics described
+> here ARE correctly implemented and consistent across all four SDKs (Python,
+> TypeScript, Java, C#): each execution gets a unique `run_id` that isolates the
+> stateful tool workers to their own Conductor domain. **However**, the Java
+> (`Agent.java`) and C# (`Agent.cs`) doc-COMMENTS on the `stateful` flag describe
+> a different/overloaded meaning — conversation-history persistence /
+> `WaitForMessageTool` — which is NOT what the flag does. This is a known
+> code-comment inconsistency only; the behavior actually wired by all four SDKs is
+> the per-execution `run_id` → worker-domain isolation documented above.
+
 ## API
 
 Two equivalent ways to opt in:

@@ -82,7 +82,7 @@ Because the SDK builds on Conductor's `ApiClient`, the `CONDUCTOR_SERVER_URL` / 
 | `AGENTSPAN_AUTO_START_SERVER` | `true` | Auto-start local server |
 | `AGENTSPAN_DAEMON_WORKERS` | `true` | Kill workers on exit |
 | `AGENTSPAN_STREAMING_ENABLED` | `true` | Enable SSE streaming |
-| `AGENTSPAN_CREDENTIAL_STRICT_MODE` | `false` | No env-var fallback for credentials |
+| `AGENTSPAN_SECRET_STRICT_MODE` | `false` | No env-var fallback for credentials |
 | `AGENTSPAN_INTEGRATIONS_AUTO_REGISTER` | `false` | Auto-register LLM integrations |
 | `AGENTSPAN_LOG_LEVEL` | `INFO` | Logging level |
 
@@ -300,13 +300,22 @@ Tri-state reconcile: `null` = leave untouched, empty list = purge, non-empty = u
 
 ### 2.12 Feature matrix (summary)
 
-The full contract is **89 features**, each traceable: concept → Python reference module → wire-format key → server handler → kitchen-sink stage. Rather than reproduce every row, here is the grouped summary; the authoritative per-row table lives alongside the Python reference and the kitchen sink (§5).
+The full contract is **~89 features**, each traceable: concept → Python reference module → wire-format key → server handler → kitchen-sink stage. There is no single authoritative per-row matrix in the repo; the grouped summary below is the working inventory.
+
+**SDK parity status.** Only **Python and TypeScript** are at the full feature set below; **Java and C# have real gaps**:
+
+- **SemanticMemory** — Python + TS only; **missing in Java and C#**. C# additionally has **no ConversationMemory** (only `SemanticMemory.cs`); Java **has** ConversationMemory.
+- **Code-execution executors** — Python + TS ship all four (Local / Docker / Jupyter [stub in TS] / Serverless); **Java = Docker only**; **C# = none in the library** (config flag + inline only).
+- **`api_tool`** (OpenAPI/Swagger/Postman discovery) — Python / TS / C#; **missing in Java**.
+- **External guardrail** (`Guardrail.external`) — Python / TS / Java; **missing in C#**.
+
+Treat the matrix below as the Python/TS reference set; subtract the rows above for Java and C#.
 
 | Group | Features (count) | Examples |
 |---|---|---|
 | Agent core | Agent def, `>>` chaining, structured output, introductions, metadata | #1, 30, 38, 39 |
 | Strategies (9) | handoff, sequential, parallel, router, round_robin, random, swarm, manual, plan_execute | #2–9, +plan_execute |
-| Tools (12 types) | worker, http, api, mcp, agent_tool, human, generate_image/audio/video/pdf, rag_search/index | #10–16, 89 |
+| Tools (12 documented + internal `pull_workflow_messages`) | worker, http, api, mcp, agent_tool, human, generate_image/audio/video/pdf, rag_search/index | #10–16, 89 |
 | Tool features | approval (HITL), ToolContext, credentials, tool-guardrails, external | #17–21 |
 | Guardrails | regex, llm, custom, external × onFail retry/raise/fix/human | #22–29 |
 | Memory | ConversationMemory, SemanticMemory | #31, 32 |
@@ -321,7 +330,7 @@ The full contract is **89 features**, each traceable: concept → Python referen
 | Validation (4) | runner, judge, native execution, HTML report | #84–87 |
 | Distributed | external agent | #88 |
 
-A new SDK is **feature-complete** when all 89 are implemented, the kitchen sink produces identical `AgentConfig` JSON and executes end-to-end, both sync and async APIs work, the validation report generates, and all Python examples are ported (§5).
+A new SDK is **feature-complete** when all ~89 are implemented (see the parity-status caveats above for Java/C#), the kitchen sink produces identical `AgentConfig` JSON and executes end-to-end, both sync and async APIs work, the validation report generates, and all Python examples are ported (§5).
 
 ---
 
@@ -564,6 +573,8 @@ Adapt native framework objects into the `Agent` model and send them via the `fra
 Supported bridges: OpenAI Agents SDK, Google ADK (`BaseAgent`/`LlmAgent`), LangChain / LangGraph, Vercel AI SDK (TS). OpenAI and Google ADK expose model/tools/instructions as public properties (zero user changes); JS frameworks that hide them in closures (Vercel AI `generateText`, LangGraph `createReactAgent`, LangChain `AgentExecutor`) use **drop-in import wrappers** — one import change captures model/tools at creation time. Detection order must check native `Agent` first, then framework markers. Full extraction rules per framework: [framework-integration.md](framework-integration.md) (and `langchain-integration.md`).
 
 ### Per-language idiom guides
+
+> **Shipped vs. guide-only.** Only **four SDKs ship today**: Python, TypeScript, Java, and C# (`sdk/python`, `sdk/typescript`, `sdk/java`, `sdk/csharp`). The **Go, Kotlin, and Ruby** docs are *translation guides only* — idiom references for a future port; there is no published Go/Kotlin/Ruby SDK, so their coordinates/namespaces in those guides are illustrative, not authoritative.
 
 Each language doc covers project setup, type-system mapping, the decorator/annotation pattern, async model, worker + SSE implementation, error handling, the testing framework, and a kitchen-sink translation. Reference type/pattern mappings:
 

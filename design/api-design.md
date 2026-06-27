@@ -86,10 +86,15 @@ source of truth; the summary below is a guide, not a redefinition.
 
 **Tool kinds.** A tool descriptor (`$defs.tool`) carries `name`, `description`,
 `inputSchema`/`outputSchema`, a `toolType` discriminator, and a freeform `config` map for
-type-specific settings. `toolType` is one of `worker | http | mcp | apiTool | agent_tool | …`
+type-specific settings. `toolType` is one of `worker | http | mcp | api | agent_tool | …`
 (see §3 for the SDK conventions that produce each). The `tool` definition keeps
 `additionalProperties: true` because `config` is freeform and the Java serializer may emit
 extra retry fields (`retryCount`, `retryDelaySeconds`, `retryPolicy`).
+
+> **Note.** `toolType` is a free `string` in the schema (it has no `enum`), so `api` validates
+> fine even though the schema's `toolType` *description* string
+> (`"worker | http | mcp | agent_tool | …"`) does not list it. `api` is the real wire literal
+> emitted by `api_tool` (see §3 / §4.1); the description string is illustrative, not exhaustive.
 
 **Guardrails.** A guardrail (`$defs.guardrail`) has a `guardrailType`
 (`regex | llm | custom | external | …`), a `position` (`input | output`), an `onFail` policy
@@ -125,7 +130,7 @@ discriminator and a `config` map.
 | `tool` / `@tool` | `worker` | A native function/worker that runs in the SDK process. | Static — the function signature defines `inputSchema`. |
 | `http_tool` | `http` | A single HTTP endpoint (name, URL, method, headers, input schema). | Static — you define the one endpoint. |
 | `mcp_tool` | `mcp` | An MCP server; all its tools become agent tools. | Auto — discovered at workflow startup via `LIST_MCP_TOOLS`. |
-| `api_tool` | `apiTool` | An OpenAPI/Swagger spec, Postman collection, or base URL; all operations become agent tools. | Auto — discovered at workflow startup via `LIST_API_TOOLS` (see §4). |
+| `api_tool` | `api` | An OpenAPI/Swagger spec, Postman collection, or base URL; all operations become agent tools. | Auto — discovered at workflow startup via `LIST_API_TOOLS` (see §4). |
 
 **Conventions shared across kinds**
 
@@ -137,8 +142,12 @@ discriminator and a `config` map.
 - **Auto-discovered kinds** (`mcp_tool`, `api_tool`) support a `max_tools` cap; when the
   discovered set exceeds it, a filter LLM selects the most relevant subset at startup.
 
+> **SDK availability.** `api_tool` ships in the **Python, TypeScript, and C#** SDKs but is
+> **not present in the Java SDK** (which has `tool` / `httpTool` / `mcpTool` only). The other
+> three tool factories (`tool` / `http_tool` / `mcp_tool`) are available in all four SDKs.
+
 ```python
-from agentspan.agents import Agent, api_tool, http_tool, mcp_tool, tool
+from conductor.ai.agents import Agent, api_tool, http_tool, mcp_tool, tool
 
 @tool
 def calculate(expression: str) -> dict:        # toolType=worker (native)
@@ -164,7 +173,7 @@ removing the need to hand-define dozens or hundreds of endpoints with `http_tool
 ### 4.1 SDK API
 
 ```python
-from agentspan.agents import api_tool
+from conductor.ai.agents import api_tool
 
 # OpenAPI 3.x spec
 stripe = api_tool(
@@ -331,10 +340,15 @@ Claude Agent SDK agents use the same `Agent(...)` interface as native agents —
 compose as sub-agents, participate in handoffs, and work with sequential/parallel/router
 strategies.
 
+> **SDK availability.** The Claude Code convention — the `ClaudeCode` config object and
+> `Agent(model="claude-code"|"claude-code/...")` — exists **only in the Python and TypeScript
+> SDKs**. It is **not available in the Java or C# SDKs**. Everything in §5 is scoped to those
+> two SDKs.
+
 ### 5.1 `Agent(model="claude-code")`
 
 ```python
-from agentspan.agents import Agent, ClaudeCode
+from conductor.ai.agents import Agent, ClaudeCode
 
 # Slash syntax (alias resolved to a full model ID)
 reviewer = Agent(
@@ -410,9 +424,14 @@ workflow with a single SIMPLE task; the worker does the rest.
   dataclass (`agent_to_claude_code_options()`) before invoking the worker. This conversion is
   **load-bearing**: the worker calls `dataclasses.replace(options, hooks=...)` to merge
   observability hooks, which would crash on a non-dataclass (e.g. an `Agent`).
-- Framework routing detects the model prefix: an `Agent` whose `model` starts with
-  `"claude-code"` routes through the framework passthrough path (`detect_framework()` returns
-  `"claude_agent_sdk"`); all other `Agent`s route natively.
+- **Routing is NOT by framework passthrough.** A native `Agent` is *always* serialized
+  natively — even when its `model` is `"claude-code"` / `"claude-code/..."`. `detect_framework()`
+  returns `None` for any native `Agent` instance (serializer.py: "Native Agent instances are
+  always native, even with claude-code models. The server handles claude-code model routing
+  during execution."). `detect_framework()` returns `"claude_agent_sdk"` **only** for a raw
+  `ClaudeCodeOptions` / `ClaudeAgentOptions` object (the escape hatch), not for an `Agent`. The
+  server routes a `claude-code`-model `Agent` server-side **by model**, not via the framework
+  passthrough path.
 
 **Sub-agent composition** requires three coordinated pieces so a `claude-code` agent can sit
 inside `agents=[...]`:

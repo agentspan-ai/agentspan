@@ -2,13 +2,13 @@
 
 **Status:** Consolidated 2026-06-26
 
-**Scope:** This is the canonical design for two coupled subsystems in AgentSpan. The first half covers **tool and code execution** — how an agent's LLM runs code via the `execute_code` tool, the executor types (local, Docker, Jupyter, serverless), the interpreter table, command validation, timeouts, and how tools register as Conductor workers. The second half covers **credentials and secrets** — the encrypted-at-rest store, execution-token auth for distributed workers, per-user LLM keys, output masking on the read path, the SDK secret-injection contract every SDK must honor, and the `/credentials` management UI. The two halves meet at secret injection into tools: a tool declares the secrets it needs, and the credentials pipeline resolves and injects them at execution time. Siblings: [agentspan-design.md](agentspan-design.md) (overall architecture), [api-design.md](api-design.md) (REST surface), [sdk-design.md](sdk-design.md) (cross-SDK contracts), [framework-integration.md](framework-integration.md) (framework passthrough). Framework-passthrough credential injection detail is shared with [framework-integration.md](framework-integration.md).
+**Scope:** This is the canonical design for two coupled subsystems in AgentSpan. The first half covers **tool and code execution** — how an agent's LLM runs code via the `execute_code` tool, the executor types (local, Docker, Jupyter, serverless), the interpreter table, command validation, timeouts, and how tools register as Conductor workers. The second half covers **credentials and secrets** — the encrypted-at-rest store, execution-token auth for distributed workers, per-user LLM keys, output masking on the read path, the SDK secret-injection contract every SDK must honor, and the **Secrets** management UI. The two halves meet at secret injection into tools: a tool declares the secrets it needs, and the credentials pipeline resolves and injects them at execution time. Siblings: [agentspan-design.md](agentspan-design.md) (overall architecture), [api-design.md](api-design.md) (REST surface), [sdk-design.md](sdk-design.md) (cross-SDK contracts), [framework-integration.md](framework-integration.md) (framework passthrough). Framework-passthrough credential injection detail is shared with [framework-integration.md](framework-integration.md).
 
 ---
 
 # Part 1 — Tool & Code Execution
 
-Local code execution lets an agent's LLM run code on the user's machine (or in a sandbox) via an `execute_code` tool. The LLM sends code + language; a **worker** on the SDK side executes it and returns stdout/stderr/exit code. This architecture is implemented consistently across SDKs (Python, JavaScript/TypeScript, Java, Go, …).
+Local code execution lets an agent's LLM run code on the user's machine (or in a sandbox) via an `execute_code` tool. The LLM sends code + language; a **worker** on the SDK side executes it and returns stdout/stderr/exit code. The contract below is the *target* shape; coverage varies by SDK — see §2.10 for the as-built matrix. There is no Go SDK (Python, TypeScript, Java, and C#/.NET only).
 
 ```
 LLM  ──tool_call──►  Conductor  ──task──►  SDK Worker  ──subprocess──►  Result
@@ -108,7 +108,7 @@ Runs code inside a Docker container for isolation.
 
 Uses a Jupyter kernel for stateful execution (state persists between calls).
 
-> **Note:** This is the exception to the "isolated per call" rule. Only include this executor in SDKs where Jupyter kernels are available (Python, potentially JS via Deno kernel).
+> **Note:** This is the exception to the "isolated per call" rule. Only include this executor in SDKs where Jupyter kernels are available. As-built: **Python is the only real implementation.** The TypeScript `JupyterCodeExecutor` is a **stub** — it returns the error `"JupyterCodeExecutor requires a running Jupyter runtime. Not yet implemented."` Java and C# have no Jupyter executor at all.
 
 ### 2.3d ServerlessCodeExecutor
 
@@ -307,6 +307,24 @@ The worker must handle:
 - [ ] Conductor worker registration and polling
 - [ ] Tests: empty code, language validation, command validation, execution success/failure/timeout
 
+## 2.10 As-built executor coverage per SDK
+
+The four-executor family above is the contract, **not** a uniform reality. Coverage today:
+
+| SDK | Local | Docker | Jupyter | Serverless | CommandValidator | Notes |
+|---|:-:|:-:|:-:|:-:|:-:|---|
+| **Python** | ✓ | ✓ | ✓ | ✓ | ✓ | All four real. Validator in `code_execution_config.py`. |
+| **TypeScript** | ✓ | ✓ | **stub** | ✓ | ✓ | Jupyter executor is a stub ("Not yet implemented"). |
+| **Java** | — | ✓ | — | — | inline | **Docker only.** No Local/Jupyter/Serverless executor classes; command validation is inline in `CliCommandExecutor`. |
+| **C# / .NET** | inline | — | — | — | — | **No executor classes in the library.** Local execution is inline `ExecuteLocalCodeAsync` in `WorkerManager`; an `LocalCodeExecutor` exists only in the `24_CodeExecution` example. |
+
+Source locations:
+
+- Python: `sdk/python/src/conductor/ai/agents/code_executor.py` (+ `code_execution_config.py`).
+- TypeScript: `sdk/typescript/src/code-execution.ts`.
+- Java: `sdk/java/.../execution/{CodeExecutor,DockerCodeExecutor,CliCommandExecutor}.java`.
+- C#: `sdk/csharp/src/Conductor.AI/WorkerManager.cs` (inline) + `sdk/csharp/examples/24_CodeExecution/Program.cs` (example).
+
 ---
 
 # Part 2 — Credentials & Secrets
@@ -319,65 +337,50 @@ This half reflects what the codebase does today, not historical proposals.
 - **Multi-user safe** — two users on the same server use distinct keys.
 - **Distributed-worker safe** — workers resolve per-execution credentials via a short-lived token, never see the user's session.
 - **One pipeline** — same resolution code path for LLM keys, tool credentials, HTTP/MCP headers, CLI tools, and framework passthroughs.
-- **Pluggable** — `SecretStoreProvider` interface lets Enterprise swap in AWS SM / HashiCorp Vault / Azure KV without touching OSS code.
+- **Pluggable** — `CredentialStoreProvider` interface lets Enterprise swap in AWS SM / HashiCorp Vault / Azure KV without touching OSS code.
 
 ## 3.1 Backend architecture
 
 ### Module layout (server)
 
-`server/src/main/java/dev/agentspan/runtime/secrets/`:
+The server namespace is `dev.agentspan.*`. The credential implementation classes live under `server/conductor-agentspan/.../runtime/credentials/` (interfaces/SPI in `runtime/spi/`, controllers in `runtime/controller/`); the OSS-only built-in store implementations live in the `conductor-agentspan-server` module.
 
 | Class | Responsibility |
 |---|---|
-| `SecretStoreProvider` (iface) | `get/set/delete/list` over an opaque backend |
-| `EncryptedDbSecretStoreProvider` | OSS default — AES-256-GCM in SQLite/Postgres |
-| `MasterKeyConfig` | Sources `AGENTSPAN_MASTER_KEY`; falls back to `~/.agentspan/master.key` on localhost |
-| `SecretDataSourceConfig` | Dedicated HikariCP pool (8 conns) for the credential DB |
-| `SecretTagsService` | CRUD over `secret_tags` (key/value labels per secret) |
-| `SecretResolutionService` | Single authority: `(userId, name) → plaintext` (direct lookup) |
+| `CredentialStoreProvider` (iface, `runtime/spi`) | `get/set/delete/list` over an opaque backend |
+| `EncryptedDbCredentialStoreProvider` (server module) | OSS default — AES-256-GCM in SQLite/Postgres |
+| `CredentialResolutionService` | Single authority: `(userId, name) → plaintext` — flat lookup + dotted-JSONPath |
 | `ExecutionTokenService` | Mint/validate HMAC-SHA256 execution tokens; in-memory `jti` deny-list |
-| `SecretEnvSeeder` | One-shot startup seeder for ~105 well-known provider env vars |
+| `KnownProviderEnvVars` | The ~35 well-known provider env-var names to seed |
+| `CredentialEnvSeeder` (server module) | One-shot startup seeder that copies those env vars into the default-user store |
+| `SecretOutputMasker` (iface, `runtime/spi`) | `mask(executionId, userId, payload)` — output redaction hook |
+| `NoOpSecretOutputMasker` (server module) | OSS default — returns the payload unchanged (no masking in OSS) |
+| `CredentialMaskingResponseAdvice` (`runtime/controller`) | `@ControllerAdvice` that delegates to `SecretOutputMasker` on execution-read URIs |
 | `SecretAwareHttpTask` / `Config` | Resolves `${NAME}` in HTTP-task headers before dispatch |
 | `SecretAwareMcpService` | Resolves `#{NAME}` in MCP tool headers |
-| `controller/SecretController + WorkerController` | REST surface (management + `/resolve`) |
+| `controller/SecretController + WorkerController` | REST surface (management at `/api/secrets`, worker resolve at `/api/workers/secrets`) |
+
+> **Naming:** the user-facing REST API (`/api/secrets`) and the UI page ("Secrets") keep the *Secrets* name for Conductor parity; the internal store/resolution/masking classes are named `Credential*`.
 
 ### Data model
 
+The OSS schema (`schema-credentials.sql`) defines exactly **one** table:
+
 ```sql
-users(id UUID PK, username UNIQUE, password_hash, email, name, created_at)
-
-api_keys(id UUID PK, user_id FK, key_hash SHA256 UNIQUE, label, last_used_at, created_at)
-
-secrets_store(
-    user_id FK,
+credentials_store(
+    user_id TEXT,
     name TEXT,                   -- e.g. "GITHUB_TOKEN"
     encrypted_value BLOB,        -- [12B IV][ciphertext + 16B GCM tag]
-    created_at, updated_at,
+    created_at TEXT, updated_at TEXT,
     PRIMARY KEY(user_id, name)
-)
-
-secret_tags(
-    user_id FK,
-    name TEXT,                   -- secret this tag belongs to
-    tag_key TEXT,
-    tag_value TEXT,
-    PRIMARY KEY(user_id, name, tag_key, tag_value)
-)
-
-secret_disclosures(
-    execution_id TEXT,           -- workflow / agent execution id
-    user_id FK,
-    name TEXT,                   -- secret name disclosed to this execution's worker
-    disclosed_at TEXT,
-    PRIMARY KEY(execution_id, name)
 )
 ```
 
-`secret_disclosures` is written by `WorkerController.resolveSecrets` on every successful name resolution and read by `SecretMaskingResponseAdvice` to redact those values from execution-read responses (§3.4).
+There are **no** `users`, `api_keys`, `secret_tags`, or `secret_disclosures` tables in OSS. (AgentSpan's standalone server runs anonymous; tag-based RBAC and per-execution disclosure tracking for output masking are **Enterprise** features. The schema file's own comment notes that `credential_disclosures` is enterprise-only and not in the OSS schema.)
 
-The earlier `credentials_binding` table (logical-key → store-name indirection) was removed for parity with Conductor's flat-name secrets API. The legacy `credentials_store` table was renamed to `secrets_store` — `SecretSchemaMigrator` copies any existing rows on first startup and drops the old table. Both transitions are zero-downtime for self-hosters.
+The earlier `credentials_binding` table (logical-key → store-name indirection) was removed for parity with Conductor's flat-name secrets API. `credentials_store` is the canonical table name; a transient dev name (`secrets_store`) was never the canonical form.
 
-Schemas: `server/src/main/resources/schema-secrets.sql` (SQLite) and `schema-secrets-postgres.sql`.
+Schema: `server/conductor-agentspan-server/src/main/resources/schema-credentials.sql`.
 
 ### Encryption at rest
 
@@ -409,7 +412,7 @@ sig    HMAC-SHA256 (master)
 
 ### Resolution pipeline
 
-`SecretResolutionService.resolve(userId, name)`:
+`CredentialResolutionService.resolve(userId, name)`:
 
 1. **Flat name** (no `.`): `storeProvider.get(userId, name)` → return value (or null).
 2. **Dotted name** (Conductor-parity JSONPath): split on first `.`. Fetch the base secret, parse it as JSON, walk the remaining dotted path via Jackson, return the leaf as a string (text nodes unquoted; other types as compact JSON). Returns null if the base isn't JSON or the path doesn't resolve.
@@ -430,7 +433,7 @@ No indirection layer beyond JSONPath. (Earlier designs had a `logical_key → st
 
 The server itself does **not** perform an env-var fallback. Env-var convenience is provided by:
 
-- **`SecretEnvSeeder`** — at server startup, copies any of ~105 well-known env vars (OpenAI, Anthropic, AWS, GCP, etc.) into the default user's credentials store. So `export OPENAI_API_KEY=…` still "just works" without any setup.
+- **`CredentialEnvSeeder`** (driven by the `KnownProviderEnvVars` list) — at server startup, copies any of the ~35 well-known provider env vars (OpenAI, Anthropic, AWS, GCP, etc.) into the default user's credentials store. So `export OPENAI_API_KEY=…` still "just works" without any setup.
 - **SDK fallback** — when `secret_strict_mode=false`, missing names from `/resolve` fall back to `os.environ` in the worker process (local-dev compat).
 
 ## 3.3 API surface
@@ -456,9 +459,8 @@ Mirrors `io.orkes.conductor.server.rest.SecretResource`.
 | `PUT`    | `/api/secrets/{key}`         | raw string     | `200` (upsert) |
 | `DELETE` | `/api/secrets/{key}`         | —              | `204` |
 | `GET`    | `/api/secrets/{key}/exists`  | —              | `true` / `false` |
-| `GET`    | `/api/secrets/{key}/tags`    | —              | `List<{key, value}>` |
-| `PUT`    | `/api/secrets/{key}/tags`    | `List<{key, value}>` | `200` (add) |
-| `DELETE` | `/api/secrets/{key}/tags`    | `List<{key, value}>` | `200` (remove) |
+
+> Tag CRUD (`/api/secrets/{key}/tags`) is **not** in OSS — `secret_tags` is an Enterprise feature.
 
 `GET /{key}` returns plaintext (Conductor parity). Every read is audit-logged. RBAC will gate this in Enterprise; in OSS, anyone with management auth can read or overwrite, so hiding plaintext on GET would be theater.
 
@@ -466,7 +468,7 @@ Mirrors `io.orkes.conductor.server.rest.SecretResource`.
 
 | Method | Path | Returns |
 |---|---|---|
-| `GET` | `/api/secrets/v2` | `List<SecretMeta>` — name + partial + created_at + updated_at + tags |
+| `GET` | `/api/secrets/v2` | `List<SecretMeta>` — name + partial + created_at + updated_at |
 
 `partial` follows the OpenAI/GitHub convention: first-4 + `…` + last-4. The UI uses this endpoint for the secrets table; the v1 `POST /api/secrets` is reserved for strict-parity callers.
 
@@ -568,7 +570,7 @@ X-API-Key:     #{OPENAI_API_KEY}
 X-Client-Id:   #{BLOB.auth.oauth.client_id} # nested JSONPath
 ```
 
-Dotted names go through the same `SecretResolutionService` as worker-side resolution, so the JSONPath syntax is uniform across all four call paths (worker `/api/workers/secrets`, HTTP placeholder, MCP placeholder, server-side LLM/VectorDB providers).
+Dotted names go through the same `CredentialResolutionService` as worker-side resolution, so the JSONPath syntax is uniform across all four call paths (worker `/api/workers/secrets`, HTTP placeholder, MCP placeholder, server-side LLM/VectorDB providers).
 
 This means credential material **never leaves the server** for system-task tools — workers don't see it, neither does Conductor (placeholders are rewritten on egress).
 
@@ -578,18 +580,20 @@ Framework agents run third-party code in-process and read keys from `os.environ`
 
 ### Per-user LLM provider keys
 
-LLM provider keys and Vector DB keys are resolved **server-side** through the same `SecretResolutionService` pipeline (last two rows of the table above). `AIModelProvider` / `VectorDBProvider` resolve `(userId, name)` at client-init time, so two users on one server transparently use distinct keys and credential material never reaches a worker process for these paths. This is the foundation for per-user / per-tenant model routing.
+LLM provider keys and Vector DB keys are resolved **server-side** through the same `CredentialResolutionService` pipeline (last two rows of the table above). `AIModelProvider` / `VectorDBProvider` resolve `(userId, name)` at client-init time, so two users on one server transparently use distinct keys and credential material never reaches a worker process for these paths. This is the foundation for per-user / per-tenant model routing.
 
 ## 3.5 Output masking (defense in depth on the read path)
 
 Even with all the controls above, a tool's *output* can leak a secret value verbatim — e.g. `gh` prints `error: authentication failed (token: ghp_realtoken123)` to stderr, and that string ends up in the Conductor task output. Anyone with execution-read permission would then see the plaintext.
 
-The masker closes that gap:
+> **OSS is a no-op; output masking + disclosure tracking are ENTERPRISE.** The OSS server wires the read-path hook (`CredentialMaskingResponseAdvice`, a Spring `@ControllerAdvice`), but it delegates to the `SecretOutputMasker` SPI whose OSS implementation (`NoOpSecretOutputMasker`) returns the payload unchanged. There is no `secret_disclosures`/`credential_disclosures` table in the OSS schema (§3.1). The mechanism described below is the **Enterprise** behavior, which plugs a real masker into the same hook.
 
-1. **Disclosure tracking** — `WorkerController.resolveSecrets` writes one row to `secret_disclosures` per successfully resolved name, scoped to the execution id + user id.
-2. **Read-side redaction** — `SecretMaskingResponseAdvice` is a Spring `@ControllerAdvice` that activates on per-execution read URIs: `/api/agent/executions/{id}` (+ `/full`, `/tasks`), `/api/agent/execution/{id}`, and the bare-id `/api/agent/{id}/status`. It pulls the disclosed names from `secret_disclosures`, fetches their **current** plaintext from the secret store, parses the response body as JSON, walks every string node, and replaces each occurrence of a disclosed value with `***NAME***`. Tree-walking (rather than literal `String.replace` on the JSON text) is required so values that contain newlines, quotes, or other JSON-escaped characters are still matched — JSON serialization would have escaped them in the wire payload.
+The Enterprise masker closes that gap:
 
-Key properties:
+1. **Disclosure tracking** — `WorkerController.resolveSecrets` writes one disclosure row per successfully resolved name, scoped to the execution id + user id (Enterprise table).
+2. **Read-side redaction** — `CredentialMaskingResponseAdvice` activates on per-execution read URIs: `/api/agent/executions/{id}` (+ `/full`, `/tasks`), `/api/agent/execution/{id}`, and the bare-id `/api/agent/{id}/status`. The Enterprise masker pulls the disclosed names, fetches their **current** plaintext from the credential store, parses the response body as JSON, walks every string node, and replaces each occurrence of a disclosed value with `***NAME***`. Tree-walking (rather than literal `String.replace` on the JSON text) is required so values that contain newlines, quotes, or other JSON-escaped characters are still matched — JSON serialization would have escaped them in the wire payload.
+
+Key properties (Enterprise masker):
 
 - **Read-time, not write-time.** Storage rewrite would be irreversible. Rotation handles itself: the always-current store value is what gets masked.
 - **Minimum-length floor (8 chars).** Shorter values produce too many false positives in natural-language output.
@@ -597,11 +601,11 @@ Key properties:
 - **JSON-aware** — values containing `"`, `\`, newlines, or other characters that JSON serialization escapes are still masked because the masker matches against unescaped text-node values, not the wire payload.
 - **Best effort.** If anything fails (parse error, no user context, no disclosures), the body passes through unchanged. Masking should never block a response.
 - **AgentSpan-owned paths only by default.** The advice always masks AgentSpan's own `/api/agent/*` reads. The raw Conductor `/api/workflow/{id}` read is host-owned, so masking it is **opt-in** via `agentspan.credentials.mask-workflow-reads=true` (default `false`) — this keeps the library from mutating an embedding host's workflow responses just by being on the classpath.
-- **Bounded retention.** `secret_disclosures` rows are pruned hourly by `SecretDisclosureService.pruneScheduled` with a default 30-day retention (configurable via `agentspan.secrets.disclosure-retention-days`). Older execution payloads remain readable but will not be masked — by design: a 30-day-old disclosed token should have been rotated anyway.
+- **Bounded retention.** Enterprise prunes disclosure rows on a retention schedule; older execution payloads remain readable but will not be masked — by design, a long-since-disclosed token should have been rotated anyway.
 
 What this does **not** cover:
 
-- **List endpoints** (`GET /api/agent/list`, `GET /api/agent/executions`, `GET /api/agent/executions/search`) — these return aggregate metadata, not per-execution payload bodies. The advice intentionally does **not** activate on list responses: there is no single execution id to scope disclosures against, and list rows surface summary fields (status, timestamps, names) rather than task outputs. If a secret can appear in a *list-row* field (e.g. an agent name shaped like an env-var template), file it as a separate masking gap.
+- **List endpoints** (`GET /api/agent/list`, `GET /api/agent/executions`, `GET /api/agent/executions/search`) — these return aggregate metadata, not per-execution payload bodies. The advice intentionally does **not** activate on list responses: there is no single execution id to scope the disclosure set against, and list rows surface summary fields (status, timestamps, names) rather than task outputs. If a secret can appear in a *list-row* field (e.g. an agent name shaped like an env-var template), file it as a separate masking gap.
 - **POST / mutation endpoints** that echo input (e.g. `/{executionId}/respond`, `/{executionId}/signal`) — the input body is what the caller already supplied, so masking it would help nothing; the *task output* it triggers is still masked when read back through the GET path.
 - **Live SSE streams** (`/api/agent/stream/{id}`) — events flow through the streaming converter, which the advice doesn't intercept. Follow-up work.
 - **Bypassing AgentSpan to hit Conductor directly** — Conductor is internal-only per the existing security model.
@@ -629,14 +633,14 @@ What this does **not** cover:
 | Tool exfiltration via egress | Names bounded to declared set; audit trail; rate-limited |
 | Conductor variable leakage | Conductor is internal-only; agentspan-server is sole external entry point |
 | Master key loss | Documented; backup is operator's responsibility |
-| Plaintext leaks via tool output (e.g. CLI error messages echo a token) | **Output masking** — `SecretMaskingResponseAdvice` redacts disclosed values from execution-read response bodies (§3.5) |
+| Plaintext leaks via tool output (e.g. CLI error messages echo a token) | **Output masking (Enterprise)** — a real `SecretOutputMasker` behind `CredentialMaskingResponseAdvice` redacts disclosed values from execution-read response bodies (§3.5); OSS masker is a no-op |
 | **Cross-tenant leak when SDK is embedded in a host app** (e.g. Django, FastAPI) | **Run agentspan-server as a separate service.** The process-wide env-injection lock is insufficient when arbitrary host-app code can read `os.environ` during the injection window. See §4.6. |
 
 ## 3.8 OSS vs Enterprise boundary
 
 | Concern | OSS | Enterprise |
 |---|:-:|:-:|
-| `SecretStoreProvider` interface, encrypted DB store | ✓ | — |
+| `CredentialStoreProvider` interface, encrypted DB store | ✓ | — |
 | Env-var seeding + SDK fallback | ✓ | — |
 | Management + `/resolve` APIs | ✓ | — |
 | Execution token mint/validate (in-memory deny-list) | ✓ | — |
@@ -644,12 +648,15 @@ What this does **not** cover:
 | Subprocess isolation | ✓ | — |
 | HTTP/MCP placeholder resolution | ✓ | — |
 | Per-user LLM / VectorDB resolution | ✓ | — |
+| Output masking (`SecretOutputMasker`): OSS no-op vs real masker | no-op | ✓ |
+| Disclosure tracking (per-execution disclosed-name table) | — | ✓ |
+| Secret tags / tag-based RBAC | — | ✓ |
 | OIDC / SSO authentication | — | ✓ |
 | AWS SM / GCP SM / Azure KV / HashiCorp / CyberArk / Doppler / K8s Secrets | — | ✓ |
 | Org / team RBAC, credential policies | — | ✓ |
 | Durable audit store, durable token revocation | — | ✓ |
 
-Enterprise plugs in via the same `SecretStoreProvider` and `AuthFilter` interfaces — no OSS changes required.
+Enterprise plugs in via the same `CredentialStoreProvider`, `SecretOutputMasker`, and `AuthFilter` interfaces — no OSS changes required.
 
 ---
 
@@ -820,6 +827,8 @@ Race tests run with raw `Thread.Start()` and `assertEventually` are flaky — th
 - `test_buggy_injection_races` (or `_clobbers_concurrent_value`)
 - `test_fixed_injection_isolates_concurrent_calls`
 
+> **As-built gap (C#/.NET):** the .NET suite (`CredentialInjectionConcurrentTest.cs`) ships only the fix-verification side (`FixedInjection_IsolatesConcurrentCalls` plus restore/exception cases). The paired **counterfactual** ("buggy") test is **missing** and should be added to satisfy this contract.
+
 ## 4.6 Embedded deployments — the contract assumes a dedicated worker process
 
 Everything in §4.1–§4.5 assumes the SDK runs in a **dedicated AgentSpan worker process** — a process whose only job is to poll Conductor and execute agent tools. Under that assumption, tier-2 (env-injection with a process-wide lock) is correct: the only code that reads `os.environ` during the injection window is the framework SDK itself, and concurrent agent invocations serialize via the lock.
@@ -864,7 +873,7 @@ The Python SDK supports this today — construct `AgentRuntime(server_url=…, a
 
 If running a separate server isn't an option (single-binary deployment, edge-case constraints), the only safe pattern is **tier-1 explicit-key for every tool, with tier-2 hard-disabled**:
 
-1. **Every tool reads secrets via the contextvars accessor** (`get_secret(name)` in Python, `getCredential(name)` in TS, `IToolContext.Secret(name)` in .NET) — never `os.environ` / `process.env` / `Environment.GetEnvironmentVariable`.
+1. **Every tool reads secrets via the contextvars accessor** (`get_secret(name)` in Python, `getCredential(name)` in TS, `ToolContext.getCredential(name)` in Java) — never `os.environ` / `process.env`. **Caveat for C#/.NET:** there is currently **no** tier-1 accessor (no `IToolContext.Secret`/`Secrets.Get`); the .NET SDK is tier-2 only (`Conductor.AI.CredentialInjection.InjectViaEnvAsync`), so the strict embedded discipline below cannot be fully satisfied on .NET today — pass keys explicitly to clients and run the server separately.
 2. **Every secret value is passed explicitly to the underlying client**: `OpenAI(api_key=key)`, `ChatAnthropic(api_key=...)`, etc. No client construction relies on env-var auto-discovery.
 3. **Framework passthrough integrations that require env-only configuration are unsupported in embedded mode.** Specifically: Claude Agent SDK CLI mode, Google ADK `genai.configure`, anything that reads env at module-import time. Use only frameworks that accept an explicit `api_key=` parameter.
 4. **Hard-disable tier-2 with a config flag** (planned: `AGENTSPAN_DISALLOW_ENV_INJECTION=1`). When set, `inject_via_env` (and equivalents) raise instead of mutating env. Provides loud failure instead of silent leak.
@@ -891,9 +900,9 @@ The decision pivots on "is unrelated code reading `os.environ` in the same proce
 
 ## 4.7 Per-language notes
 
-**Java is tier-1-only by language constraint.** `System.getenv()` returns an unmodifiable map at JVM start, so the SDK *cannot* implement tier-2 env injection without reflection hacks against private JDK internals. The Java SDK ships with `ai.agentspan.Secrets.get(name)` — a thread-local accessor populated by `WorkerManager` immediately before invoking each `@Tool` method. Tool authors read declared credentials via `Secrets.get(...)` and pass them explicitly to model client constructors. Framework passthrough that depends on env-var auto-discovery doesn't work in Java; users must construct framework clients with explicit `api_key` arguments. This is exactly the contract the doc recommends for new languages — Java got it for free because the language wouldn't let us cheat.
+**Java is tier-1-only by language constraint.** `System.getenv()` returns an unmodifiable map at JVM start, so the SDK *cannot* implement tier-2 env injection without reflection hacks against private JDK internals. The Java SDK exposes `ToolContext.getCredential(name)` on the `ToolContext` passed to each `@Tool` method, backed by the `internal.CredentialContext` thread-local populated by the worker immediately before invocation. Tool authors read declared credentials via `ctx.getCredential(...)` and pass them explicitly to model client constructors. Framework passthrough that depends on env-var auto-discovery doesn't work in Java; users must construct framework clients with explicit `api_key` arguments. This is exactly the contract the doc recommends for new languages — Java got it for free because the language wouldn't let us cheat.
 
-**Java ThreadLocal does not propagate across async boundaries.** `ai.agentspan.Secrets` is backed by a plain `ThreadLocal`, populated on the worker thread immediately before `@Tool` invocation and cleared immediately after. If a tool spawns an `ExecutorService.submit(...)`, `CompletableFuture.runAsync(...)`, virtual-thread `Thread.startVirtualThread(...)`, or any other handoff to a different carrier thread, the secret is **not visible** in the spawned task — `Secrets.get(name)` returns `null` there. This is a known limitation: tool authors who need a secret on a background thread must capture it on the calling thread (e.g. `String tok = Secrets.get("X"); pool.submit(() -> useToken(tok));`) rather than calling `Secrets.get` from inside the lambda. Reactor / RxJava / Kotlin-coroutine context propagation is the user's responsibility — there is no `InheritableThreadLocal` because it would leak across unrelated executions sharing a thread pool. See `Example16CredentialsTool` for the supported pattern.
+**Java ThreadLocal does not propagate across async boundaries.** `internal.CredentialContext` (the `ThreadLocal` behind `ToolContext.getCredential`) is populated on the worker thread immediately before `@Tool` invocation and cleared immediately after. If a tool spawns an `ExecutorService.submit(...)`, `CompletableFuture.runAsync(...)`, virtual-thread `Thread.startVirtualThread(...)`, or any other handoff to a different carrier thread, the secret is **not visible** in the spawned task — `ctx.getCredential(name)` returns `null` there. This is a known limitation: tool authors who need a secret on a background thread must capture it on the calling thread (e.g. `String tok = ctx.getCredential("X"); pool.submit(() -> useToken(tok));`) rather than calling `ctx.getCredential` from inside the lambda. Reactor / RxJava / Kotlin-coroutine context propagation is the user's responsibility — there is no `InheritableThreadLocal` because it would leak across unrelated executions sharing a thread pool. See `Example16CredentialsTool` for the supported pattern.
 
 ### Guidance for new-language SDKs
 
@@ -915,145 +924,103 @@ The contract applies everywhere an SDK injects resolved secrets into a shared mu
 
 | SDK | Helper location | Used by |
 |---|---|---|
-| Python | `agentspan.agents.runtime.secret_injection.inject_via_env` | Native `_dispatch.py` + `frameworks/langchain.py`, `langgraph.py`, `claude_agent_sdk.py` |
-| .NET | `Agentspan.SecretInjection.InjectViaEnvAsync` | `WorkerManager.cs` (covers native handlers + OpenAI / SemanticKernel / GoogleADK integrations) |
+| Python | `conductor.ai.agents.runtime.secret_injection.inject_via_env` | Native `_dispatch.py` + `frameworks/langchain.py`, `langgraph.py`, `claude_agent_sdk.py` |
+| .NET | `Conductor.AI.CredentialInjection.InjectViaEnvAsync` | `WorkerManager.cs` (covers native handlers + OpenAI / SemanticKernel / GoogleADK integrations) |
 | TypeScript | `src/credentials.ts` (`injectSecretsForInvocation`) | `worker.ts` (covers native tools + LangChain / LangGraph serializers) |
-| Java | `ai.agentspan.Secrets` (thread-local accessor) + `ai.agentspan.internal.WorkerCredentialFetcher` (HTTP client for `/api/workers/secrets`) | `internal.WorkerManager.executeTask` (covers every `@Tool` method; tier-1 explicit-key only — env injection structurally impossible in Java) |
+| Java | `ToolContext.getCredential` (backed by `internal.CredentialContext` thread-local) + `internal.WorkerCredentialFetcher` (HTTP client for `/api/workers/secrets`) | `internal.WorkerManager.executeTask` (covers every `@Tool` method; tier-1 explicit-key only — env injection structurally impossible in Java) |
 
 ---
 
-# Part 5 — Credentials Management UI
+# Part 5 — Secrets Management UI
 
-A Credentials management page in the AgentSpan UI lets users store, view, update, and delete per-user API keys and secrets. It follows the existing React 18 + MUI 7 + React Query design language exactly.
+A **Secrets** management page in the AgentSpan UI lets users store, view, update, and delete per-user secrets. It follows the existing React 18 + MUI 7 + React Query design language. The page is flat-name only (no bindings UI — the logical-key → store-name indirection was removed backend-side for Conductor parity, see §3.1).
 
-> **Note on bindings:** the original spec included a logical-key → store-name "bindings" feature. That indirection layer was removed backend-side for parity with Conductor's flat-name secrets API (see §3.1). The current UI is flat-name only — no bindings UI. The bindings-related components below are retained for historical context but are not part of the as-built page.
+> **Naming:** the page and route are *Secrets*, matching the `/api/secrets` REST surface. (Internally the server classes are named `Credential*`; see §3.1.)
 
 ## 5.1 Architecture
 
 ### Page structure
 
-A single `/credentials` route registered under a new **Settings** section in the sidebar. No sub-routes.
+A single `/secrets` route (`SECRETS_URL.BASE`), registered as `SecretsPage` at `ui/src/pages/secrets/SecretsPage.tsx`. No sub-routes. It sits in the existing **Definitions** sidebar submenu — there is **no** `/credentials` route, no `Settings` submenu, and no `ui/src/pages/credentials/` directory.
 
 ### State management
 
-React Query (`useFetch`, `useAction`, `useActionWithPath` from `utils/query.ts`) — no XState needed. Same pattern as `TaskDefinitions` and other list pages. Local `useState` for dialog visibility, expanded row state, and toast messages.
+React Query via `useFetchContext` + a thin `secretFetch` wrapper. Same pattern as the other definition list pages. Local `useState` for dialog visibility and toast messages.
 
-### Auth
+### Auth — none in OSS
 
-The credentials API requires a Bearer JWT only when `auth.enabled=true` (non-default in OSS). The UI handles both modes:
-
-- A `useCredentialAuth` hook in `pages/credentials/hooks/useCredentialAuth.ts` reads/writes a JWT from `localStorage` under the key `agentspan.credential_token`.
-- All credentials API calls use a `credentialFetch(path, options)` helper that **wraps `fetchWithContext`** (from `plugins/fetch.ts`), passing an `Authorization: Bearer <token>` header only when a token exists. This preserves `fetchWithContext`'s URL construction (`VITE_WF_SERVER` base, `cleanPath`, error handler).
-- If the API returns **401**, the hook clears the token and shows a **LoginDialog**.
-- If no token is stored and the API returns **200** (i.e. `auth.enabled=false` — the OSS default), the page loads normally without ever showing `LoginDialog`. `LoginDialog` only appears in response to a 401.
-- On successful login (`POST /auth/login`), the token is stored in localStorage and the credentials list is refetched.
-- A **Logout** link appears in the page's `SectionHeaderActions` when a token is stored.
-
-This is self-contained — it does not modify the existing `useFetch` / `useAuthHeaders` infrastructure (which uses `X-Authorization` for the existing Conductor APIs).
+The standalone AgentSpan server runs **anonymous**, so the Secrets page sends **no per-request token**. There is **no** `useCredentialAuth` hook, **no** `LoginDialog`, **no** `credentialFetch`/login flow, and **no** `POST /auth/login`. The page passes `{ token: null, onUnauthorized: () => {} }` to its API hooks; auth, when present, is the embedding host's concern.
 
 ## 5.2 File structure
 
-### New files
-
 | File | Responsibility |
 |------|---------------|
-| `ui/src/pages/credentials/CredentialsPage.tsx` | Main page: table, dialogs, toasts |
-| `ui/src/pages/credentials/hooks/useCredentialAuth.ts` | JWT read/write from localStorage; 401 → clear token → trigger LoginDialog |
-| `ui/src/pages/credentials/hooks/useCredentialsApi.ts` | Fetch wrappers: `useListCredentials`, `useCreateCredential`, `useUpdateCredential`, `useDeleteCredential` |
-| `ui/src/pages/credentials/components/AddEditCredentialDialog.tsx` | Add/edit dialog: Name + Value (masked, show/hide toggle). Edit pre-fills Name (read-only), clears Value. |
-| `ui/src/pages/credentials/components/LoginDialog.tsx` | Username + password dialog; calls `POST /auth/login`; stores token |
-| `ui/src/pages/credentials/index.ts` | Re-exports `CredentialsPage` |
+| `ui/src/pages/secrets/SecretsPage.tsx` | Main page: table, add/edit dialog, delete confirm, toasts |
+| `ui/src/pages/secrets/hooks/useSecretsApi.ts` | `secretFetch` wrapper + hooks: `useListSecrets` (`GET /api/secrets/v2`), create/update/delete |
 
-### Modified files
+Route + sidebar wiring (existing files):
 
-| File | Change |
-|------|--------|
-| `ui/src/utils/constants/route.ts` | Add `export const CREDENTIALS_URL = "/credentials";` (single route — plain string, consistent with `NEW_TASK_DEF_URL` pattern) |
-| `ui/src/routes/routes.tsx` | Add `{ path: CREDENTIALS_URL, element: <CredentialsPage /> }` |
-| `ui/src/components/Sidebar/sidebarCoreItems.tsx` | Add Settings submenu at **position 350** (between Definitions at 300 and Help at 400 — no renumbering needed). Use `SettingsIcon` from `@mui/icons-material` to match the existing sidebar icon style. |
+| File | Entry |
+|------|-------|
+| `ui/src/utils/constants/route.ts` | `SECRETS_URL.BASE = "/secrets"` |
+| `ui/src/routes/routes.tsx` | route for `SecretsPage` at `SECRETS_URL.BASE` |
+| `ui/src/components/Sidebar/sidebarCoreItems.tsx` | `secretsItem` (title "Secrets", `linkTo: SECRETS_URL.BASE`) under the **Definitions** submenu at **position 300** (`CORE_SIDEBAR_POSITIONS.DEFINITIONS.secretsItem = 300`) |
 
 ## 5.3 Data model
 
 API responses the UI consumes (served by `GET /api/secrets/v2`, see §3.3):
 
 ```typescript
-// list item — name + masked partial + timestamp
-type CredentialListItem = {
+// list item — name + masked partial + timestamp (from GET /api/secrets/v2)
+type SecretListItem = {
   name: string;         // store name, e.g. "GITHUB_TOKEN"
   partial: string;      // e.g. "ghp_...6789"
   updated_at: string;   // ISO-8601
 };
-
-// POST /auth/login
-type LoginRequest = { username: string; password: string };
-type LoginResponse = { token: string; user: { id: string; username: string; name: string } };
 ```
+
+There is no login request/response type — the OSS server is anonymous.
 
 ## 5.4 Component details
 
-### CredentialsPage
+### SecretsPage
 
-- **Header**: uses `SectionHeader` with `title="Credentials"` and a `SectionHeaderActions` node containing:
-  - `+ Add Credential` primary button (always shown)
-  - `Logout` text button (shown only when a token is stored in localStorage)
-  - A descriptive note ("Values are encrypted at rest and never shown after creation") is placed as a `Typography` subtitle below `SectionHeader`, not inside it (SectionHeader has no subtitle prop).
-- **Search**: quick-filter `TextField` above the MUI `Table` — filters `data` client-side by credential name.
-- **Table**: MUI `Table` / `TableHead` / `TableBody` (not the custom `DataTable` — credentials list needs no column customisation, sorting, or server-side pagination). Columns: Name | Value (partial) | Last updated | Actions.
-- **Add button**: opens `AddEditCredentialDialog` in "add" mode.
-- **Edit icon**: opens `AddEditCredentialDialog` in "edit" mode (Name read-only, Value cleared).
-- **Delete icon**: `useState<string | null>(null)` for `confirmDeleteName`. Conditionally renders `{confirmDeleteName && <ConfirmChoiceDialog ... />}` — `ConfirmChoiceDialog` has no `open` prop and must be conditionally mounted. Uses `isInputConfirmation={true}` and `valueToBeDeleted={confirmDeleteName}`. On confirm, calls `deleteCredential(confirmDeleteName)`.
-- **LoginDialog**: rendered when `!isAuthenticated` — covers the page content, no dismiss button.
-- **Toast**: `{toastMessage && <SnackbarMessage message={toastMessage.text} severity={toastMessage.severity} autoHideDuration={3000} onDismiss={() => setToastMessage(null)} />}` — guard required because `message` prop is a required `string`.
+- **Header**: `SectionHeader` titled "Secrets" with an `+ Add Secret` primary action. A descriptive note ("Values are encrypted at rest and never shown after creation") sits as a `Typography` subtitle below the header. No Logout control (anonymous server).
+- **Search**: quick-filter `TextField` filters the list client-side by secret name.
+- **Table**: MUI `Table` / `TableHead` / `TableBody`. Columns: Name | Value (partial) | Last updated | Actions.
+- **Add button**: opens the add/edit dialog in "add" mode.
+- **Edit icon**: opens the dialog in "edit" mode (Name read-only, Value cleared — user re-enters to update).
+- **Delete icon**: `useState<string | null>(null)` for `confirmDeleteName`; conditionally renders `{confirmDeleteName && <ConfirmChoiceDialog ... />}` (`ConfirmChoiceDialog` has no `open` prop and must be conditionally mounted) with `isInputConfirmation` + `valueToBeDeleted`. On confirm, calls the delete mutation.
+- **Toast**: `{toastMessage && <SnackbarMessage ... />}` — guard required because `message` is a required prop.
 
-### AddEditCredentialDialog
+### Add/Edit dialog
 
-- **Fields**: Name (text, monospace font, required; read-only in edit mode) + Value (password `<input>` with a show/hide `IconButton`, required in both add and edit modes — user re-enters to update).
-- **Validation** (React Hook Form + Yup): Name must be non-empty. The UI suggests UPPER_SNAKE_CASE in the helper text ("Convention: UPPER_SNAKE_CASE e.g. GITHUB_TOKEN") but does **not** enforce it with a regex — the backend imposes no constraint and supports lowercase/hyphen names (e.g. `my-github-prod-key`). Only blank names are rejected.
-- **Submit**: `POST /api/secrets` (add) or `PUT /api/secrets/{name}` (edit) via `credentialFetch`.
+- **Fields**: Name (monospace, required; read-only in edit mode) + Value (password input with show/hide toggle, required in add and edit).
+- **Validation**: Name must be non-empty. UPPER_SNAKE_CASE is *suggested* in helper text but not enforced — the backend supports lowercase/hyphen names too. Only blank names are rejected.
+- **Submit**: `POST /api/secrets` (add) or `PUT /api/secrets/{name}` (edit) via `secretFetch`.
 
-### LoginDialog
+### useSecretsApi
 
-- **Fields**: Username + Password (masked, `type="password"`).
-- **No close button** — cannot be dismissed without logging in.
-- **On success**: stores token in localStorage, calls `refetchCredentials()`, closes dialog.
-- **On error**: shows inline `Alert severity="error"` inside the dialog: "Invalid username or password."
-
-### useCredentialsApi
-
-All mutations accept an `onSuccess` / `onError` callback pair so `CredentialsPage` can set toast messages.
-
-`credentialFetch(path, options)`:
-1. Calls `fetchWithContext(path, fetchContext, { ...options, headers: { ...options.headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) } })`.
-2. Catches thrown errors (raw `Response` objects per fetch.ts throw behaviour); if `err.status === 401`, calls `clearToken()`. `useCredentialAuth` exposes `{ token, isAuthenticated: !!token, clearToken, setToken }`.
-3. Uses the same `fetchContext` from `useFetchContext()` — ensuring `VITE_WF_SERVER` base URL and `cleanPath` logic are inherited.
-
-Query cache invalidation: after `createCredential` / `updateCredential` / `deleteCredential`, invalidate the `[fetchContext.stack, "/api/secrets"]` key.
+- `secretFetch(path, ctx, options, onUnauthorized)` wraps `fetchWithContext`, inheriting the `VITE_WF_SERVER` base URL and `cleanPath` logic. In OSS it is called with `token: null` and a no-op `onUnauthorized`.
+- `useListSecrets({ token, onUnauthorized })` → `GET /api/secrets/v2`, cache key `[ctx.stack, "/secrets/v2"]`, `retry: false`.
+- Create / update / delete mutations accept `onSuccess` / `onError` callbacks so the page can set toast messages, and invalidate the list cache key on success.
 
 ## 5.5 Sidebar
 
-New **Settings** submenu at **position 350** inserted between Definitions (300) and Help (400). No existing position numbers change.
+The `secretsItem` lives in the existing **Definitions** submenu at position 300 — no new submenu, no renumbering:
 
 ```typescript
-// In CORE_SIDEBAR_POSITIONS.ROOT:
-settingsSubMenu: 350,
+// CORE_SIDEBAR_POSITIONS.DEFINITIONS
+secretsItem: 300,
 
-// Sidebar item:
+// Sidebar item (under the Definitions submenu)
 {
-  id: "settingsSubMenu",
-  title: "Settings",
-  icon: <SettingsIcon />,   // from @mui/icons-material — matches sidebar icon style
-  linkTo: "",
-  position: 350,
-  items: [
-    {
-      id: "credentialsItem",
-      title: "Credentials",
-      icon: null,
-      linkTo: CREDENTIALS_URL,
-      activeRoutes: [CREDENTIALS_URL],
-      position: 100,
-    },
-  ],
+  id: "secretsItem",
+  title: "Secrets",
+  icon: null,
+  linkTo: SECRETS_URL.BASE,
+  activeRoutes: [SECRETS_URL.BASE],
+  position: D.secretsItem,   // 300
 }
 ```
 
@@ -1061,20 +1028,17 @@ settingsSubMenu: 350,
 
 | Scenario | Behaviour |
 |----------|-----------|
-| 401 on any credentials API call | Clears token, shows LoginDialog |
-| 401 on login attempt | Inline error in LoginDialog: "Invalid username or password" |
-| 404 on delete (already gone) | Toast: "Credential not found — it may have already been deleted", severity=warning |
-| 409 on create (name exists) | Form-level error on Name field: "A credential with this name already exists" |
+| 404 on delete (already gone) | Toast: "Secret not found — it may have already been deleted", severity=warning |
+| 409 on create (name exists) | Form-level error on Name field: "A secret with this name already exists" |
 | Network error | Toast: "Network error — please try again", severity=error |
-| Server returns 200 with no token present | Page loads normally (auth disabled — OSS default) |
+
+(There is no 401/login handling in OSS — the server is anonymous.)
 
 ## 5.7 Testing
 
-- Tests go in `ui/src/pages/credentials/__tests__/`.
-- **`CredentialsPage.test.tsx`**: renders list; delete shows `ConfirmChoiceDialog`, typing name enables confirm; delete success shows toast and refetches; 401 response shows `LoginDialog`.
-- **`AddEditCredentialDialog.test.tsx`**: blank name rejected; blank value rejected; submit calls `POST` (add) or `PUT` (edit); show/hide toggle changes input type.
-- **`LoginDialog.test.tsx`**: renders when no token; stores token on 200 success; shows inline error on 401.
-- **`useCredentialAuth.test.ts`**: `clearToken` removes localStorage key; token present → Authorization header added; no token → no Authorization header.
+- Tests live alongside the Secrets page (`ui/src/pages/secrets/`).
+- **SecretsPage**: renders list from `/api/secrets/v2`; delete shows `ConfirmChoiceDialog`, typing the name enables confirm; delete success shows toast and refetches.
+- **Add/Edit dialog**: blank name rejected; submit calls `POST` (add) or `PUT` (edit); show/hide toggle changes input type.
 
 ---
 
@@ -1084,10 +1048,10 @@ settingsSubMenu: 350,
 - **Durable token revocation** — OSS deny-list is in-memory; bounded risk because TTL ≤ execution timeout, but a server crash drops revocations.
 - **Multi-threaded framework passthrough throughput** — tier-2 (env-injection) calls serialize under the shared lock; scale by adding worker processes. Tier-1 (explicit-key via `get_secret()` or factory `secrets=` arg) runs fully concurrent.
 - **TypeScript SDK** — credential resolution path needs verification against the Python SDK's contract.
-- **Java SDK framework passthrough** — Java SDK has runtime credential resolution (`ai.agentspan.Secrets` accessor, `@Tool(credentials={…})` declaration). What's NOT supported: framework integrations (LangChain4j, OpenAI-Agents) that depend on env-var auto-discovery — Java's `System.getenv()` is immutable, so users must construct those clients with explicit `api_key` arguments.
+- **Java SDK framework passthrough** — Java SDK has runtime credential resolution (`ToolContext.getCredential` accessor, `@Tool(credentials={…})` declaration). What's NOT supported: framework integrations (LangChain4j, OpenAI-Agents) that depend on env-var auto-discovery — Java's `System.getenv()` is immutable, so users must construct those clients with explicit `api_key` arguments.
 - **Credential rotation / expiry** — no first-class TTL on stored credentials; rotation is a `PUT` from the operator.
 - **`AGENTSPAN_DISALLOW_ENV_INJECTION` flag** — planned hard-disable for tier-2 in embedded deployments; not yet implemented.
-- **Live SSE stream masking** — `SecretMaskingResponseAdvice` doesn't intercept `/api/agent/stream/{id}`; secrets in streamed task output are not yet masked.
+- **Live SSE stream masking** — `CredentialMaskingResponseAdvice` doesn't intercept `/api/agent/stream/{id}`; even with the Enterprise masker, secrets in streamed task output are not masked.
 - **Code execution sandboxing** — `LocalCodeExecutor` + `CommandValidator` are not security boundaries; untrusted code requires Docker/serverless executors. Per-language Docker images and a managed serverless backend are follow-ups.
 
 ---
@@ -1095,6 +1059,6 @@ settingsSubMenu: 350,
 # References
 
 - Sibling design docs: [agentspan-design.md](agentspan-design.md), [api-design.md](api-design.md), [sdk-design.md](sdk-design.md), [framework-integration.md](framework-integration.md).
-- Server code: `server/src/main/java/dev/agentspan/runtime/secrets/`.
+- Server code: `server/conductor-agentspan/src/main/java/dev/agentspan/runtime/{credentials,spi,controller}/` (+ built-in store impls in the `conductor-agentspan-server` module).
 - Python SDK examples: `sdk/python/examples/16_credentials_*.py` (a–k).
 - Tests: `server/src/test/java/.../credentials/`, `sdk/python/tests/{unit,e2e}/test_*credential*.py`, `ui/e2e/credentials.spec.ts`.
