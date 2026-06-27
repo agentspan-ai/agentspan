@@ -302,7 +302,7 @@ Tri-state reconcile: `null` = leave untouched, empty list = purge, non-empty = u
 
 The full contract is **~89 features**, each traceable: concept → Python reference module → wire-format key → server handler → kitchen-sink stage. There is no single authoritative per-row matrix in the repo; the grouped summary below is the working inventory.
 
-**SDK parity status.** All four SDKs (Python, TypeScript, Java, C#) are now at **near-full parity**. The recent cross-SDK fixes closed most of the former Java/C# gaps:
+**SDK parity status.** All four SDKs (Python, TypeScript, Java, C#) are now at **essentially complete parity** — the recent cross-SDK fixes closed the former Java/C# gaps, leaving only two honest open items (the server `maskedFields` no-op and the provider/framework asymmetries, both below). The fixes:
 
 - **SemanticMemory** — now in **all four SDKs** (Java added). Reminder: it is a client-side keyword (Jaccard-overlap) store, not a vector DB; not serialized to the wire (§2.8).
 - **ConversationMemory** — now in **all four SDKs** (C# added); wire shape `{messages, maxMessages}`.
@@ -311,13 +311,15 @@ The full contract is **~89 features**, each traceable: concept → Python refere
 - **Tier-1 credential accessor** — now in **all four SDKs** (Python `get_secret`, TS `getCredential`, Java `ToolContext.getCredential`, C# `ToolContext.GetCredential` / `Secrets.Get`).
 - **Default guardrail `onFail`** is now **`raise` uniformly** across all four; `human`+`input` is rejected at construction in all four.
 
-Remaining nuances (not blockers, but kept honest):
+- **Code-execution executors** — now **full across all four SDKs**: Local / Docker / Jupyter / Serverless ship in Python, TS, Java, and C#. The only difference is the Jupyter *mechanism* (Python in-process `jupyter_client`; TS `jupyter run` CLI; Java/C# Jupyter Kernel Gateway over HTTP); the executor itself is present everywhere. See [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md) §2.10.
+- **Optional config-field gaps — closed.** C# now emits `synthesize`, `prefillTools`, `cliConfig` (with `workingDir`), `reasoningEffort`, `contextWindowBudget`, and `maskedFields`; TS now emits `reasoningEffort`, `contextWindowBudget`, and `maskedFields`. All four SDKs now emit the full optional-field set.
 
-- **Code-execution executors** are **not** uniform: Python + TS ship Local / Docker / Jupyter [stub in TS] / Serverless; **Java = Docker only**; **C# = Docker only** (C# gained a `DockerCodeExecutor`; Local/Jupyter/Serverless still absent in Java and C#).
-- **Optional config-field gaps:** C# still omits `synthesize`, `prefillTools`, `cliConfig`, `reasoningEffort`, `contextWindowBudget`, `maskedFields`; TS omits `reasoningEffort`, `contextWindowBudget`, `maskedFields`. (Separately, the server accepts `maskedFields` but never wires it into the compiled WorkflowDef — credential masking in history/UI silently no-ops across all SDKs.)
-- **Provider/framework asymmetries (unchanged):** the `claude-code` model + `ClaudeCode` config are Python/TS only; the Claude Agent SDK framework is Python-only; Vercel AI SDK is TS-only; OCG is Python-only.
+The two remaining honest open items:
 
-Treat the matrix below as the shared reference set; subtract the code-exec and optional-field nuances above for Java/C#.
+- **Server `maskedFields` no-op (unchanged):** all four SDKs now *emit* `maskedFields`, but the server accepts it and never wires it into the compiled WorkflowDef (0 callers) — credential masking in history/UI silently no-ops across all SDKs. This is a server-side gap, not an SDK gap.
+- **Provider/framework asymmetries (unchanged, language-support driven):** the `claude-code` model + `ClaudeCode` config are Python/TS only; the Claude Agent SDK framework is Python-only; Vercel AI SDK is TS-only; OCG is Python-only.
+
+Treat the matrix below as the shared reference set; the only remaining deltas are the two open items above.
 
 | Group | Features (count) | Examples |
 |---|---|---|
@@ -338,7 +340,7 @@ Treat the matrix below as the shared reference set; subtract the code-exec and o
 | Validation (4) | runner, judge, native execution, HTML report | #84–87 |
 | Distributed | external agent | #88 |
 
-A new SDK is **feature-complete** when all ~89 are implemented (see the parity-status nuances above — code-exec executors and a few optional config fields are the only remaining Java/C# deltas), the kitchen sink produces identical `AgentConfig` JSON and executes end-to-end, both sync and async APIs work, the validation report generates, and all Python examples are ported (§5).
+A new SDK is **feature-complete** when all ~89 are implemented (parity across the four shipped SDKs is now essentially complete — see the parity-status note above; the only standing caveats are the server-side `maskedFields` no-op and the language-driven provider/framework asymmetries, neither an SDK feature gap), the kitchen sink produces identical `AgentConfig` JSON and executes end-to-end, both sync and async APIs work, the validation report generates, and all Python examples are ported (§5).
 
 ---
 

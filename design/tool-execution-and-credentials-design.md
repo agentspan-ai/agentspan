@@ -8,7 +8,7 @@
 
 # Part 1 — Tool & Code Execution
 
-Local code execution lets an agent's LLM run code on the user's machine (or in a sandbox) via an `execute_code` tool. The LLM sends code + language; a **worker** on the SDK side executes it and returns stdout/stderr/exit code. The contract below is the *target* shape; coverage varies by SDK — see §2.10 for the as-built matrix. There is no Go SDK (Python, TypeScript, Java, and C#/.NET only).
+Local code execution lets an agent's LLM run code on the user's machine (or in a sandbox) via an `execute_code` tool. The LLM sends code + language; a **worker** on the SDK side executes it and returns stdout/stderr/exit code. The full four-executor family (Local + Docker + Jupyter + Serverless) now ships in **all four SDKs**; the only cross-SDK difference is the Jupyter *mechanism*, which is language-idiomatic — see §2.10 for the as-built matrix. There is no Go SDK (Python, TypeScript, Java, and C#/.NET only).
 
 ```
 LLM  ──tool_call──►  Conductor  ──task──►  SDK Worker  ──subprocess──►  Result
@@ -108,7 +108,7 @@ Runs code inside a Docker container for isolation.
 
 Uses a Jupyter kernel for stateful execution (state persists between calls).
 
-> **Note:** This is the exception to the "isolated per call" rule. Only include this executor in SDKs where Jupyter kernels are available. As-built: **Python is the only real implementation.** The TypeScript `JupyterCodeExecutor` is a **stub** — it returns the error `"JupyterCodeExecutor requires a running Jupyter runtime. Not yet implemented."` Java and C# have no Jupyter executor at all.
+> **Note:** This is the exception to the "isolated per call" rule. A `JupyterCodeExecutor` now ships in **all four SDKs**, but the underlying mechanism is language-idiomatic: Python runs in-process via `jupyter_client`; TypeScript shells out to the `jupyter run` CLI; Java and C# talk to a Jupyter **Kernel Gateway** over HTTP. The executor is present everywhere — only the runtime it requires differs by language.
 
 ### 2.3d ServerlessCodeExecutor
 
@@ -309,21 +309,21 @@ The worker must handle:
 
 ## 2.10 As-built executor coverage per SDK
 
-The four-executor family above is the contract, **not** a uniform reality. Coverage today:
+The four-executor family above now ships in **all four SDKs**. The only cross-SDK difference is the Jupyter *mechanism* (the executor is present everywhere; the runtime it drives is language-idiomatic):
 
-| SDK | Local | Docker | Jupyter | Serverless | CommandValidator | Notes |
+| SDK | Local | Docker | Jupyter | Serverless | CommandValidator | Jupyter mechanism |
 |---|:-:|:-:|:-:|:-:|:-:|---|
-| **Python** | ✓ | ✓ | ✓ | ✓ | ✓ | All four real. Validator in `code_execution_config.py`. |
-| **TypeScript** | ✓ | ✓ | **stub** | ✓ | ✓ | Jupyter executor is a stub ("Not yet implemented"). |
-| **Java** | — | ✓ | — | — | inline | **Docker only.** No Local/Jupyter/Serverless executor classes; command validation is inline in `CliCommandExecutor`. |
-| **C# / .NET** | inline | ✓ | — | — | inline | **Docker only (executor class).** C# now ships a `DockerCodeExecutor`; no Local/Jupyter/Serverless executor classes. Local execution remains inline `ExecuteLocalCodeAsync` in `WorkerManager`; command validation is inline. |
+| **Python** | ✓ | ✓ | ✓ | ✓ | ✓ | In-process `jupyter_client` kernel. |
+| **TypeScript** | ✓ | ✓ | ✓ | ✓ | ✓ | Shells out to the `jupyter run` CLI. |
+| **Java** | ✓ | ✓ | ✓ | ✓ | ✓ | Jupyter Kernel Gateway over HTTP. |
+| **C# / .NET** | ✓ | ✓ | ✓ | ✓ | ✓ | Jupyter Kernel Gateway over HTTP. C# `WorkerManager` now delegates local execution to `LocalCodeExecutor` (the earlier inline `ExecuteLocalCodeAsync` path). |
 
 Source locations:
 
 - Python: `sdk/python/src/conductor/ai/agents/code_executor.py` (+ `code_execution_config.py`).
 - TypeScript: `sdk/typescript/src/code-execution.ts`.
-- Java: `sdk/java/.../execution/{CodeExecutor,DockerCodeExecutor,CliCommandExecutor}.java`.
-- C#: `sdk/csharp/src/Conductor.AI/DockerCodeExecutor.cs` + inline `ExecuteLocalCodeAsync` in `sdk/csharp/src/Conductor.AI/WorkerManager.cs`.
+- Java: `sdk/java/.../execution/{CodeExecutor,LocalCodeExecutor,DockerCodeExecutor,JupyterCodeExecutor,ServerlessCodeExecutor,CliCommandExecutor}.java`.
+- C#: `sdk/csharp/src/Conductor.AI/{LocalCodeExecutor,DockerCodeExecutor,JupyterCodeExecutor,ServerlessCodeExecutor}.cs`; `WorkerManager` delegates local execution to `LocalCodeExecutor`.
 
 ---
 

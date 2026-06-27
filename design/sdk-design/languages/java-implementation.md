@@ -41,10 +41,10 @@ Root package `org.conductoross.conductor.ai` (99 main source files):
 | `handoff` | `Handoff`, `OnTextMention`, `OnToolResult`, `OnCondition` (SWARM triggers) |
 | `termination` | `TerminationCondition` + `MaxMessageTermination`, `StopMessageTermination`, `TextMentionTermination`, `TokenUsageTermination`, `AndTermination`, `OrTermination`, `TerminationResult` |
 | `plans` | `Plan` and supporting types (`Step`, `Action`, `Op`, `Ref`, `Generate`, `Validation`, `Context`, `PlanValues`) — deterministic PLAN_EXECUTE |
-| `schedule` | `Schedule`, `Schedules`, `ScheduleInfo` (cron lifecycle) |
+| `schedule` | `Schedule`, `Schedules`, `ScheduleInfo` (cron lifecycle). `Schedules.runNowAndWait(name)` now returns an `AgentResult` (uniform with the other SDKs), not a Conductor `Workflow`. |
 | `skill` | `Skill`, `SkillLoadError` (Agent Skills: `SKILL.md` directories) |
 | `gate` | `TextGate` (sequential-pipeline sentinel gate) |
-| `execution` | `CliCommandExecutor`, `CliConfig`, `CodeExecutor`, `DockerCodeExecutor`, `ExecutionResult` (local CLI / code execution) |
+| `execution` | `CliCommandExecutor`, `CliConfig`, `CodeExecutor`, the full executor family — `LocalCodeExecutor` (subprocess + temp file), `DockerCodeExecutor` (container), `JupyterCodeExecutor` (stateful kernel via a Jupyter Kernel Gateway over HTTP), `ServerlessCodeExecutor` (HTTP endpoint) — and `ExecutionResult` (local CLI / code execution) |
 | `frameworks` | `AdkBridge`, `LangChainBridge`, `LangChain4jAgent`, `OpenAIAgent` |
 | `openai` | `GPTAssistantAgent` (OpenAI Assistants API wrapper) |
 | `exceptions` | `AgentspanException`, `AgentAPIException`, `AgentNotFoundException`, and credential errors (`CredentialNotFound/Auth/RateLimit/Service`) |

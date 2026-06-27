@@ -394,7 +394,7 @@ schedules.list("daily_digest");
 schedules.pause("weekday-9am", "rate limit cooldown");
 schedules.resume("weekday-9am");
 schedules.runNow("weekday-9am");                  // name-keyed; fire-and-return execution id
-schedules.runNowAndWait("weekday-9am");           // synchronous wait variant (returns Workflow)
+schedules.runNowAndWait("weekday-9am");           // synchronous wait variant (returns AgentResult)
 schedules.delete("weekday-9am");
 schedules.previewNext("0 9 * * MON-FRI", 5);
 ```
@@ -507,7 +507,7 @@ Cron preview uses `GET /api/scheduler/nextFewSchedules` and the existing `cronEx
 ### 3.8 Resolved design questions (Phase 1)
 
 1. **Module path** → `conductor.ai.agents.schedule.Schedule`. Ships only what exists today; if/when Webhook/Event triggers land, they get their own modules and we revisit a `triggers/` umbrella.
-2. **`run_now` blocking** → the default returns the execution id immediately. Agents can run for minutes; blocking is the wrong default for a UI button or scripted invocation. **`run_now` is now name-keyed in all four SDKs, and all four expose an opt-in synchronous wait variant**: Python `run_now(name, wait=True)`, TS `runNow(name, {wait})` / `runNowAndWait(name)`, Java `runNow(name)` / `runNowAndWait(name)`, C# `RunNowAsync(name)` / `RunNowAsync(name, wait: true)`. Remaining minor ergonomic delta: Java's wait variant returns a `Workflow` while TS and C# return an `AgentResult` (Python returns `AgentResult`).
+2. **`run_now` blocking** → the default returns the execution id immediately. Agents can run for minutes; blocking is the wrong default for a UI button or scripted invocation. **`run_now` is now name-keyed in all four SDKs, and all four expose an opt-in synchronous wait variant**: Python `run_now(name, wait=True)`, TS `runNow(name, {wait})` / `runNowAndWait(name)`, Java `runNow(name)` / `runNowAndWait(name)`, C# `RunNowAsync(name)` / `RunNowAsync(name, wait: true)`. The wait variant returns an `AgentResult` **uniformly across all four SDKs** — no return-type divergence.
 3. **`nextRunTime` when paused-on-create** → verified against Conductor source (`scheduler/core/.../SchedulerService.java:732`): `setNextRunTimeInEpoch(...)` is called unconditionally on save; the `isPaused()` check only gates the queue-message push that triggers the fire. The UI's "Next: ..." column is reliable for paused schedules. No SDK or UI accommodation needed.
 4. **Schedule name scoping** → unique **per agent**, not globally. The SDK auto-prefixes the wire name to `{agent.name}-{name}` at `deploy()` time so users write `Schedule(name="daily")` ergonomically while Conductor's org-wide uniqueness is satisfied. The prefixed name is the canonical identifier returned by `list()`/`get()` and accepted by `pause`/`resume`/`delete`/`run_now`. The `ScheduleInfo` dataclass exposes both `name` (prefixed, wire) and `short_name` (the user's original) for display.
 
