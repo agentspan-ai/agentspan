@@ -69,7 +69,8 @@ def run_now(
 
     Returns the workflow execution id immediately (non-blocking by default).
     If ``wait=True``, blocks until the workflow reaches a terminal state and
-    returns the result dict (raises ``TimeoutError`` after ``timeout`` seconds).
+    returns an :class:`AgentResult` (raises ``TimeoutError`` after ``timeout``
+    seconds) — consistent with ``run()``'s completed-workflow result.
     """
     client = _client(runtime)
     info = client.get(name)
@@ -88,7 +89,10 @@ def run_now(
         wf = wc.get_workflow_status(workflow_id=execution_id, include_output=True)
         status = getattr(wf, "status", None)
         if status in ("COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"):
-            return wf
+            # Reuse the runtime's completed-workflow → AgentResult extraction
+            # (same conversion `run()` uses) rather than returning the raw
+            # workflow-status object.
+            return rt._build_result_from_workflow(wf, execution_id)
         if time.monotonic() > deadline:
             raise TimeoutError(f"run_now({name!r}) did not finish within {timeout}s")
         time.sleep(poll_interval)

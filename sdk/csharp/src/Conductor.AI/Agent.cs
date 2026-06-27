@@ -105,6 +105,47 @@ public sealed partial class Agent
     public List<string>? AllowedLanguages { get; set; }
     public List<string>? AllowedCommands { get; set; }
     public CodeExecutionConfig? CodeExecution { get; set; }
+
+    /// <summary>
+    /// First-class CLI command execution. When set, the server attaches a
+    /// <c>run_command</c> tool to the agent (CLI allowlist / working dir). Emits
+    /// the <c>cliConfig</c> wire object. Mirrors Python/Java's CliConfig.
+    /// </summary>
+    public CliConfig? CliConfig { get; set; }
+
+    /// <summary>
+    /// Tool calls executed before the first LLM turn; results are injected into
+    /// context. Build entries via <see cref="ToolDef.Call"/>. Emits
+    /// <c>prefillTools: [{toolName, arguments}]</c>. Mirrors Python/Java.
+    /// </summary>
+    public List<PrefillToolCall>? PrefillTools { get; set; }
+
+    /// <summary>
+    /// Reasoning effort for OpenAI reasoning models (e.g. <c>"low"</c>,
+    /// <c>"medium"</c>, <c>"high"</c>). Emits <c>reasoningEffort</c> (string).
+    /// </summary>
+    public string? ReasoningEffort { get; set; }
+
+    /// <summary>
+    /// Token budget for proactive context-window condensation. Emits
+    /// <c>contextWindowBudget</c> (int).
+    /// </summary>
+    public int? ContextWindowBudget { get; set; }
+
+    /// <summary>
+    /// Input/output field names to redact in execution history and the UI. Emits
+    /// <c>maskedFields</c> (list of strings). Note: the server currently does not
+    /// apply this (known no-op); emitted for cross-SDK wire parity.
+    /// </summary>
+    public List<string>? MaskedFields { get; set; }
+
+    /// <summary>
+    /// Whether to append a final LLM synthesis step after specialist agents
+    /// complete. Defaults to <c>true</c> (the server default); only emitted on
+    /// the wire when explicitly disabled. Mirrors Python/Java.
+    /// </summary>
+    public bool Synthesize { get; set; } = true;
+
     public string? IncludeContents { get; set; }
     public int? ThinkingBudgetTokens { get; set; }
     /// <summary>Called before each LLM invocation. Receives the messages list; return empty dict to continue, non-empty to skip LLM.</summary>

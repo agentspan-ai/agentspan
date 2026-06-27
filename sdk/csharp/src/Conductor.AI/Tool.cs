@@ -130,6 +130,14 @@ public sealed class ToolDef
     /// <summary>Guardrails scoped to this tool's input or output (mirrors Python's @tool(guardrails=[...])).</summary>
     public List<GuardrailDef> Guardrails { get; init; } = [];
 
+    /// <summary>
+    /// Create a pre-declared tool call for use with <c>Agent.PrefillTools</c>.
+    /// The server executes these tools before the first LLM turn and injects the
+    /// results into context. Mirrors Python's <c>tool_def.call(arg=val)</c>.
+    /// </summary>
+    public PrefillToolCall Call(Dictionary<string, object>? arguments = null)
+        => new(Name, arguments ?? new Dictionary<string, object>(), this);
+
     /// <summary>Return a copy of this <see cref="ToolDef"/> with the given guardrails appended.</summary>
     public ToolDef WithGuardrails(params GuardrailDef[] guardrails) => new ToolDef
     {
@@ -154,6 +162,21 @@ public sealed class ToolDef
         Guardrails                 = [..Guardrails, ..guardrails],
     };
 }
+
+/// <summary>
+/// A tool call to execute before the LLM runs. Created via
+/// <see cref="ToolDef.Call"/>. Passed to <c>Agent.PrefillTools</c> so the server
+/// executes these tools before the first LLM turn and injects results into
+/// context. Serializes as <c>{toolName, arguments}</c> matching Python/Java.
+///
+/// <para><see cref="ToolDef"/> carries a back-reference to the source tool so the
+/// runtime can register a worker for the prefill task even when the same tool is
+/// not also listed in <c>Agent.Tools</c>.</para>
+/// </summary>
+public sealed record PrefillToolCall(
+    string ToolName,
+    Dictionary<string, object> Arguments,
+    ToolDef? ToolDef = null);
 
 // ── ToolDef factory ────────────────────────────────────────
 

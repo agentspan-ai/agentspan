@@ -186,7 +186,13 @@ export class AgentConfigSerializer {
     // Scalar fields — always emit maxTurns, timeoutSeconds, external (match Python)
     config.maxTurns = agent.maxTurns;
     if (agent.maxTokens !== undefined) config.maxTokens = agent.maxTokens;
+    // Context window budget for proactive condensation (matches Python key).
+    if (agent.contextWindowBudget !== undefined) {
+      config.contextWindowBudget = agent.contextWindowBudget;
+    }
     if (agent.temperature !== undefined) config.temperature = agent.temperature;
+    // Reasoning effort (OpenAI reasoning models) — matches Python key.
+    if (agent.reasoningEffort !== undefined) config.reasoningEffort = agent.reasoningEffort;
     config.timeoutSeconds = agent.timeoutSeconds;
     config.external = agent.external;
     if (agent.stateful) config.stateful = true;
@@ -269,6 +275,14 @@ export class AgentConfigSerializer {
     // CLI config
     if (agent.cliConfig) {
       config.cliConfig = agent.cliConfig;
+    }
+
+    // Masked fields — input/output field names to redact in execution history
+    // and UI. Maps to Conductor's WorkflowDef.maskedFields. NOTE: the server
+    // does not yet apply this (known no-op); emitted for cross-SDK parity with
+    // Python/Java. Matches Python's `maskedFields` key. Only emit when set.
+    if (agent.maskedFields && agent.maskedFields.length > 0) {
+      config.maskedFields = [...agent.maskedFields];
     }
 
     // Credentials

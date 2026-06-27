@@ -594,6 +594,42 @@ describe("serializeAgent() — thinkingConfig", () => {
   });
 });
 
+// ── reasoningEffort / contextWindowBudget / maskedFields ──
+
+describe("serializeAgent() — reasoningEffort, contextWindowBudget, maskedFields", () => {
+  it("emits reasoningEffort when set (matches Python key)", () => {
+    const a = new Agent({ name: "test", reasoningEffort: "high" });
+    const config = serializer.serializeAgent(a);
+    expect(config.reasoningEffort).toBe("high");
+  });
+
+  it("emits contextWindowBudget when set (matches Python key)", () => {
+    const a = new Agent({ name: "test", contextWindowBudget: 100000 });
+    const config = serializer.serializeAgent(a);
+    expect(config.contextWindowBudget).toBe(100000);
+  });
+
+  it("emits maskedFields when set (matches Python key)", () => {
+    const a = new Agent({ name: "test", maskedFields: ["ssn", "password"] });
+    const config = serializer.serializeAgent(a);
+    expect(config.maskedFields).toEqual(["ssn", "password"]);
+  });
+
+  it("omits all three when unset", () => {
+    const a = new Agent({ name: "test" });
+    const config = serializer.serializeAgent(a);
+    expect(config).not.toHaveProperty("reasoningEffort");
+    expect(config).not.toHaveProperty("contextWindowBudget");
+    expect(config).not.toHaveProperty("maskedFields");
+  });
+
+  it("omits maskedFields when empty array", () => {
+    const a = new Agent({ name: "test", maskedFields: [] });
+    const config = serializer.serializeAgent(a);
+    expect(config).not.toHaveProperty("maskedFields");
+  });
+});
+
 // ── stopWhen ───────────────────────────────────────────────
 
 describe("serializeAgent() — stopWhen", () => {

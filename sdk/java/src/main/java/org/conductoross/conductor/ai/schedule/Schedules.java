@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Set;
 
 import org.conductoross.conductor.ai.exceptions.AgentAPIException;
+import org.conductoross.conductor.ai.model.AgentHandle;
+import org.conductoross.conductor.ai.model.AgentResult;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.netflix.conductor.client.exception.ConductorClientException;
@@ -158,11 +160,13 @@ public class Schedules {
      *
      * <p>When {@code wait} is {@code false} (default behaviour) returns the
      * workflowId immediately. When {@code wait} is {@code true} this blocks until
-     * the workflow reaches a terminal state and returns the completed
-     * {@link Workflow} (parity with Python's {@code run_now(name, wait=True)}).
+     * the workflow reaches a terminal state and returns an {@link AgentResult}
+     * built from the completed workflow (parity with Python's
+     * {@code run_now(name, wait=True)} and the C#/TS SDKs, which return an
+     * {@link AgentResult} from the wait variant).
      *
-     * @return a {@link String} workflowId when {@code wait=false}, or a
-     *     {@link Workflow} when {@code wait=true}
+     * @return a {@link String} workflowId when {@code wait=false}, or an
+     *     {@link AgentResult} when {@code wait=true}
      */
     public Object runNow(String name, boolean wait) {
         if (!wait) {
@@ -173,30 +177,37 @@ public class Schedules {
 
     /**
      * Fetch the schedule by its wire {@code name}, start it, then poll until the
-     * triggered workflow reaches a terminal state and return it.
+     * triggered workflow reaches a terminal state and return it as an
+     * {@link AgentResult}.
      *
      * @throws ScheduleException.Timeout if the workflow has not finished within the timeout
      */
-    public Workflow runNowAndWait(String name) {
+    public AgentResult runNowAndWait(String name) {
         return runNowAndWait(name, DEFAULT_WAIT_TIMEOUT_MS, DEFAULT_POLL_INTERVAL_MS);
     }
 
     /**
      * Fetch the schedule by its wire {@code name}, start it, then poll until the
-     * triggered workflow reaches a terminal state and return it.
+     * triggered workflow reaches a terminal state and return it as an
+     * {@link AgentResult}.
+     *
+     * <p>The completed {@link Workflow} is converted via the SDK's shared
+     * workflow → {@link AgentResult} extraction ({@link AgentHandle#fromWorkflow})
+     * — the same logic the {@code AgentHandle.waitForResult} path uses — so the
+     * output, status, error, token usage, and tool calls match a direct run.
      *
      * @param name           the schedule's wire name
      * @param timeoutMs      maximum time to wait, in milliseconds
      * @param pollIntervalMs delay between status polls, in milliseconds
      * @throws ScheduleException.Timeout if the workflow has not finished within {@code timeoutMs}
      */
-    public Workflow runNowAndWait(String name, long timeoutMs, long pollIntervalMs) {
+    public AgentResult runNowAndWait(String name, long timeoutMs, long pollIntervalMs) {
         String executionId = runNow(name);
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (true) {
             Workflow wf = workflowClient.getWorkflow(executionId, true);
             if (isTerminal(wf)) {
-                return wf;
+                return AgentHandle.fromWorkflow(wf);
             }
             if (System.currentTimeMillis() >= deadline) {
                 throw new ScheduleException.Timeout(

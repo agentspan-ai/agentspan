@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { LocalCodeExecutor, CodeExecutor } from "../../src/code-execution.js";
+import { LocalCodeExecutor, JupyterCodeExecutor, CodeExecutor } from "../../src/code-execution.js";
 import type { ExecutionResult } from "../../src/code-execution.js";
 import * as childProcess from "child_process";
 
@@ -168,5 +168,56 @@ describe("LocalCodeExecutor", () => {
       expect(props.language).toBeDefined();
       expect(schema.required).toContain("code");
     });
+  });
+});
+
+// ── JupyterCodeExecutor ─────────────────────────────────
+
+describe("JupyterCodeExecutor", () => {
+  it("is an instance of CodeExecutor", () => {
+    const executor = new JupyterCodeExecutor();
+    expect(executor).toBeInstanceOf(CodeExecutor);
+  });
+
+  it("defaults kernelName to python3 and timeout to 30", () => {
+    const executor = new JupyterCodeExecutor();
+    expect(executor.kernelName).toBe("python3");
+    expect(executor.timeout).toBe(30);
+  });
+
+  it("accepts custom kernelName, timeout, and startupCode", () => {
+    const executor = new JupyterCodeExecutor({
+      kernelName: "ir",
+      timeout: 90,
+      startupCode: "import os",
+    });
+    expect(executor.kernelName).toBe("ir");
+    expect(executor.timeout).toBe(90);
+    expect(executor.startupCode).toBe("import os");
+  });
+
+  it("returns a structured error (never throws) when the kernel is unavailable", () => {
+    mockedExecSync.mockImplementation(() => {
+      const err = new Error("jupyter: command not found") as Error & { status: number };
+      err.status = 127;
+      throw err;
+    });
+
+    const executor = new JupyterCodeExecutor();
+    const result = executor.execute("print(1)");
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.error.length).toBeGreaterThan(0);
+  });
+
+  it("returns a successful result when the kernel runs the cell", () => {
+    mockedExecSync.mockReturnValue("42\n");
+
+    const executor = new JupyterCodeExecutor();
+    const result = executor.execute("print(42)");
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("42");
   });
 });

@@ -15,6 +15,7 @@ No network calls.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -369,6 +370,91 @@ class TestReconcile:
             )
         sc.save_schedule.assert_not_called()
         sc.delete_schedule.assert_not_called()
+
+
+# ── run_now wait-variant returns AgentResult ────────────────────────
+
+
+def _runnow_runtime(*, wf_status, wf_output):
+    """A minimal fake runtime exercising the REAL workflow→AgentResult
+    extraction path used by ``schedules.run_now(wait=True)``.
+
+    ``schedules_client()`` returns a mock whose ``get`` yields a ScheduleInfo
+    and whose ``run_now`` returns a fixed execution id. The runtime's
+    ``_workflow_client`` is mocked so polling returns a terminal workflow.
+    The real ``AgentRuntime._build_result_from_workflow`` is bound onto the
+    fake runtime so the test drives production extraction logic.
+    """
+    from conductor.ai.agents.runtime.runtime import AgentRuntime
+
+    exec_id = "exec-123"
+
+    terminal_wf = SimpleNamespace(
+        status=wf_status,
+        output=wf_output,
+        reason_for_incompletion=None,
+        tasks=[],
+        variables=None,
+    )
+
+    wc = MagicMock()
+    # Polling endpoint used by run_now's wait loop.
+    wc.get_workflow_status.return_value = terminal_wf
+    # Enrichment fetch used inside the extraction helper.
+    wc.get_workflow.return_value = terminal_wf
+
+    # ``run_now`` only forwards ``info`` to the (mocked) client; a stub suffices.
+    info = MagicMock(name="ScheduleInfo")
+    sched_client = MagicMock()
+    sched_client.get.return_value = info
+    sched_client.run_now.return_value = exec_id
+
+    rt = MagicMock()
+    rt.schedules_client.return_value = sched_client
+    rt._workflow_client = wc
+    # Avoid hitting the network for token usage.
+    rt._extract_token_usage = MagicMock(return_value=None)
+    # Wire the REAL extraction methods so we exercise production logic, not
+    # MagicMock stubs. ``_build_result_from_workflow`` delegates to these.
+    # Instance methods are bound to ``rt``; staticmethods are attached as-is.
+    for meth in ("_build_result_from_workflow", "_extract_tool_calls", "_extract_messages"):
+        setattr(rt, meth, getattr(AgentRuntime, meth).__get__(rt))
+    for static in (
+        "_normalize_output",
+        "_extract_failed_task_reason",
+        "_derive_finish_reason",
+        "_extract_sub_results",
+    ):
+        setattr(rt, static, getattr(AgentRuntime, static))
+    return rt, exec_id
+
+
+class TestRunNowResult:
+    def test_wait_true_returns_agent_result(self):
+        from conductor.ai.agents.result import AgentResult, Status
+
+        rt, exec_id = _runnow_runtime(
+            wf_status="COMPLETED",
+            wf_output={"result": "the digest"},
+        )
+
+        result = schedules.run_now("digest-daily", wait=True, runtime=rt, poll_interval=0)
+
+        assert isinstance(result, AgentResult)
+        assert result.execution_id == exec_id
+        assert result.status == Status.COMPLETED
+        assert result.output == {"result": "the digest"}
+
+    def test_no_wait_returns_execution_id_string(self):
+        rt, exec_id = _runnow_runtime(
+            wf_status="COMPLETED",
+            wf_output={"result": "ignored"},
+        )
+
+        result = schedules.run_now("digest-daily", runtime=rt)
+
+        assert result == exec_id
+        assert isinstance(result, str)
 
 
 # ── Public surface ──────────────────────────────────────────────────

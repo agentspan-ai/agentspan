@@ -5,12 +5,13 @@ package org.conductoross.conductor.ai.schedule;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
 
+import org.conductoross.conductor.ai.enums.AgentStatus;
+import org.conductoross.conductor.ai.model.AgentResult;
 import org.junit.jupiter.api.Test;
 
 import com.netflix.conductor.client.http.WorkflowClient;
@@ -63,6 +64,13 @@ class ScheduleRunNowTest {
     private static Workflow wf(WorkflowStatus status) {
         Workflow w = new Workflow();
         w.setStatus(status);
+        w.setWorkflowId("wf-123");
+        return w;
+    }
+
+    private static Workflow wfWithOutput(WorkflowStatus status, Map<String, Object> output) {
+        Workflow w = wf(status);
+        w.setOutput(output);
         return w;
     }
 
@@ -99,20 +107,38 @@ class ScheduleRunNowTest {
     }
 
     @Test
-    void runNowAndWait_pollsToTerminalAndReturnsWorkflow() {
+    void runNowAndWait_pollsToTerminalAndReturnsAgentResult() {
         FakeWorkflowClient fwc = new FakeWorkflowClient();
         Workflow running = wf(WorkflowStatus.RUNNING);
-        Workflow done = wf(WorkflowStatus.COMPLETED);
+        Workflow done = wfWithOutput(WorkflowStatus.COMPLETED, Map.of("result", "done"));
         fwc.statusSequence = new Workflow[] {running, running, done};
 
         Schedules schedules = schedulesWith(fwc, info("my_agent"));
 
         // 0ms poll interval keeps the test fast/deterministic.
-        Workflow result = schedules.runNowAndWait("my_agent-daily", 5_000L, 0L);
+        AgentResult result = schedules.runNowAndWait("my_agent-daily", 5_000L, 0L);
 
-        assertSame(done, result, "must return the terminal workflow");
         assertEquals(3, fwc.polls, "must poll until terminal");
-        assertTrue(result.getStatus().isTerminal());
+        assertEquals(AgentStatus.COMPLETED, result.getStatus(), "terminal workflow → COMPLETED");
+        assertTrue(result.isSuccess());
+        assertEquals("wf-123", result.getExecutionId());
+        assertEquals(Map.of("result", "done"), result.getOutput(), "output carried from the workflow");
+    }
+
+    @Test
+    void runNowAndWait_failedWorkflow_mapsToFailedResult() {
+        FakeWorkflowClient fwc = new FakeWorkflowClient();
+        Workflow failed = wf(WorkflowStatus.FAILED);
+        failed.setReasonForIncompletion("boom");
+        fwc.statusSequence = new Workflow[] {failed};
+
+        Schedules schedules = schedulesWith(fwc, info("my_agent"));
+
+        AgentResult result = schedules.runNowAndWait("my_agent-daily", 5_000L, 0L);
+
+        assertEquals(AgentStatus.FAILED, result.getStatus());
+        assertFalse(result.isSuccess());
+        assertEquals("boom", result.getError());
     }
 
     @Test

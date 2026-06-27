@@ -92,7 +92,8 @@ public record CliConfig(
     bool Enabled = true,
     List<string>? AllowedCommands = null,
     int Timeout = 30,
-    bool AllowShell = false
+    bool AllowShell = false,
+    string? WorkingDir = null
 );
 
 public record ExecutionResult(

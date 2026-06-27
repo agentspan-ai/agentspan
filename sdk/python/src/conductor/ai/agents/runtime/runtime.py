@@ -5387,6 +5387,64 @@ class AgentRuntime:
             return fr
         return None
 
+    def _build_result_from_workflow(
+        self,
+        wf: Any,
+        execution_id: str,
+        *,
+        correlation_id: Optional[str] = None,
+    ) -> AgentResult:
+        """Build an :class:`AgentResult` from a finished workflow object.
+
+        Single source of truth for the "completed workflow → AgentResult"
+        conversion shared by the run-by-name path and the schedule
+        ``run_now(wait=True)`` path. ``wf`` must be a terminal workflow
+        carrying ``status``/``output`` (and ideally ``tasks`` for enrichment);
+        when ``tasks`` are absent the method fetches the full execution to
+        populate ``tool_calls``/``messages``.
+        """
+        raw_status = getattr(wf, "status", None)
+        output = self._normalize_output(
+            getattr(wf, "output", None),
+            raw_status,
+            getattr(wf, "reason_for_incompletion", None),
+        )
+
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        task_failure_reason: Optional[str] = None
+        try:
+            # Reuse the passed workflow when it already carries tasks;
+            # otherwise fetch the full execution for enrichment.
+            full = wf if getattr(wf, "tasks", None) else self._workflow_client.get_workflow(
+                execution_id, include_tasks=True
+            )
+            tool_calls = self._extract_tool_calls(full)
+            messages = self._extract_messages(full)
+            token_usage = self._extract_token_usage(execution_id)
+            if raw_status == "FAILED":
+                task_failure_reason = self._extract_failed_task_reason(full)
+        except Exception as exc:
+            logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
+
+        error_reason: Optional[str] = None
+        if raw_status in ("FAILED", "TERMINATED"):
+            error_reason = task_failure_reason or getattr(wf, "reason_for_incompletion", None)
+
+        return AgentResult(
+            output=output,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            status=raw_status,
+            finish_reason=self._derive_finish_reason(raw_status, getattr(wf, "output", None)),
+            error=error_reason,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+            sub_results=self._extract_sub_results(output),
+        )
+
     def _extract_output(self, workflow_run: Any, agent: Agent) -> Any:
         """Extract the final output from an execution."""
         import json as _json

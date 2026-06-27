@@ -335,6 +335,64 @@ internal static class AgentConfigSerializer
         if (callbackArr.Count > 0)
             cfg["callbacks"] = callbackArr;
 
+        // ── Cross-SDK parity fields (match Python/Java wire keys & shapes) ──
+
+        // reasoningEffort (string) — OpenAI reasoning models
+        if (!string.IsNullOrEmpty(agent.ReasoningEffort))
+            cfg["reasoningEffort"] = agent.ReasoningEffort;
+
+        // contextWindowBudget (int) — proactive context condensation
+        if (agent.ContextWindowBudget.HasValue)
+            cfg["contextWindowBudget"] = agent.ContextWindowBudget.Value;
+
+        // maskedFields (list of strings) — redacted in history/UI. NOTE: the
+        // server does not currently apply this (known no-op); emitted anyway for
+        // wire parity with Python/Java.
+        if (agent.MaskedFields is { Count: > 0 })
+        {
+            var arr = new JsonArray();
+            foreach (var f in agent.MaskedFields) arr.Add(f);
+            cfg["maskedFields"] = arr;
+        }
+
+        // synthesize (bool) — only emit when explicitly disabled (true = server default)
+        if (!agent.Synthesize)
+            cfg["synthesize"] = false;
+
+        // prefillTools — [{toolName, arguments}] executed before the first LLM turn
+        if (agent.PrefillTools is { Count: > 0 })
+        {
+            var arr = new JsonArray();
+            foreach (var pt in agent.PrefillTools)
+            {
+                arr.Add(new JsonObject
+                {
+                    ["toolName"]  = pt.ToolName,
+                    ["arguments"] = JsonNode.Parse(
+                        JsonSerializer.Serialize(pt.Arguments, AgentspanJson.Options))!,
+                });
+            }
+            cfg["prefillTools"] = arr;
+        }
+
+        // cliConfig — {enabled, allowedCommands, timeout, allowShell, workingDir?}
+        if (agent.CliConfig is not null)
+        {
+            var c = agent.CliConfig;
+            var cmds = new JsonArray();
+            if (c.AllowedCommands is not null)
+                foreach (var cmd in c.AllowedCommands) cmds.Add(cmd);
+            var cli = new JsonObject
+            {
+                ["enabled"]         = c.Enabled,
+                ["allowedCommands"] = cmds,
+                ["timeout"]         = c.Timeout,
+                ["allowShell"]      = c.AllowShell,
+            };
+            if (c.WorkingDir is not null) cli["workingDir"] = c.WorkingDir;
+            cfg["cliConfig"] = cli;
+        }
+
         return cfg;
     }
 

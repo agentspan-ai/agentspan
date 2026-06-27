@@ -477,65 +477,25 @@ internal sealed class WorkerManager : IAsyncDisposable
 
     private static async Task<object?> ExecuteLocalCodeAsync(string language, string code, int timeoutSeconds)
     {
-        var result = new Dictionary<string, object?>();
-        string? tmpFile = null;
-        try
-        {
-            string interpreter = language.ToLowerInvariant() switch
-            {
-                "python" or "python3" => "python3",
-                "bash" or "sh"        => "bash",
-                "node" or "javascript" => "node",
-                _                      => language,
-            };
-            var ext = language.StartsWith("python", StringComparison.OrdinalIgnoreCase) ? ".py"
-                    : language.StartsWith("node",   StringComparison.OrdinalIgnoreCase)
-                      || language.StartsWith("javascript", StringComparison.OrdinalIgnoreCase) ? ".js"
-                    : ".sh";
-            tmpFile = Path.Combine(Path.GetTempPath(), $"agentspan_code_{Guid.NewGuid():N}{ext}");
-            await File.WriteAllTextAsync(tmpFile, code);
+        // Delegate to the shared LocalCodeExecutor (subprocess + temp file +
+        // interpreter table + timeout + cleanup), then map its structured
+        // ExecutionResult onto this worker's wire contract. stdout+stderr are
+        // combined into "output" to preserve the prior runtime behavior.
+        var exec = new LocalCodeExecutor(language: language, timeout: timeoutSeconds);
+        var er = await exec.ExecuteAsync(code);
 
-            var psi = new System.Diagnostics.ProcessStartInfo(interpreter, tmpFile)
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError  = true,
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-            };
-            using var proc = System.Diagnostics.Process.Start(psi)
-                ?? throw new InvalidOperationException($"Failed to start {interpreter}");
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-            try
-            {
-                await proc.WaitForExitAsync(cts.Token);
-                var output = (await proc.StandardOutput.ReadToEndAsync())
-                           + (await proc.StandardError.ReadToEndAsync());
-                result["output"]    = output;
-                result["exit_code"] = proc.ExitCode;
-                result["success"]   = proc.ExitCode == 0;
-                if (proc.ExitCode != 0)
-                    result["error"] = $"Process exited with code {proc.ExitCode}";
-            }
-            catch (OperationCanceledException)
-            {
-                try { proc.Kill(entireProcessTree: true); } catch { }
-                result["output"]    = "";
-                result["error"]     = $"Code execution timed out after {timeoutSeconds}s";
-                result["exit_code"] = -1;
-                result["success"]   = false;
-            }
-        }
-        catch (Exception e)
+        var result = new Dictionary<string, object?>
         {
-            result["output"]    = "";
-            result["error"]     = e.Message;
-            result["exit_code"] = -1;
-            result["success"]   = false;
-        }
-        finally
+            ["output"]    = (er.Output ?? "") + (er.Error ?? ""),
+            ["exit_code"] = er.ExitCode,
+            ["success"]   = er.Success,
+        };
+        if (!er.Success)
         {
-            if (tmpFile is not null) try { File.Delete(tmpFile); } catch { }
+            result["error"] = er.TimedOut
+                ? $"Code execution timed out after {timeoutSeconds}s"
+                : !string.IsNullOrEmpty(er.Error) ? er.Error
+                : $"Process exited with code {er.ExitCode}";
         }
         return result;
     }
