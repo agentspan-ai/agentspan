@@ -1,6 +1,6 @@
 # Agentspan TypeScript SDK — Documentation
 
-The official TypeScript/Node SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
+The official TypeScript/Node SDK for [Agentspan](https://agentspan.ai) — long-running, background, scheduled, and event-driven AI agents.
 
 - **Package:** `@conductoross/conductor-agent-sdk` (npm)
 - **Runtime:** Node.js >= 18

@@ -7,7 +7,7 @@ description: Agentspan documentation for building production AI agents.
 
 **Agentspan is a durable runtime for AI agents, built for Conductor. Your code runs in your process. Execution state lives on the server.**
 
-Execution state lives server-side, so crashes, restarts, and deployments do not lose work. Write agents natively or wrap an existing LangGraph, OpenAI Agents SDK, or Google ADK agent in one line.
+Run long-running agents, fire background jobs, schedule agents on cron, or trigger them from webhooks and events — all with server-side execution state that survives crashes, restarts, and deployments. Write agents natively or wrap an existing LangGraph, OpenAI Agents SDK, or Google ADK agent in one line.
 
 ## Getting Started
 

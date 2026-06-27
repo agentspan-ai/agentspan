@@ -1,6 +1,6 @@
 # Agentspan .NET SDK — Documentation
 
-The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
+The official .NET SDK for [Agentspan](https://agentspan.ai) — long-running, background, scheduled, and event-driven AI agents.
 
 - **Package:** `conductor-agent-sdk` (NuGet)
 - **Target:** .NET 10

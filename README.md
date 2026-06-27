@@ -38,7 +38,14 @@
 https://github.com/user-attachments/assets/dd4b720d-d11c-42e8-93a6-875c5a740fd8
 
 
-**Agentspan** is a distributed, durable runtime for AI agents, built for Conductor. It runs agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
+**Agentspan** runs the agents your application can't fit in an HTTP request — long-running jobs, background tasks, scheduled workflows, and event-triggered pipelines — all backed by Conductor for durability, observability, and scale.
+
+| Pattern | What it means |
+|---|---|
+| **Long-running** | Agents that take minutes or hours, not seconds. State is server-side; crashes don't restart from zero. |
+| **Background** | Fire an agent and move on. Poll for results, stream events, or check the UI. |
+| **Scheduled** | Attach a cron to any agent in one line. Daily digest, weekly reports, hourly syncs. |
+| **Event-driven** | Trigger agents from webhooks, queues, or database events. Each run is a durable execution. |
 
 ## Quickstart (60 seconds)
 

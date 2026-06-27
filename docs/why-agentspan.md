@@ -38,6 +38,10 @@ This works fine on your laptop. In production, it breaks in predictable ways.
 
 **Scaling means duplicating state.** Running agents across multiple machines means solving distributed state management yourself — or accepting that each agent instance is isolated with no shared execution context.
 
+**No scheduling without external infrastructure.** Running an agent on a cron means maintaining a separate scheduler, handling missed fires, and managing overlap. Any of those can fail silently — and there's no execution history tied to your agent when it does.
+
+**Background jobs block or disappear.** Firing an agent asynchronously in-process — via threading or asyncio — means the job dies when your process does. There's no record, no retry, and no way to check what happened.
+
 ---
 
 ## How Agentspan works differently
@@ -67,6 +71,10 @@ Your process can crash, restart, or be replaced. The agent keeps running.
 **Durable human-in-the-loop.** Mark any tool with `approval_required=True`. The agent pauses server-side and waits indefinitely — no timeouts, no in-memory state at risk. Approve or deny via CLI, API, or the UI.
 
 **Full execution history.** Every run is stored with inputs, outputs, token usage, and per-step timing. Query via CLI, browse in the UI at `http://localhost:6767`, or replay any past run.
+
+**Scheduled agents.** Attach one or more crons to any agent at deploy time. The server fires the agent on cadence, tracks every execution, and lets you pause, resume, or trigger ad-hoc — without touching application code. See [Scheduling](scheduling.md).
+
+**Background execution.** `runtime.run()` returns when the agent finishes; `runtime.deploy()` registers the agent so any external trigger — webhook handler, queue consumer, cron, database event — can call `runtime.run()` and get a durable background execution with full history.
 
 **Works with frameworks you already use.** Pass a LangGraph `StateGraph`, an OpenAI Agents SDK `Agent`, or a Google ADK pipeline directly to `runtime.run()`. Your definitions stay unchanged.
 
