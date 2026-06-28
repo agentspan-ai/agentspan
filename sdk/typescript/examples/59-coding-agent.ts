@@ -12,7 +12,7 @@
  *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  */
 
-import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // -- QA Tester: reviews code and runs tests ----------------------------------
 

@@ -5,7 +5,7 @@
  * so the agent returns typed structured data.
  */
 
-import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 

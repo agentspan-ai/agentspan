@@ -15,7 +15,7 @@ import {
   AgentRuntime,
   MaxMessage,
   TextMention,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 
 // ── Tool state ───────────────────────────────────────────
 let analysisStepCount = 0;

@@ -19,8 +19,8 @@
 
 import * as readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
-import type { AgentHandle } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
+import type { AgentHandle } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 export const writer = new Agent({

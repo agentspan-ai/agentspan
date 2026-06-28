@@ -8,7 +8,7 @@
  */
 
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // State schema

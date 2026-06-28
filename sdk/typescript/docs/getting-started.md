@@ -4,10 +4,10 @@ Get an agent running in under 30 seconds.
 
 ## 1. Install
 
-The SDK ships as the `@conductoross/conductor-agent-sdk` npm package (Node.js >= 18).
+The SDK ships as the `@conductor-oss/conductor-agent-sdk` npm package (Node.js >= 18).
 
 ```bash
-npm install @conductoross/conductor-agent-sdk
+npm install @conductor-oss/conductor-agent-sdk
 ```
 
 It is published as both ESM and CommonJS, so `import` and `require` both work. The examples in these docs use ESM (`import`). You will also want `zod` if you plan to define tool/output schemas with it:
@@ -43,7 +43,7 @@ A handful of other env vars tune workers and logging (`AGENTSPAN_WORKER_POLL_INT
 ## 3. Run an agent
 
 ```ts
-import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'greeter',

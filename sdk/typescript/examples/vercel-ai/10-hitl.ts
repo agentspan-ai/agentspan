@@ -18,7 +18,7 @@ import {
   Agent,
   AgentRuntime,
   tool as agentspanTool,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 
 // ── Risk assessment tool (AI SDK, auto-execute) ──────────
 const assessRisk = aiTool({

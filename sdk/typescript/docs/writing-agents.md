@@ -2,10 +2,10 @@
 
 Everything you author is an `Agent`. A simple LLM agent, a tool-using agent, and a multi-agent orchestration are all the same `Agent` class with different options. This page walks the authoring surface.
 
-All snippets import from `@conductoross/conductor-agent-sdk` and assume a runtime:
+All snippets import from `@conductor-oss/conductor-agent-sdk` and assume a runtime:
 
 ```ts
-import { Agent, AgentRuntime, tool } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
 const runtime = new AgentRuntime();
 ```
 
@@ -26,7 +26,7 @@ const agent = new Agent({
 There is also a functional form, `agent(fn, options)`, where `fn` is the dynamic-instructions callable (see below):
 
 ```ts
-import { agent } from '@conductoross/conductor-agent-sdk';
+import { agent } from '@conductor-oss/conductor-agent-sdk';
 
 const a = agent(() => 'You are a helpful assistant.', {
   name: 'helper',
@@ -46,7 +46,7 @@ new Agent({ name: 'a', model, instructions: 'You are concise.' });
 new Agent({ name: 'a', model, instructions: () => `Today is ${new Date().toDateString()}.` });
 
 // Server-managed prompt template (referenced by name + version)
-import { PromptTemplate } from '@conductoross/conductor-agent-sdk';
+import { PromptTemplate } from '@conductor-oss/conductor-agent-sdk';
 new Agent({
   name: 'a',
   model,
@@ -93,7 +93,7 @@ The tool function receives an optional second argument, the [`ToolContext`](api-
 Decorate methods on a class and extract them, bound to the instance:
 
 ```ts
-import { Tool, toolsFrom } from '@conductoross/conductor-agent-sdk';
+import { Tool, toolsFrom } from '@conductor-oss/conductor-agent-sdk';
 
 class MathTools {
   @Tool({ description: 'Add two numbers.', inputSchema: {
@@ -128,7 +128,7 @@ These return a `ToolDef` that runs server-side (no local worker). Add them to `t
 | `indexTool({ name, description, vectorDb, index, embeddingModelProvider, embeddingModel, namespace?, chunkSize?, chunkOverlap? })` | `rag_index` | RAG index/ingest. |
 
 ```ts
-import { httpTool, mcpTool } from '@conductoross/conductor-agent-sdk';
+import { httpTool, mcpTool } from '@conductor-oss/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'researcher',
@@ -150,7 +150,7 @@ const agent = new Agent({
 `waitForMessageTool` lets a running agent dequeue messages pushed into its workflow message queue (Conductor `PULL_WORKFLOW_MESSAGES`). No worker is needed — the server handles it. In blocking mode (default) the task stays in progress until a message arrives.
 
 ```ts
-import { waitForMessageTool } from '@conductoross/conductor-agent-sdk';
+import { waitForMessageTool } from '@conductor-oss/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'inbox_agent',
@@ -168,7 +168,7 @@ const agent = new Agent({
 #### `agentTool` — agent as a tool
 
 ```ts
-import { agentTool } from '@conductoross/conductor-agent-sdk';
+import { agentTool } from '@conductor-oss/conductor-agent-sdk';
 
 const translator = new Agent({ name: 'translator', model, instructions: 'Translate to French.' });
 
@@ -214,7 +214,7 @@ const routed = new Agent({
 `scatterGather({ name, workers, ... })` is a convenience builder that returns a coordinator agent which fans a problem out to worker agents in parallel and synthesizes the results:
 
 ```ts
-import { scatterGather } from '@conductoross/conductor-agent-sdk';
+import { scatterGather } from '@conductor-oss/conductor-agent-sdk';
 const coordinator = scatterGather({ name: 'fanout', workers: [worker], retryCount: 2 });
 ```
 
@@ -223,7 +223,7 @@ const coordinator = scatterGather({ name: 'fanout', workers: [worker], retryCoun
 For `swarm`/`handoff` strategies you can declare explicit handoff transitions with `handoffs: [...]`. Each condition has a `target` (a sub-agent name).
 
 ```ts
-import { OnTextMention, OnToolResult, OnCondition } from '@conductoross/conductor-agent-sdk';
+import { OnTextMention, OnToolResult, OnCondition } from '@conductor-oss/conductor-agent-sdk';
 
 const team = new Agent({
   name: 'coding_team',
@@ -250,7 +250,7 @@ You can also constrain which transitions are allowed with `allowedTransitions: {
 Guardrails validate input or output. Attach them at the agent level (`guardrails: [...]`) or per-tool (`tool(fn, { guardrails: [...] })`). Each has a `position` (`'input'` | `'output'`, default `'output'`) and an `onFail` policy (`'raise'` | `'retry'` | `'fix'` | `'human'`, default `'raise'`).
 
 ```ts
-import { guardrail, RegexGuardrail, LLMGuardrail } from '@conductoross/conductor-agent-sdk';
+import { guardrail, RegexGuardrail, LLMGuardrail } from '@conductor-oss/conductor-agent-sdk';
 
 // Regex (runs on the server, no worker)
 const noSecrets = new RegexGuardrail({
@@ -292,7 +292,7 @@ const agent = new Agent({
 Termination conditions decide when a multi-turn / multi-agent loop should stop. Pass one to `termination:`. They compose with `.and()` / `.or()` (or the variadic `AndCondition` / `OrCondition`).
 
 ```ts
-import { TextMention, MaxMessage, TokenUsageCondition, StopMessage } from '@conductoross/conductor-agent-sdk';
+import { TextMention, MaxMessage, TokenUsageCondition, StopMessage } from '@conductor-oss/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'debate',
@@ -310,7 +310,7 @@ Available conditions: `TextMention(text, caseSensitive?)`, `StopMessage(stopMess
 `TextGate` and `gate()` gate transitions (e.g. on `gate:`):
 
 ```ts
-import { TextGate } from '@conductoross/conductor-agent-sdk';
+import { TextGate } from '@conductor-oss/conductor-agent-sdk';
 new Agent({ name: 'a', model, gate: new TextGate({ text: 'APPROVED', caseSensitive: false }) });
 ```
 
@@ -319,7 +319,7 @@ new Agent({ name: 'a', model, gate: new TextGate({ text: 'APPROVED', caseSensiti
 Subclass `CallbackHandler` and override the lifecycle hooks you care about. Each hook runs as a server-registered worker.
 
 ```ts
-import { CallbackHandler } from '@conductoross/conductor-agent-sdk';
+import { CallbackHandler } from '@conductor-oss/conductor-agent-sdk';
 
 class Logger extends CallbackHandler {
   async onAgentStart(agentName: string, prompt: string) { console.log('[start]', agentName, prompt); }
@@ -390,7 +390,7 @@ One HUMAN task gates the whole batch of pending tool calls with a single `{ appr
 Attach cron schedules to an agent at deploy time. Reconciliation is declarative: a list upserts those and prunes the rest; `[]` purges all; omitting `schedules` leaves them untouched.
 
 ```ts
-import { Agent, AgentRuntime, Schedule, schedules } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, Schedule, schedules } from '@conductor-oss/conductor-agent-sdk';
 
 const digest = new Agent({ name: 'eng_digest', model, instructions: 'Write a digest.' });
 
@@ -423,7 +423,7 @@ Lifecycle calls (`get`/`pause`/`resume`/`delete`/`runNow`) key on the **wire nam
 Define agents as decorated methods on a class and extract them:
 
 ```ts
-import { AgentDec, agentsFrom } from '@conductoross/conductor-agent-sdk';
+import { AgentDec, agentsFrom } from '@conductor-oss/conductor-agent-sdk';
 
 class MyAgents {
   @AgentDec({ name: 'summarizer', model: 'anthropic/claude-sonnet-4-6', instructions: 'Summarize text.' })
@@ -441,7 +441,7 @@ const [summarizer, classifier] = agentsFrom(new MyAgents());   // Agent[]
 Set `stateful: true` on an agent (or `stateful: true` on a tool def) to isolate tool workers per execution via a unique domain UUID. Within a single run, tools share a mutable `context.state` object; mutations are captured and propagated between tool calls.
 
 ```ts
-import type { ToolContext } from '@conductoross/conductor-agent-sdk';
+import type { ToolContext } from '@conductor-oss/conductor-agent-sdk';
 
 const addItem = tool(
   async (args: { item: string }, ctx?: ToolContext) => {

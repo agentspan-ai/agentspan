@@ -11,7 +11,7 @@
  *   - AGENTSPAN_LLM_MODEL   (e.g. openai/gpt-4o-mini)
  */
 
-import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 export const agent = new Agent({

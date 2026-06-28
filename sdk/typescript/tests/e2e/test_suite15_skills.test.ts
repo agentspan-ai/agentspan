@@ -27,7 +27,7 @@ import {
   agentTool,
   createSkillWorkers,
   getToolDef,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 import { checkServerHealth, getWorkflow, MODEL } from './helpers';
 
 // ── Fixtures ─────────────────────────────────────────────────

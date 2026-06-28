@@ -20,7 +20,7 @@ import {
   CredentialNotFoundError,
   getCredential,
   tool,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Non-isolated tool: get Stripe customer balance ---------------------------

@@ -13,7 +13,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 const getWeather = tool(

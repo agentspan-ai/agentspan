@@ -1,5 +1,5 @@
 {
-  "name": "@conductoross/conductor-agent-sdk",
+  "name": "@conductor-oss/conductor-agent-sdk",
   "version": "0.1.0",
   "description": "Conductor Agent SDK for TypeScript — build, deploy, and run AI agents",
   "type": "module",

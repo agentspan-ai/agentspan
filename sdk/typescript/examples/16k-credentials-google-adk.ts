@@ -23,7 +23,7 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, tool, getCredential } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // Mirrors a Google ADK FunctionTool that checks for a credential

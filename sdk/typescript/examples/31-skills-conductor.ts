@@ -13,7 +13,7 @@
  *   - conductor-skills installed (https://github.com/conductor-oss/conductor-skills)
  */
 
-import { Agent, AgentRuntime, agentTool, loadSkills, skill } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, agentTool, loadSkills, skill } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel, secondaryLlmModel } from './settings';
 
 // ── Load conductor skill ───────────────────────────────────────────

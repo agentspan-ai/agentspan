@@ -13,7 +13,7 @@ import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // Tool definitions

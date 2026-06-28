@@ -8,7 +8,7 @@
  * Usage:
  *   // BEFORE: import { AgentExecutor } from 'langchain/agents';
  *   // AFTER:
- *   import { AgentExecutor } from '@conductoross/conductor-agent-sdk/langchain';
+ *   import { AgentExecutor } from '@conductor-oss/conductor-agent-sdk/langchain';
  *
  * Everything else in user code stays UNCHANGED.
  */
@@ -25,7 +25,7 @@ function _loadLangChainCore(): Record<string, unknown> {
     return _lcCoreModule!;
   } catch {
     throw new Error(
-      `The '@langchain/core' package is required by @conductoross/conductor-agent-sdk/langchain but was not found. ` +
+      `The '@langchain/core' package is required by @conductor-oss/conductor-agent-sdk/langchain but was not found. ` +
         `Install it with: npm install @langchain/core`,
     );
   }

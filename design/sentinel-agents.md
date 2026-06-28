@@ -337,7 +337,7 @@ schedules.preview_next("0 9 * * MON-FRI", n=5)
 #### TypeScript
 
 ```ts
-import { Agent, deploy, schedules, Schedule } from "@conductoross/conductor-agent-sdk";
+import { Agent, deploy, schedules, Schedule } from "@conductor-oss/conductor-agent-sdk";
 
 const agent = new Agent({ name: "dailyDigest", /* ... */ });
 
@@ -585,7 +585,7 @@ The local process runs:
 
 ```bash
 # 1. Install
-pip install conductor-agent-sdk   # or: npm install @conductoross/conductor-agent-sdk
+pip install conductor-agent-sdk   # or: npm install @conductor-oss/conductor-agent-sdk
 
 # 2. Write the sentinel (sentinel.py / sentinel.ts)
 #    Define agent + tools + FileWatch trigger

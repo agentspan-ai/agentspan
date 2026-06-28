@@ -10,7 +10,7 @@
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // System prompt (Socratic tutor persona)

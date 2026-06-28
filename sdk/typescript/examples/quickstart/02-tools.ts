@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { Agent, AgentRuntime, tool } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from '../settings.js';
 
 const getWeather = tool(

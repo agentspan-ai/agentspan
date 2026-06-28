@@ -2,7 +2,7 @@
 
 The official TypeScript/Node SDK for [Agentspan](https://agentspan.ai) — long-running, dynamic plan-execute, and event-driven AI agents.
 
-- **Package:** `@conductoross/conductor-agent-sdk` (npm)
+- **Package:** `@conductor-oss/conductor-agent-sdk` (npm)
 - **Runtime:** Node.js >= 18
 - **Module:** ESM and CommonJS (`import` / `require`)
 
@@ -19,7 +19,7 @@ The official TypeScript/Node SDK for [Agentspan](https://agentspan.ai) — long-
 ## At a glance
 
 ```ts
-import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'greeter',

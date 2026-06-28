@@ -516,7 +516,7 @@ A `@google/adk` agent is bridged via the TypeScript SDK. Detection: `subAgents[]
 
 ```ts
 import { LlmAgent } from '@google/adk';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const agent = new LlmAgent({ name: 'greeter', model: 'gemini-2.5-flash',
   instruction: 'You are a friendly assistant.' });

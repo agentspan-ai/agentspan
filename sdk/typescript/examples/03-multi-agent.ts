@@ -11,7 +11,7 @@ import {
   Agent,
   AgentRuntime,
   OnTextMention,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 

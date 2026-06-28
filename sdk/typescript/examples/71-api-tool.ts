@@ -30,7 +30,7 @@
  *   - For GitHub example: agentspan credentials set GITHUB_TOKEN ghp_xxx
  */
 
-import { Agent, AgentRuntime, apiTool, tool } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, apiTool, tool } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 const MCP_TEST_SERVER_SPEC = 'http://localhost:3001/api-docs';

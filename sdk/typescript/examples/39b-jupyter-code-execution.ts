@@ -13,7 +13,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, JupyterCodeExecutor } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, JupyterCodeExecutor } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 const jupyterExecutor = new JupyterCodeExecutor({

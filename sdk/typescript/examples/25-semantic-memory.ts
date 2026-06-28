@@ -19,7 +19,7 @@ import {
   tool,
   SemanticMemory,
   InMemoryStore,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Build up a knowledge base ---------------------------------------------

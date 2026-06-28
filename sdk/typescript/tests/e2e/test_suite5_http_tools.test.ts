@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime, httpTool, apiTool } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, httpTool, apiTool } from '@conductor-oss/conductor-agent-sdk';
 import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import {
   checkServerHealth,

@@ -10,7 +10,7 @@
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { z } from 'zod';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // Structured output schema
