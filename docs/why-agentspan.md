@@ -7,11 +7,11 @@ description: Why agents fail in production, and how Agentspan's server-side exec
 
 **Agentspan is a durable runtime for AI agents, built for Conductor. Your code runs in your process. Execution state lives on the server — so crashes, restarts, and deployments don't lose work.**
 
-This page covers why conventional agent frameworks fail in production, how Agentspan's server-side execution model addresses those failures, and when Agentspan is the right choice.
+![Agentspan three pillars: long-running agents, dynamic plan-execute, event-driven agents](assets/three-pillars.svg)
 
 ---
 
-## How most agent frameworks work
+## How most agent frameworks work (_and what could go wrong?_)
 
 Most agent frameworks — LangGraph, the OpenAI Agents SDK, Google ADK, and others — run the agent loop inside your process. Your code calls the LLM, receives a tool call, executes the tool, and loops. All of that happens in memory, in your process.
 
@@ -23,12 +23,9 @@ Your process
     ├── call LLM again
     └── ...until done
 ```
-
 This works fine on your laptop. In production, it breaks in predictable ways.
 
----
-
-## What can go wrong
+### What can go wrong
 
 **Process crash mid-run.** A long-running agent — one that searches the web, reads files, calls APIs across dozens of steps — can take minutes. If your process dies (OOM kill, deploy, network drop), the entire run is gone. There is no way to resume from where it stopped.
 
@@ -44,7 +41,7 @@ This works fine on your laptop. In production, it breaks in predictable ways.
 
 ---
 
-## How Agentspan works differently
+## How Agentspan separates orchestration from execution
 
 Agentspan separates where your code runs from where execution state lives.
 

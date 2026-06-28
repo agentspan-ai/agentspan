@@ -1,11 +1,11 @@
 ---
 title: SDK Overview
-description: Conductor agent SDK — coordinates, Agent 101, and framework integrations for Python, TypeScript, Java, and C#.
+description: Conductor Agent SDK — coordinates, Agent 101, and framework integrations for Python, TypeScript, Java, and C#.
 ---
 
 # SDK Overview
 
-The Conductor agent SDK lets you build and run Agentspan agents in four languages. Install the package, point it at an Agentspan server, and you're running agents in under 30 seconds.
+The Conductor Agent SDK lets you build and run Agentspan agents in four languages. Install the package, point it at an Agentspan server, and you're running agents in under 30 seconds.
 
 ## Quick reference
 
@@ -456,7 +456,7 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
 
     **Option 1 — Use AI SDK tools on a native Agent (recommended):**
 
-    The Conductor agent SDK auto-detects Vercel AI SDK `tool()` objects — no wrapper needed.
+    The Conductor Agent SDK auto-detects Vercel AI SDK `tool()` objects — no wrapper needed.
 
     ```ts
     import { tool as aiTool } from 'ai';
