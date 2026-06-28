@@ -129,7 +129,7 @@ const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const graph = createReactAgent({ llm, tools, name: 'sales_analyst' });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
   framework: 'langgraph',
 };

@@ -1,6 +1,6 @@
 export const MODEL_OPTIONS = [
   "openai/gpt-4o",
-  "openai/gpt-4o-mini",
+  "anthropic/claude-sonnet-4-6",
   "openai/o1",
   "openai/o3-mini",
   "anthropic/claude-opus-4-20250514",

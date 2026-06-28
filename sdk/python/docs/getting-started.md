@@ -12,7 +12,8 @@ Point the SDK at a running Agentspan server (defaults to `http://localhost:6767/
 
 ```bash
 export AGENTSPAN_SERVER_URL=http://localhost:6767/api
-export OPENAI_API_KEY=sk-...        # whichever provider your model uses
+export OPENAI_API_KEY=<YOUR-KEY>
+export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 ```
 
 Write `hello.py`:
@@ -22,7 +23,7 @@ from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(
     name="greeter",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="You are a friendly assistant. Keep responses brief.",
 )
 
@@ -63,7 +64,7 @@ the output if you prefer.
 | `AGENTSPAN_SECRET_STRICT_MODE` | `false` | Fail hard on missing secrets |
 | `AGENTSPAN_LOG_LEVEL` | `INFO` | Log level |
 
-The model string is `"provider/model"`, e.g. `openai/gpt-4o-mini`,
+The model string is `"provider/model"`, e.g. `anthropic/claude-sonnet-4-6`,
 `anthropic/claude-sonnet-4-20250514`, `google_gemini/gemini-2.0-flash`. Set the
 matching provider API key in the environment of whoever runs the agent's workers.
 

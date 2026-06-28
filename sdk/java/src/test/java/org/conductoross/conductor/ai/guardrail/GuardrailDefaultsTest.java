@@ -45,7 +45,7 @@ class GuardrailDefaultsTest {
     void llm_guardrail_default_on_fail_is_raise() {
         GuardrailDef g = LLMGuardrail.builder()
                 .name("l")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .policy("p")
                 .build();
         assertEquals(OnFail.RAISE, g.getOnFail(), "LLMGuardrail default onFail must be RAISE");

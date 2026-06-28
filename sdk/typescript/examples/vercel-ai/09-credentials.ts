@@ -31,7 +31,7 @@ const fetchReport = aiTool({
 // ── Native Agent with credentials ────────────────────────
 export const agent = new Agent({
   name: 'credentialed_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions:
     'You are a helpful assistant with access to analytics reports. ' +
     'Use the fetchReport tool to retrieve data when asked.',

@@ -15,7 +15,7 @@ Typical usage — delegate retrieval from a main agent::
     from conductor.ai.agents import Agent, agent_tool
     from conductor.ai.agents.ocg import ocg_agent
 
-    retriever = ocg_agent(model="openai/gpt-4o-mini",
+    retriever = ocg_agent(model="anthropic/claude-sonnet-4-6",
                           url="https://ocg.example.com",
                           credential="OCG_KEY")
     main = Agent(name="support", model="openai/gpt-4o",
@@ -23,9 +23,9 @@ Typical usage — delegate retrieval from a main agent::
 
 Multi-instance (e.g. data residency) — bind each retriever to its own OCG::
 
-    us = ocg_agent(name="ocg_us", model="openai/gpt-4o-mini",
+    us = ocg_agent(name="ocg_us", model="anthropic/claude-sonnet-4-6",
                    url="https://us.ocg.example.com", credential="OCG_US_KEY")
-    ca = ocg_agent(name="ocg_canada", model="openai/gpt-4o-mini",
+    ca = ocg_agent(name="ocg_canada", model="anthropic/claude-sonnet-4-6",
                    url="https://ca.ocg.example.com", credential="OCG_CA_KEY")
 
 ``url`` is required — every OCG tool set binds the instance it talks to;

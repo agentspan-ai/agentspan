@@ -22,7 +22,7 @@ public static class SemanticKernelAgent
     /// Create an Agentspan <see cref="Agent"/> from one or more plugin objects.
     /// </summary>
     /// <param name="name">Agent name (must match <c>^[a-zA-Z_][a-zA-Z0-9_-]*$</c>).</param>
-    /// <param name="model">LLM model string, e.g. <c>"openai/gpt-4o-mini"</c>.</param>
+    /// <param name="model">LLM model string, e.g. <c>"anthropic/claude-sonnet-4-6"</c>.</param>
     /// <param name="instructions">System prompt for the agent.</param>
     /// <param name="plugins">
     /// Objects with <c>[KernelFunction]</c>-annotated methods, or <see cref="KernelPlugin"/>

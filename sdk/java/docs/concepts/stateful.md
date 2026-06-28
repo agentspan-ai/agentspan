@@ -11,7 +11,7 @@ share a session id form one conversation.
 ```java
 Agent assistant = Agent.builder()
     .name("assistant")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("You are a helpful assistant.")
     .sessionId("user-42")
     .build();
@@ -26,7 +26,7 @@ concurrent stateful runs never dequeue each other's tool tasks.
 ```java
 Agent agent = Agent.builder()
     .name("hr_assistant")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("You are an HR assistant. Remember earlier turns.")
     .stateful(true)
     .build();
@@ -52,7 +52,7 @@ ConversationMemory memory = new ConversationMemory(20)   // retain at most 20 me
 
 Agent agent = Agent.builder()
     .name("assistant")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .memory(memory)
     .build();
 ```

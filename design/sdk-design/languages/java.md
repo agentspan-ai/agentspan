@@ -546,7 +546,7 @@ Guardrail piiGuardrail = RegexGuardrail.builder()
 
 Guardrail biasGuardrail = LLMGuardrail.builder()
     .name("bias_detector")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .policy("Check for biased language or stereotypes. If found, provide corrected version.")
     .position(Position.OUTPUT)
     .onFail(OnFail.FIX)

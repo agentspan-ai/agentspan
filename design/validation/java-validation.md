@@ -150,7 +150,7 @@ The separate **`java-sdk-tests`** job (`./gradlew test :spring:test`) runs the S
 
 ### `ci-java-sdk-e2e.yml` — standalone, `workflow_dispatch` only
 
-Manual trigger with optional `model` (default `openai/gpt-4o-mini`) and `suite` filter inputs. It builds the server JAR inline (`./gradlew bootJar -x test -q` in `server/`) rather than downloading the shared artifact, starts it on :6767 with the same health poll, and runs:
+Manual trigger with optional `model` (default `anthropic/claude-sonnet-4-6`) and `suite` filter inputs. It builds the server JAR inline (`./gradlew bootJar -x test -q` in `server/`) rather than downloading the shared artifact, starts it on :6767 with the same health poll, and runs:
 ```bash
 ./gradlew test -Pe2e \
   -DAGENTSPAN_SERVER_URL=$AGENTSPAN_SERVER_URL \

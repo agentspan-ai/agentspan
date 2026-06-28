@@ -63,7 +63,7 @@ def aggregate_results(results: list) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk, aggregate_results],
     instructions="""Analyze data in chunks using analyze_chunk, then aggregate with aggregate_results.
     Process each chunk sequentially. Report progress as you go.""",
@@ -99,7 +99,7 @@ def aggregate_results(results: list) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk, aggregate_results],
     instructions="...",
 )
@@ -171,7 +171,7 @@ def analyze_chunk(chunk_id: int, data: str) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk],
     instructions="...",
 )
@@ -191,7 +191,7 @@ def analyze_chunk(chunk_id: int, data: str) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk],
     instructions="...",
 )
@@ -243,7 +243,7 @@ def analyze_chunk(chunk_id: int, data: str) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk],
     instructions="...",
 )

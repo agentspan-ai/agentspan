@@ -99,7 +99,7 @@ For a complex graph where automatic introspection of the model/tools could fail,
 import { createReactAgent } from '@conductoross/conductor-agent-sdk/langgraph';
 ```
 
-You can also pass a model hint at call time when detection can't infer it: `runtime.run(graph, prompt, { model: 'openai/gpt-4o-mini' })`.
+You can also pass a model hint at call time when detection can't infer it: `runtime.run(graph, prompt, { model: 'anthropic/claude-sonnet-4-6' })`.
 
 ## LangChain
 
@@ -141,7 +141,7 @@ const weatherTool = aiTool({
 
 const agent = new Agent({
   name: 'weather_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'Use available tools to answer questions.',
   tools: [weatherTool],
 });
@@ -161,7 +161,7 @@ try {
 import { generateText } from '@conductoross/conductor-agent-sdk/vercel-ai';
 
 const { text } = await generateText({
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   prompt: 'Write a haiku about durable execution.',
 });
 ```

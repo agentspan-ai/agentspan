@@ -169,7 +169,7 @@ const searchApi = httpTool({
 
 const agent = new Agent({
   name: 'credentialed_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: '…',
   tools: [dbLookup, analytics, searchApi],
   credentials: ['DB_API_KEY', 'ANALYTICS_KEY', 'SEARCH_API_KEY'],
@@ -234,7 +234,7 @@ const all = loadSkills('./skills');          // Record<string, Agent>
 
 const orchestrator = new Agent({
   name: 'lead',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'Delegate reviews to the code-review skill.',
   tools: [agentTool(reviewer)],
 });

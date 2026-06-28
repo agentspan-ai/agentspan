@@ -84,7 +84,7 @@ const graph = createReactAgent({
 
 // Add agentspan metadata
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [calculate],
   framework: 'langgraph',
 };
@@ -161,7 +161,7 @@ const graph = new StateGraph(State)
 
 // Add agentspan metadata
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [],
   framework: 'langgraph',
 };

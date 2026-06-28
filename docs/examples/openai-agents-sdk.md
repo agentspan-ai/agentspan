@@ -122,7 +122,7 @@ account_agent = Agent(
 
 triage_agent = Agent(
     name="support_triage",
-    model="gpt-4o-mini",  # fast, cheap — just routes
+    model="anthropic/claude-sonnet-4-6",  # fast, cheap — just routes
     instructions="""You are a support triage agent. Understand the customer's issue
     and hand off to the right specialist immediately.
 

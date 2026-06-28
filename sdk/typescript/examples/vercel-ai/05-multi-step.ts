@@ -47,7 +47,7 @@ const lookupTime = aiTool({
 // ── Native Agent with multiple tools and maxTurns ────────
 export const agent = new Agent({
   name: 'multistep_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions:
     'You are a helpful assistant. Use the available tools to look up weather and time data, then summarize the results.',
   tools: [lookupWeather, lookupTime],

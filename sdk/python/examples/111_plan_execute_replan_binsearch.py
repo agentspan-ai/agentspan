@@ -270,7 +270,7 @@ def main(argv: list[str]) -> None:
         name="binsearch",
         tools=[write_guess, check_guess],
         planner_instructions="(planner unused; plans supplied directly each iteration)",
-        model=os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini"),
+        model=os.environ.get("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6"),
     )
 
     with AgentRuntime() as runtime:

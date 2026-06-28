@@ -26,7 +26,7 @@ public class SearchTools {
 
 Agent agent = Agent.builder()
     .name("research_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .tools(ToolRegistry.fromInstance(new SearchTools()))
     .build();
 ```
@@ -84,7 +84,7 @@ public class GitHubTools {
 // Agent-level declaration (applies to every tool the agent calls):
 Agent agent = Agent.builder()
     .name("github_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .credentials("GITHUB_TOKEN")
     .tools(ToolRegistry.fromInstance(new GitHubTools()))
     .build();
@@ -115,7 +115,7 @@ ToolDef searchTool = HttpTool.builder()
 
 Agent agent = Agent.builder()
     .name("shop_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .tools(searchTool)
     .build();
 ```
@@ -147,7 +147,7 @@ import org.conductoross.conductor.ai.execution.CliConfig;
 
 Agent agent = Agent.builder()
     .name("devops_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Run git commands as requested.")
     .cliConfig(CliConfig.builder()
         .allowedCommands(List.of("git status", "git log", "git diff"))
@@ -175,7 +175,7 @@ ToolDef approvalTool = HumanTool.create(
 
 Agent agent = Agent.builder()
     .name("deploy_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .tools(approvalTool)
     .build();
 ```
@@ -273,13 +273,13 @@ import org.conductoross.conductor.ai.tools.AgentTool;
 
 Agent researcher = Agent.builder()
     .name("researcher")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Research a topic and return a summary.")
     .build();
 
 Agent manager = Agent.builder()
     .name("manager")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Use the researcher tool to gather information.")
     .tools(AgentTool.from(researcher))            // callable like a function
     // AgentTool.from(researcher, "custom description") to override the description

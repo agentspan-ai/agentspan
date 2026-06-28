@@ -5,7 +5,7 @@ from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(
     name="greeter",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="You are a friendly assistant. Keep responses brief.",
 )
 

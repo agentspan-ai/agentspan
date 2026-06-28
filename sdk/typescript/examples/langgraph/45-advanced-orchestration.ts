@@ -211,7 +211,7 @@ const agentRunnable = new RunnableLambda({
 
 (agentRunnable as any)._agentspan = {
   name: 'advanced_orchestration',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
   framework: 'langchain',
 };

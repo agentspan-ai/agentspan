@@ -30,7 +30,7 @@ public class OpenAIAgentTests
     [Fact]
     public void Build_sets_framework_to_openai()
     {
-        var agent = OpenAIAgent.Builder().Name("a").Model("openai/gpt-4o-mini").Build();
+        var agent = OpenAIAgent.Builder().Name("a").Model("anthropic/claude-sonnet-4-6").Build();
         // COUNTERFACTUAL: if Builder drops the framework tag, this is null.
         Assert.Equal("openai", agent.Framework);
     }
@@ -46,10 +46,10 @@ public class OpenAIAgentTests
     [Fact]
     public void Handoffs_land_in_framework_config()
     {
-        var sub = new Agent("sub") { Model = "openai/gpt-4o-mini", Instructions = "I am sub." };
+        var sub = new Agent("sub") { Model = "anthropic/claude-sonnet-4-6", Instructions = "I am sub." };
         var agent = OpenAIAgent.Builder()
             .Name("root")
-            .Model("openai/gpt-4o-mini")
+            .Model("anthropic/claude-sonnet-4-6")
             .Handoffs(sub)
             .Build();
 

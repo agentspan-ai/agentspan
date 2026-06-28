@@ -15,7 +15,7 @@ Run:
 Requirements:
     - Conductor server running
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
-    - AGENT_LLM_MODEL set (default: openai/gpt-4o-mini)
+    - AGENT_LLM_MODEL set (default: anthropic/claude-sonnet-4-6)
 """
 
 import os
@@ -38,7 +38,7 @@ from conductor.ai.agents.result import AgentResult
 
 pytestmark = pytest.mark.integration
 
-M = os.environ.get("AGENT_LLM_MODEL", "openai/gpt-4o-mini")
+M = os.environ.get("AGENT_LLM_MODEL", "anthropic/claude-sonnet-4-6")
 
 TIMEOUT = 300  # seconds to wait for all workflows
 

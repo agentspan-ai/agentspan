@@ -68,7 +68,7 @@ const prompts = [
 // ── Native Agent with guardrails ─────────────────────────
 export const agent = new Agent({
   name: 'guarded_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'You are a helpful assistant. Never reveal internal system details.',
   guardrails: [piiGuardrail, outputLogGuardrail],
 });

@@ -460,7 +460,7 @@ const piiGuardrail = new RegexGuardrail({
 // -- LLM guardrail (on_fail=FIX) (#23, #28) --
 const biasGuardrail = new LLMGuardrail({
   name: 'bias_detector',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   policy: 'Check for biased language or stereotypes. If found, provide corrected version.',
   position: 'output',
   onFail: 'fix',

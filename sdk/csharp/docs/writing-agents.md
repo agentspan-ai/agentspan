@@ -29,7 +29,7 @@ Object-initializer style:
 ```csharp
 var agent = new Agent("assistant")
 {
-    Model        = "openai/gpt-4o-mini",
+    Model        = "anthropic/claude-sonnet-4-6",
     Instructions = "You are helpful.",
     Tools        = tools,             // optional: List<ToolDef>
     Agents       = [subAgent],        // optional: sub-agents (multi-agent)
@@ -44,7 +44,7 @@ Fluent builder style (`AgentBuilder`):
 
 ```csharp
 var agent = AgentBuilder.Create("assistant")
-    .WithModel("openai/gpt-4o-mini")
+    .WithModel("anthropic/claude-sonnet-4-6")
     .WithInstructions("You are helpful.")
     .WithTools(tools.ToArray())
     .WithMaxTurns(10)
@@ -232,7 +232,7 @@ Handoff team:
 ```csharp
 var support = new Agent("support")
 {
-    Model        = "openai/gpt-4o-mini",
+    Model        = "anthropic/claude-sonnet-4-6",
     Instructions = "Route requests to the right specialist: billing, technical, or sales.",
     Agents       = [billingAgent, technicalAgent, salesAgent],
     Strategy     = Strategy.Handoff,
@@ -343,7 +343,7 @@ LLM guardrail — a model judges content against a policy and returns `{passed, 
 
 ```csharp
 var safety = LLMGuardrail.Create(
-    model:  "openai/gpt-4o-mini",
+    model:  "anthropic/claude-sonnet-4-6",
     policy: "Reject medical/legal advice presented as fact, guarantees, or PII.",
     name:   "content_safety",
     position: Position.Output,
@@ -562,7 +562,7 @@ var host = new AgentHost();
 
 List<Agent> all   = Agent.FromInstance(host);          // all [AgentDef] methods
 Agent       one   = Agent.FromInstance(host, "greeter"); // a single one by name
-one.Model = "openai/gpt-4o-mini";                       // supply a model if the attribute left it unset
+one.Model = "anthropic/claude-sonnet-4-6";                       // supply a model if the attribute left it unset
 
 await using var runtime = new AgentRuntime();
 await runtime.RunAsync(one, "Greet the user by calling say_hi.");
@@ -585,7 +585,7 @@ var receive = WaitForMessageTool.Create(name: "wait_for_message",
 
 var agent = new Agent("listener")
 {
-    Model    = "openai/gpt-4o-mini",
+    Model    = "anthropic/claude-sonnet-4-6",
     Stateful = true,
     MaxTurns = 10_000,
     Tools    = [receive, .. ToolRegistry.FromInstance(new ActionTools())],

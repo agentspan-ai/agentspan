@@ -33,7 +33,7 @@ This page covers the user-facing API. For the design rationale see
 from conductor.ai.agents import Agent, deploy, schedules
 from conductor.ai.agents.schedule import Schedule
 
-agent = Agent(name="daily_digest", model="openai/gpt-4o-mini",
+agent = Agent(name="daily_digest", model="anthropic/claude-sonnet-4-6",
               instructions="Summarize today's eng activity.")
 
 deploy(
@@ -73,7 +73,7 @@ import {
 
 const agent = new Agent({
   name: "dailyDigest",
-  model: "openai/gpt-4o-mini",
+  model: "anthropic/claude-sonnet-4-6",
   instructions: "Summarize today's eng activity.",
 });
 
@@ -111,7 +111,7 @@ import org.conductoross.conductor.ai.schedule.Schedule;
 
 Agent agent = Agent.builder()
         .name("daily_digest")
-        .model("openai/gpt-4o-mini")
+        .model("anthropic/claude-sonnet-4-6")
         .instructions("Summarize today's eng activity.")
         .build();
 
@@ -147,7 +147,7 @@ using Conductor.AI.Scheduling;
 var agent = new Agent
 {
     Name = "daily_digest",
-    Model = "openai/gpt-4o-mini",
+    Model = "anthropic/claude-sonnet-4-6",
     Instructions = "Summarize today's eng activity.",
 };
 
@@ -278,7 +278,7 @@ These are future-phase items, not blockers:
 from conductor.ai.agents import Agent, AgentRuntime
 from conductor.ai.agents.schedule import Schedule
 
-agent = Agent(name="hello", model="openai/gpt-4o-mini",
+agent = Agent(name="hello", model="anthropic/claude-sonnet-4-6",
               instructions="Say 'Hello, world!' and the current UTC time.")
 
 with AgentRuntime() as rt:

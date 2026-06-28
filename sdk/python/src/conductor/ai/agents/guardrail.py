@@ -298,7 +298,7 @@ class LLMGuardrail(Guardrail):
     Example::
 
         safety = LLMGuardrail(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             policy="Reject any content that contains harmful, violent, or discriminatory language.",
             name="safety_check",
         )

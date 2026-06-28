@@ -80,7 +80,7 @@ The serializer:
 ```python
 raw_config = {
     "name": "my_agent",
-    "model": "openai/gpt-4o-mini",
+    "model": "anthropic/claude-sonnet-4-6",
     "instructions": "You are a helpful pirate.",  # from system_prompt param, if present
     "tools": [
         {"_worker_ref": "search", "description": "Search the web", "parameters": {...}},
@@ -107,7 +107,7 @@ Each node is classified as: **regular** (plain function → SIMPLE worker), **LL
 ```python
 raw_config = {
     "name": "my_workflow",
-    "model": "openai/gpt-4o-mini",
+    "model": "anthropic/claude-sonnet-4-6",
     "_graph": {
         "nodes": [
             {"name": "fetch", "_worker_ref": "my_workflow_fetch"},
@@ -453,7 +453,7 @@ Modern LangChain (v1.2+) uses `create_agent()` from `langchain.agents`, which re
 create_agent(llm, tools=[...], system_prompt="...")
     → CompiledStateGraph ──detect_framework()──► "langgraph"
     → serialize_langgraph()
-        ├─ _find_model_in_graph()              → "openai/gpt-4o-mini"
+        ├─ _find_model_in_graph()              → "anthropic/claude-sonnet-4-6"
         ├─ _find_tools_in_graph()              → [tool1, tool2, ...]
         └─ _extract_system_prompt_from_graph() → "You are a helpful assistant."
     → Full Extraction raw_config: { name, model, instructions, tools: [...] }
@@ -610,7 +610,7 @@ from conductor.ai.agents import Agent, agent_tool
 from conductor.ai.agents.ocg import ocg_agent
 
 retriever = ocg_agent(
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     url="https://test.contextgraph.io",
     credential="OCG_PUBLIC_KEY",        # secrets-store NAME, never the key
 )
@@ -627,7 +627,7 @@ main = Agent(
 from conductor.ai.agents.ocg import ocg_tools
 
 main = Agent(
-    name="support", model="openai/gpt-4o-mini",
+    name="support", model="anthropic/claude-sonnet-4-6",
     instructions="Answer using ocg_query (keyword/embedding retrieval, NOT an LLM). Query with specific keywords, at most one per topic, then write your brief.",
     tools=ocg_tools(url="https://test.contextgraph.io", credential="OCG_PUBLIC_KEY",
                     entities=False, memory=False),   # subset switches → ocg_query only

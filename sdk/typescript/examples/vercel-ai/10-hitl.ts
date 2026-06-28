@@ -60,7 +60,7 @@ const executeAction = agentspanTool(
 // ── Native Agent with HITL tools ─────────────────────────
 export const agent = new Agent({
   name: 'hitl_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions:
     'You are a careful assistant that assesses risk before taking action.\n' +
     'For every user request:\n' +

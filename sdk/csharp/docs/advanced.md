@@ -145,7 +145,7 @@ Cron triggers attach to a deployed agent. The lifecycle API is `runtime.Schedule
 ```csharp
 using Conductor.AI.Scheduling;
 
-var agent = new Agent("eng_digest") { Model = "openai/gpt-4o-mini", Instructions = "..." };
+var agent = new Agent("eng_digest") { Model = "anthropic/claude-sonnet-4-6", Instructions = "..." };
 
 // Declarative deploy: upsert these schedules, prune any others for this agent.
 await runtime.DeployAsync(agent, new[]
@@ -200,7 +200,7 @@ internal record WeatherReport(
 
 var agent = new Agent("weather_reporter")
 {
-    Model      = "openai/gpt-4o-mini",
+    Model      = "anthropic/claude-sonnet-4-6",
     Tools      = ToolRegistry.FromInstance(new WeatherTools()),
     OutputType = typeof(WeatherReport),
 };
@@ -269,11 +269,11 @@ produces a JSON plan that the server executes deterministically, with an optiona
 `Fallback` agent for recovery.
 
 ```csharp
-var planner = new Agent("planner") { Model = "openai/gpt-4o-mini", Instructions = "..." };
+var planner = new Agent("planner") { Model = "anthropic/claude-sonnet-4-6", Instructions = "..." };
 
 var harness = new Agent("onboarding")
 {
-    Model    = "openai/gpt-4o-mini",
+    Model    = "anthropic/claude-sonnet-4-6",
     Strategy = Strategy.PlanExecute,
     Planner  = planner,
     Fallback = fallback,            // optional; absent => plan failures terminate

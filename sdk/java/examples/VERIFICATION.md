@@ -6,7 +6,7 @@ confirm LLM calls, tool calls, sub-agent orchestration, and guardrails
 all execute **server-side**.
 
 - **Last full run:** 2026-05-21 against a local server at `localhost:6767`
-- **Model:** `openai/gpt-4o-mini` for every example (configurable via
+- **Model:** `anthropic/claude-sonnet-4-6` for every example (configurable via
   `AGENTSPAN_LLM_MODEL`)
 - **Examples covered:** 88 (39 ADK + 28 LangChain + 11 LangGraph + 10 OpenAI)
 - **Workflow-level pass rate:** 88 / 88 COMPLETED

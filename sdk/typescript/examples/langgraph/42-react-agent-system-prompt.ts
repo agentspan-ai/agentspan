@@ -86,7 +86,7 @@ const graph = createReactAgent({
 });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
   instructions: SYSTEM_PROMPT,
   framework: 'langgraph',

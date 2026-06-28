@@ -48,7 +48,7 @@ public class GuardrailTests
     [Fact]
     public void Llm_default_onfail_is_raise()
     {
-        var g = LLMGuardrail.Create("openai/gpt-4o-mini", "no bad stuff");
+        var g = LLMGuardrail.Create("anthropic/claude-sonnet-4-6", "no bad stuff");
         Assert.Equal(OnFail.Raise, g.OnFail);
     }
 

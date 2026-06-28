@@ -34,7 +34,7 @@ public class LoggingHandler extends CallbackHandler {
 
 Agent agent = Agent.builder()
     .name("observed_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .callbacks(new LoggingHandler())
     .build();
 ```
@@ -61,7 +61,7 @@ For one-off hooks without a class, use the function-typed builder methods. Each 
 ```java
 Agent agent = Agent.builder()
     .name("observed_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .beforeModelCallback(ctx -> { System.out.println("calling LLM: " + ctx.get("messages")); return ctx; })
     .afterModelCallback(ctx -> { System.out.println("LLM replied: " + ctx.get("output")); return ctx; })
     .beforeAgentCallback(ctx -> ctx)

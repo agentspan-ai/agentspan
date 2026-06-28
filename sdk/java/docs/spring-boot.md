@@ -56,7 +56,7 @@ public class ChatService {
     public String answer(String question) {
         Agent agent = Agent.builder()
             .name("assistant")
-            .model("openai/gpt-4o-mini")
+            .model("anthropic/claude-sonnet-4-6")
             .instructions("You are a helpful assistant.")
             .build();
 

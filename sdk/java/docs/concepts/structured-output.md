@@ -14,7 +14,7 @@ public class WeatherReport {
 
 Agent agent = Agent.builder()
     .name("weather_reporter")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("You are a weather reporter. Get the weather and provide a recommendation.")
     .tools(ToolRegistry.fromInstance(new WeatherTools()))
     .outputType(WeatherReport.class)

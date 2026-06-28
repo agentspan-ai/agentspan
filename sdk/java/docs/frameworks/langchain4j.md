@@ -35,7 +35,7 @@ public class CalculatorTools {
 // Wrap with LangChain4jAgent
 Agent agent = LangChain4jAgent.from(
     "calculator_agent",                         // agent name
-    "openai/gpt-4o-mini",                       // model
+    "anthropic/claude-sonnet-4-6",                       // model
     "You can perform math and look up prices.", // instructions
     new CalculatorTools()                       // one or more tool POJOs
 );

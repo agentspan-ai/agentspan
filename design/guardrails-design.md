@@ -207,7 +207,7 @@ json_only = RegexGuardrail(
 
 ```python
 safety = LLMGuardrail(
-    model="openai/gpt-4o-mini",  # use a fast, cheap model
+    model="anthropic/claude-sonnet-4-6",  # use a fast, cheap model
     policy=(
         "Reject any content that:\n"
         "1. Contains medical or legal advice presented as fact\n"
@@ -421,7 +421,7 @@ Client-side (`litellm` in the worker process) requires a dependency, isn't visib
 guardrail_llm = LlmChatComplete(
     task_ref_name=f"{agent_name}_guardrail_llm",
     llm_provider="openai",          # server-configured provider — no extra keys
-    model="gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     messages=[
         ChatMessage(role="system", message=guardrail_policy_prompt),
         ChatMessage(role="user", message="${llm_output}"),

@@ -20,7 +20,7 @@ import org.conductoross.conductor.ai.model.GuardrailDef;
  * <pre>{@code
  * GuardrailDef safety = LLMGuardrail.builder()
  *     .name("safety_check")
- *     .model("openai/gpt-4o-mini")
+ *     .model("anthropic/claude-sonnet-4-6")
  *     .policy("Reject any content that contains harmful, violent, or discriminatory language.")
  *     .build();
  * }</pre>
@@ -47,7 +47,7 @@ public class LLMGuardrail {
             return this;
         }
 
-        /** LLM model in {@code "provider/model"} format (e.g. {@code "openai/gpt-4o-mini"}). */
+        /** LLM model in {@code "provider/model"} format (e.g. {@code "anthropic/claude-sonnet-4-6"}). */
         public Builder model(String model) {
             this.model = model;
             return this;

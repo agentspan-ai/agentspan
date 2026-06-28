@@ -13,7 +13,7 @@ Requirements:
 
 from conductor.ai.agents import Agent, AgentRuntime
 
-MODEL = "openai/gpt-4o-mini"
+MODEL = "anthropic/claude-sonnet-4-6"
 
 agent = Agent(
     name="cli_error_tester",

@@ -5,13 +5,13 @@ from conductor.ai.agents import Agent, AgentRuntime
 
 researcher = Agent(
     name="researcher",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="Research the topic. Provide 3 key facts.",
 )
 
 writer = Agent(
     name="writer",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="Write a brief summary based on the research provided.",
 )
 

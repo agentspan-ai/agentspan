@@ -22,7 +22,7 @@ type Person = z.infer<typeof PersonSchema>;
 // ── Native Agent with structured output ──────────────────
 export const agent = new Agent({
   name: 'structured_output_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'Generate fictional but realistic profiles when asked.',
   outputType: PersonSchema, // Zod schema auto-converted to JSON Schema
 });

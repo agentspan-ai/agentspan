@@ -20,7 +20,7 @@ import org.conductoross.conductor.ai.enums.Position;
 
 Agent agent = Agent.builder()
     .name("safe_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .guardrails(
         // Block output containing a phone-number pattern
         RegexGuardrail.builder()
@@ -34,7 +34,7 @@ Agent agent = Agent.builder()
         LLMGuardrail.builder()
             .name("professional_tone")
             .position(Position.OUTPUT)
-            .model("openai/gpt-4o-mini")
+            .model("anthropic/claude-sonnet-4-6")
             .policy("The response must be professional and free of slang.")
             .onFail(OnFail.RETRY)
             .build())
@@ -65,7 +65,7 @@ Ask a language model to evaluate the content against a policy.
 LLMGuardrail.builder()
     .name("safe_content")
     .position(Position.OUTPUT)
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .policy("Reject any harmful, offensive, or unsafe content.")
     .onFail(OnFail.RAISE)
     .build();

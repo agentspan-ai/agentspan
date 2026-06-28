@@ -1385,7 +1385,7 @@ group = "SMOKE_TEST"
 timeout = 300
 
 [judge]
-model = "openai/gpt-4o-mini"
+model = "anthropic/claude-sonnet-4-6"
 max_output_chars = 3000
 max_tokens = 300
 ```
@@ -1603,7 +1603,7 @@ piiGuardrail := agentspan.NewRegexGuardrail("pii_blocker",
 )
 
 biasGuardrail := agentspan.NewLLMGuardrail("bias_detector",
-    "openai/gpt-4o-mini",
+    "anthropic/claude-sonnet-4-6",
     "Check for biased language or stereotypes.",
     agentspan.WithPosition(agentspan.PositionOutput),
     agentspan.WithOnFail(agentspan.OnFailFix),

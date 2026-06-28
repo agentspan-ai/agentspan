@@ -29,6 +29,8 @@ You need a running Agentspan server. The defaults assume a local one at `http://
 
 ```bash
 export AGENTSPAN_SERVER_URL=http://localhost:6767/api
+export OPENAI_API_KEY=<YOUR-KEY>
+export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 # Orkes Cloud only:
 # export AGENTSPAN_AUTH_KEY=...
 # export AGENTSPAN_AUTH_SECRET=...
@@ -45,7 +47,7 @@ import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'greeter',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'You are a friendly assistant. Keep responses brief.',
 });
 

@@ -192,7 +192,7 @@ want to assemble your own retriever.
 from conductor.ai.agents import Agent, agent_tool
 from conductor.ai.agents.ocg import ocg_agent
 
-retriever = ocg_agent(model="openai/gpt-4o-mini",
+retriever = ocg_agent(model="anthropic/claude-sonnet-4-6",
                       url="https://ocg.example.com", credential="OCG_KEY")
 main = Agent(name="support", model="openai/gpt-4o", tools=[agent_tool(retriever)])
 ```
@@ -287,7 +287,7 @@ def no_pii(content: str) -> GuardrailResult:
 no_emails = RegexGuardrail(patterns=[r"[\w.+-]+@[\w-]+\.[\w.-]+"],
                            name="no_emails", message="No email addresses.")
 
-safety = LLMGuardrail(model="openai/gpt-4o-mini",
+safety = LLMGuardrail(model="anthropic/claude-sonnet-4-6",
                       policy="Reject harmful or discriminatory content.")
 
 agent = Agent(name="safe", model="openai/gpt-4o",

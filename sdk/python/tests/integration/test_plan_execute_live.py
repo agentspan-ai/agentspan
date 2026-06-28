@@ -249,7 +249,7 @@ class TestPlanExecuteHappyPath:
         """Plan-Execute should generate a report that passes word count validation."""
         planner = Agent(
             name="test_planner",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=PLANNER_INSTRUCTIONS,
             max_turns=3,
             max_tokens=4000,
@@ -257,7 +257,7 @@ class TestPlanExecuteHappyPath:
 
         fallback = Agent(
             name="test_fallback",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=FALLBACK_INSTRUCTIONS,
             tools=[create_directory, read_file, write_file, assemble_files, check_word_count],
             max_turns=10,
@@ -266,7 +266,7 @@ class TestPlanExecuteHappyPath:
 
         harness = Agent(
             name="test_report_gen",
-            model="openai/gpt-4o-mini",  # not used by PLAN_EXECUTE; keeps agent local (non-external)
+            model="anthropic/claude-sonnet-4-6",  # not used by PLAN_EXECUTE; keeps agent local (non-external)
             strategy=Strategy.PLAN_EXECUTE,
             planner=planner,
             fallback=fallback,
@@ -439,7 +439,7 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
 
         planner = Agent(
             name="test_planner_maxtok",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=max_tokens_planner_instructions,
             max_turns=3,
             max_tokens=4000,
@@ -447,7 +447,7 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
 
         fallback = Agent(
             name="test_fallback_maxtok",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=FALLBACK_INSTRUCTIONS,
             tools=[create_directory, read_file, write_file, assemble_files, check_word_count],
             max_turns=10,
@@ -456,7 +456,7 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
 
         harness = Agent(
             name="test_report_gen_maxtok",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             strategy=Strategy.PLAN_EXECUTE,
             planner=planner,
             fallback=fallback,
@@ -499,7 +499,7 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
         """Plan-Execute output should indicate validation passed."""
         planner = Agent(
             name="test_planner2",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=PLANNER_INSTRUCTIONS,
             max_turns=3,
             max_tokens=4000,
@@ -507,7 +507,7 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
 
         fallback = Agent(
             name="test_fallback2",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=FALLBACK_INSTRUCTIONS,
             tools=[create_directory, read_file, write_file, assemble_files, check_word_count],
             max_turns=10,
@@ -516,7 +516,7 @@ IMPORTANT: Every generate block MUST include "max_tokens": 8192.
 
         harness = Agent(
             name="test_report_gen2",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             strategy=Strategy.PLAN_EXECUTE,
             planner=planner,
             fallback=fallback,
@@ -555,14 +555,14 @@ class TestPlanAndCompileTask:
 
         planner = Agent(
             name="test_pac_planner",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=PLANNER_INSTRUCTIONS,
             max_turns=3,
             max_tokens=4000,
         )
         fallback = Agent(
             name="test_pac_fallback",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=FALLBACK_INSTRUCTIONS,
             tools=[create_directory, read_file, write_file, assemble_files, check_word_count],
             max_turns=10,
@@ -570,7 +570,7 @@ class TestPlanAndCompileTask:
         )
         harness = Agent(
             name="test_pac_harness",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             strategy=Strategy.PLAN_EXECUTE,
             planner=planner,
             fallback=fallback,
@@ -777,14 +777,14 @@ class TestPlanAndCompileValidation:
 
         planner = Agent(
             name="test_unknown_planner",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=_EMPTY_PLANNER_INSTRUCTIONS,
             max_turns=1,
             max_tokens=20,  # caps planner output well below a JSON plan's size
         )
         fallback = Agent(
             name="test_unknown_fallback",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "The deterministic plan failed to compile. You MUST call "
                 "record_recovery() exactly once before responding. Do not "
@@ -796,7 +796,7 @@ class TestPlanAndCompileValidation:
         )
         harness = Agent(
             name="test_unknown_tool_harness",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             strategy=Strategy.PLAN_EXECUTE,
             planner=planner,
             fallback=fallback,
@@ -861,14 +861,14 @@ class TestPlanAndCompileValidation:
 
         planner = Agent(
             name="test_guardrail_planner",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=_EMPTY_PLANNER_INSTRUCTIONS,
             max_turns=1,
             max_tokens=20,
         )
         fallback = Agent(
             name="test_guardrail_fallback",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "The deterministic plan was blocked by a guardrail. "
                 "Call record_recovery() exactly once, then stop. "
@@ -880,7 +880,7 @@ class TestPlanAndCompileValidation:
         )
         harness = Agent(
             name="test_guardrail_harness",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             strategy=Strategy.PLAN_EXECUTE,
             planner=planner,
             fallback=fallback,
@@ -999,7 +999,7 @@ class TestStaticPlanAndPlanExecuteHelper:
             tools=[static_record, static_check],
             planner_instructions="",
             fallback_instructions="If the plan failed, just stop.",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
         )
 
         # Construct the plan with typed builders — IDE-checkable, no JSON
@@ -1040,7 +1040,7 @@ class TestStaticPlanAndPlanExecuteHelper:
             name="static_plan_dict_demo",
             tools=[static_record, static_check],
             planner_instructions="",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
         )
         plan_dict = {
             "steps": [

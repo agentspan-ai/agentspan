@@ -122,7 +122,7 @@ const orchBuilder = new StateGraph(MessagesAnnotation)
 const graph = orchBuilder.compile({ name: "orchestrator_with_subagents" });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
   framework: 'langgraph',
 };

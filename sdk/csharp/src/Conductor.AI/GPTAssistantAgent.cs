@@ -34,7 +34,7 @@ public static class GPTAssistantAgent
 
     /// <summary>Create a new OpenAI Assistant on the fly and wrap it as an Agentspan agent.</summary>
     /// <param name="name">Agent name.</param>
-    /// <param name="model">OpenAI model (e.g. <c>"openai/gpt-4o-mini"</c>).</param>
+    /// <param name="model">OpenAI model (e.g. <c>"anthropic/claude-sonnet-4-6"</c>).</param>
     /// <param name="instructions">System instructions for the assistant.</param>
     /// <param name="openAiTools">OpenAI-native tool specs, e.g. <c>[{"type":"code_interpreter"}]</c>.</param>
     /// <param name="apiKey">OpenAI API key (falls back to <c>OPENAI_API_KEY</c> env var).</param>
@@ -88,7 +88,7 @@ public static class GPTAssistantAgent
 
         return new Agent(name)
         {
-            Model        = model ?? "openai/gpt-4o-mini",
+            Model        = model ?? "anthropic/claude-sonnet-4-6",
             Instructions = instructions ?? "You are a helpful assistant.",
             Tools        = [toolDef],
         };

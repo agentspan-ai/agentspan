@@ -54,7 +54,7 @@ const graph = new StateGraph(StreamState)
 // Add agentspan metadata for graph-structure extraction.
 // Do NOT set tools on StateGraphs — only model + framework.
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

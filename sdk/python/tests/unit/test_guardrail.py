@@ -278,26 +278,26 @@ class TestLLMGuardrail:
 
     def test_creation(self):
         guard = LLMGuardrail(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             policy="No harmful content.",
             name="safety",
         )
         assert guard.name == "safety"
         assert guard.position == "output"
         assert guard.on_fail == "raise"
-        assert guard._model == "openai/gpt-4o-mini"
+        assert guard._model == "anthropic/claude-sonnet-4-6"
         assert guard._policy == "No harmful content."
 
     def test_is_guardrail_subclass(self):
         guard = LLMGuardrail(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             policy="Be safe.",
         )
         assert isinstance(guard, Guardrail)
 
     def test_custom_position(self):
         guard = LLMGuardrail(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             policy="Check input.",
             position="input",
             on_fail="raise",
@@ -307,17 +307,17 @@ class TestLLMGuardrail:
 
     def test_repr(self):
         guard = LLMGuardrail(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             policy="Be safe.",
             name="safe_guard",
         )
         r = repr(guard)
         assert "safe_guard" in r
-        assert "openai/gpt-4o-mini" in r
+        assert "anthropic/claude-sonnet-4-6" in r
 
     def test_max_retries_passed_through(self):
         guard = LLMGuardrail(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             policy="Be safe.",
             max_retries=10,
         )
@@ -330,7 +330,7 @@ class TestLLMGuardrailEvaluate:
     def test_evaluate_passes(self):
         from unittest.mock import MagicMock, patch
 
-        guard = LLMGuardrail(model="openai/gpt-4o-mini", policy="Be safe.")
+        guard = LLMGuardrail(model="anthropic/claude-sonnet-4-6", policy="Be safe.")
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -347,7 +347,7 @@ class TestLLMGuardrailEvaluate:
     def test_evaluate_fails(self):
         from unittest.mock import MagicMock, patch
 
-        guard = LLMGuardrail(model="openai/gpt-4o-mini", policy="No violence.")
+        guard = LLMGuardrail(model="anthropic/claude-sonnet-4-6", policy="No violence.")
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -367,7 +367,7 @@ class TestLLMGuardrailEvaluate:
     def test_evaluate_litellm_not_installed(self):
         from unittest.mock import patch
 
-        guard = LLMGuardrail(model="openai/gpt-4o-mini", policy="Be safe.")
+        guard = LLMGuardrail(model="anthropic/claude-sonnet-4-6", policy="Be safe.")
 
         # Simulate litellm import failure inside _evaluate
         with patch.object(LLMGuardrail, "_evaluate") as mock_eval:
@@ -382,7 +382,7 @@ class TestLLMGuardrailEvaluate:
     def test_evaluate_unparseable_response(self):
         from unittest.mock import MagicMock, patch
 
-        guard = LLMGuardrail(model="openai/gpt-4o-mini", policy="Be safe.")
+        guard = LLMGuardrail(model="anthropic/claude-sonnet-4-6", policy="Be safe.")
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -400,7 +400,7 @@ class TestLLMGuardrailEvaluate:
     def test_evaluate_api_error(self):
         from unittest.mock import MagicMock, patch
 
-        guard = LLMGuardrail(model="openai/gpt-4o-mini", policy="Be safe.")
+        guard = LLMGuardrail(model="anthropic/claude-sonnet-4-6", policy="Be safe.")
 
         with patch.dict("sys.modules", {"litellm": MagicMock()}):
             import sys
@@ -633,7 +633,7 @@ class TestBackwardCompatibility:
 
     def test_llm_guardrail_with_enums(self):
         guard = LLMGuardrail(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             policy="Be safe.",
             position=Position.OUTPUT,
             on_fail=OnFail.RETRY,
@@ -694,7 +694,7 @@ class TestGuardrailMaxRetriesValidation:
     def test_llm_guardrail_zero_retries_raises(self):
         with pytest.raises(ValueError, match="max_retries must be >= 1"):
             LLMGuardrail(
-                model="openai/gpt-4o-mini",
+                model="anthropic/claude-sonnet-4-6",
                 policy="Be safe.",
                 max_retries=0,
             )

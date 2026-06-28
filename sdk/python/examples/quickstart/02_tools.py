@@ -12,7 +12,7 @@ def get_weather(city: str) -> str:
 
 agent = Agent(
     name="weather_bot",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="Use the get_weather tool to answer weather questions.",
     tools=[get_weather],
 )

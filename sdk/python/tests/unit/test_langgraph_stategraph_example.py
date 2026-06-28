@@ -72,7 +72,7 @@ class TestCustomStateGraph:
         from conductor.ai.agents.runtime.config import AgentConfig
 
         # Build a native Agent whose sub-agents list contains a CompiledStateGraph
-        wrapper = Agent(name="wrapper", instructions="test", model="openai/gpt-4o-mini")
+        wrapper = Agent(name="wrapper", instructions="test", model="anthropic/claude-sonnet-4-6")
         # Directly inject the graph as a sub-agent (bypassing type checks)
         wrapper.agents = [custom_graph]
 

@@ -65,7 +65,7 @@ docs_handler = Agent(
 
 classifier = Agent(
     name="classifier",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions=(
         "You are an issue classifier. Read the issue and reply with "
         "EXACTLY ONE of these agent names — nothing else:\n\n"
@@ -81,7 +81,7 @@ classifier = Agent(
 
 triage = Agent(
     name="triage",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     agents=[bug_handler, feature_handler, docs_handler],
     strategy=Strategy.ROUTER,
     router=classifier,

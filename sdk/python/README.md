@@ -421,7 +421,7 @@ class LoggingHandler(CallbackHandler):
 
 agent = Agent(
     name="my_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="You are a helpful assistant.",
     callbacks=[TimingHandler(), LoggingHandler()],
 )

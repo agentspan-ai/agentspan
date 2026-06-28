@@ -56,7 +56,7 @@ export interface AgentspanMetadata {
  */
 export function extractModelFromLLM(llm: unknown): string {
   if (typeof llm === "string") return llm;
-  if (typeof llm !== "object" || llm === null) return "openai/gpt-4o-mini";
+  if (typeof llm !== "object" || llm === null) return "anthropic/claude-sonnet-4-6";
 
   const l = llm as Record<string, unknown>;
 

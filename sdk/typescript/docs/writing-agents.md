@@ -14,7 +14,7 @@ const runtime = new AgentRuntime();
 ```ts
 const agent = new Agent({
   name: 'greeter',                 // required; must match /^[a-zA-Z][a-zA-Z0-9_-]*$/
-  model: 'openai/gpt-4o-mini',     // provider/model string
+  model: 'anthropic/claude-sonnet-4-6',     // provider/model string
   instructions: 'Keep answers short.',
   temperature: 0.7,
   maxTurns: 25,                    // default 25
@@ -30,7 +30,7 @@ import { agent } from '@conductoross/conductor-agent-sdk';
 
 const a = agent(() => 'You are a helpful assistant.', {
   name: 'helper',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
 });
 ```
 
@@ -78,7 +78,7 @@ const getWeather = tool(
 
 const agent = new Agent({
   name: 'weather_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'Answer weather questions using the tool.',
   tools: [getWeather],
 });
@@ -132,7 +132,7 @@ import { httpTool, mcpTool } from '@conductoross/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'researcher',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [
     httpTool({
       name: 'get_user',
@@ -154,7 +154,7 @@ import { waitForMessageTool } from '@conductoross/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'inbox_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'When asked to wait, call wait_for_message and process what arrives.',
   tools: [waitForMessageTool({
     name: 'wait_for_message',
@@ -264,7 +264,7 @@ const noSecrets = new RegexGuardrail({
 // LLM (server-side LLM judge)
 const policy = new LLMGuardrail({
   name: 'safety',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   policy: 'Reject any content that gives medical dosage advice.',
   position: 'output',
   onFail: 'retry',
@@ -426,10 +426,10 @@ Define agents as decorated methods on a class and extract them:
 import { AgentDec, agentsFrom } from '@conductoross/conductor-agent-sdk';
 
 class MyAgents {
-  @AgentDec({ name: 'summarizer', model: 'openai/gpt-4o-mini', instructions: 'Summarize text.' })
+  @AgentDec({ name: 'summarizer', model: 'anthropic/claude-sonnet-4-6', instructions: 'Summarize text.' })
   summarize() {}
 
-  @AgentDec({ name: 'classifier', model: 'openai/gpt-4o-mini', instructions: 'Classify text.' })
+  @AgentDec({ name: 'classifier', model: 'anthropic/claude-sonnet-4-6', instructions: 'Classify text.' })
   classify() {}
 }
 

@@ -4,7 +4,7 @@ import { extractModelString, mapFinishReason } from "../../../src/wrappers/ai.js
 describe("Vercel AI SDK wrapper", () => {
   describe("extractModelString", () => {
     it("returns string model as-is", () => {
-      expect(extractModelString("openai/gpt-4o-mini")).toBe("openai/gpt-4o-mini");
+      expect(extractModelString("anthropic/claude-sonnet-4-6")).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("returns model with existing provider prefix as-is", () => {
@@ -16,7 +16,7 @@ describe("Vercel AI SDK wrapper", () => {
         modelId: "gpt-4o-mini",
         provider: "openai.chat",
       };
-      expect(extractModelString(model)).toBe("openai/gpt-4o-mini");
+      expect(extractModelString(model)).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("extracts from AI SDK model object with modelId that includes provider", () => {
@@ -50,7 +50,7 @@ describe("Vercel AI SDK wrapper", () => {
         modelId: "gpt-4o-mini",
         provider: "openai.chat.completions",
       };
-      expect(extractModelString(model)).toBe("openai/gpt-4o-mini");
+      expect(extractModelString(model)).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("infers openai provider from gpt- prefix", () => {
@@ -68,20 +68,20 @@ describe("Vercel AI SDK wrapper", () => {
       expect(extractModelString(model)).toBe("google/gemini-pro");
     });
 
-    it("defaults to openai/gpt-4o-mini for null model", () => {
-      expect(extractModelString(null)).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for null model", () => {
+      expect(extractModelString(null)).toBe("anthropic/claude-sonnet-4-6");
     });
 
-    it("defaults to openai/gpt-4o-mini for undefined model", () => {
-      expect(extractModelString(undefined)).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for undefined model", () => {
+      expect(extractModelString(undefined)).toBe("anthropic/claude-sonnet-4-6");
     });
 
-    it("defaults to openai/gpt-4o-mini for empty object", () => {
-      expect(extractModelString({})).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for empty object", () => {
+      expect(extractModelString({})).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("handles number input gracefully", () => {
-      expect(extractModelString(42)).toBe("openai/gpt-4o-mini");
+      expect(extractModelString(42)).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("infers openai for o1 prefix", () => {
@@ -147,7 +147,7 @@ describe("Vercel AI SDK wrapper", () => {
       };
 
       const modelStr = extractModelString(options.model);
-      expect(modelStr).toBe("openai/gpt-4o-mini");
+      expect(modelStr).toBe("anthropic/claude-sonnet-4-6");
 
       const toolObjects = Object.values(options.tools);
       expect(toolObjects).toHaveLength(1);
@@ -161,7 +161,7 @@ describe("Vercel AI SDK wrapper", () => {
       });
 
       expect(agent.name).toBe("vercel_ai_agent");
-      expect(agent.model).toBe("openai/gpt-4o-mini");
+      expect(agent.model).toBe("anthropic/claude-sonnet-4-6");
       expect(agent.instructions).toBe("You are a helpful assistant.");
       expect(agent.tools).toHaveLength(1);
       expect(agent.maxTurns).toBe(5);
@@ -180,7 +180,7 @@ describe("Vercel AI SDK wrapper", () => {
 
     it("handles options with no tools", () => {
       const modelStr = extractModelString({ modelId: "gpt-4o-mini", provider: "openai.chat" });
-      expect(modelStr).toBe("openai/gpt-4o-mini");
+      expect(modelStr).toBe("anthropic/claude-sonnet-4-6");
       // No tools case - should produce empty array
       const tools = undefined;
       const toolObjects = tools ? Object.values(tools) : [];

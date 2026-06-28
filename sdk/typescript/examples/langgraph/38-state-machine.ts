@@ -169,7 +169,7 @@ const graph = new StateGraph(OrderState)
   .compile({ name: "order_state_machine" });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

@@ -102,7 +102,7 @@ Key `AgentOptions` fields:
 | Field | Type | Notes |
 |---|---|---|
 | `name` | `string` | Required. `/^[a-zA-Z][a-zA-Z0-9_-]*$/`. |
-| `model` | `string \| ClaudeCode` | e.g. `'openai/gpt-4o-mini'`. |
+| `model` | `string \| ClaudeCode` | e.g. `'anthropic/claude-sonnet-4-6'`. |
 | `baseUrl` | `string` | Override LLM provider base URL. |
 | `instructions` | `string \| PromptTemplate \| (() => string)` | Static / template / dynamic. |
 | `tools` | `unknown[]` | `tool()` wrappers, built-in tool defs, framework tools. |

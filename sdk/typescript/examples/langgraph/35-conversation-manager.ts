@@ -117,7 +117,7 @@ const graph = new StateGraph(ConversationState)
   .compile({ name: "conversation_manager" });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

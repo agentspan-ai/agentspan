@@ -15,7 +15,7 @@ import java.util.Map;
  * <pre>{@code
  * Agent agent = Agent.builder()
  *     .name("support")
- *     .model("openai/gpt-4o-mini")
+ *     .model("anthropic/claude-sonnet-4-6")
  *     .instructionsTemplate(new PromptTemplate("customer-support",
  *         Map.of("company", "Acme", "tone", "friendly")))
  *     .build();

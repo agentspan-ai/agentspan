@@ -13,7 +13,7 @@ def test_start_via_server_includes_context_in_payload():
     """Verify context dict ends up in the /api/agent/start POST body."""
     from conductor.ai.agents import AgentRuntime
 
-    agent = Agent(name="test", model="openai/gpt-4o-mini")
+    agent = Agent(name="test", model="anthropic/claude-sonnet-4-6")
     rt = AgentRuntime()
     with patch("requests.post") as mock_post:
         mock_resp = MagicMock()
@@ -30,7 +30,7 @@ def test_start_via_server_without_context_omits_key():
     """Without context param, payload should not include context key."""
     from conductor.ai.agents import AgentRuntime
 
-    agent = Agent(name="test", model="openai/gpt-4o-mini")
+    agent = Agent(name="test", model="anthropic/claude-sonnet-4-6")
     rt = AgentRuntime()
     with patch("requests.post") as mock_post:
         mock_resp = MagicMock()

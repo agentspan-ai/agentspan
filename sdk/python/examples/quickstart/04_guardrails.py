@@ -5,7 +5,7 @@ from conductor.ai.agents import Agent, AgentRuntime, RegexGuardrail
 
 agent = Agent(
     name="safe_bot",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="Answer questions. Never include email addresses in your response.",
     guardrails=[
         RegexGuardrail(

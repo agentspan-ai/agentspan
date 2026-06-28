@@ -26,7 +26,7 @@ from conductor.ai.agents import Agent, AgentRuntime
 from conductor.ai.agents.schedule import Schedule
 
 SERVER = "http://localhost:6767/api"
-MODEL = os.environ.get("AGENTSPAN_MODEL", "openai/gpt-4o-mini")
+MODEL = os.environ.get("AGENTSPAN_MODEL", "anthropic/claude-sonnet-4-6")
 
 
 def fetch_executions(agent_name: str, limit: int = 20) -> list[dict]:

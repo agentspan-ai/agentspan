@@ -14,7 +14,7 @@ Usage::
     assert_output_satisfies(
         result,
         criterion="The output should contain weather information for NYC",
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-sonnet-4-6",
     )
 """
 
@@ -27,7 +27,7 @@ def assert_output_satisfies(
     result: AgentResult,
     criterion: str,
     *,
-    model: str = "openai/gpt-4o-mini",
+    model: str = "anthropic/claude-sonnet-4-6",
     threshold: float = 0.7,
 ) -> None:
     """Assert that the agent output semantically satisfies a criterion.

@@ -71,7 +71,7 @@ class ApiToolTest {
 
         Agent agent = Agent.builder()
                 .name("api_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .tools(List.of(t))
                 .build();
@@ -102,7 +102,7 @@ class ApiToolTest {
                 ApiTool.builder().url("https://example.com/spec").maxTools(20).build();
         Agent agent = Agent.builder()
                 .name("api_agent2")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .tools(List.of(t))
                 .build();

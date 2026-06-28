@@ -167,7 +167,7 @@ server_url = "http://localhost:6767/api"
 
 [judge]
 baseline_run = "openai"
-model = "gpt-4o-mini"
+model = "anthropic/claude-sonnet-4-6"
 max_output_chars = 3000
 max_tokens = 300
 rate_limit = 0.5       # seconds between judge calls

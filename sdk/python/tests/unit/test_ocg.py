@@ -112,10 +112,10 @@ class TestOcgAgent:
     def test_returns_plain_agent(self):
         from conductor.ai.agents.agent import Agent
 
-        agent = ocg_agent(model="openai/gpt-4o-mini", url=URL)
+        agent = ocg_agent(model="anthropic/claude-sonnet-4-6", url=URL)
         assert isinstance(agent, Agent)
         assert agent.name == "ocg_agent"
-        assert agent.model == "openai/gpt-4o-mini"
+        assert agent.model == "anthropic/claude-sonnet-4-6"
         assert agent.max_turns == 10
 
     def test_model_is_required(self):
@@ -124,10 +124,10 @@ class TestOcgAgent:
 
     def test_url_is_required(self):
         with pytest.raises(TypeError):
-            ocg_agent(model="openai/gpt-4o-mini")  # no url
+            ocg_agent(model="anthropic/claude-sonnet-4-6")  # no url
 
     def test_canned_prompt_is_default(self):
-        agent = ocg_agent(model="openai/gpt-4o-mini", url=URL)
+        agent = ocg_agent(model="anthropic/claude-sonnet-4-6", url=URL)
         assert agent.instructions == OCG_SYSTEM_PROMPT
         # Execution-time date anchor must survive into the prompt verbatim —
         # Conductor substitutes it when the LLM task is scheduled.
@@ -135,14 +135,14 @@ class TestOcgAgent:
 
     def test_instructions_override(self):
         agent = ocg_agent(
-            model="openai/gpt-4o-mini", url=URL, instructions="Custom retrieval prompt."
+            model="anthropic/claude-sonnet-4-6", url=URL, instructions="Custom retrieval prompt."
         )
         assert agent.instructions == "Custom retrieval prompt."
 
     def test_instance_binding_flows_to_tools(self):
         agent = ocg_agent(
             name="ocg_us",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             url="https://us.ocg.example.com",
             credential="OCG_US_KEY",
         )
@@ -157,7 +157,7 @@ class TestOcgAgent:
             assert td.credentials == ["OCG_US_KEY"]
 
     def test_tool_subset_flags_forwarded(self):
-        agent = ocg_agent(model="openai/gpt-4o-mini", url=URL, memory=False)
+        agent = ocg_agent(model="anthropic/claude-sonnet-4-6", url=URL, memory=False)
         assert len(agent.tools) == 3
 
     def test_exported_from_agents_package(self):
@@ -178,7 +178,7 @@ class TestOcgWireFormat:
 
         retriever = ocg_agent(
             name="ocg_us",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             url="https://us.ocg.example.com",
             credential="OCG_US_KEY",
         )

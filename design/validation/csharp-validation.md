@@ -155,7 +155,7 @@ Two GitHub Actions paths exercise C# e2e.
 
 ### `ci-csharp-sdk-e2e.yml` (manual)
 
-- `workflow_dispatch` only, with inputs `model` (default `openai/gpt-4o-mini`) and `suite` (filter, e.g. `Suite1_BasicValidation`).
+- `workflow_dispatch` only, with inputs `model` (default `anthropic/claude-sonnet-4-6`) and `suite` (filter, e.g. `Suite1_BasicValidation`).
 - Builds the server JAR in-line (`./gradlew bootJar -x test -q` in `server/`), sets up Java 21 + .NET 10, starts `agentspan-runtime.jar --server.port=6767`, polls `/health` (30 × 2s), then runs `dotnet test tests/AgentspanE2eTests/AgentspanE2eTests.csproj --configuration Release` with an optional `--filter FullyQualifiedName~<suite>`.
 - Env: `AGENTSPAN_SERVER_URL`, `AGENTSPAN_LLM_MODEL` (from input), `OPENAI_API_KEY`. Stops the server in an `always()` step.
 

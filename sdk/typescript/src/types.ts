@@ -259,7 +259,7 @@ export interface RunOptions {
   signal?: AbortSignal;
   /**
    * LLM model hint for framework agents where automatic detection fails.
-   * Accepts a model string ('openai/gpt-4o-mini') or an LLM object (e.g. ChatOpenAI instance).
+   * Accepts a model string ('anthropic/claude-sonnet-4-6') or an LLM object (e.g. ChatOpenAI instance).
    * Required for LangGraph agents that don't use the @conductoross/conductor-agent-sdk/langgraph wrapper.
    */
   model?: unknown;

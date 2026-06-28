@@ -1489,7 +1489,7 @@ class TestHasWorkerTools:
         agent = Agent(
             name="test",
             model="openai/gpt-4o",
-            guardrails=[LLMGuardrail(model="openai/gpt-4o-mini", policy="be safe")],
+            guardrails=[LLMGuardrail(model="anthropic/claude-sonnet-4-6", policy="be safe")],
         )
         assert runtime._has_worker_tools(agent) is False
 

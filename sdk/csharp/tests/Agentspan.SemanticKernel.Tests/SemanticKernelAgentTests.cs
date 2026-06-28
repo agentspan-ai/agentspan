@@ -31,7 +31,7 @@ public class SemanticKernelAgentTests
     [Fact]
     public void From_extracts_one_tool_per_KernelFunction()
     {
-        var agent = SemanticKernelAgent.From("a", "openai/gpt-4o-mini", "x", new MathPlugin());
+        var agent = SemanticKernelAgent.From("a", "anthropic/claude-sonnet-4-6", "x", new MathPlugin());
 
         // COUNTERFACTUAL: if methods without [KernelFunction] leak in, count > 2.
         // If [KernelFunction] methods are dropped, count < 2.
@@ -41,7 +41,7 @@ public class SemanticKernelAgentTests
     [Fact]
     public void Tool_name_uses_KernelFunction_attribute_override()
     {
-        var agent = SemanticKernelAgent.From("a", "openai/gpt-4o-mini", "x", new MathPlugin());
+        var agent = SemanticKernelAgent.From("a", "anthropic/claude-sonnet-4-6", "x", new MathPlugin());
 
         // [KernelFunction("multiply")] overrides the method name "MultiplyValues".
         // COUNTERFACTUAL: if the attribute's name is ignored, this finds the
@@ -53,7 +53,7 @@ public class SemanticKernelAgentTests
     [Fact]
     public void Tool_description_is_propagated()
     {
-        var agent = SemanticKernelAgent.From("a", "openai/gpt-4o-mini", "x", new MathPlugin());
+        var agent = SemanticKernelAgent.From("a", "anthropic/claude-sonnet-4-6", "x", new MathPlugin());
         var add = agent.Tools.Single(t => t.Name == "Add");
 
         // COUNTERFACTUAL: if Description is dropped, this is "".
@@ -63,7 +63,7 @@ public class SemanticKernelAgentTests
     [Fact]
     public void InputSchema_includes_parameters_with_descriptions()
     {
-        var agent = SemanticKernelAgent.From("a", "openai/gpt-4o-mini", "x", new MathPlugin());
+        var agent = SemanticKernelAgent.From("a", "anthropic/claude-sonnet-4-6", "x", new MathPlugin());
         var add = agent.Tools.Single(t => t.Name == "Add");
         var schemaJson = add.InputSchema.ToJsonString();
         using var doc = JsonDocument.Parse(schemaJson);

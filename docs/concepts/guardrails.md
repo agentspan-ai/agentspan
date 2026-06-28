@@ -132,7 +132,7 @@ Use a second LLM as a judge:
 from conductor.ai.agents import LLMGuardrail
 
 factual_check = LLMGuardrail(
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     policy="Is this response factually accurate and helpful? Reply YES or NO with a brief explanation.",
     on_fail=OnFail.RETRY,
     max_retries=2,

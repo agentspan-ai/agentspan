@@ -281,7 +281,7 @@ from conductor.ai.agents import scatter_gather
 
 coordinator = scatter_gather(
     name="multi_search",
-    worker=Agent(name="searcher", model="openai/gpt-4o-mini", instructions="Search and summarize."),
+    worker=Agent(name="searcher", model="anthropic/claude-sonnet-4-6", instructions="Search and summarize."),
     timeout_seconds=300,
 )
 # Spawns multiple copies of worker agent in parallel, aggregates results
@@ -362,7 +362,7 @@ RegexGuardrail(
 # LLM: policy-based check
 LLMGuardrail(
     name="safety",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     policy="Reject responses with medical advice.",
     on_fail="raise",
 )
@@ -470,7 +470,7 @@ Attach one or more cron triggers to an agent at deploy time. The scheduler fires
 from conductor.ai.agents import Agent, AgentRuntime
 from conductor.ai.agents.schedule import Schedule
 
-agent = Agent(name="hello", model="openai/gpt-4o-mini", instructions="Say hi.")
+agent = Agent(name="hello", model="anthropic/claude-sonnet-4-6", instructions="Say hi.")
 
 with AgentRuntime() as rt:
     rt.deploy(
@@ -731,17 +731,17 @@ class Article(BaseModel):
     tags: list[str]
 
 # 3. Parallel research phase (two specialists run concurrently)
-market = Agent(name="market", model="openai/gpt-4o-mini", tools=[fetch_news, remember],
+market = Agent(name="market", model="anthropic/claude-sonnet-4-6", tools=[fetch_news, remember],
                instructions="Research market signals. Save findings with remember().")
-risk = Agent(name="risk", model="openai/gpt-4o-mini", tools=[remember],
+risk = Agent(name="risk", model="anthropic/claude-sonnet-4-6", tools=[remember],
              instructions="Identify risks. Save findings with remember().")
 
-research = Agent(name="research_phase", model="openai/gpt-4o-mini",
+research = Agent(name="research_phase", model="anthropic/claude-sonnet-4-6",
                  agents=[market, risk], strategy=Strategy.PARALLEL)
 
 # 4. Quality gate — skip writing if research is empty
 quality_check = Agent(
-    name="quality_check", model="openai/gpt-4o-mini",
+    name="quality_check", model="anthropic/claude-sonnet-4-6",
     instructions="Output NO_SIGNAL if the research lacks substance. Otherwise summarize.",
     gate=TextGate("NO_SIGNAL"),
 )
@@ -755,7 +755,7 @@ writer = Agent(
     guardrails=[
         RegexGuardrail(name="no_emails", patterns=[r"[\w.+-]+@[\w-]+\.[\w.-]+"],
                        message="Remove emails.", on_fail="retry", max_retries=2),
-        LLMGuardrail(name="safety", model="openai/gpt-4o-mini",
+        LLMGuardrail(name="safety", model="anthropic/claude-sonnet-4-6",
                      policy="Reject content with PII or medical advice.", on_fail="raise"),
     ],
 )

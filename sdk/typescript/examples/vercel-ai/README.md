@@ -122,7 +122,7 @@ const weatherTool = aiTool({
 
 const agent = new Agent({
   name: 'weather_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   //      ^^^^^^^^^^^^^^^^^^^ string, not provider object
   instructions: 'You are a helpful assistant.',
   tools: [weatherTool],

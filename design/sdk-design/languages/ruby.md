@@ -1784,7 +1784,7 @@ pii_guardrail = Agentspan::RegexGuardrail.new(
 # LLM guardrail (server-side, on_fail=FIX)
 bias_guardrail = Agentspan::LLMGuardrail.new(
   name: "bias_detector",
-  model: "openai/gpt-4o-mini",
+  model: "anthropic/claude-sonnet-4-6",
   policy: "Check for biased language or stereotypes. If found, provide corrected version.",
   position: Agentspan::Position::OUTPUT,
   on_fail: Agentspan::OnFail::FIX,

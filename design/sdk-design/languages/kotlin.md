@@ -959,7 +959,7 @@ val reviewAgent = agent("safety_reviewer") {
         }
         // #28 on_fail=FIX
         llm("bias_detector") {
-            model = "openai/gpt-4o-mini"
+            model = "anthropic/claude-sonnet-4-6"
             policy = "Check for biased language or stereotypes. If found, provide corrected version."
             position = Position.OUTPUT
             onFail = OnFail.FIX

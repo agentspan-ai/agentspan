@@ -9,7 +9,7 @@ import { serializeLangChain } from "../../../src/frameworks/langchain-serializer
 describe("LangChain wrapper", () => {
   describe("extractModelFromLLM", () => {
     it("returns string model as-is", () => {
-      expect(extractModelFromLLM("openai/gpt-4o-mini")).toBe("openai/gpt-4o-mini");
+      expect(extractModelFromLLM("anthropic/claude-sonnet-4-6")).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("extracts model from ChatOpenAI-like object", () => {
@@ -17,7 +17,7 @@ describe("LangChain wrapper", () => {
         model = "gpt-4o-mini";
       }
       const llm = new ChatOpenAI();
-      expect(extractModelFromLLM(llm)).toBe("openai/gpt-4o-mini");
+      expect(extractModelFromLLM(llm)).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("extracts model from ChatAnthropic-like object", () => {
@@ -38,8 +38,8 @@ describe("LangChain wrapper", () => {
       expect(extractModelFromLLM(llm)).toBe("anthropic/claude-3-opus");
     });
 
-    it("defaults to openai/gpt-4o-mini for null", () => {
-      expect(extractModelFromLLM(null)).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for null", () => {
+      expect(extractModelFromLLM(null)).toBe("anthropic/claude-sonnet-4-6");
     });
   });
 
@@ -61,7 +61,7 @@ describe("LangChain wrapper", () => {
 
       expect(executor._agentspan).toBeDefined();
       const metadata = executor._agentspan as Record<string, unknown>;
-      expect(metadata.model).toBe("openai/gpt-4o-mini");
+      expect(metadata.model).toBe("anthropic/claude-sonnet-4-6");
       expect(metadata.tools).toBe(tools);
       expect(metadata.framework).toBe("langchain");
     });
@@ -104,7 +104,7 @@ describe("LangChain wrapper", () => {
       expect(runnable._agentspan).toBeDefined();
 
       const metadata = runnable._agentspan as Record<string, unknown>;
-      expect(metadata.model).toBe("openai/gpt-4o-mini");
+      expect(metadata.model).toBe("anthropic/claude-sonnet-4-6");
       expect(metadata.tools).toBe(tools);
       expect(metadata.instructions).toBe("You are helpful.");
       expect(metadata.framework).toBe("langchain");
@@ -130,7 +130,7 @@ describe("LangChain wrapper", () => {
           },
         ],
         _agentspan: {
-          model: "openai/gpt-4o-mini",
+          model: "anthropic/claude-sonnet-4-6",
           tools: [
             {
               name: "search",
@@ -149,7 +149,7 @@ describe("LangChain wrapper", () => {
 
       const [config, workers] = serializeLangChain(mockExecutor);
 
-      expect(config.model).toBe("openai/gpt-4o-mini");
+      expect(config.model).toBe("anthropic/claude-sonnet-4-6");
       expect(config.instructions).toBe("You are a search assistant.");
       expect(Array.isArray(config.tools)).toBe(true);
 

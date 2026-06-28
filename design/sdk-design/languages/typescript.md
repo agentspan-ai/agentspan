@@ -1363,7 +1363,7 @@ The validation runner executes kitchen sink examples against multiple models con
 ```toml
 # validation/runs.toml
 [judge]
-model = "openai/gpt-4o-mini"
+model = "anthropic/claude-sonnet-4-6"
 max_output_chars = 3000
 max_tokens = 300
 rate_limit = 0.5
@@ -1580,7 +1580,7 @@ const piiGuardrail = new RegexGuardrail({
 
 const biasGuardrail = new LLMGuardrail({
   name: "bias_detector",
-  model: "openai/gpt-4o-mini",
+  model: "anthropic/claude-sonnet-4-6",
   policy: "Check for biased language or stereotypes. If found, provide corrected version.",
   position: "output",
   onFail: "fix",

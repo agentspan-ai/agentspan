@@ -53,7 +53,7 @@ const termination = new TextMention('ANALYSIS COMPLETE').or(new MaxMessage(10));
 // ── Native Agent with AI SDK tools and termination ───────
 export const agent = new Agent({
   name: 'stop_conditions_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions:
     'You are a market analyst. Analyze each aspect one at a time using the analyzeStep tool, ' +
     'then summarize all findings. Do not analyze more than 3 aspects. ' +

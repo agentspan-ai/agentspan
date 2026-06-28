@@ -63,7 +63,7 @@ def process_refund(order_id: str, amount: float) -> dict:
 
 agent = Agent(
     name="refund_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[get_order, get_customer, process_refund],
     instructions="""You handle refund requests.
     1. Look up the order

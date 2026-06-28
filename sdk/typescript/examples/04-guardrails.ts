@@ -34,7 +34,7 @@ const piiBlocker = new RegexGuardrail({
 // -- LLMGuardrail: detect biased language --
 const biasDetector = new LLMGuardrail({
   name: 'bias_detector',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   policy: 'Check for biased language or stereotypes. If found, provide a corrected version.',
   position: 'output',
   onFail: 'fix',

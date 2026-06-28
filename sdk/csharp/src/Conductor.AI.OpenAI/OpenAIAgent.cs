@@ -11,7 +11,7 @@ namespace Conductor.AI.OpenAI;
 /// <para>Mirrors the Python pattern:</para>
 /// <code>
 /// from agents import Agent
-/// agent = Agent(name="greeter", instructions="...", model="openai/gpt-4o-mini")
+/// agent = Agent(name="greeter", instructions="...", model="anthropic/claude-sonnet-4-6")
 /// runtime.run(agent, "Say hi")
 /// </code>
 ///
@@ -20,7 +20,7 @@ namespace Conductor.AI.OpenAI;
 /// var agent = OpenAIAgent.Builder()
 ///     .Name("greeter")
 ///     .Instructions("You are a helpful assistant")
-///     .Model("openai/gpt-4o-mini")
+///     .Model("anthropic/claude-sonnet-4-6")
 ///     .Build();
 /// await runtime.RunAsync(agent, "Say hi");
 /// </code>

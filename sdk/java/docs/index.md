@@ -5,7 +5,7 @@ Build long-running, dynamic plan-execute, and event-driven AI agents in Java on 
 ```java
 Agent agent = Agent.builder()
     .name("assistant")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("You are a helpful assistant.")
     .build();
 

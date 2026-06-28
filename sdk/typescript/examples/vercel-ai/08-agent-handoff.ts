@@ -38,7 +38,7 @@ const analyzeData = aiTool({
 
 export const codeSpecialist = new Agent({
   name: 'code_specialist',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions:
     'You are a coding expert. Use the lookupCode tool to help users with programming questions.',
   tools: [lookupCode],
@@ -46,7 +46,7 @@ export const codeSpecialist = new Agent({
 
 export const dataSpecialist = new Agent({
   name: 'data_specialist',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions:
     'You are a data science expert. Use the analyzeData tool to help users with data analysis.',
   tools: [analyzeData],
@@ -56,7 +56,7 @@ export const dataSpecialist = new Agent({
 
 export const triageAgent = new Agent({
   name: 'triage_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions:
     "You are a triage agent. Determine the user's need and hand off:\n" +
     '- Coding questions -> code_specialist\n' +

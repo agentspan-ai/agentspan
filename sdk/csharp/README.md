@@ -33,7 +33,7 @@ using Conductor.AI;
 
 var agent = new Agent("greeter")
 {
-    Model = "openai/gpt-4o-mini",
+    Model = "anthropic/claude-sonnet-4-6",
     Instructions = "You are a friendly assistant. Keep responses brief.",
 };
 
@@ -60,7 +60,7 @@ The fundamental unit. An agent is an LLM with optional tools and/or sub-agents:
 ```csharp
 var agent = new Agent("my_agent")
 {
-    Model = "openai/gpt-4o-mini",
+    Model = "anthropic/claude-sonnet-4-6",
     Instructions = "You are helpful.",
     Tools = myTools,        // optional: local worker tools
     Agents = [subAgent],    // optional: sub-agents (for multi-agent)
@@ -220,7 +220,7 @@ The SDK serializes agents to the format the Agentspan server expects:
 {
   "agentConfig": {
     "name": "my_agent",
-    "model": "openai/gpt-4o-mini",
+    "model": "anthropic/claude-sonnet-4-6",
     "instructions": "...",
     "tools": [
       {

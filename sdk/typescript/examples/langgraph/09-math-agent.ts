@@ -108,7 +108,7 @@ const graph = createReactAgent({
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [addTool, subtractTool, multiplyTool, divideTool, powerTool, sqrtTool, factorialTool],
   framework: 'langgraph',
 };

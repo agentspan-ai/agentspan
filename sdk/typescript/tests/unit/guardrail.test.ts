@@ -381,7 +381,7 @@ describe("human + input guardrail validation", () => {
       () =>
         new LLMGuardrail({
           name: "l",
-          model: "openai/gpt-4o-mini",
+          model: "anthropic/claude-sonnet-4-6",
           policy: "be nice",
           onFail: "human",
           position: "input",

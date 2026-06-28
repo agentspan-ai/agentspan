@@ -346,7 +346,7 @@ describe("serializeAgent() — multi-agent", () => {
   });
 
   it("serializes router with Agent", () => {
-    const routerAgent = new Agent({ name: "router", model: "openai/gpt-4o-mini" });
+    const routerAgent = new Agent({ name: "router", model: "anthropic/claude-sonnet-4-6" });
     const a = new Agent({
       name: "routed",
       agents: [new Agent({ name: "a" }), new Agent({ name: "b" })],
@@ -357,7 +357,7 @@ describe("serializeAgent() — multi-agent", () => {
 
     const router = config.router as Record<string, unknown>;
     expect(router.name).toBe("router");
-    expect(router.model).toBe("openai/gpt-4o-mini");
+    expect(router.model).toBe("anthropic/claude-sonnet-4-6");
   });
 
   it("serializes router with function", () => {

@@ -23,7 +23,7 @@ using Conductor.AI;
 
 var agent = new Agent("greeter")
 {
-    Model        = "openai/gpt-4o-mini",
+    Model        = "anthropic/claude-sonnet-4-6",
     Instructions = "You are a friendly assistant. Keep responses brief.",
 };
 

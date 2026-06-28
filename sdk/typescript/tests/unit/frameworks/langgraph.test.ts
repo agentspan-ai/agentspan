@@ -291,7 +291,7 @@ describe("serializeLangGraph", () => {
             ["agent", "__end__"],
           ]),
         },
-        _agentspan: { model: "openai/gpt-4o-mini" },
+        _agentspan: { model: "anthropic/claude-sonnet-4-6" },
       };
 
       // Without model option: LLM detected but no object → inferred (passthrough)
@@ -346,7 +346,7 @@ describe("serializeLangGraph", () => {
             ["pro", "__end__"],
           ]),
         },
-        _agentspan: { model: "openai/gpt-4o-mini" },
+        _agentspan: { model: "anthropic/claude-sonnet-4-6" },
       };
 
       // With LLM object: prep worker should capture messages
@@ -413,7 +413,7 @@ describe("serializeLangGraph", () => {
             ["pro", "__end__"],
           ]),
         },
-        _agentspan: { model: "openai/gpt-4o-mini" },
+        _agentspan: { model: "anthropic/claude-sonnet-4-6" },
       };
 
       // NO model option passed — LLM is in closure, not accessible
@@ -480,7 +480,7 @@ describe("serializeLangGraph", () => {
             ["agent", "__end__"],
           ]),
         },
-        _agentspan: { model: "openai/gpt-4o-mini" },
+        _agentspan: { model: "anthropic/claude-sonnet-4-6" },
       };
 
       const [, workers] = serializeLangGraph(mockGraph);
@@ -533,7 +533,7 @@ describe("serializeLangGraph", () => {
             ["agent", "__end__"],
           ]),
         },
-        _agentspan: { model: "openai/gpt-4o-mini" },
+        _agentspan: { model: "anthropic/claude-sonnet-4-6" },
       };
 
       const [, workers] = serializeLangGraph(mockGraph);
@@ -573,7 +573,7 @@ describe("serializeLangGraph", () => {
             ["agent", "__end__"],
           ]),
         },
-        _agentspan: { model: "openai/gpt-4o-mini", llm: mockLLM },
+        _agentspan: { model: "anthropic/claude-sonnet-4-6", llm: mockLLM },
       };
 
       const [config, workers] = serializeLangGraph(mockGraph);
@@ -607,7 +607,7 @@ describe("serializeLangGraph", () => {
       };
 
       const [config, workers] = serializeLangGraph(mockGraph);
-      expect(config.model).toBe("openai/gpt-4o-mini");
+      expect(config.model).toBe("anthropic/claude-sonnet-4-6");
       expect(config.tools).toEqual([]);
       expect(workers).toHaveLength(0);
     });
@@ -753,7 +753,7 @@ describe("serializeLangGraph", () => {
       const mockLLM = { model: "gpt-4o-mini", constructor: { name: "ChatOpenAI" } };
       const [config, workers] = serializeLangGraph(mockGraph, { model: mockLLM });
       expect(config.name).toBe("my_agent");
-      expect(config.model).toBe("openai/gpt-4o-mini");
+      expect(config.model).toBe("anthropic/claude-sonnet-4-6");
       expect(config._graph).toBeUndefined(); // full extraction = no _graph
       expect(Array.isArray(config.tools)).toBe(true);
       expect(workers).toHaveLength(1);

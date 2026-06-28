@@ -60,7 +60,7 @@ try {
  */
 export function extractModelString(model: unknown): string {
   if (typeof model === "string") return model;
-  if (typeof model !== "object" || model === null) return "openai/gpt-4o-mini";
+  if (typeof model !== "object" || model === null) return "anthropic/claude-sonnet-4-6";
 
   const m = model as Record<string, unknown>;
 

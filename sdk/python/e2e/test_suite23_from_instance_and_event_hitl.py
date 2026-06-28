@@ -231,12 +231,12 @@ class _Team:
         return GuardrailResult(passed="secret" not in content)
 
     # Returns None — attributes-only agent (docstring instructions).
-    @agent(model="openai/gpt-4o-mini")
+    @agent(model="anthropic/claude-sonnet-4-6")
     def researcher(self):
         """You research topics thoroughly."""
 
     # Returns a str — dynamic instructions referencing instance state.
-    @agent(model="openai/gpt-4o-mini", agents=["researcher"], strategy=Strategy.HANDOFF)
+    @agent(model="anthropic/claude-sonnet-4-6", agents=["researcher"], strategy=Strategy.HANDOFF)
     def manager(self):
         return f"You manage the researcher. DB={self.db_name}"
 
@@ -248,7 +248,7 @@ class _Factory:
     def custom(self):
         return Agent(
             name="custom_built",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="Built by a factory method.",
         )
 
@@ -262,7 +262,7 @@ def _agent_def_from_plan(plan_result):
 class TestFromInstance:
     """Resolve @agent methods on an instance into Agent objects."""
 
-    MODEL = "openai/gpt-4o-mini"
+    MODEL = "anthropic/claude-sonnet-4-6"
 
     # ── Discovery ──────────────────────────────────────────────────────
 
@@ -358,22 +358,22 @@ class TestFromInstance:
             def child(self):
                 """Child."""
 
-            @agent(model="openai/gpt-4o-mini", agents=["child"])
+            @agent(model="anthropic/claude-sonnet-4-6", agents=["child"])
             def parent(self):
                 """Parent."""
 
         parent = Agent.from_instance(T(), "parent")
-        assert parent.agents[0].model == "openai/gpt-4o-mini", (
+        assert parent.agents[0].model == "anthropic/claude-sonnet-4-6", (
             "Sub-agent must inherit the parent's model when it declares none."
         )
 
     def test_cyclic_subagents_raise(self):
         class Cyclic:
-            @agent(model="openai/gpt-4o-mini", agents=["b"])
+            @agent(model="anthropic/claude-sonnet-4-6", agents=["b"])
             def a(self):
                 """A."""
 
-            @agent(model="openai/gpt-4o-mini", agents=["a"])
+            @agent(model="anthropic/claude-sonnet-4-6", agents=["a"])
             def b(self):
                 """B."""
 

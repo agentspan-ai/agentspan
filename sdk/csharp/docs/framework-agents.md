@@ -33,7 +33,7 @@ using Conductor.AI.OpenAI;
 var agent = OpenAIAgent.Builder()
     .Name("greeter")
     .Instructions("You are a friendly assistant. Keep responses concise.")
-    .Model("openai/gpt-4o-mini")
+    .Model("anthropic/claude-sonnet-4-6")
     .Build();
 
 await using var runtime = new AgentRuntime();
@@ -48,7 +48,7 @@ result.PrintResult();
 var agent = OpenAIAgent.Builder()
     .Name("multi_tool_agent")
     .Instructions("Use the weather and calculator tools to answer questions.")
-    .Model("openai/gpt-4o-mini")
+    .Model("anthropic/claude-sonnet-4-6")
     .Tools(new WeatherTools())          // [Tool]-annotated object(s)
     .Build();
 
@@ -67,7 +67,7 @@ Use `.ToolDefs(...)` to add already-built `ToolDef`s (HTTP, MCP, etc.).
 var triage = OpenAIAgent.Builder()
     .Name("customer_service_triage")
     .Instructions("Triage the request and hand off to the right specialist.")
-    .Model("openai/gpt-4o-mini")
+    .Model("anthropic/claude-sonnet-4-6")
     .Handoffs(orderAgent, refundAgent, salesAgent)
     .Build();
 ```
@@ -126,7 +126,7 @@ internal sealed class CalculatorPlugin
 
 var agent = SemanticKernelAgent.From(
     name:         "sk_calc_agent",
-    model:        "openai/gpt-4o-mini",
+    model:        "anthropic/claude-sonnet-4-6",
     instructions: "You are a calculator. Use the tools to answer math questions.",
     new CalculatorPlugin());
 
@@ -142,7 +142,7 @@ KernelPlugin plugin = KernelPluginFactory.CreateFromObject(new CalculatorPlugin(
 
 var agent = SemanticKernelAgent.From(
     name:         "sk_kernelplugin",
-    model:        "openai/gpt-4o-mini",
+    model:        "anthropic/claude-sonnet-4-6",
     instructions: "Solve arithmetic using the calc plugin.",
     plugin);
 ```

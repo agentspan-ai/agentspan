@@ -7,7 +7,7 @@ Long-running, dynamic plan-execute, and event-driven AI agents in Python. You wr
 ```python
 from conductor.ai.agents import Agent, AgentRuntime
 
-agent = Agent(name="greeter", model="openai/gpt-4o-mini",
+agent = Agent(name="greeter", model="anthropic/claude-sonnet-4-6",
               instructions="You are a friendly assistant.")
 
 with AgentRuntime() as runtime:

@@ -216,7 +216,7 @@ from conductor.ai.agents import Agent, AgentRuntime
 
 classifier = Agent(
     name="classifier",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="Classify the request as 'billing', 'technical', or 'general'. Reply with just the category.",
 )
 
