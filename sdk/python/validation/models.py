@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 
 @dataclass
@@ -35,5 +36,5 @@ class RunResult:
 class SingleResult:
     """Result of running one example with one model (single-run mode)."""
 
-    example: Example = None  # type: ignore[assignment]
-    result: RunResult = None  # type: ignore[assignment]
+    example: Optional[Example] = None
+    result: Optional[RunResult] = None
