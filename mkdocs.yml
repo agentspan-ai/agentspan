@@ -43,6 +43,7 @@ nav:
   - Getting Started:
       - Why Agentspan: why-agentspan.md
       - Quickstart: quickstart.md
+      - SDK Overview: sdk.md
   - Concepts:
       - Agents: concepts/agents.md
       - Tools: concepts/tools.md
