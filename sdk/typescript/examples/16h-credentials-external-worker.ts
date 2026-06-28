@@ -30,7 +30,7 @@ import {
   tool,
   resolveCredentials,
   extractExecutionToken,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Agent side: declare external tool with credentials -----------------------

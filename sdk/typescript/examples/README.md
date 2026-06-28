@@ -68,11 +68,11 @@ If you want to copy an example into a separate project after `npm install`, swit
 its imports to the published package:
 
 ```bash
-npm install @conductoross/conductor-agent-sdk zod
+npm install @conductor-oss/conductor-agent-sdk zod
 ```
 
 ```ts
-import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 ```
 
 The files under `examples/` are not copy/paste-ready as-is because they import the

@@ -8,7 +8,7 @@
  */
 
 import { monitoringAgent } from './63d-serve-from-package.js';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const runtime = new AgentRuntime();
 try {

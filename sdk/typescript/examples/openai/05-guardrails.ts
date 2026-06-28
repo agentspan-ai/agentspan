@@ -20,7 +20,7 @@ import {
 } from '@openai/agents';
 import type { InputGuardrail, OutputGuardrail, GuardrailFunctionOutput } from '@openai/agents';
 import { z } from 'zod';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 setTracingDisabled(true);
 

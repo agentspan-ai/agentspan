@@ -2,7 +2,7 @@
 
 **Status:** Refreshed 2026-06-26
 
-**Scope:** TypeScript SDK validation spans two surfaces: (1) a **deterministic E2E suite** (`sdk/typescript/tests/e2e/`) that exercises real agents against a live server with purely algorithmic, no-LLM-judging assertions, and (2) an **examples-quality validation framework** (`sdk/typescript/validation/`) that runs every shipped example, audits its event stream algorithmically, scores output with an LLM judge, and compares `conductor`-passthrough output against native framework execution. The deterministic suite is the CI gate; the framework is the examples-correctness harness. The SDK ships as `@conductoross/conductor-agent-sdk`. See methodology [`README.md`](README.md), implementation [`../sdk-design/languages/typescript-implementation.md`](../sdk-design/languages/typescript-implementation.md), and overall design [`../sdk-design.md`](../sdk-design.md).
+**Scope:** TypeScript SDK validation spans two surfaces: (1) a **deterministic E2E suite** (`sdk/typescript/tests/e2e/`) that exercises real agents against a live server with purely algorithmic, no-LLM-judging assertions, and (2) an **examples-quality validation framework** (`sdk/typescript/validation/`) that runs every shipped example, audits its event stream algorithmically, scores output with an LLM judge, and compares `conductor`-passthrough output against native framework execution. The deterministic suite is the CI gate; the framework is the examples-correctness harness. The SDK ships as `@conductor-oss/conductor-agent-sdk`. See methodology [`README.md`](README.md), implementation [`../sdk-design/languages/typescript-implementation.md`](../sdk-design/languages/typescript-implementation.md), and overall design [`../sdk-design.md`](../sdk-design.md).
 
 ---
 
@@ -55,7 +55,7 @@ sdk/typescript/tests/e2e/
   test_suite23_agent_client.test.ts
 ```
 
-25 suites total. Each imports the SDK from `@conductoross/conductor-agent-sdk` (aliased to `src/index.ts` by `vitest.config.ts` — see §4).
+25 suites total. Each imports the SDK from `@conductor-oss/conductor-agent-sdk` (aliased to `src/index.ts` by `vitest.config.ts` — see §4).
 
 ### 2.2 Shared helpers (`helpers.ts`)
 
@@ -151,7 +151,7 @@ npx tsx validation/runner.ts --config runs.toml --run 01-basic-agent,02-tools
 
 ### 4.1 vitest configuration (`sdk/typescript/vitest.config.ts`)
 
-- Aliases `@conductoross/conductor-agent-sdk` → `src/index.ts`, so tests exercise local source without a build step.
+- Aliases `@conductor-oss/conductor-agent-sdk` → `src/index.ts`, so tests exercise local source without a build step.
 - Enables decorator support (`experimentalDecorators`, `emitDecoratorMetadata`).
 - `pool: 'forks'` with `maxForks: 3` — runs 3 test files concurrently; credential names are unique per suite so suites don't collide, and suites 17/18 use no credentials.
 - `testTimeout: 60_000`; suites with long-running workflow polling set their own per-`describe`/`beforeAll` budgets (e.g. Suite 17: 600 s describe timeout, 480 s internal poll budget).

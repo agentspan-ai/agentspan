@@ -7,7 +7,7 @@ This file provides context for AI coding agents (Claude Code, Copilot, Cursor, e
 The Agentspan Python SDK compiles Python `Agent` definitions into durable [Conductor](https://github.com/conductor-oss/conductor) executions. Agents survive process crashes, tools scale as distributed workers, and human-in-the-loop approvals can pause for days.
 
 **Package name (PyPI):** `conductor-agent-sdk`
-**npm package:** `@conductoross/conductor-agent-sdk`
+**npm package:** `@conductor-oss/conductor-agent-sdk`
 **Import path:** `from conductor.ai.agents import ...`
 **Python:** 3.10+
 **License:** MIT

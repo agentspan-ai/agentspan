@@ -29,7 +29,7 @@ Pass an `@openai/agents` `Agent` straight to the runtime.
 
 ```ts
 import { Agent, setTracingDisabled } from '@openai/agents';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 setTracingDisabled(true);
 
@@ -54,7 +54,7 @@ Pass a `@google/adk` agent (`LlmAgent`, or the `Sequential`/`Parallel`/`Loop` or
 
 ```ts
 import { LlmAgent } from '@google/adk';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const agent = new LlmAgent({
   name: 'greeter',
@@ -79,7 +79,7 @@ Pass a prebuilt `createReactAgent` graph directly — detection handles it via `
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const graph = createReactAgent({ llm, tools, name: 'math_agent' });
@@ -96,7 +96,7 @@ try {
 For a complex graph where automatic introspection of the model/tools could fail, import `createReactAgent` from the SDK wrapper instead. It stamps `._agentspan` metadata onto the graph so the serializer skips introspection:
 
 ```ts
-import { createReactAgent } from '@conductoross/conductor-agent-sdk/langgraph';
+import { createReactAgent } from '@conductor-oss/conductor-agent-sdk/langgraph';
 ```
 
 You can also pass a model hint at call time when detection can't infer it: `runtime.run(graph, prompt, { model: 'anthropic/claude-sonnet-4-6' })`.
@@ -106,8 +106,8 @@ You can also pass a model hint at call time when detection can't infer it: `runt
 A real `langchain` `AgentExecutor` is detected via `.invoke()` + `lc_namespace`. To make the model/tools unambiguous, use the SDK's drop-in builder, which attaches `._agentspan` metadata:
 
 ```ts
-import { createAgentExecutor } from '@conductoross/conductor-agent-sdk/langchain';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { createAgentExecutor } from '@conductor-oss/conductor-agent-sdk/langchain';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const executor = createAgentExecutor({ agent, tools, llm });
 
@@ -120,7 +120,7 @@ try {
 }
 ```
 
-The `@conductoross/conductor-agent-sdk/langchain` subpath also exports `createRunnableWithMetadata(...)` (a runnable-like object with `invoke` + `lc_namespace` + metadata) and `getLangChainModule()`.
+The `@conductor-oss/conductor-agent-sdk/langchain` subpath also exports `createRunnableWithMetadata(...)` (a runnable-like object with `invoke` + `lc_namespace` + metadata) and `getLangChainModule()`.
 
 ## Vercel AI SDK
 
@@ -131,7 +131,7 @@ Two ways to use the AI SDK:
 ```ts
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const weatherTool = aiTool({
   description: 'Get current weather for a city',
@@ -155,10 +155,10 @@ try {
 }
 ```
 
-**2. Drop-in `generateText` / `streamText`.** The `@conductoross/conductor-agent-sdk/vercel-ai` subpath exports AI-SDK-shaped `generateText` and `streamText` that internally build an `Agent` + `AgentRuntime` and map the result back into the AI SDK response shape:
+**2. Drop-in `generateText` / `streamText`.** The `@conductor-oss/conductor-agent-sdk/vercel-ai` subpath exports AI-SDK-shaped `generateText` and `streamText` that internally build an `Agent` + `AgentRuntime` and map the result back into the AI SDK response shape:
 
 ```ts
-import { generateText } from '@conductoross/conductor-agent-sdk/vercel-ai';
+import { generateText } from '@conductor-oss/conductor-agent-sdk/vercel-ai';
 
 const { text } = await generateText({
   model: 'anthropic/claude-sonnet-4-6',

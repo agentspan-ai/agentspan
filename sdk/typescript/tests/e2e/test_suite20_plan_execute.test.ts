@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { Agent, AgentRuntime, Op, Plan, Ref, Step, tool } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, Op, Plan, Ref, Step, tool } from '@conductor-oss/conductor-agent-sdk';
 import { checkServerHealth, MODEL, TIMEOUT } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';

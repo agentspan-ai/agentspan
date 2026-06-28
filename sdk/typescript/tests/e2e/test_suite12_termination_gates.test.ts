@@ -21,7 +21,7 @@ import {
   TextMention,
   MaxMessage,
   TextGate,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

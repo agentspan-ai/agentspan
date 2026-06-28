@@ -7,7 +7,7 @@ Runtime configuration, the control-plane and workflow clients, the deploy/serve/
 `new AgentRuntime(options?)` takes `AgentConfigOptions`. Every field falls back to an env var, then a default. Options take precedence over env vars.
 
 ```ts
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const runtime = new AgentRuntime({
   serverUrl: 'http://localhost:6767/api',   // AGENTSPAN_SERVER_URL
@@ -26,7 +26,7 @@ Full `AgentConfigOptions`: `serverUrl`, `apiKey`, `authKey`, `authSecret`, `work
 There is also a module-level singleton API for convenience — `configure(options)`, `run`, `start`, `stream`, `deploy`, `plan`, `serve`, `shutdown` — that operate on a shared runtime:
 
 ```ts
-import { configure, run, shutdown } from '@conductoross/conductor-agent-sdk';
+import { configure, run, shutdown } from '@conductor-oss/conductor-agent-sdk';
 configure({ serverUrl: 'http://localhost:6767/api' });
 const result = await run(agent, 'hi');
 await shutdown();
@@ -79,7 +79,7 @@ await handle.approve();          // / reject(reason) / send(message) / respond(b
 const infos = await client.deploy(agentA, agentB);   // DeploymentInfo[]
 
 // Deploy + reconcile cron schedules in one call
-import { Schedule } from '@conductoross/conductor-agent-sdk';
+import { Schedule } from '@conductor-oss/conductor-agent-sdk';
 await client.schedule(agent, [new Schedule({ name: 'nightly', cron: '0 0 0 * * *' })]);
 ```
 
@@ -131,7 +131,7 @@ console.log(structured.category, structured.sentiment);
 Pass credential names with `credentials: [...]` at the agent level and/or per tool. Secrets are resolved from the server's secret store at execution time and injected as environment variables for the tool call. For HTTP/MCP tools, reference them inline in headers with `${NAME}` substitution.
 
 ```ts
-import { Agent, tool, httpTool, getCredential } from '@conductoross/conductor-agent-sdk';
+import { Agent, tool, httpTool, getCredential } from '@conductor-oss/conductor-agent-sdk';
 
 // A worker tool: the secret is injected into the worker's process.env for the call
 const dbLookup = tool(
@@ -197,7 +197,7 @@ const result = await runtime.run(harness, 'Build a release report.');
 You can also supply a **deterministic static plan** with the typed builders and pass it via `RunOptions.plan` — it wins over the planner's output (the planner still runs, but its output is discarded):
 
 ```ts
-import { Plan, Step, Op, Generate, Ref } from '@conductoross/conductor-agent-sdk';
+import { Plan, Step, Op, Generate, Ref } from '@conductor-oss/conductor-agent-sdk';
 
 const plan = new Plan({
   steps: [
@@ -227,7 +227,7 @@ For planner reference docs, set `plannerContext: [...]` on the agent (strings or
 `skill(path, options?)` loads a `SKILL.md` skill directory as an `Agent`; `loadSkills(dir)` loads every skill subdirectory keyed by name. Skills are framework agents (`_framework: "skill"`) and run via the same `run()` path; they can be wrapped with `agentTool` and used inside other agents.
 
 ```ts
-import { skill, loadSkills, agentTool, Agent } from '@conductoross/conductor-agent-sdk';
+import { skill, loadSkills, agentTool, Agent } from '@conductor-oss/conductor-agent-sdk';
 
 const reviewer = skill('./skills/code-review', { model: 'openai/gpt-4o' });
 const all = loadSkills('./skills');          // Record<string, Agent>

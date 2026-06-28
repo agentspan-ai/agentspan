@@ -2,7 +2,7 @@
 
 **Status:** Refreshed 2026-06-26
 
-**Scope:** This document describes the TypeScript SDK *as built* — the shipped code under `sdk/typescript/`, published to npm as **`@conductoross/conductor-agent-sdk`**. It is a reference for how the SDK is structured and how it behaves at runtime, not a plan for future work. It is present-tense and maps directly to source files. For the cross-language contract and feature set, see the shared design docs ([`../../sdk-design.md`](../../sdk-design.md), [`../../agentspan-design.md`](../../agentspan-design.md), [`../../api-design.md`](../../api-design.md), [`../../framework-integration.md`](../../framework-integration.md), [`../../tool-execution-and-credentials-design.md`](../../tool-execution-and-credentials-design.md)). For language idioms and ergonomics, see the sibling guide [`typescript.md`](./typescript.md). For the validation harness, see [`../../validation/typescript-validation.md`](../../validation/typescript-validation.md).
+**Scope:** This document describes the TypeScript SDK *as built* — the shipped code under `sdk/typescript/`, published to npm as **`@conductor-oss/conductor-agent-sdk`**. It is a reference for how the SDK is structured and how it behaves at runtime, not a plan for future work. It is present-tense and maps directly to source files. For the cross-language contract and feature set, see the shared design docs ([`../../sdk-design.md`](../../sdk-design.md), [`../../agentspan-design.md`](../../agentspan-design.md), [`../../api-design.md`](../../api-design.md), [`../../framework-integration.md`](../../framework-integration.md), [`../../tool-execution-and-credentials-design.md`](../../tool-execution-and-credentials-design.md)). For language idioms and ergonomics, see the sibling guide [`typescript.md`](./typescript.md). For the validation harness, see [`../../validation/typescript-validation.md`](../../validation/typescript-validation.md).
 
 ---
 
@@ -15,7 +15,7 @@ The TypeScript SDK lets you define agents, tools, guardrails, memory, and multi-
 | Aspect | Decision |
 |--------|----------|
 | Language | TypeScript-first (`.ts` source, compiled to ESM + CJS) |
-| Package | `@conductoross/conductor-agent-sdk` |
+| Package | `@conductor-oss/conductor-agent-sdk` |
 | Runtime | Node.js 18+ (native `fetch`, `AbortController`, `ReadableStream`, `crypto.randomUUID`) |
 | Schema | **Superset** — accepts both Zod schemas and raw JSON Schema, auto-detecting format; Zod is an optional peer |
 | Framework integration | Auto-detecting runtime (`detectFramework`) plus drop-in `./vercel-ai`, `./langgraph`, `./langchain` wrappers |
@@ -53,7 +53,7 @@ All framework peers and `zod`/`zod-to-json-schema` are marked optional in `peerD
 
 ```jsonc
 {
-  "name": "@conductoross/conductor-agent-sdk",
+  "name": "@conductor-oss/conductor-agent-sdk",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

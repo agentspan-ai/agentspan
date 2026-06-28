@@ -22,7 +22,7 @@ import {
   StopMessage,
   TokenUsageCondition,
   OnTextMention,
-} from '@conductoross/conductor-agent-sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 
 // Force consistent model
 const llmModel = 'anthropic/claude-sonnet-4-6';

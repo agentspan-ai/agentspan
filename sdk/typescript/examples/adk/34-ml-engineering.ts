@@ -29,7 +29,7 @@
  */
 
 import { LlmAgent, SequentialAgent, ParallelAgent, LoopAgent } from '@google/adk';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 

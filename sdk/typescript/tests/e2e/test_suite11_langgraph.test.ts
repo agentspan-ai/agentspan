@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 import { checkServerHealth, MODEL } from './helpers';
 
 // ── Dynamic imports (skip if LangGraph not installed) ───────────────────

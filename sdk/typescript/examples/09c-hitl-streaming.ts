@@ -17,7 +17,7 @@
 
 import * as readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { Agent, AgentRuntime, tool } from '@conductoross/conductor-agent-sdk';
+import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 const checkService = tool(

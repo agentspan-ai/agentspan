@@ -67,7 +67,7 @@ Build on Agentspan with the Conductor agent SDK, available for Python, TypeScrip
 pip install conductor-agent-sdk
 
 # TypeScript / JavaScript
-npm install @conductoross/conductor-agent-sdk
+npm install @conductor-oss/conductor-agent-sdk
 
 # C# / .NET
 dotnet add package conductor-agent-sdk

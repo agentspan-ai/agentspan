@@ -69,7 +69,7 @@ A full working example is in `sdk/python/examples/hello_world_agent_schedule.py`
 ```ts
 import {
   Agent, AgentRuntime, Schedule, schedules,
-} from "@conductoross/conductor-agent-sdk";
+} from "@conductor-oss/conductor-agent-sdk";
 
 const agent = new Agent({
   name: "dailyDigest",

@@ -12,7 +12,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@conductoross/conductor-agent-sdk': path.resolve(__dirname, 'src/index.ts'),
+      '@conductor-oss/conductor-agent-sdk': path.resolve(__dirname, 'src/index.ts'),
     },
   },
   test: {

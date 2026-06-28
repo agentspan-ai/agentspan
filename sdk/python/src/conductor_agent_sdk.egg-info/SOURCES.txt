@@ -3,6 +3,7 @@ README.md
 pyproject.toml
 src/conductor/__init__.py
 src/conductor/ai/__init__.py
+src/conductor/ai/__main__.py
 src/conductor/ai/agents/__init__.py
 src/conductor/ai/agents/agent.py
 src/conductor/ai/agents/callback.py

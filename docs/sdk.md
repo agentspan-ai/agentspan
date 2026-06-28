@@ -12,7 +12,7 @@ The Conductor agent SDK lets you build and run Agentspan agents in four language
 | Language | Install | Import | Full docs |
 |---|---|---|---|
 | **Python** | `pip install conductor-agent-sdk` | `from conductor.ai.agents import Agent, AgentRuntime` | [Python SDK](python-sdk/README.md) |
-| **TypeScript** | `npm install @conductoross/conductor-agent-sdk` | `import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk'` | [TypeScript SDK](typescript-sdk/README.md) |
+| **TypeScript** | `npm install @conductor-oss/conductor-agent-sdk` | `import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk'` | [TypeScript SDK](typescript-sdk/README.md) |
 | **Java** | `org.conductoross.conductor:conductor-agent-sdk:0.1.0` | `import org.conductoross.conductor.ai.*` | [Java SDK](java-sdk/index.md) |
 | **C#** | `dotnet add package conductor-agent-sdk` | `using Conductor.AI;` | [C# SDK](csharp-sdk/README.md) |
 
@@ -38,7 +38,8 @@ agentspan server start   # downloads the runtime jar on first run, starts on :67
 
 The minimal loop: define an `Agent`, open a runtime, call `run`.
 
-=== "Python"
+---
+#### Python
 
     ```python
     from conductor.ai.agents import Agent, AgentRuntime, tool
@@ -59,11 +60,11 @@ The minimal loop: define an `Agent`, open a runtime, call `run`.
         result = runtime.run(agent, "What's the weather in San Francisco?")
         result.print_result()
     ```
-
-=== "TypeScript"
+---
+#### TypeScript
 
     ```ts
-    import { Agent, AgentRuntime, tool } from '@conductoross/conductor-agent-sdk';
+    import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
     import { z } from 'zod';
 
     const getWeather = tool({
@@ -89,7 +90,8 @@ The minimal loop: define an `Agent`, open a runtime, call `run`.
     }
     ```
 
-=== "Java"
+---
+#### Java
 
     ```java
     import org.conductoross.conductor.ai.Agent;
@@ -118,7 +120,8 @@ The minimal loop: define an `Agent`, open a runtime, call `run`.
     }
     ```
 
-=== "C#"
+--- 
+#### C#
 
     ```csharp
     using Conductor.AI;
@@ -166,7 +169,8 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
 
 ### LangGraph
 
-=== "Python"
+---
+#### Python
 
     ```python
     import math
@@ -188,14 +192,15 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
         result.print_result()
     ```
 
-=== "TypeScript"
+---
+#### TypeScript
 
     ```ts
     import { createReactAgent } from '@langchain/langgraph/prebuilt';
     import { ChatOpenAI } from '@langchain/openai';
     import { tool } from '@langchain/core/tools';
     import { z } from 'zod';
-    import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+    import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
     const calculate = tool(
       async ({ expression }) => String(eval(expression)),
@@ -215,7 +220,8 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
     }
     ```
 
-=== "Java (LangGraph4j)"
+---
+####  Java (LangGraph4j)
 
     ```java
     import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -239,7 +245,8 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
 
 ### LangChain
 
-=== "Python"
+---
+#####  Python
 
     ```python
     from conductor.ai.agents import AgentRuntime
@@ -267,11 +274,12 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
         result.print_result()
     ```
 
-=== "TypeScript"
+---
+#### TypeScript
 
     ```ts
-    import { createAgentExecutor } from '@conductoross/conductor-agent-sdk/langchain';
-    import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+    import { createAgentExecutor } from '@conductor-oss/conductor-agent-sdk/langchain';
+    import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
     import { ChatOpenAI } from '@langchain/openai';
     import { tool } from '@langchain/core/tools';
     import { z } from 'zod';
@@ -298,7 +306,8 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
 
 ### OpenAI Agents SDK
 
-=== "Python"
+---
+#### Python
 
     ```python
     from conductor.ai import Runner          # drop-in: replaces `from agents import Runner`
@@ -321,11 +330,12 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
 
     One import change — everything else stays as written.
 
-=== "TypeScript"
+---
+#### TypeScript
 
     ```ts
     import { Agent, setTracingDisabled } from '@openai/agents';
-    import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+    import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
     setTracingDisabled(true);
 
@@ -344,7 +354,8 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
     }
     ```
 
-=== "Java"
+---
+#### Java
 
     ```java
     import org.conductoross.conductor.ai.Agent;
@@ -370,7 +381,8 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
 
 ### Google ADK
 
-=== "Python"
+---
+#### Python
 
     ```python
     from google.adk.agents import LlmAgent
@@ -393,11 +405,12 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
         result.print_result()
     ```
 
-=== "TypeScript"
+---
+#### TypeScript
 
     ```ts
     import { LlmAgent } from '@google/adk';
-    import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
+    import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
     const agent = new LlmAgent({
       name: 'weather_agent',
@@ -414,7 +427,8 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
     }
     ```
 
-=== "Java"
+---
+#### Java
 
     ```java
     import com.google.adk.agents.LlmAgent;
@@ -437,7 +451,8 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
 
 ### Vercel AI SDK
 
-=== "TypeScript"
+---
+#### TypeScript
 
     **Option 1 — Use AI SDK tools on a native Agent (recommended):**
 
@@ -446,7 +461,7 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
     ```ts
     import { tool as aiTool } from 'ai';
     import { z } from 'zod';
-    import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+    import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
     const getWeather = aiTool({
       description: 'Get current weather for a city.',
@@ -473,7 +488,7 @@ You don't have to rewrite agents authored in another framework. Pass the framewo
     **Option 2 — Drop-in `generateText`:**
 
     ```ts
-    import { generateText } from '@conductoross/conductor-agent-sdk/vercel-ai';
+    import { generateText } from '@conductor-oss/conductor-agent-sdk/vercel-ai';
 
     const { text } = await generateText({
       model: 'anthropic/claude-sonnet-4-6',

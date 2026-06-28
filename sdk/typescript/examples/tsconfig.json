@@ -11,11 +11,11 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "paths": {
-      "@conductoross/conductor-agent-sdk": ["../src/index.ts"],
-      "@conductoross/conductor-agent-sdk/langgraph": ["../src/wrappers/langgraph.ts"],
-      "@conductoross/conductor-agent-sdk/langchain": ["../src/wrappers/langchain.ts"],
-      "@conductoross/conductor-agent-sdk/vercel-ai": ["../src/wrappers/ai.ts"],
-      "@conductoross/conductor-agent-sdk/testing": ["../src/testing/index.ts"]
+      "@conductor-oss/conductor-agent-sdk": ["../src/index.ts"],
+      "@conductor-oss/conductor-agent-sdk/langgraph": ["../src/wrappers/langgraph.ts"],
+      "@conductor-oss/conductor-agent-sdk/langchain": ["../src/wrappers/langchain.ts"],
+      "@conductor-oss/conductor-agent-sdk/vercel-ai": ["../src/wrappers/ai.ts"],
+      "@conductor-oss/conductor-agent-sdk/testing": ["../src/testing/index.ts"]
     }
   },
   "include": ["**/*.ts"],

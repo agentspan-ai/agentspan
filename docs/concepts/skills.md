@@ -128,7 +128,7 @@ lead = Agent(
 ### TypeScript
 
 ```typescript
-import { Agent, AgentRuntime, agentTool, skill } from "@conductoross/conductor-agent-sdk";
+import { Agent, AgentRuntime, agentTool, skill } from "@conductor-oss/conductor-agent-sdk";
 
 const reviewer = skill("~/.claude/skills/dg", {
   model: "openai/gpt-4o",
