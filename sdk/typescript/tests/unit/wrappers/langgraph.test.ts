@@ -13,7 +13,7 @@ describe("LangGraph wrapper", () => {
         model = "gpt-4o-mini";
       }
       const llm = new ChatOpenAI();
-      expect(extractModelFromLLM(llm)).toBe("anthropic/claude-sonnet-4-6");
+      expect(extractModelFromLLM(llm)).toBe("openai/gpt-4o-mini");
     });
 
     it("extracts model from ChatAnthropic-like object", () => {
@@ -92,7 +92,7 @@ describe("LangGraph wrapper", () => {
 
       // Simulate what createReactAgent wrapper does
       const modelStr = extractModelFromLLM(llm);
-      expect(modelStr).toBe("anthropic/claude-sonnet-4-6");
+      expect(modelStr).toBe("openai/gpt-4o-mini");
 
       const metadata = {
         model: modelStr,
@@ -105,7 +105,7 @@ describe("LangGraph wrapper", () => {
 
       // Verify metadata was stored
       expect((mockGraph as any)._agentspan).toBeDefined();
-      expect((mockGraph as any)._agentspan.model).toBe("anthropic/claude-sonnet-4-6");
+      expect((mockGraph as any)._agentspan.model).toBe("openai/gpt-4o-mini");
       expect((mockGraph as any)._agentspan.tools).toHaveLength(2);
       expect((mockGraph as any)._agentspan.framework).toBe("langgraph");
     });

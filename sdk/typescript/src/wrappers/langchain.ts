@@ -59,7 +59,7 @@ export function extractModelFromLLM(llm: unknown): string {
     (typeof l.model === "string" && l.model) ||
     (typeof l.modelName === "string" && l.modelName) ||
     (typeof l.model_name === "string" && l.model_name) ||
-    "gpt-4o-mini";
+    "anthropic/claude-sonnet-4-6";
 
   // Already has provider prefix
   if (modelName.includes("/")) return modelName;

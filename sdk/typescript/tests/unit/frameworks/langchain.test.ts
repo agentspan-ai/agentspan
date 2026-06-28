@@ -298,7 +298,7 @@ describe("serializeLangChain", () => {
       };
 
       const [config] = serializeLangChain(mockExecutor);
-      expect(config.model).toBe("anthropic/claude-sonnet-4-6");
+      expect(config.model).toBe("openai/gpt-4o-mini");
     });
 
     it("infers anthropic from claude in model name", () => {

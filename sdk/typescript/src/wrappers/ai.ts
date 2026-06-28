@@ -69,7 +69,7 @@ export function extractModelString(model: unknown): string {
     (typeof m.modelId === "string" && m.modelId) ||
     (typeof m.modelName === "string" && m.modelName) ||
     (typeof m.model === "string" && m.model) ||
-    "gpt-4o-mini";
+    "anthropic/claude-sonnet-4-6";
 
   // Already has provider prefix
   if (modelId.includes("/")) return modelId;

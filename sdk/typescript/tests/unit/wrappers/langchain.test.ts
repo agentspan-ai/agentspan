@@ -17,7 +17,7 @@ describe("LangChain wrapper", () => {
         model = "gpt-4o-mini";
       }
       const llm = new ChatOpenAI();
-      expect(extractModelFromLLM(llm)).toBe("anthropic/claude-sonnet-4-6");
+      expect(extractModelFromLLM(llm)).toBe("openai/gpt-4o-mini");
     });
 
     it("extracts model from ChatAnthropic-like object", () => {
@@ -61,7 +61,7 @@ describe("LangChain wrapper", () => {
 
       expect(executor._agentspan).toBeDefined();
       const metadata = executor._agentspan as Record<string, unknown>;
-      expect(metadata.model).toBe("anthropic/claude-sonnet-4-6");
+      expect(metadata.model).toBe("openai/gpt-4o-mini");
       expect(metadata.tools).toBe(tools);
       expect(metadata.framework).toBe("langchain");
     });
@@ -104,7 +104,7 @@ describe("LangChain wrapper", () => {
       expect(runnable._agentspan).toBeDefined();
 
       const metadata = runnable._agentspan as Record<string, unknown>;
-      expect(metadata.model).toBe("anthropic/claude-sonnet-4-6");
+      expect(metadata.model).toBe("openai/gpt-4o-mini");
       expect(metadata.tools).toBe(tools);
       expect(metadata.instructions).toBe("You are helpful.");
       expect(metadata.framework).toBe("langchain");
