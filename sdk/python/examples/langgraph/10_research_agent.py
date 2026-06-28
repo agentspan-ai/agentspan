@@ -16,7 +16,7 @@ Requirements:
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 # Mock research database
 _MOCK_SEARCH_RESULTS = {

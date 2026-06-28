@@ -72,7 +72,7 @@ def verify_server():
 @pytest.fixture(scope="module")
 def runtime():
     """Module-scoped AgentRuntime — shared across tests in a module."""
-    from agentspan.agents import AgentRuntime
+    from conductor.ai.agents import AgentRuntime
 
     with AgentRuntime() as rt:
         yield rt

@@ -23,7 +23,7 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool, getCredential } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // Mirrors a LangChain @tool that checks for a credential in the environment
@@ -46,7 +46,6 @@ const checkGithubToken = tool(
     name: 'check_github_token',
     description: 'Check if GitHub token is available in the environment.',
     inputSchema: { type: 'object', properties: {} },
-    isolated: false,
     credentials: ['GITHUB_TOKEN'],
   },
 );

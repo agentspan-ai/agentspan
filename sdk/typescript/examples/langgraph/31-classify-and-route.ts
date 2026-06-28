@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -107,33 +107,31 @@ function route(state: State): string {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(ClassifyState);
-builder.addNode('classify', classify);
-builder.addNode('science', answerScience);
-builder.addNode('history', answerHistory);
-builder.addNode('sports', answerSports);
-builder.addNode('technology', answerTechnology);
-builder.addNode('cooking', answerCooking);
-
-builder.addEdge(START, 'classify');
-builder.addConditionalEdges('classify', route, {
-  science: 'science',
-  history: 'history',
-  sports: 'sports',
-  technology: 'technology',
-  cooking: 'cooking',
-});
-builder.addEdge('science', END);
-builder.addEdge('history', END);
-builder.addEdge('sports', END);
-builder.addEdge('technology', END);
-builder.addEdge('cooking', END);
-
-const graph = builder.compile({ name: "classify_and_route_agent" });
+const graph = new StateGraph(ClassifyState)
+  .addNode('classify', classify)
+  .addNode('science', answerScience)
+  .addNode('history', answerHistory)
+  .addNode('sports', answerSports)
+  .addNode('technology', answerTechnology)
+  .addNode('cooking', answerCooking)
+  .addEdge(START, 'classify')
+  .addConditionalEdges('classify', route, {
+    science: 'science',
+    history: 'history',
+    sports: 'sports',
+    technology: 'technology',
+    cooking: 'cooking',
+  })
+  .addEdge('science', END)
+  .addEdge('history', END)
+  .addEdge('sports', END)
+  .addEdge('technology', END)
+  .addEdge('cooking', END)
+  .compile({ name: "classify_and_route_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

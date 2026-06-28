@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentspan.agents.code_executor import (
+from conductor.ai.agents.code_executor import (
     DockerCodeExecutor,
     ExecutionResult,
     JupyterCodeExecutor,
@@ -40,8 +40,8 @@ class TestExecutionResult:
 
 
 class TestLocalCodeExecutor:
-    @patch("agentspan.agents.code_executor.subprocess.run")
-    @patch("agentspan.agents.code_executor.os.unlink")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.os.unlink")
     def test_execute_python_success(self, mock_unlink, mock_run):
         mock_run.return_value = MagicMock(stdout="hello\n", stderr="", returncode=0)
         executor = LocalCodeExecutor(language="python", timeout=10)
@@ -52,8 +52,8 @@ class TestLocalCodeExecutor:
         assert result.success is True
         mock_unlink.assert_called_once()
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
-    @patch("agentspan.agents.code_executor.os.unlink")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.os.unlink")
     def test_execute_bash(self, mock_unlink, mock_run):
         mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
         executor = LocalCodeExecutor(language="bash")
@@ -63,8 +63,8 @@ class TestLocalCodeExecutor:
         assert cmd[0] == "bash"
         assert result.output == "ok"
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
-    @patch("agentspan.agents.code_executor.os.unlink")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.os.unlink")
     def test_execute_nonzero_exit(self, mock_unlink, mock_run):
         mock_run.return_value = MagicMock(stdout="", stderr="error!", returncode=1)
         executor = LocalCodeExecutor(language="python")
@@ -74,8 +74,8 @@ class TestLocalCodeExecutor:
         assert result.error == "error!"
         assert result.success is False
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
-    @patch("agentspan.agents.code_executor.os.unlink")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.os.unlink")
     def test_execute_timeout(self, mock_unlink, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="python3", timeout=10)
         executor = LocalCodeExecutor(language="python", timeout=10)
@@ -85,8 +85,8 @@ class TestLocalCodeExecutor:
         assert result.exit_code == -1
         assert "timed out" in result.error.lower()
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
-    @patch("agentspan.agents.code_executor.os.unlink")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.os.unlink")
     def test_execute_missing_interpreter(self, mock_unlink, mock_run):
         mock_run.side_effect = FileNotFoundError()
         executor = LocalCodeExecutor(language="python")
@@ -95,8 +95,8 @@ class TestLocalCodeExecutor:
         assert result.exit_code == 127
         assert "not found" in result.error.lower()
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
-    @patch("agentspan.agents.code_executor.os.unlink")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.os.unlink")
     def test_execute_general_exception(self, mock_unlink, mock_run):
         mock_run.side_effect = OSError("permission denied")
         executor = LocalCodeExecutor(language="python")
@@ -112,8 +112,8 @@ class TestLocalCodeExecutor:
         assert result.exit_code == 1
         assert "Unsupported" in result.error
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
-    @patch("agentspan.agents.code_executor.os.unlink")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.os.unlink")
     def test_temp_file_cleanup_on_failure(self, mock_unlink, mock_run):
         mock_run.side_effect = RuntimeError("unexpected")
         executor = LocalCodeExecutor(language="python")
@@ -148,7 +148,7 @@ class TestLocalFileExtension:
 
 
 class TestDockerCodeExecutor:
-    @patch("agentspan.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
     def test_execute_success(self, mock_run):
         mock_run.return_value = MagicMock(stdout="42\n", stderr="", returncode=0)
         executor = DockerCodeExecutor(image="python:3.12-slim")
@@ -161,7 +161,7 @@ class TestDockerCodeExecutor:
         assert "python:3.12-slim" in cmd
         assert "--network=none" in cmd  # default: network disabled
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
     def test_execute_network_enabled(self, mock_run):
         mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
         executor = DockerCodeExecutor(network_enabled=True)
@@ -170,7 +170,7 @@ class TestDockerCodeExecutor:
         cmd = mock_run.call_args.args[0]
         assert "--network=none" not in cmd
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
     def test_execute_memory_limit(self, mock_run):
         mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
         executor = DockerCodeExecutor(memory_limit="256m")
@@ -181,7 +181,7 @@ class TestDockerCodeExecutor:
         idx = cmd.index("--memory")
         assert cmd[idx + 1] == "256m"
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
     def test_execute_volumes(self, mock_run):
         mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
         executor = DockerCodeExecutor(volumes={"/host/data": "/data"})
@@ -192,7 +192,7 @@ class TestDockerCodeExecutor:
         idx = cmd.index("-v")
         assert cmd[idx + 1] == "/host/data:/data:ro"
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
     def test_execute_timeout(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="docker", timeout=40)
         executor = DockerCodeExecutor(timeout=30)
@@ -201,7 +201,7 @@ class TestDockerCodeExecutor:
         assert result.timed_out is True
         assert result.exit_code == -1
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
     def test_execute_docker_not_found(self, mock_run):
         mock_run.side_effect = FileNotFoundError()
         executor = DockerCodeExecutor()
@@ -210,7 +210,7 @@ class TestDockerCodeExecutor:
         assert result.exit_code == 127
         assert "Docker not found" in result.error
 
-    @patch("agentspan.agents.code_executor.subprocess.run")
+    @patch("conductor.ai.agents.code_executor.subprocess.run")
     def test_execute_general_exception(self, mock_run):
         mock_run.side_effect = RuntimeError("container error")
         executor = DockerCodeExecutor()
@@ -326,7 +326,7 @@ class TestJupyterCodeExecutor:
         # Should not raise or create new kernel
         executor._ensure_kernel()
 
-    @patch("agentspan.agents.code_executor.JupyterCodeExecutor._ensure_kernel")
+    @patch("conductor.ai.agents.code_executor.JupyterCodeExecutor._ensure_kernel")
     def test_ensure_kernel_import_error_propagates(self, mock_ensure):
         mock_ensure.side_effect = ImportError("no jupyter_client")
         executor = JupyterCodeExecutor()
@@ -552,7 +552,7 @@ class TestJupyterCodeExecutor:
 
             # Manually set up the kernel (simulating _ensure_kernel)
             with patch(
-                "agentspan.agents.code_executor.JupyterCodeExecutor._ensure_kernel"
+                "conductor.ai.agents.code_executor.JupyterCodeExecutor._ensure_kernel"
             ) as mock_ensure:
                 # Instead of calling _ensure_kernel, just set internal state
                 executor._kernel_manager = mock_km

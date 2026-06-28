@@ -24,8 +24,8 @@
 //   - mcp-testkit running on http://localhost:3001 (see above)
 //   - MCP_API_KEY stored via `agentspan credentials set`
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // MCP tool with credential-bearing headers.
 // ${MCP_API_KEY} is resolved server-side from the credential store

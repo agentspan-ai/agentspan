@@ -4,7 +4,7 @@
       "external": false,
       "instructions": "You are a market analyst. Analyze the given topic from a market perspective: market size, growth trends, key players, and opportunities.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "market_analyst",
       "timeoutSeconds": 0
     },
@@ -12,7 +12,7 @@
       "external": false,
       "instructions": "You are a risk analyst. Analyze the given topic for risks: regulatory risks, technical risks, competitive threats, and mitigation strategies.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "risk_analyst",
       "timeoutSeconds": 0
     },
@@ -20,14 +20,14 @@
       "external": false,
       "instructions": "You are a compliance specialist. Check the given topic for compliance considerations: data privacy, regulatory requirements, and industry standards.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "compliance",
       "timeoutSeconds": 0
     }
   ],
   "external": false,
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "analysis",
   "strategy": "parallel",
   "timeoutSeconds": 0

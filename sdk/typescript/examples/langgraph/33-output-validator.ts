@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -128,24 +128,22 @@ function finalize(state: State): Partial<State> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(ValidatorState);
-builder.addNode('generate', generateProfile);
-builder.addNode('validate', validateOutput);
-builder.addNode('finalize', finalize);
-
-builder.addEdge(START, 'generate');
-builder.addEdge('generate', 'validate');
-builder.addConditionalEdges('validate', shouldRetry, {
-  retry: 'generate',
-  done: 'finalize',
-});
-builder.addEdge('finalize', END);
-
-const graph = builder.compile({ name: "output_validator_agent" });
+const graph = new StateGraph(ValidatorState)
+  .addNode('generate', generateProfile)
+  .addNode('validate', validateOutput)
+  .addNode('finalize', finalize)
+  .addEdge(START, 'generate')
+  .addEdge('generate', 'validate')
+  .addConditionalEdges('validate', shouldRetry, {
+    retry: 'generate',
+    done: 'finalize',
+  })
+  .addEdge('finalize', END)
+  .compile({ name: "output_validator_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

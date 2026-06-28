@@ -1,0 +1,5 @@
+[console_scripts]
+agentspan = conductor.ai.cli:main
+
+[pytest11]
+agentspan-testing = conductor.ai.agents.testing.pytest_plugin

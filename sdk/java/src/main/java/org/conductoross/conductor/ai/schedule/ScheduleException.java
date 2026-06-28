@@ -33,4 +33,11 @@ public class ScheduleException extends RuntimeException {
             super(message);
         }
     }
+
+    /** A {@code runNow(..., wait=true)} workflow did not finish within the timeout. */
+    public static class Timeout extends ScheduleException {
+        public Timeout(String message) {
+            super(message);
+        }
+    }
 }

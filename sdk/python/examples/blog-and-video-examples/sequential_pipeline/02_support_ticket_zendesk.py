@@ -22,7 +22,7 @@ Setup:
 
 import os
 import requests
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 
 # ── Zendesk Tools ────────────────────────────────────────────────

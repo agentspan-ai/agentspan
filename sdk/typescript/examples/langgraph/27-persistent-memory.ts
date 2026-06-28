@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation, MemorySaver } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -64,18 +64,17 @@ async function chat(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(MemoryState);
-builder.addNode('chat', chat);
-builder.addEdge(START, 'chat');
-builder.addEdge('chat', END);
-
 const checkpointer = new MemorySaver();
-const graph = builder.compile({ checkpointer, name: "persistent_memory_chatbot" });
+const graph = new StateGraph(MemoryState)
+  .addNode('chat', chat)
+  .addEdge(START, 'chat')
+  .addEdge('chat', END)
+  .compile({ checkpointer, name: "persistent_memory_chatbot" });
 
 // Add agentspan metadata for graph-structure extraction.
 // Do NOT set tools on StateGraphs — only model + framework.
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

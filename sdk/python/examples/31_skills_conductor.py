@@ -19,7 +19,7 @@ Install conductor-skills:
     # The skill is at ~/.claude/skills/conductor/
 """
 
-from agentspan.agents import Agent, AgentRuntime, agent_tool, load_skills, skill
+from conductor.ai.agents import Agent, AgentRuntime, agent_tool, load_skills, skill
 from settings import settings
 
 # ── Load conductor skill ───────────────────────────────────────────

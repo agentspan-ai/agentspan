@@ -15,8 +15,8 @@ import {
   tool,
   guardrail,
   RegexGuardrail,
-} from '@agentspan-ai/sdk';
-import type { AgentEvent, AgentResult, GuardrailResult } from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-agent-sdk';
+import type { AgentEvent, AgentResult, GuardrailResult } from '@conductoross/conductor-agent-sdk';
 import { checkServerHealth, MODEL, TIMEOUT } from './helpers';
 
 // ── Runtime setup ────────────────────────────────────────────────────────

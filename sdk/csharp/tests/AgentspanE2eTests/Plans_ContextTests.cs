@@ -10,10 +10,10 @@
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
 using Xunit;
-using Agentspan;
-using Agentspan.Plans;
+using Conductor.AI;
+using Conductor.AI.Plans;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 public sealed class Plans_ContextTests
 {
@@ -89,7 +89,7 @@ public sealed class Plans_ContextTests
     [Fact]
     public void SerializerEmitsPlannerContextWithMixedEntries()
     {
-        var planner = AgentBuilder.Create("planner_sub").WithModel("openai/gpt-4o-mini").Build();
+        var planner = AgentBuilder.Create("planner_sub").WithModel("anthropic/claude-sonnet-4-6").Build();
         var stub = new ToolDef
         {
             Name = "stub",
@@ -101,7 +101,7 @@ public sealed class Plans_ContextTests
             },
         };
         var harness = AgentBuilder.Create("h")
-            .WithModel("openai/gpt-4o-mini")
+            .WithModel("anthropic/claude-sonnet-4-6")
             .WithStrategy(Strategy.PlanExecute)
             .WithPlanner(planner)
             .WithTools(stub)
@@ -138,7 +138,7 @@ public sealed class Plans_ContextTests
         // appear. Pairs with the positive test — without this, the
         // positive case could vacuously pass if the serializer always
         // emitted the field.
-        var planner = AgentBuilder.Create("planner_sub").WithModel("openai/gpt-4o-mini").Build();
+        var planner = AgentBuilder.Create("planner_sub").WithModel("anthropic/claude-sonnet-4-6").Build();
         var stub = new ToolDef
         {
             Name = "stub",
@@ -150,7 +150,7 @@ public sealed class Plans_ContextTests
             },
         };
         var harness = AgentBuilder.Create("h")
-            .WithModel("openai/gpt-4o-mini")
+            .WithModel("anthropic/claude-sonnet-4-6")
             .WithStrategy(Strategy.PlanExecute)
             .WithPlanner(planner)
             .WithTools(stub)
@@ -166,9 +166,9 @@ public sealed class Plans_ContextTests
         // Same guard shape as Python/TS/Java — setting PlannerContext on
         // anything other than Strategy.PlanExecute is a silent bug.
         // Serializer is the last line of defence.
-        var sub = AgentBuilder.Create("sub").WithModel("openai/gpt-4o-mini").Build();
+        var sub = AgentBuilder.Create("sub").WithModel("anthropic/claude-sonnet-4-6").Build();
         var harness = AgentBuilder.Create("h")
-            .WithModel("openai/gpt-4o-mini")
+            .WithModel("anthropic/claude-sonnet-4-6")
             .WithStrategy(Strategy.Handoff)
             .WithAgents(sub)
             .WithPlannerContext("rule")
@@ -189,7 +189,7 @@ public sealed class Plans_ContextTests
     private static JsonObject SerializeAgentConfigForTest(Agent agent)
     {
         var t = typeof(Agent).Assembly
-            .GetType("Agentspan.AgentConfigSerializer", throwOnError: true)!;
+            .GetType("Conductor.AI.AgentConfigSerializer", throwOnError: true)!;
         var mi = t.GetMethod(
             "SerializeAgent",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;

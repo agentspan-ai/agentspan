@@ -11,7 +11,7 @@ Agentspan is a distributed, durable runtime for AI agents. Agents survive crashe
 ## Quickstart (Ephemeral — for autonomous agents)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="helper", model="openai/gpt-4o", instructions="You are a helpful assistant.")
 
@@ -26,7 +26,7 @@ with AgentRuntime() as rt:
 ## Production Pattern (for developers)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="helper", model="openai/gpt-4o", instructions="...")
 
@@ -47,7 +47,7 @@ Trigger from outside: `agentspan run helper "What is quantum computing?"`
 rt = AgentRuntime()
 
 # Explicit:
-from agentspan.agents import AgentConfig
+from conductor.ai.agents import AgentConfig
 config = AgentConfig(server_url="http://localhost:6767/api", api_key="...")
 rt = AgentRuntime(config=config)
 ```
@@ -79,7 +79,7 @@ Model formats: `"openai/gpt-4o"`, `"anthropic/claude-sonnet-4-6"`, `"google_gemi
 ### @agent Decorator
 
 ```python
-from agentspan.agents import agent
+from conductor.ai.agents import agent
 
 @agent(model="openai/gpt-4o", tools=[search])
 def researcher():
@@ -126,7 +126,7 @@ For autonomous agents building ephemeral agents — always check `result.is_succ
 ## Tools
 
 ```python
-from agentspan.agents import tool
+from conductor.ai.agents import tool
 
 @tool
 def search(query: str) -> str:
@@ -145,7 +145,7 @@ Tool functions must have type hints and a docstring. The schema is generated aut
 ### ToolContext (dependency injection + shared state)
 
 ```python
-from agentspan.agents import tool, ToolContext
+from conductor.ai.agents import tool, ToolContext
 
 @tool
 def lookup(query: str, context: ToolContext) -> str:
@@ -176,7 +176,7 @@ def get_cart(context: ToolContext) -> list:
 ### Server-side tools (no local worker needed)
 
 ```python
-from agentspan.agents import http_tool, mcp_tool, api_tool
+from conductor.ai.agents import http_tool, mcp_tool, api_tool
 
 weather = http_tool(
     name="get_weather",
@@ -205,7 +205,7 @@ All multi-agent compositions use one `Agent(...)` as the *parent* with `agents=[
 ### Strategy Enum
 
 ```python
-from agentspan.agents import Strategy
+from conductor.ai.agents import Strategy
 
 Strategy.SEQUENTIAL    # Run in order; output of one feeds the next
 Strategy.PARALLEL      # Run concurrently; results aggregated
@@ -257,7 +257,7 @@ Agent(
 ### SWARM (peer-to-peer handoff)
 
 ```python
-from agentspan.agents.handoff import OnTextMention
+from conductor.ai.agents.handoff import OnTextMention
 
 coder = Agent(name="coder", model="openai/gpt-4o", instructions="Code. Say HANDOFF_TO_QA when done.")
 qa = Agent(name="qa", model="openai/gpt-4o", instructions="Test. Say HANDOFF_TO_CODER if bugs found.")
@@ -277,11 +277,11 @@ Agent(
 ### Scatter-Gather (fan-out/fan-in)
 
 ```python
-from agentspan.agents import scatter_gather
+from conductor.ai.agents import scatter_gather
 
 coordinator = scatter_gather(
     name="multi_search",
-    worker=Agent(name="searcher", model="openai/gpt-4o-mini", instructions="Search and summarize."),
+    worker=Agent(name="searcher", model="anthropic/claude-sonnet-4-6", instructions="Search and summarize."),
     timeout_seconds=300,
 )
 # Spawns multiple copies of worker agent in parallel, aggregates results
@@ -333,7 +333,7 @@ Mix and match — `parallel >> sequential`, `router → swarm`, etc. The `>>` op
 ### Agent as Tool
 
 ```python
-from agentspan.agents import agent_tool
+from conductor.ai.agents import agent_tool
 
 specialist = Agent(name="math_expert", model="openai/gpt-4o", instructions="Solve math problems.")
 
@@ -348,7 +348,7 @@ orchestrator = Agent(
 ## Guardrails
 
 ```python
-from agentspan.agents import RegexGuardrail, LLMGuardrail, Guardrail, GuardrailResult
+from conductor.ai.agents import RegexGuardrail, LLMGuardrail, Guardrail, GuardrailResult
 
 # Regex: block emails in output
 RegexGuardrail(
@@ -362,7 +362,7 @@ RegexGuardrail(
 # LLM: policy-based check
 LLMGuardrail(
     name="safety",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     policy="Reject responses with medical advice.",
     on_fail="raise",
 )
@@ -379,7 +379,7 @@ Guardrail(no_ssn, position="output", on_fail="retry", max_retries=3)
 ## Termination Conditions
 
 ```python
-from agentspan.agents import TextMentionTermination, MaxMessageTermination
+from conductor.ai.agents import TextMentionTermination, MaxMessageTermination
 
 Agent(
     name="worker",
@@ -394,7 +394,7 @@ Agent(
 ## Gates (Conditional Pipelines)
 
 ```python
-from agentspan.agents.gate import TextGate
+from conductor.ai.agents.gate import TextGate
 
 checker = Agent(name="checker", model="openai/gpt-4o",
     instructions="Output NO_ISSUES if everything is fine.",
@@ -408,7 +408,7 @@ pipeline = checker >> fixer  # fixer only runs if checker finds issues
 ## Memory
 
 ```python
-from agentspan.agents import ConversationMemory, SemanticMemory
+from conductor.ai.agents import ConversationMemory, SemanticMemory
 
 # Conversation memory (chat history with windowing)
 agent = Agent(
@@ -427,7 +427,7 @@ results = memory.search("What language does the user prefer?")
 ## Claude Code Agents
 
 ```python
-from agentspan.agents import Agent, ClaudeCode
+from conductor.ai.agents import Agent, ClaudeCode
 
 # Simple: slash syntax
 reviewer = Agent(
@@ -467,10 +467,10 @@ Agent(
 Attach one or more cron triggers to an agent at deploy time. The scheduler fires the agent on its cadence with the supplied input.
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.schedule import Schedule
 
-agent = Agent(name="hello", model="openai/gpt-4o-mini", instructions="Say hi.")
+agent = Agent(name="hello", model="anthropic/claude-sonnet-4-6", instructions="Say hi.")
 
 with AgentRuntime() as rt:
     rt.deploy(
@@ -526,7 +526,7 @@ Agent(
 ## Callbacks
 
 ```python
-from agentspan.agents import CallbackHandler
+from conductor.ai.agents import CallbackHandler
 
 class MyCallbacks(CallbackHandler):
     def on_agent_start(self, **kwargs): pass
@@ -542,7 +542,7 @@ Agent(name="agent", model="openai/gpt-4o", callbacks=[MyCallbacks()])
 Use `rt.start()` + `handle.stream()` to react to events as they fire — required for interactive HITL (approval tools).
 
 ```python
-from agentspan.agents import EventType
+from conductor.ai.agents import EventType
 
 with AgentRuntime() as rt:
     handle = rt.start(agent, "Transfer $500 from A to B")
@@ -569,7 +569,7 @@ with AgentRuntime() as rt:
 For LLM-generated plans that should run deterministically (DAG compiled into a Conductor workflow):
 
 ```python
-from agentspan.agents import plan_execute, Agent, tool
+from conductor.ai.agents import plan_execute, Agent, tool
 
 planner = Agent(name="planner", model="openai/gpt-4o", instructions="Produce a JSON plan...")
 fallback = Agent(name="fixer", model="openai/gpt-4o", instructions="Repair failed plan.")
@@ -615,7 +615,7 @@ Agent(name="analyzer", model="openai/gpt-4o", output_type=Analysis)
 ```python
 from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o")
 graph = create_react_agent(llm, tools=[my_tool])
@@ -629,7 +629,7 @@ with AgentRuntime() as rt:
 
 ```python
 from agents import Agent as OpenAIAgent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 agent = OpenAIAgent(name="helper", instructions="...", model="gpt-4o")
 
@@ -697,12 +697,12 @@ A research-and-publish pipeline showing tools, server-side tools, shared state, 
 
 ```python
 from pydantic import BaseModel
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent, AgentRuntime, Strategy, tool, http_tool, agent_tool,
     RegexGuardrail, LLMGuardrail, EventType, ToolContext,
 )
-from agentspan.agents.gate import TextGate
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents.gate import TextGate
+from conductor.ai.agents.schedule import Schedule
 
 
 # 1. Tools — local Python + server-side HTTP
@@ -731,17 +731,17 @@ class Article(BaseModel):
     tags: list[str]
 
 # 3. Parallel research phase (two specialists run concurrently)
-market = Agent(name="market", model="openai/gpt-4o-mini", tools=[fetch_news, remember],
+market = Agent(name="market", model="anthropic/claude-sonnet-4-6", tools=[fetch_news, remember],
                instructions="Research market signals. Save findings with remember().")
-risk = Agent(name="risk", model="openai/gpt-4o-mini", tools=[remember],
+risk = Agent(name="risk", model="anthropic/claude-sonnet-4-6", tools=[remember],
              instructions="Identify risks. Save findings with remember().")
 
-research = Agent(name="research_phase", model="openai/gpt-4o-mini",
+research = Agent(name="research_phase", model="anthropic/claude-sonnet-4-6",
                  agents=[market, risk], strategy=Strategy.PARALLEL)
 
 # 4. Quality gate — skip writing if research is empty
 quality_check = Agent(
-    name="quality_check", model="openai/gpt-4o-mini",
+    name="quality_check", model="anthropic/claude-sonnet-4-6",
     instructions="Output NO_SIGNAL if the research lacks substance. Otherwise summarize.",
     gate=TextGate("NO_SIGNAL"),
 )
@@ -755,7 +755,7 @@ writer = Agent(
     guardrails=[
         RegexGuardrail(name="no_emails", patterns=[r"[\w.+-]+@[\w-]+\.[\w.-]+"],
                        message="Remove emails.", on_fail="retry", max_retries=2),
-        LLMGuardrail(name="safety", model="openai/gpt-4o-mini",
+        LLMGuardrail(name="safety", model="anthropic/claude-sonnet-4-6",
                      policy="Reject content with PII or medical advice.", on_fail="raise"),
     ],
 )

@@ -22,10 +22,10 @@ import {
   StopMessage,
   TokenUsageCondition,
   OnTextMention,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-agent-sdk';
 
 // Force consistent model
-const llmModel = 'openai/gpt-4o-mini';
+const llmModel = 'anthropic/claude-sonnet-4-6';
 const secondaryModel = 'openai/gpt-4o';
 
 const serializer = new AgentConfigSerializer();
@@ -665,8 +665,8 @@ function dump_47() {
     tools: [getFacts],
     callbacks: [
       {
-        onModelStart: () => {},
-        onModelEnd: () => {},
+        onModelStart: async (_agentName: string, _messages: unknown[]) => {},
+        onModelEnd: async (_agentName: string, _response: unknown) => {},
       },
     ],
   });

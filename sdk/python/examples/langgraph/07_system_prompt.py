@@ -15,7 +15,7 @@ Requirements:
 
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 TUTOR_SYSTEM_PROMPT = """\
 You are Socrates, an ancient Greek philosopher and skilled tutor.

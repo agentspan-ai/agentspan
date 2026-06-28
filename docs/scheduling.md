@@ -5,8 +5,7 @@ more crons to a deployed agent in a single declarative call; the runtime's
 scheduler fires the agent on cadence and you watch the executions roll in.
 
 This page covers the user-facing API. For the design rationale see
-[`docs/design/scheduling.md`](design/scheduling.md). For the implementation
-plan see [`docs/design/plans/2026-05-27-agent-scheduling.md`](design/plans/2026-05-27-agent-scheduling.md).
+[`design/sentinel-agents.md`](https://github.com/agentspan-ai/agentspan/blob/main/design/sentinel-agents.md).
 
 ## What you get
 
@@ -31,10 +30,10 @@ plan see [`docs/design/plans/2026-05-27-agent-scheduling.md`](design/plans/2026-
 ### Python
 
 ```python
-from agentspan.agents import Agent, deploy, schedules
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents import Agent, deploy, schedules
+from conductor.ai.agents.schedule import Schedule
 
-agent = Agent(name="daily_digest", model="openai/gpt-4o-mini",
+agent = Agent(name="daily_digest", model="anthropic/claude-sonnet-4-6",
               instructions="Summarize today's eng activity.")
 
 deploy(
@@ -70,11 +69,11 @@ A full working example is in `sdk/python/examples/hello_world_agent_schedule.py`
 ```ts
 import {
   Agent, AgentRuntime, Schedule, schedules,
-} from "@agentspan-ai/sdk";
+} from "@conductoross/conductor-agent-sdk";
 
 const agent = new Agent({
   name: "dailyDigest",
-  model: "openai/gpt-4o-mini",
+  model: "anthropic/claude-sonnet-4-6",
   instructions: "Summarize today's eng activity.",
 });
 
@@ -106,13 +105,13 @@ const nextTimes = await schedules.previewNext("0 0 9 * * MON-FRI", { n: 5 });
 ### Java
 
 ```java
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.schedule.Schedule;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.schedule.Schedule;
 
 Agent agent = Agent.builder()
         .name("daily_digest")
-        .model("openai/gpt-4o-mini")
+        .model("anthropic/claude-sonnet-4-6")
         .instructions("Summarize today's eng activity.")
         .build();
 
@@ -142,13 +141,13 @@ try (AgentRuntime runtime = new AgentRuntime()) {
 ### C#
 
 ```csharp
-using Agentspan;
-using Agentspan.Scheduling;
+using Conductor.AI;
+using Conductor.AI.Scheduling;
 
 var agent = new Agent
 {
     Name = "daily_digest",
-    Model = "openai/gpt-4o-mini",
+    Model = "anthropic/claude-sonnet-4-6",
     Instructions = "Summarize today's eng activity.",
 };
 
@@ -276,10 +275,10 @@ These are future-phase items, not blockers:
 ### Run a hello-world agent every 5 seconds
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.schedule import Schedule
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.schedule import Schedule
 
-agent = Agent(name="hello", model="openai/gpt-4o-mini",
+agent = Agent(name="hello", model="anthropic/claude-sonnet-4-6",
               instructions="Say 'Hello, world!' and the current UTC time.")
 
 with AgentRuntime() as rt:

@@ -10,7 +10,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -92,19 +92,17 @@ async function generateAnswer(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(QAState);
-builder.addNode('retrieve', retrieveContext);
-builder.addNode('generate', generateAnswer);
-
-builder.addEdge(START, 'retrieve');
-builder.addEdge('retrieve', 'generate');
-builder.addEdge('generate', END);
-
-const graph = builder.compile({ name: "qa_agent" });
+const graph = new StateGraph(QAState)
+  .addNode('retrieve', retrieveContext)
+  .addNode('generate', generateAnswer)
+  .addEdge(START, 'retrieve')
+  .addEdge('retrieve', 'generate')
+  .addEdge('generate', END)
+  .compile({ name: "qa_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

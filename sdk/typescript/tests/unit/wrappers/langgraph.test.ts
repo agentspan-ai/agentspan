@@ -5,7 +5,7 @@ import { serializeLangGraph } from "../../../src/frameworks/langgraph-serializer
 describe("LangGraph wrapper", () => {
   describe("extractModelFromLLM", () => {
     it("returns string model as-is", () => {
-      expect(extractModelFromLLM("openai/gpt-4o-mini")).toBe("openai/gpt-4o-mini");
+      expect(extractModelFromLLM("anthropic/claude-sonnet-4-6")).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("extracts model from ChatOpenAI-like object", () => {
@@ -52,12 +52,12 @@ describe("LangGraph wrapper", () => {
       expect(extractModelFromLLM(llm)).toBe("google_gemini/gemini-pro");
     });
 
-    it("defaults to openai/gpt-4o-mini for null", () => {
-      expect(extractModelFromLLM(null)).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for null", () => {
+      expect(extractModelFromLLM(null)).toBe("anthropic/claude-sonnet-4-6");
     });
 
-    it("defaults to openai/gpt-4o-mini for undefined", () => {
-      expect(extractModelFromLLM(undefined)).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for undefined", () => {
+      expect(extractModelFromLLM(undefined)).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("handles Bedrock class name", () => {
@@ -113,7 +113,7 @@ describe("LangGraph wrapper", () => {
     it("stores undefined instructions when prompt is not a string", () => {
       const prompt: unknown = 123;
       const metadata = {
-        model: "openai/gpt-4o-mini",
+        model: "anthropic/claude-sonnet-4-6",
         tools: [],
         instructions: typeof prompt === "string" ? prompt : undefined,
         framework: "langgraph" as const,
@@ -136,7 +136,7 @@ describe("LangGraph wrapper", () => {
           ["__end__", {}],
         ]),
         _agentspan: {
-          model: "openai/gpt-4o-mini",
+          model: "anthropic/claude-sonnet-4-6",
           tools: [
             {
               name: "search",
@@ -165,7 +165,7 @@ describe("LangGraph wrapper", () => {
       const [config, workers] = serializeLangGraph(mockGraph);
 
       // Should use metadata-based extraction
-      expect(config.model).toBe("openai/gpt-4o-mini");
+      expect(config.model).toBe("anthropic/claude-sonnet-4-6");
       expect(config.instructions).toBe("You are a helpful assistant.");
       expect(Array.isArray(config.tools)).toBe(true);
 
@@ -237,7 +237,7 @@ describe("LangGraph wrapper", () => {
           ],
         ]),
         _agentspan: {
-          model: "openai/gpt-4o-mini",
+          model: "anthropic/claude-sonnet-4-6",
           // No tools - should fall through
         },
       };

@@ -19,7 +19,7 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, httpTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, httpTool } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // HTTP tool with credential-bearing headers.

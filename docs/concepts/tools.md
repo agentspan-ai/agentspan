@@ -23,7 +23,7 @@ For `http_tool`, `api_tool`, and `mcp_tool`, you provide a URL and optionally cr
 Decorate any Python function to make it a tool:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> dict:
@@ -59,7 +59,7 @@ def dangerous_action(target: str) -> dict:
 Add a `context: ToolContext` parameter to access execution context and shared state:
 
 ```python
-from agentspan.agents import tool, ToolContext
+from conductor.ai.agents import tool, ToolContext
 
 @tool
 def query_database(query: str, context: ToolContext) -> dict:
@@ -106,7 +106,7 @@ agent = Agent(
 Define a single HTTP endpoint as a tool. Executes entirely server-side — no worker process needed:
 
 ```python
-from agentspan.agents import http_tool
+from conductor.ai.agents import http_tool
 
 weather_api = http_tool(
     name="get_weather",
@@ -129,7 +129,7 @@ agent = Agent(name="assistant", model="openai/gpt-4o", tools=[weather_api])
 Point to any OpenAPI, Swagger, or Postman spec. All endpoints are auto-discovered and exposed as tools. The LLM filters to the most relevant ones at runtime:
 
 ```python
-from agentspan.agents import api_tool
+from conductor.ai.agents import api_tool
 
 stripe = api_tool(
     url="https://api.stripe.com/openapi.json",
@@ -161,7 +161,7 @@ with AgentRuntime() as runtime:
 Connect to an MCP server. Tools are auto-discovered at runtime. Executes server-side:
 
 ```python
-from agentspan.agents import mcp_tool
+from conductor.ai.agents import mcp_tool
 
 github = mcp_tool(
     server_url="http://localhost:6767/mcp",
@@ -188,7 +188,7 @@ Credentials are encrypted at rest (AES-256-GCM).
 **Step 2: Declare which credentials a tool needs**
 
 ```python
-from agentspan.agents import tool, get_credential
+from conductor.ai.agents import tool, get_credential
 
 # Option A: isolated subprocess (credentials available as env vars)
 @tool(credentials=["GITHUB_TOKEN"])
@@ -240,8 +240,8 @@ agent = Agent(
 Agents can execute code in a sandboxed environment:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.code_executor import DockerCodeExecutor
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.code_executor import DockerCodeExecutor
 
 executor = DockerCodeExecutor(image="python:3.12-slim", timeout=30)
 

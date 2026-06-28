@@ -12,7 +12,7 @@ import {
   SemanticMemory,
   InMemoryStore,
   tool,
-} from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-agent-sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -40,7 +40,7 @@ semanticMem.add('Quantum error correction is essential for practical quantum com
 const recallTool = tool(
   async (args: { query: string }) => {
     const found = semanticMem.search(args.query, 3);
-    return { results: found.map((e) => e.content) };
+    return { results: found };
   },
   {
     name: 'recall_articles',
@@ -89,7 +89,7 @@ async function main() {
 
 console.log('Conversation messages:', conversationMem.toChatMessages().length);
 
-const results = semanticMem.search('quantum error', 2);
+const results = semanticMem.searchEntries('quantum error', 2);
 console.log('\nSemantic search results:');
 for (const entry of results) {
   console.log(`  - ${entry.content}`);

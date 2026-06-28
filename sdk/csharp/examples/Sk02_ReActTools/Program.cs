@@ -12,12 +12,12 @@
 
 using System.ComponentModel;
 using System.Globalization;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.SemanticKernel;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.SemanticKernel;
 using Microsoft.SemanticKernel;
 
-namespace Agentspan.Examples.Sk02;
+namespace Conductor.AI.Examples.Sk02;
 
 public sealed class UtilityPlugin
 {

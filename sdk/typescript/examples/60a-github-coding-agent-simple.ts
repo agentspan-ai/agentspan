@@ -11,7 +11,7 @@
  *   - Git configured with push access to the repo
  */
 
-import { Agent, AgentRuntime, OnTextMention } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, OnTextMention } from '@conductoross/conductor-agent-sdk';
 import { randomBytes } from 'crypto';
 
 const REPO = 'agentspan/codingexamples';

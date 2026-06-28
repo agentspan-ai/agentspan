@@ -12,9 +12,9 @@
 //   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 
 using System.Text.Json;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.GoogleADK;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.GoogleADK;
 
 var collector = GoogleADKAgent.Builder()
     .Name("data_collector")

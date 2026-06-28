@@ -1,12 +1,12 @@
-from agentspan.agents import Agent, AgentRuntime, tool, EventType
+from conductor.ai.agents import Agent, AgentRuntime, tool, EventType
 import sys
 import os
 import logging
 
 logging.getLogger("googleapiclient.discovery_cache").setLevel(logging.ERROR)
-logging.getLogger("agentspan.agents.runtime").setLevel(logging.ERROR)
-logging.getLogger("agentspan.agents.run").setLevel(logging.ERROR)
-logging.getLogger("agentspan.agents.worker_manager").setLevel(logging.ERROR)
+logging.getLogger("conductor.ai.agents.runtime").setLevel(logging.ERROR)
+logging.getLogger("conductor.ai.agents.run").setLevel(logging.ERROR)
+logging.getLogger("conductor.ai.agents.worker_manager").setLevel(logging.ERROR)
 logging.getLogger("conductor.client.automator.task_handler").setLevel(logging.ERROR)
 logging.getLogger("conductor.client.automator.task_runner").setLevel(logging.ERROR)
 

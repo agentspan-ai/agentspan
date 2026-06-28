@@ -12,12 +12,12 @@
 //   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 
 using System.ComponentModel;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.SemanticKernel;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.SemanticKernel;
 using Microsoft.SemanticKernel;
 
-namespace Agentspan.Examples.Sk19;
+namespace Conductor.AI.Examples.Sk19;
 
 public sealed class TranslatePlugin
 {

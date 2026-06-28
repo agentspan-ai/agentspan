@@ -18,8 +18,8 @@
 //   - python:3.12-slim image available (docker pull python:3.12-slim)
 
 using System.Diagnostics;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 var agent = new Agent("docker_coder_39a")
 {

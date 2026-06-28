@@ -5,7 +5,7 @@ import urllib.error
 
 import pytest
 
-import agentspan.cli as cli
+import conductor.ai.cli as cli
 
 
 class _FakeResp:

@@ -8,7 +8,7 @@
  * Usage:
  *   // BEFORE: import { AgentExecutor } from 'langchain/agents';
  *   // AFTER:
- *   import { AgentExecutor } from '@agentspan-ai/sdk/langchain';
+ *   import { AgentExecutor } from '@conductoross/conductor-agent-sdk/langchain';
  *
  * Everything else in user code stays UNCHANGED.
  */
@@ -25,7 +25,7 @@ function _loadLangChainCore(): Record<string, unknown> {
     return _lcCoreModule!;
   } catch {
     throw new Error(
-      `The '@langchain/core' package is required by @agentspan-ai/sdk/langchain but was not found. ` +
+      `The '@langchain/core' package is required by @conductoross/conductor-agent-sdk/langchain but was not found. ` +
         `Install it with: npm install @langchain/core`,
     );
   }
@@ -51,7 +51,7 @@ export interface AgentspanMetadata {
  */
 export function extractModelFromLLM(llm: unknown): string {
   if (typeof llm === "string") return llm;
-  if (typeof llm !== "object" || llm === null) return "openai/gpt-4o-mini";
+  if (typeof llm !== "object" || llm === null) return "anthropic/claude-sonnet-4-6";
 
   const l = llm as Record<string, unknown>;
 
@@ -59,7 +59,7 @@ export function extractModelFromLLM(llm: unknown): string {
     (typeof l.model === "string" && l.model) ||
     (typeof l.modelName === "string" && l.modelName) ||
     (typeof l.model_name === "string" && l.model_name) ||
-    "gpt-4o-mini";
+    "anthropic/claude-sonnet-4-6";
 
   // Already has provider prefix
   if (modelName.includes("/")) return modelName;

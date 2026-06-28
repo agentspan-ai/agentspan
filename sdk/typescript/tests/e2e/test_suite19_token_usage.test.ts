@@ -13,8 +13,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
-import type { TokenUsage } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
+import type { TokenUsage } from '@conductoross/conductor-agent-sdk';
 import { checkServerHealth, MODEL, TIMEOUT, runDiagnostic } from './helpers';
 
 let runtime: AgentRuntime;

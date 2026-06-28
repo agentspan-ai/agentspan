@@ -136,7 +136,7 @@ mavenPublishing {
         signAllPublications()
     }
 
-    coordinates('org.conductoross.conductor', 'conductor-ai-sdk', project.version.toString())
+    coordinates('org.conductoross.conductor', 'conductor-agent-sdk', project.version.toString())
 
     pom {
         name = 'Agentspan Java SDK'

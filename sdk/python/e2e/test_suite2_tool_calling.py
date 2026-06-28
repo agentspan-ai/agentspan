@@ -16,8 +16,8 @@ import time
 import pytest
 import requests
 
-from agentspan.agents import Agent, AgentRuntime, tool
-from agentspan.agents.tool import get_tool_def
+from conductor.ai.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents.tool import get_tool_def
 
 pytestmark = [
     pytest.mark.e2e,

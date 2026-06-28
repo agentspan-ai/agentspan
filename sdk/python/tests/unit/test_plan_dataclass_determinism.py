@@ -27,7 +27,7 @@ import json
 
 import pytest
 
-from agentspan.agents.plans import Generate, Op, Plan, Step, Validation, coerce_plan
+from conductor.ai.agents.plans import Generate, Op, Plan, Step, Validation, coerce_plan
 
 
 def _build_complex_plan() -> Plan:

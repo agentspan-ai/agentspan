@@ -7,7 +7,7 @@ Two ways to integrate — pick what fits your stage.
 Swap one import. Your `generateText()` code stays identical.
 
 <table>
-<tr><th>Before (vanilla Vercel AI)</th><th>After (agentspan)</th></tr>
+<tr><th>Before (vanilla Vercel AI)</th><th>After (Agentspan)</th></tr>
 <tr><td>
 
 ```typescript
@@ -38,9 +38,9 @@ console.log(result.text);
 </td><td>
 
 ```typescript
-import { generateText, tool } from '@agentspan-ai/sdk/vercel-ai';
+import { generateText, tool } from '@conductoross/conductor-agent-sdk/vercel-ai';
 //      ^^^^^^^^^^^^
-//      from '@agentspan-ai/sdk/vercel-ai'  <-- only change
+//      from '@conductoross/conductor-agent-sdk/vercel-ai'  <-- only change
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
@@ -65,14 +65,14 @@ console.log(result.text);
 </td></tr>
 </table>
 
-Everything else — tools, model, prompt, result shape — is unchanged. Under the hood, `generateText` builds an agentspan Agent, runs it on the platform, and maps the result back to the AI SDK format.
+Everything else — tools, model, prompt, result shape — is unchanged. Under the hood, `generateText` builds a Agentspan `Agent`, runs it on the platform, and maps the result back to the AI SDK format.
 
 ## Production: Agent API
 
 When you need features that `generateText()` can't express — termination conditions, guardrails, multi-agent handoff, human-in-the-loop — use the Agent API directly.
 
 <table>
-<tr><th>Before (vanilla Vercel AI)</th><th>After (agentspan Agent API)</th></tr>
+<tr><th>Before (vanilla Vercel AI)</th><th>After (Agentspan Agent API)</th></tr>
 <tr><td>
 
 ```typescript
@@ -108,7 +108,7 @@ console.log(result.text);
 import { tool as aiTool } from 'ai';
 //                          ^^^ tools still from 'ai'
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 //      ^^^^^  ^^^^^^^^^^^^
 //      agentspan Agent + Runtime
 
@@ -122,7 +122,7 @@ const weatherTool = aiTool({
 
 const agent = new Agent({
   name: 'weather_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   //      ^^^^^^^^^^^^^^^^^^^ string, not provider object
   instructions: 'You are a helpful assistant.',
   tools: [weatherTool],
@@ -155,7 +155,7 @@ await runtime.shutdown();
 | File | Description |
 |------|-------------|
 | `01-basic-agent.ts` | Simple agent with one AI SDK tool |
-| `02-tools-compat.ts` | Mix of agentspan native and AI SDK tools |
+| `02-tools-compat.ts` | Mix of Agentspan native and AI SDK tools |
 | `03-streaming.ts` | Default `runtime.run()` flow with a commented `runtime.stream()` alternative |
 | `04-structured-output.ts` | Zod schema for typed output |
 | `05-multi-step.ts` | Multiple tools, multi-turn conversation |

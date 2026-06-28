@@ -17,9 +17,9 @@ import {
   guardrail,
   RegexGuardrail,
   LLMGuardrail,
-} from "@agentspan-ai/sdk";
-import type { GuardrailResult, AgentHandle, AgentStatus } from "@agentspan-ai/sdk";
-import { checkServerHealth, MODEL, getOutputText } from "./helpers";
+} from '@conductoross/conductor-agent-sdk';
+import type { GuardrailResult, AgentHandle, AgentStatus } from '@conductoross/conductor-agent-sdk';
+import { checkServerHealth, MODEL, getOutputText } from './helpers';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -725,7 +725,7 @@ const SPECS: Spec[] = [
         guardrail(customAoutBlock, { name: "gm07", position: "output", onFail: "retry" }),
       ],
     }),
-    prompt: "Look up the marker data.",
+    prompt: "Look up the marker data for item 'test'.",
     validStatuses: ["COMPLETED"],
     notContains: "MARKER42",
   },
@@ -741,7 +741,7 @@ const SPECS: Spec[] = [
         guardrail(customAoutBlock, { name: "gm08", position: "output", onFail: "raise" }),
       ],
     }),
-    prompt: "Look up the marker data.",
+    prompt: "Look up the marker data for item 'test'.",
     validStatuses: ["FAILED"],
   },
   {
@@ -754,7 +754,7 @@ const SPECS: Spec[] = [
       instructions: INST_SECRET,
       guardrails: [guardrail(customAoutFix, { name: "gm09", position: "output", onFail: "fix" })],
     }),
-    prompt: "Look up the marker data.",
+    prompt: "Look up the marker data for item 'test'.",
     validStatuses: ["COMPLETED"],
     notContains: "MARKER42",
     contains: "REDACTED",

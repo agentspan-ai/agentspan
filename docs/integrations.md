@@ -8,7 +8,7 @@ description: Use Agentspan with LangGraph, the OpenAI Agents SDK, Google ADK, or
 Agentspan works with the frameworks you already use. Pass your existing agent directly to `runtime.run()` — definitions, tools, and routing logic stay exactly as written. You get crash recovery, durable human-in-the-loop, and full execution history without changing a single node or handoff.
 
 ```python
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 with AgentRuntime() as runtime:
     result = runtime.run(your_existing_agent, "your prompt")
@@ -26,7 +26,7 @@ Pass a compiled `StateGraph` or any graph produced by `create_react_agent`:
 
 ```python
 from langgraph.prebuilt import create_react_agent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 graph = create_react_agent(model="openai/gpt-4o", tools=[search, calculator])
 
@@ -47,7 +47,7 @@ Pass an `Agent` from the `agents` package directly:
 
 ```python
 from agents import Agent as OAIAgent, WebSearchTool
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 oai_agent = OAIAgent(
     name="support_agent",
@@ -72,7 +72,7 @@ Pass any ADK pipeline (`SequentialAgent`, `ParallelAgent`, `LoopAgent`, or a cus
 
 ```python
 from google.adk.agents import SequentialAgent, LlmAgent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 researcher = LlmAgent(name="researcher", model="gemini-2.0-flash", ...)
 writer = LlmAgent(name="writer", model="gemini-2.0-flash", ...)
@@ -116,12 +116,12 @@ See [Tools](/docs/concepts/tools) for details.
 
 ---
 
-## Native Agentspan agents
+## Native Agentspan
 
 If you're not using an existing framework, define agents natively:
 
 ```python
-from agentspan.agents import Agent, tool, AgentRuntime
+from conductor.ai.agents import Agent, tool, AgentRuntime
 
 @tool
 def search_web(query: str) -> str:

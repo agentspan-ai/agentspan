@@ -5,7 +5,7 @@ The OpenAI Agent format is natively recognized. Swap `run()` for `runtime.run()`
 ## Before / After
 
 <table>
-<tr><th>Before (vanilla OpenAI Agents)</th><th>After (agentspan)</th></tr>
+<tr><th>Before (vanilla OpenAI Agents)</th><th>After (Agentspan)</th></tr>
 <tr><td>
 
 ```typescript
@@ -47,7 +47,7 @@ import { Agent, tool, setTracingDisabled }
   from '@openai/agents';
 // ^^^ replace run() with setTracingDisabled
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 // ^^^ add agentspan import
 
 const getWeather = tool({
@@ -86,7 +86,7 @@ await runtime.shutdown();
 
 | What | Change |
 |------|--------|
-| **Imports** | Drop `run` from `@openai/agents`, add `AgentRuntime` from `@agentspan-ai/sdk` |
+| **Imports** | Drop `run` from `@openai/agents`, add `AgentRuntime` from `@conductoross/conductor-agent-sdk` |
 | **Agent** | No changes — same `new Agent({ ... })` |
 | **Tools** | No changes — same `tool({ ... })` |
 | **Execution** | `run(agent, prompt)` → `runtime.run(agent, prompt)` |

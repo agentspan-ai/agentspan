@@ -68,11 +68,11 @@ If you want to copy an example into a separate project after `npm install`, swit
 its imports to the published package:
 
 ```bash
-npm install @agentspan-ai/sdk zod
+npm install @conductoross/conductor-agent-sdk zod
 ```
 
 ```ts
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 ```
 
 The files under `examples/` are not copy/paste-ready as-is because they import the
@@ -121,7 +121,7 @@ The `AGENTSPAN_LLM_MODEL` variable uses the `provider/model-name` format. Exampl
 
 | Provider | Model string | API key env var |
 |----------|-------------|-----------------|
-| OpenAI | `openai/gpt-4o-mini` (default) | `OPENAI_API_KEY` |
+| OpenAI | `anthropic/claude-sonnet-4-6` (default) | `OPENAI_API_KEY` |
 | Anthropic | `anthropic/claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
 | Google Gemini | `google_gemini/gemini-2.0-flash` | `GOOGLE_GEMINI_API_KEY` |
 | AWS Bedrock | `aws_bedrock/...` | AWS credentials |

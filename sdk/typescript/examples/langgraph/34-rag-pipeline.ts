@@ -12,7 +12,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -171,26 +171,24 @@ function decideToGenerate(state: State): string {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(RAGState);
-builder.addNode('retrieve', retrieve);
-builder.addNode('grade', gradeDocuments);
-builder.addNode('rewrite', rewriteQuestion);
-builder.addNode('generate', generateAnswer);
-
-builder.addEdge(START, 'retrieve');
-builder.addEdge('retrieve', 'grade');
-builder.addConditionalEdges('grade', decideToGenerate, {
-  generate: 'generate',
-  rewrite: 'rewrite',
-});
-builder.addEdge('rewrite', 'retrieve');
-builder.addEdge('generate', END);
-
-const graph = builder.compile({ name: "rag_pipeline" });
+const graph = new StateGraph(RAGState)
+  .addNode('retrieve', retrieve)
+  .addNode('grade', gradeDocuments)
+  .addNode('rewrite', rewriteQuestion)
+  .addNode('generate', generateAnswer)
+  .addEdge(START, 'retrieve')
+  .addEdge('retrieve', 'grade')
+  .addConditionalEdges('grade', decideToGenerate, {
+    generate: 'generate',
+    rewrite: 'rewrite',
+  })
+  .addEdge('rewrite', 'retrieve')
+  .addEdge('generate', END)
+  .compile({ name: "rag_pipeline" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

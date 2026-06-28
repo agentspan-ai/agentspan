@@ -12,7 +12,7 @@
   ],
   "instructions": "You are a customer support assistant. Use the available tools to answer questions about orders and customers. Always include all details from the tool results in your response.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "support_agent",
   "timeoutSeconds": 0,
   "tools": [

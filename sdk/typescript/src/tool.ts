@@ -803,6 +803,48 @@ export function indexTool(opts: IndexToolOptions): ToolDef {
   );
 }
 
+// ── waitForMessageTool ────────────────────────────────────
+
+export interface WaitForMessageToolOptions {
+  name: string;
+  description: string;
+  /** Maximum number of messages to dequeue per invocation (server cap is 100, default 1). */
+  batchSize?: number;
+  /** If true (default), the task blocks until at least one message is available. */
+  blocking?: boolean;
+}
+
+/**
+ * Create a tool that dequeues messages from the Workflow Message Queue
+ * (Conductor `PULL_WORKFLOW_MESSAGES` task).
+ *
+ * When the LLM calls this tool, the workflow dequeues up to `batchSize`
+ * messages from its WMQ. No worker process is needed — the Conductor server
+ * handles the `PULL_WORKFLOW_MESSAGES` task directly.
+ *
+ * In **blocking** mode (default), the task stays IN_PROGRESS while the queue
+ * is empty and completes once messages arrive. In **non-blocking** mode, the
+ * task returns immediately with whatever messages are in the queue.
+ *
+ * Use {@link AgentRuntime.sendMessage} from outside the workflow to push a
+ * message into the queue.
+ */
+export function waitForMessageTool(opts: WaitForMessageToolOptions): ToolDef {
+  const batchSize = opts.batchSize ?? 1;
+  const blocking = opts.blocking ?? true;
+
+  const config: Record<string, unknown> = { batchSize };
+  if (!blocking) config.blocking = false;
+
+  return serverTool(
+    "pull_workflow_messages",
+    opts.name,
+    opts.description,
+    { type: "object", properties: {} },
+    config,
+  );
+}
+
 // ── @Tool decorator ───────────────────────────────────────
 
 const TOOL_DECORATOR_KEY = Symbol("TOOL_DECORATOR");

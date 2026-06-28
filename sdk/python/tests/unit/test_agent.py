@@ -5,7 +5,7 @@
 
 import pytest
 
-from agentspan.agents.agent import Agent
+from conductor.ai.agents.agent import Agent
 
 
 class TestAgentCreation:
@@ -37,7 +37,7 @@ class TestAgentCreation:
         assert agent.instructions() == "Dynamic instructions"
 
     def test_agent_with_tools(self):
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.tool import tool
 
         @tool
         def my_tool(x: str) -> str:
@@ -108,7 +108,7 @@ class TestAgentCreation:
         assert agent.max_turns == 4
 
     def test_termination_param(self):
-        from agentspan.agents.termination import TextMentionTermination
+        from conductor.ai.agents.termination import TextMentionTermination
 
         cond = TextMentionTermination("DONE")
         agent = Agent(name="test", model="openai/gpt-4o", termination=cond)
@@ -165,7 +165,7 @@ class TestAgentRepr:
         assert "openai/gpt-4o" in repr(agent)
 
     def test_repr_with_tools(self):
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.tool import tool
 
         @tool
         def t(x: str) -> str:
@@ -189,7 +189,7 @@ class TestPromptTemplate:
     """Test the PromptTemplate dataclass."""
 
     def test_basic_creation(self):
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         t = PromptTemplate("my-prompt")
         assert t.name == "my-prompt"
@@ -197,7 +197,7 @@ class TestPromptTemplate:
         assert t.version is None
 
     def test_with_variables_and_version(self):
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         t = PromptTemplate("support-v2", variables={"company": "Acme"}, version=3)
         assert t.name == "support-v2"
@@ -205,14 +205,14 @@ class TestPromptTemplate:
         assert t.version == 3
 
     def test_is_frozen(self):
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         t = PromptTemplate("test")
         with pytest.raises(AttributeError):
             t.name = "changed"
 
     def test_agent_accepts_prompt_template(self):
-        from agentspan.agents.agent import PromptTemplate
+        from conductor.ai.agents.agent import PromptTemplate
 
         t = PromptTemplate("my-instructions", variables={"tone": "formal"})
         agent = Agent(name="test", model="openai/gpt-4o", instructions=t)
@@ -220,7 +220,7 @@ class TestPromptTemplate:
         assert agent.instructions.name == "my-instructions"
 
     def test_import_from_init(self):
-        from agentspan.agents import PromptTemplate
+        from conductor.ai.agents import PromptTemplate
 
         t = PromptTemplate("test")
         assert t.name == "test"
@@ -348,7 +348,7 @@ class TestScatterGather:
     """Test the scatter_gather() convenience helper."""
 
     def test_creates_agent_with_agent_tool(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="researcher", model="openai/gpt-4o")
         coord = scatter_gather("coordinator", worker)
@@ -358,7 +358,7 @@ class TestScatterGather:
         assert coord.tools[0].name == "researcher"
 
     def test_instructions_include_decomposition_prefix(self):
-        from agentspan.agents.agent import _SCATTER_GATHER_PREFIX, scatter_gather
+        from conductor.ai.agents.agent import _SCATTER_GATHER_PREFIX, scatter_gather
 
         worker = Agent(name="worker", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker, instructions="Be concise.")
@@ -367,8 +367,8 @@ class TestScatterGather:
         assert "Be concise." in coord.instructions
 
     def test_extra_tools_included(self):
-        from agentspan.agents.agent import scatter_gather
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.agent import scatter_gather
+        from conductor.ai.agents.tool import tool
 
         @tool
         def helper(x: str) -> str:
@@ -382,21 +382,21 @@ class TestScatterGather:
         assert coord.tools[0].name == "w"
 
     def test_model_inherited_from_worker(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="w", model="anthropic/claude-sonnet")
         coord = scatter_gather("coord", worker)
         assert coord.model == "anthropic/claude-sonnet"
 
     def test_model_override(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="w", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker, model="anthropic/claude-sonnet")
         assert coord.model == "anthropic/claude-sonnet"
 
     def test_kwargs_forwarded(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="w", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker, max_turns=10, temperature=0.5)
@@ -404,7 +404,7 @@ class TestScatterGather:
         assert coord.temperature == 0.5
 
     def test_retry_config_passed_to_agent_tool(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="w", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker, retry_count=5, retry_delay_seconds=10)
@@ -413,7 +413,7 @@ class TestScatterGather:
         assert worker_tool.config["retryDelaySeconds"] == 10
 
     def test_fail_fast_sets_optional_false(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="w", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker, fail_fast=True)
@@ -421,7 +421,7 @@ class TestScatterGather:
         assert worker_tool.config["optional"] is False
 
     def test_default_is_not_fail_fast(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="w", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker)
@@ -430,14 +430,14 @@ class TestScatterGather:
         assert "optional" not in worker_tool.config
 
     def test_default_timeout_300(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="w", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker)
         assert coord.timeout_seconds == 300
 
     def test_timeout_override(self):
-        from agentspan.agents.agent import scatter_gather
+        from conductor.ai.agents.agent import scatter_gather
 
         worker = Agent(name="w", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker, timeout_seconds=600)
@@ -448,13 +448,13 @@ class TestAgentCredentials:
     """Agent credentials param and CLI auto-mapping."""
 
     def test_credentials_defaults_to_empty_list(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         a = Agent(name="test_agent", model="openai/gpt-4o")
         assert a.credentials == []
 
     def test_explicit_credentials_stored(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         a = Agent(
             name="test_agent",
@@ -466,7 +466,7 @@ class TestAgentCredentials:
 
     def test_cli_allowed_commands_without_credentials_stays_empty(self):
         """CLI commands without explicit credentials produce empty credentials list."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         a = Agent(
             name="test_agent",
@@ -478,7 +478,7 @@ class TestAgentCredentials:
 
     def test_cli_allowed_commands_with_explicit_credentials(self):
         """Explicit credentials are required — no auto-mapping from CLI commands."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         a = Agent(
             name="test_agent",
@@ -492,7 +492,7 @@ class TestAgentCredentials:
 
     def test_terraform_without_credentials_allowed(self):
         """terraform in cli_allowed_commands without credentials is allowed (no auto-mapping)."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         a = Agent(
             name="test_agent",
@@ -504,7 +504,7 @@ class TestAgentCredentials:
 
     def test_terraform_with_explicit_credentials_does_not_raise(self):
         """terraform is fine when explicit credentials are declared."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         # Should not raise
         a = Agent(
@@ -518,7 +518,7 @@ class TestAgentCredentials:
 
     def test_commands_not_in_map_are_ignored_gracefully(self):
         """CLI commands like mktemp, rm not in map produce no credentials (no error)."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         a = Agent(
             name="test_agent",
@@ -531,7 +531,7 @@ class TestAgentCredentials:
 
     def test_explicit_credentials_override_automapping(self):
         """When explicit credentials provided, auto-mapping is not applied."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         a = Agent(
             name="test_agent",
@@ -561,7 +561,7 @@ class TestMaskedFields:
         assert agent.masked_fields == ["ssn", "api_key", "password"]
 
     def test_masked_fields_serialized(self):
-        from agentspan.agents.config_serializer import AgentConfigSerializer
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
         agent = Agent(
             name="pii_agent",
@@ -573,7 +573,7 @@ class TestMaskedFields:
         assert config["maskedFields"] == ["ssn", "credit_card"]
 
     def test_no_masked_fields_omitted_from_serialization(self):
-        from agentspan.agents.config_serializer import AgentConfigSerializer
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
         agent = Agent(name="b", model="openai/gpt-4o")
         config = AgentConfigSerializer().serialize(agent)

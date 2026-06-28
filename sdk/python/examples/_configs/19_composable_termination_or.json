@@ -2,7 +2,7 @@
   "external": false,
   "instructions": "Have a conversation. Say GOODBYE when you're finished.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "chatbot",
   "termination": {
     "conditions": [

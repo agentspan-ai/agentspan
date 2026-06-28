@@ -19,7 +19,7 @@ import sys
 from langchain_core.messages import HumanMessage, AIMessageChunk, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, streaming=True)
 

@@ -12,7 +12,7 @@
  *   - gh CLI installed
  */
 
-import { Agent, AgentRuntime, OnTextMention, TextGate } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, OnTextMention, TextGate } from '@conductoross/conductor-agent-sdk';
 
 const REPO = 'agentspan-ai/codingexamples';
 const MODEL = 'anthropic/claude-sonnet-4-6';

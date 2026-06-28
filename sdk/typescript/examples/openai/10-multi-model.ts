@@ -15,7 +15,7 @@
 
 import { Agent, tool, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 setTracingDisabled(true);
 

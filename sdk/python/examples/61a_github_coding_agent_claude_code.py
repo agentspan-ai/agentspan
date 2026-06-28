@@ -30,9 +30,9 @@ Requirements:
     - Claude Code SDK installed (pip install claude-code-sdk)
 """
 
-from agentspan.agents import Agent, AgentRuntime, ClaudeCode
-from agentspan.agents.cli_config import CliConfig
-from agentspan.agents.gate import TextGate
+from conductor.ai.agents import Agent, AgentRuntime, ClaudeCode
+from conductor.ai.agents.cli_config import CliConfig
+from conductor.ai.agents.gate import TextGate
 
 REPO = "agentspan-ai/codingexamples"
 MODEL = "anthropic/claude-sonnet-4-6"

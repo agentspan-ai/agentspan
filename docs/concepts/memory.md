@@ -10,8 +10,8 @@ Agentspan provides two memory systems: **ConversationMemory** for managing chat 
 ## Import
 
 ```python
-from agentspan.agents import Agent, ConversationMemory
-from agentspan.agents.semantic_memory import SemanticMemory
+from conductor.ai.agents import Agent, ConversationMemory
+from conductor.ai.agents.semantic_memory import SemanticMemory
 ```
 
 ## ConversationMemory
@@ -19,7 +19,7 @@ from agentspan.agents.semantic_memory import SemanticMemory
 Manages chat history as a list of messages. Messages are prepended to the LLM's message list at compile time, giving the LLM context from previous interactions.
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, ConversationMemory
+from conductor.ai.agents import Agent, AgentRuntime, ConversationMemory
 
 memory = ConversationMemory(max_messages=100)
 
@@ -69,7 +69,7 @@ When `max_messages` is set and the message count exceeds it:
 Long-term memory with similarity-based retrieval. Stores facts, preferences, and knowledge recalled by relevance to the current query.
 
 ```python
-from agentspan.agents.semantic_memory import SemanticMemory
+from conductor.ai.agents.semantic_memory import SemanticMemory
 
 memory = SemanticMemory(max_results=3)
 
@@ -106,8 +106,8 @@ context = memory.get_context("What plan am I on?")
 The agent decides when to search and what to query:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
-from agentspan.agents.semantic_memory import SemanticMemory
+from conductor.ai.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents.semantic_memory import SemanticMemory
 
 memory = SemanticMemory(max_results=3)
 memory.add("User prefers Python over JavaScript")
@@ -150,7 +150,7 @@ The default `InMemoryStore` uses Jaccard similarity. Non-persistent — suitable
 For production, implement `MemoryStore`:
 
 ```python
-from agentspan.agents.semantic_memory import MemoryStore, MemoryEntry, SemanticMemory
+from conductor.ai.agents.semantic_memory import MemoryStore, MemoryEntry, SemanticMemory
 
 class PineconeStore(MemoryStore):
     def __init__(self, index_name: str, api_key: str):

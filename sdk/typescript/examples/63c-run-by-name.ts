@@ -12,7 +12,7 @@
  */
 
 import { docAssistant } from './63-deploy.js';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const runtime = new AgentRuntime();
 try {

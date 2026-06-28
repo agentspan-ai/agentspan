@@ -1,10 +1,10 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License.
 
-using Agentspan;
+using Conductor.AI;
 using Xunit;
 
-namespace Agentspan.OpenAI.Tests;
+namespace Conductor.AI.OpenAI.Tests;
 
 /// <summary>
 /// Unit tests for <see cref="CliTool.Tokenize"/> — the command-line tokenizer

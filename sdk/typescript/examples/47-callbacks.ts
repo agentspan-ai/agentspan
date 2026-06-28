@@ -1,8 +1,8 @@
 /**
- * 47 - Callbacks — lifecycle hooks before and after LLM calls.
+ * 47 - Callbacks — composable lifecycle hooks around LLM and tool calls.
  *
- * Demonstrates using `beforeModelCallback` and `afterModelCallback`
- * to intercept and inspect LLM interactions.
+ * Demonstrates a `CallbackHandler` subclass (passed via `callbacks: [...]`)
+ * to intercept and inspect agent/model/tool lifecycle events.
  *
  * Requirements:
  *   - Conductor server with callback support
@@ -10,21 +10,24 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, CallbackHandler, tool } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
-// -- Callback functions ------------------------------------------------------
+// -- Callback handler --------------------------------------------------------
 
-function logBeforeModel(kwargs: { messages?: unknown[] }): Record<string, unknown> {
-  const msgCount = kwargs.messages?.length ?? 0;
-  console.log(`  [before_model] Sending ${msgCount} messages to LLM`);
-  return {}; // Continue to LLM
-}
+class MonitorCallbacks extends CallbackHandler {
+  async onModelStart(agentName: string, messages: unknown[]): Promise<void> {
+    console.log(`  [before_model] ${agentName}: sending ${messages.length} messages to LLM`);
+  }
 
-function inspectAfterModel(kwargs: { llmResult?: string }): Record<string, unknown> {
-  const length = kwargs.llmResult?.length ?? 0;
-  console.log(`  [after_model] LLM returned ${length} characters`);
-  return {}; // Keep original response
+  async onModelEnd(agentName: string, response: unknown): Promise<void> {
+    const length = typeof response === 'string' ? response.length : JSON.stringify(response ?? '').length;
+    console.log(`  [after_model] ${agentName}: LLM returned ${length} characters`);
+  }
+
+  async onToolStart(agentName: string, toolName: string, args: unknown): Promise<void> {
+    console.log(`  [before_tool] ${agentName}: calling ${toolName}(${JSON.stringify(args)})`);
+  }
 }
 
 // -- Tool --------------------------------------------------------------------
@@ -62,8 +65,7 @@ export const agent = new Agent({
   model: llmModel,
   instructions: 'You are a helpful assistant. Use get_facts when asked about topics.',
   tools: [getFacts],
-  beforeModelCallback: logBeforeModel,
-  afterModelCallback: inspectAfterModel,
+  callbacks: [new MonitorCallbacks()],
 });
 
 // -- Run ---------------------------------------------------------------------

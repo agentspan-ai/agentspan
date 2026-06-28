@@ -10,15 +10,15 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
-import type { ToolContext } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool } from '@conductoross/conductor-agent-sdk';
+import type { ToolContext } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
 
 const addItem = tool(
   async (args: { item: string }, context?: ToolContext) => {
-    const items: string[] = context?.state?.shopping_list ?? [];
+    const items = (context?.state?.shopping_list as string[] | undefined) ?? [];
     items.push(args.item);
     if (context?.state) {
       context.state.shopping_list = items;
@@ -40,7 +40,7 @@ const addItem = tool(
 
 const getList = tool(
   async (_args: Record<string, never>, context?: ToolContext) => {
-    const items: string[] = context?.state?.shopping_list ?? [];
+    const items = (context?.state?.shopping_list as string[] | undefined) ?? [];
     return { items, total_items: items.length };
   },
   {

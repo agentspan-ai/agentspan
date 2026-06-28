@@ -16,7 +16,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -105,26 +105,24 @@ async function reviseEmail(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(EmailState);
-builder.addNode('draft_node', draftEmail);
-builder.addNode('review', reviewEmail);
-builder.addNode('finalize', finalize);
-builder.addNode('revise', reviseEmail);
-
-builder.addEdge(START, 'draft_node');
-builder.addEdge('draft_node', 'review');
-builder.addConditionalEdges('review', routeAfterReview, {
-  finalize: 'finalize',
-  revise: 'revise',
-});
-builder.addEdge('finalize', END);
-builder.addEdge('revise', END);
-
-const graph = builder.compile({ name: "email_hitl_agent" });
+const graph = new StateGraph(EmailState)
+  .addNode('draft_node', draftEmail)
+  .addNode('review', reviewEmail)
+  .addNode('finalize', finalize)
+  .addNode('revise', reviseEmail)
+  .addEdge(START, 'draft_node')
+  .addEdge('draft_node', 'review')
+  .addConditionalEdges('review', routeAfterReview, {
+    finalize: 'finalize',
+    revise: 'revise',
+  })
+  .addEdge('finalize', END)
+  .addEdge('revise', END)
+  .compile({ name: "email_hitl_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

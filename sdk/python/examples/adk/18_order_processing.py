@@ -11,7 +11,7 @@ complete order lifecycle: search, cart, pricing, and order placement.
 
 from google.adk.agents import Agent
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

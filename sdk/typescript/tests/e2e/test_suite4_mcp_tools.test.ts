@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime, mcpTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, mcpTool } from '@conductoross/conductor-agent-sdk';
 import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import {
   checkServerHealth,
@@ -46,7 +46,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  credentialDelete(CRED_NAME);
+  await credentialDelete(CRED_NAME);
   await runtime.shutdown();
 });
 
@@ -189,7 +189,7 @@ describe('Suite 4: MCP Tools', { timeout: 600_000 }, () => {
       serverProc = startMcpServer(MCP_PORT, MCP_AUTH_KEY);
 
       // Auth agent
-      credentialSet(CRED_NAME, MCP_AUTH_KEY);
+      await credentialSet(CRED_NAME, MCP_AUTH_KEY);
 
       const authAgent = new Agent({
         name: 'e2e_ts_mcp_auth',

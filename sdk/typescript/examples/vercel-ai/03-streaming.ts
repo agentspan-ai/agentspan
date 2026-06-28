@@ -7,7 +7,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ── Vercel AI SDK tool ───────────────────────────────────
 const weatherTool = aiTool({
@@ -23,7 +23,7 @@ const weatherTool = aiTool({
 // ── Native Agent ─────────────────────────────────────────
 export const agent = new Agent({
   name: 'streaming_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'You are a helpful assistant. Use tools when relevant.',
   tools: [weatherTool],
 });

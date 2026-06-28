@@ -14,7 +14,7 @@
  *   - /dg skill installed (https://github.com/v1r3n/dinesh-gilfoyle)
  */
 
-import { Agent, AgentRuntime, agentTool, skill } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, agentTool, skill } from '@conductoross/conductor-agent-sdk';
 import { llmModel, secondaryLlmModel } from './settings';
 
 // ── Load /dg skill as an Agent ─────────────────────────────────────

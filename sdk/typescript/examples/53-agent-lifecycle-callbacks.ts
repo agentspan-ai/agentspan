@@ -11,7 +11,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, CallbackHandler, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, CallbackHandler, tool } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Handler 1: Timing -------------------------------------------------------
@@ -19,12 +19,12 @@ import { llmModel } from './settings';
 class TimingHandler extends CallbackHandler {
   private t0 = 0;
 
-  onAgentStart(_kwargs: Record<string, unknown>) {
+  async onAgentStart(_agentName: string, _prompt: string): Promise<void> {
     this.t0 = Date.now();
     console.log('  [timing] Agent started');
   }
 
-  onAgentEnd(_kwargs: Record<string, unknown>) {
+  async onAgentEnd(_agentName: string, _result: unknown): Promise<void> {
     const elapsed = ((Date.now() - this.t0) / 1000).toFixed(2);
     console.log(`  [timing] Agent finished -- ${elapsed}s`);
   }
@@ -33,21 +33,21 @@ class TimingHandler extends CallbackHandler {
 // -- Handler 2: Logging ------------------------------------------------------
 
 class LoggingHandler extends CallbackHandler {
-  onModelStart(kwargs: { messages?: unknown[] }) {
-    console.log(`  [log] Sending ${(kwargs.messages ?? []).length} messages to LLM`);
+  async onModelStart(_agentName: string, messages: unknown[]): Promise<void> {
+    console.log(`  [log] Sending ${(messages ?? []).length} messages to LLM`);
   }
 
-  onModelEnd(kwargs: { llmResult?: string }) {
-    const snippet = (kwargs.llmResult ?? '').slice(0, 80);
+  async onModelEnd(_agentName: string, response: unknown): Promise<void> {
+    const snippet = String(response ?? '').slice(0, 80);
     console.log(`  [log] LLM responded: "${snippet}"`);
   }
 
-  onToolStart(_kwargs: Record<string, unknown>) {
-    console.log('  [log] Tool executing...');
+  async onToolStart(_agentName: string, toolName: string, _args: unknown): Promise<void> {
+    console.log(`  [log] Tool executing: ${toolName}...`);
   }
 
-  onToolEnd(_kwargs: Record<string, unknown>) {
-    console.log('  [log] Tool finished');
+  async onToolEnd(_agentName: string, toolName: string, _result: unknown): Promise<void> {
+    console.log(`  [log] Tool finished: ${toolName}`);
   }
 }
 

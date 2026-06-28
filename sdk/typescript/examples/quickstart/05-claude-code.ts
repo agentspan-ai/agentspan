@@ -2,7 +2,7 @@
  * Claude Code agent — uses Claude's built-in tools (Read, Glob, Grep).
  */
 
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 export const agent = new Agent({
   name: 'code_explorer',

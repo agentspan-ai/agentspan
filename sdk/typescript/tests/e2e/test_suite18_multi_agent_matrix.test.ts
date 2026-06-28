@@ -17,8 +17,8 @@ import {
   OnTextMention,
   TextGate,
   TERMINAL_STATUSES,
-} from '@agentspan-ai/sdk';
-import type { AgentHandle, AgentResult } from '@agentspan-ai/sdk';
+} from '@conductoross/conductor-agent-sdk';
+import type { AgentHandle, AgentResult } from '@conductoross/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

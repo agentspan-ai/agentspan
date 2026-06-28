@@ -257,53 +257,9 @@ public class AgentHandle {
         List<Map<String, Object>> toolCalls = new ArrayList<>();
         try {
             Workflow workflow = workflowClient.getWorkflow(executionId, true);
-            List<Task> tasks = workflow != null ? workflow.getTasks() : List.of();
-            int promptT = 0, completionT = 0, totalT = 0;
-            boolean sawTokens = false;
-            for (Task task : tasks) {
-                String taskType = task.getTaskType();
-                Map<String, Object> outputData = task.getOutputData();
-
-                // LLM task — aggregate tokens
-                if ("LLM_CHAT_COMPLETE".equals(taskType) && outputData != null) {
-                    promptT += toInt(outputData.get("promptTokens"));
-                    completionT += toInt(outputData.get("completionTokens"));
-                    totalT += toInt(outputData.get("tokenUsed"));
-                    sawTokens = true;
-                    continue;
-                }
-
-                // Tool worker task — capture name, input args (stripping
-                // internal Agentspan context), and output result.
-                // referenceTaskName starts with "call_" for LLM-dispatched tool calls.
-                String refName = task.getReferenceTaskName();
-                if (refName != null && refName.startsWith("call_") && outputData != null) {
-                    Map<String, Object> tc = new LinkedHashMap<>();
-                    tc.put("name", taskType);
-                    Map<String, Object> inputData = task.getInputData();
-                    if (inputData != null) {
-                        Map<String, Object> cleaned = new LinkedHashMap<>();
-                        for (Map.Entry<String, Object> e : inputData.entrySet()) {
-                            String k = e.getKey();
-                            if (k.startsWith("_")
-                                    || "method".equals(k)
-                                    || "__agentspan_ctx__".equals(k)
-                                    || "evaluatorType".equals(k)
-                                    || "expression".equals(k)
-                                    || "ctx".equals(k)
-                                    || "workerTag".equals(k)
-                                    || "agentConfig".equals(k)) continue;
-                            cleaned.put(k, e.getValue());
-                        }
-                        tc.put("args", cleaned);
-                    }
-                    tc.put("result", outputData.get("result"));
-                    toolCalls.add(tc);
-                }
-            }
-            if (sawTokens) {
-                tokenUsage = new TokenUsage(promptT, completionT, totalT);
-            }
+            TaskExtract extract = extractFromTasks(workflow);
+            tokenUsage = extract.tokenUsage;
+            toolCalls = extract.toolCalls;
         } catch (Exception e) {
             logger.debug("Could not extract tokens/toolCalls for {}: {}", executionId, e.getMessage());
         }
@@ -311,7 +267,111 @@ public class AgentHandle {
         return new AgentResult(output, executionId, status, toolCalls, null, tokenUsage, error);
     }
 
-    private int toInt(Object value) {
+    /** Bundles the token usage + tool calls walked out of a workflow's tasks. */
+    private static final class TaskExtract {
+        TokenUsage tokenUsage;
+        List<Map<String, Object>> toolCalls = new ArrayList<>();
+    }
+
+    /**
+     * Walk a workflow's tasks once and aggregate token usage (from
+     * {@code LLM_CHAT_COMPLETE} tasks) and tool calls (from {@code call_*}
+     * worker tasks). Shared by both {@link #buildResult} and
+     * {@link #fromWorkflow(Workflow)} so the extraction lives in one place.
+     */
+    private static TaskExtract extractFromTasks(Workflow workflow) {
+        TaskExtract out = new TaskExtract();
+        List<Task> tasks = workflow != null && workflow.getTasks() != null ? workflow.getTasks() : List.of();
+        int promptT = 0, completionT = 0, totalT = 0;
+        boolean sawTokens = false;
+        for (Task task : tasks) {
+            String taskType = task.getTaskType();
+            Map<String, Object> outputData = task.getOutputData();
+
+            // LLM task — aggregate tokens
+            if ("LLM_CHAT_COMPLETE".equals(taskType) && outputData != null) {
+                promptT += toInt(outputData.get("promptTokens"));
+                completionT += toInt(outputData.get("completionTokens"));
+                totalT += toInt(outputData.get("tokenUsed"));
+                sawTokens = true;
+                continue;
+            }
+
+            // Tool worker task — capture name, input args (stripping
+            // internal Agentspan context), and output result.
+            // referenceTaskName starts with "call_" for LLM-dispatched tool calls.
+            String refName = task.getReferenceTaskName();
+            if (refName != null && refName.startsWith("call_") && outputData != null) {
+                Map<String, Object> tc = new LinkedHashMap<>();
+                tc.put("name", taskType);
+                Map<String, Object> inputData = task.getInputData();
+                if (inputData != null) {
+                    Map<String, Object> cleaned = new LinkedHashMap<>();
+                    for (Map.Entry<String, Object> e : inputData.entrySet()) {
+                        String k = e.getKey();
+                        if (k.startsWith("_")
+                                || "method".equals(k)
+                                || "__agentspan_ctx__".equals(k)
+                                || "evaluatorType".equals(k)
+                                || "expression".equals(k)
+                                || "ctx".equals(k)
+                                || "workerTag".equals(k)
+                                || "agentConfig".equals(k)) continue;
+                        cleaned.put(k, e.getValue());
+                    }
+                    tc.put("args", cleaned);
+                }
+                tc.put("result", outputData.get("result"));
+                out.toolCalls.add(tc);
+            }
+        }
+        if (sawTokens) {
+            out.tokenUsage = new TokenUsage(promptT, completionT, totalT);
+        }
+        return out;
+    }
+
+    /**
+     * Build an {@link AgentResult} from a terminal {@link Workflow}.
+     *
+     * <p>Shared workflow → {@link AgentResult} extraction used by callers that
+     * already hold a completed {@link Workflow} (e.g. the scheduler's
+     * {@code runNowAndWait}). Maps the workflow status to an {@link AgentStatus},
+     * normalizes the output map, surfaces {@code reasonForIncompletion} as the
+     * error for non-completed runs, and reuses {@link #extractFromTasks} for the
+     * token-usage and tool-call aggregation.
+     *
+     * @param workflow a finished (or at least populated) workflow; may be null
+     * @return the equivalent {@link AgentResult}
+     */
+    public static AgentResult fromWorkflow(Workflow workflow) {
+        String executionId = workflow != null ? workflow.getWorkflowId() : null;
+
+        Workflow.WorkflowStatus wfStatus = workflow != null ? workflow.getStatus() : null;
+        AgentStatus status;
+        try {
+            status = wfStatus != null ? AgentStatus.valueOf(wfStatus.name()) : AgentStatus.FAILED;
+        } catch (IllegalArgumentException e) {
+            status = AgentStatus.FAILED;
+        }
+
+        String error = null;
+        if (status != AgentStatus.COMPLETED && workflow != null) {
+            error = workflow.getReasonForIncompletion();
+        }
+
+        Object output = workflow != null ? workflow.getOutput() : null;
+        if (output == null) {
+            output = java.util.Collections.singletonMap("result", (Object) null);
+        } else if (!(output instanceof Map)) {
+            output = java.util.Collections.singletonMap("result", output);
+        }
+
+        TaskExtract extract = extractFromTasks(workflow);
+        return new AgentResult(output, executionId, status, extract.toolCalls, null, extract.tokenUsage, error);
+    }
+
+    private static int toInt(Object value) {
         if (value == null) return 0;
         if (value instanceof Number) return ((Number) value).intValue();
         try {

@@ -14,9 +14,9 @@
 using System;
 using System.Collections.Generic;
 using Xunit;
-using Agentspan.Plans;
+using Conductor.AI.Plans;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 public sealed class Plans_OpTests
 {

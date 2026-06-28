@@ -56,7 +56,7 @@ os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from settings import settings
 
-from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
+from conductor.ai.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 
 # Filesystem IPC between main process and worker processes (separate OS PIDs).
 _ipc_dir = Path(tempfile.mkdtemp(prefix="live_dashboard_"))

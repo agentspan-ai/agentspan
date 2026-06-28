@@ -22,7 +22,7 @@
  *   - MCP_API_KEY stored via CLI or Agentspan UI
  */
 
-import { Agent, AgentRuntime, mcpTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, mcpTool } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // MCP tool with credential-bearing headers.

@@ -1,12 +1,12 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for agentspan.agents.testing.assertions."""
+"""Tests for conductor.ai.agents.testing.assertions."""
 
 import pytest
 
-from agentspan.agents.result import AgentEvent, AgentResult, EventType
-from agentspan.agents.testing.assertions import (
+from conductor.ai.agents.result import AgentEvent, AgentResult, EventType
+from conductor.ai.agents.testing.assertions import (
     assert_agent_ran,
     assert_event_sequence,
     assert_events_contain,

@@ -18,8 +18,8 @@ from unittest.mock import patch
 
 import pytest
 
-from agentspan.agents.runtime.config import AgentConfig
-from agentspan.agents.runtime.runtime import AgentRuntime
+from conductor.ai.agents.runtime.config import AgentConfig
+from conductor.ai.agents.runtime.runtime import AgentRuntime
 
 # ── Mock SSE Server ─────────────────────────────────────────────────
 
@@ -399,7 +399,7 @@ class TestStreamSSEAuth:
     def test_auth_key_secret_mints_x_authorization(self):
         """auth_key/auth_secret are exchanged for a JWT via POST /token (the
         secured-host contract, e.g. orkes) and sent as X-Authorization."""
-        from agentspan.agents._internal.token_utils import _TOKEN_CACHE
+        from conductor.ai.agents._internal.token_utils import _TOKEN_CACHE
 
         scenario = {
             "events": [

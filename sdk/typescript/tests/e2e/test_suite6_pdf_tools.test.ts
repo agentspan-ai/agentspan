@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime, pdfTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, pdfTool } from '@conductoross/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

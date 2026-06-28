@@ -2,7 +2,7 @@
  * Google ADK Agent with Structured Output -- enforced JSON schema response.
  *
  * Demonstrates:
- *   - Using outputSchema (Zod) for structured, validated responses
+ *   - Using outputSchema (Zod converted via zodObjectToSchema) for structured, validated responses
  *   - Generation config for controlling model behavior
  *   - The server normalizer maps ADK's outputSchema to AgentConfig.outputType
  *
@@ -11,9 +11,9 @@
  *   - AGENTSPAN_SERVER_URL for agentspan path
  */
 
-import { LlmAgent } from '@google/adk';
+import { LlmAgent, zodObjectToSchema } from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
@@ -50,7 +50,7 @@ export const agent = new LlmAgent({
     'You are a professional chef assistant. When asked for a recipe, ' +
     'provide a complete, well-structured recipe with precise measurements, ' +
     'clear step-by-step instructions, and accurate timing.',
-  outputSchema: RecipeSchema,
+  outputSchema: zodObjectToSchema(RecipeSchema),
   generateContentConfig: {
     temperature: 0.3,
   },

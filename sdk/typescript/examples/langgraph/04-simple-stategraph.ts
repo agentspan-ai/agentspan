@@ -19,7 +19,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -76,21 +76,20 @@ async function generate_answer(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph (same structure as Python: validate → refine → answer)
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(QueryState);
-builder.addNode('validate', validate_query);
-builder.addNode('refine', refine_query);
-builder.addNode('answer', generate_answer);
-builder.addEdge(START, 'validate');
-builder.addEdge('validate', 'refine');
-builder.addEdge('refine', 'answer');
-builder.addEdge('answer', END);
-
-const graph = builder.compile({ name: "query_pipeline" });
+const graph = new StateGraph(QueryState)
+  .addNode('validate', validate_query)
+  .addNode('refine', refine_query)
+  .addNode('answer', generate_answer)
+  .addEdge(START, 'validate')
+  .addEdge('validate', 'refine')
+  .addEdge('refine', 'answer')
+  .addEdge('answer', END)
+  .compile({ name: "query_pipeline" });
 
 // Add agentspan metadata for graph-structure extraction.
 // Do NOT set tools on StateGraphs — only model + framework.
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

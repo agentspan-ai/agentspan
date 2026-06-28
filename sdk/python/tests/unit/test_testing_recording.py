@@ -1,12 +1,12 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for agentspan.agents.testing.recording."""
+"""Tests for conductor.ai.agents.testing.recording."""
 
 import json
 
-from agentspan.agents.result import AgentEvent, AgentResult, EventType, TokenUsage
-from agentspan.agents.testing.recording import record, replay
+from conductor.ai.agents.result import AgentEvent, AgentResult, EventType, TokenUsage
+from conductor.ai.agents.testing.recording import record, replay
 
 
 def _make_result():

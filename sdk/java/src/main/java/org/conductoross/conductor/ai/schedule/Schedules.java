@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Set;
 
 import org.conductoross.conductor.ai.exceptions.AgentAPIException;
+import org.conductoross.conductor.ai.model.AgentHandle;
+import org.conductoross.conductor.ai.model.AgentResult;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.netflix.conductor.client.exception.ConductorClientException;
@@ -20,6 +22,7 @@ import com.netflix.conductor.client.http.ConductorClientRequest;
 import com.netflix.conductor.client.http.ConductorClientRequest.Method;
 import com.netflix.conductor.client.http.WorkflowClient;
 import com.netflix.conductor.common.metadata.workflow.StartWorkflowRequest;
+import com.netflix.conductor.common.run.Workflow;
 
 /**
  * Lifecycle API for cron-based agent schedules. Obtained via {@code runtime.schedules()}.
@@ -48,6 +51,12 @@ public class Schedules {
     public Schedules(ConductorClient conductorClient) {
         this.client = conductorClient;
         this.workflowClient = new WorkflowClient(conductorClient);
+    }
+
+    /** Test seam: inject a {@link WorkflowClient} so {@code runNow}/{@code runNowAndWait} can be unit-tested. */
+    Schedules(ConductorClient conductorClient, WorkflowClient workflowClient) {
+        this.client = conductorClient;
+        this.workflowClient = workflowClient;
     }
 
     // ── CRUD ────────────────────────────────────────────────────────────
@@ -129,6 +138,95 @@ public class Schedules {
         req.setName(info.getAgent());
         if (info.getInput() != null) req.setInput(info.getInput());
         return workflowClient.startWorkflow(req);
+    }
+
+    /** Default timeout (ms) for {@link #runNowAndWait}, mirroring Python's 600s default. */
+    private static final long DEFAULT_WAIT_TIMEOUT_MS = 600_000L;
+    /** Default poll interval (ms) for {@link #runNowAndWait}, mirroring Python's 1s default. */
+    private static final long DEFAULT_POLL_INTERVAL_MS = 1_000L;
+
+    /**
+     * Fetch the schedule by its wire {@code name} and start its agent's workflow
+     * immediately with the schedule's stored input. Returns the new workflowId.
+     *
+     * <p>Name-keyed parity with the Python/TS {@code run_now(name)}.
+     */
+    public String runNow(String name) {
+        return runNow(get(name));
+    }
+
+    /**
+     * Fetch the schedule by its wire {@code name} and start its agent's workflow.
+     *
+     * <p>When {@code wait} is {@code false} (default behaviour) returns the
+     * workflowId immediately. When {@code wait} is {@code true} this blocks until
+     * the workflow reaches a terminal state and returns an {@link AgentResult}
+     * built from the completed workflow (parity with Python's
+     * {@code run_now(name, wait=True)} and the C#/TS SDKs, which return an
+     * {@link AgentResult} from the wait variant).
+     *
+     * @return a {@link String} workflowId when {@code wait=false}, or an
+     *     {@link AgentResult} when {@code wait=true}
+     */
+    public Object runNow(String name, boolean wait) {
+        if (!wait) {
+            return runNow(name);
+        }
+        return runNowAndWait(name);
+    }
+
+    /**
+     * Fetch the schedule by its wire {@code name}, start it, then poll until the
+     * triggered workflow reaches a terminal state and return it as an
+     * {@link AgentResult}.
+     *
+     * @throws ScheduleException.Timeout if the workflow has not finished within the timeout
+     */
+    public AgentResult runNowAndWait(String name) {
+        return runNowAndWait(name, DEFAULT_WAIT_TIMEOUT_MS, DEFAULT_POLL_INTERVAL_MS);
+    }
+
+    /**
+     * Fetch the schedule by its wire {@code name}, start it, then poll until the
+     * triggered workflow reaches a terminal state and return it as an
+     * {@link AgentResult}.
+     *
+     * <p>The completed {@link Workflow} is converted via the SDK's shared
+     * workflow → {@link AgentResult} extraction ({@link AgentHandle#fromWorkflow})
+     * — the same logic the {@code AgentHandle.waitForResult} path uses — so the
+     * output, status, error, token usage, and tool calls match a direct run.
+     *
+     * @param name           the schedule's wire name
+     * @param timeoutMs      maximum time to wait, in milliseconds
+     * @param pollIntervalMs delay between status polls, in milliseconds
+     * @throws ScheduleException.Timeout if the workflow has not finished within {@code timeoutMs}
+     */
+    public AgentResult runNowAndWait(String name, long timeoutMs, long pollIntervalMs) {
+        String executionId = runNow(name);
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (true) {
+            Workflow wf = workflowClient.getWorkflow(executionId, true);
+            if (isTerminal(wf)) {
+                return AgentHandle.fromWorkflow(wf);
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                throw new ScheduleException.Timeout("runNow('" + name + "') did not finish within " + timeoutMs + "ms");
+            }
+            if (pollIntervalMs > 0) {
+                try {
+                    Thread.sleep(pollIntervalMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new ScheduleException.Timeout("runNow('" + name + "') was interrupted while waiting");
+                }
+            }
+        }
+    }
+
+    /** {@code true} if the workflow has reached a terminal state (completed/failed/terminated/timed-out). */
+    static boolean isTerminal(Workflow wf) {
+        Workflow.WorkflowStatus status = wf != null ? wf.getStatus() : null;
+        return status != null && status.isTerminal();
     }
 
     public List<Long> previewNext(String cron, int n) {

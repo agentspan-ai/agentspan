@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 import { checkServerHealth, MODEL } from './helpers';
 
 // ── Dynamic imports (skip if LangGraph not installed) ───────────────────
@@ -130,7 +130,7 @@ describe('Suite 11: LangGraph Integration', { timeout: 300_000 }, () => {
     });
 
     (graph as any)._agentspan = {
-      model: 'openai/gpt-4o-mini',
+      model: 'anthropic/claude-sonnet-4-6',
       tools: [calculateTool, countWordsTool, reverseTool],
       framework: 'langgraph',
     };
@@ -180,7 +180,7 @@ describe('Suite 11: LangGraph Integration', { timeout: 300_000 }, () => {
     const graph = createReactAgent({ llm, tools: [multiplyTool], name: 'e2e_lg_schema' });
 
     (graph as any)._agentspan = {
-      model: 'openai/gpt-4o-mini',
+      model: 'anthropic/claude-sonnet-4-6',
       tools: [multiplyTool],
       framework: 'langgraph',
     };
@@ -452,7 +452,7 @@ describe('Suite 11: LangGraph Integration', { timeout: 300_000 }, () => {
     const graph = createReactAgent({ llm, tools: [], name: 'compile_hello_world' });
 
     (graph as any)._agentspan = {
-      model: 'openai/gpt-4o-mini',
+      model: 'anthropic/claude-sonnet-4-6',
       tools: [],
       framework: 'langgraph',
     };
@@ -501,7 +501,7 @@ describe('Suite 11: LangGraph Integration', { timeout: 300_000 }, () => {
     });
 
     (graph as any)._agentspan = {
-      model: 'openai/gpt-4o-mini',
+      model: 'anthropic/claude-sonnet-4-6',
       tools: [calculateTool, countWordsTool],
       framework: 'langgraph',
     };
@@ -595,7 +595,7 @@ describe('Suite 11: LangGraph Integration', { timeout: 300_000 }, () => {
     });
 
     (graph as any)._agentspan = {
-      model: 'openai/gpt-4o-mini',
+      model: 'anthropic/claude-sonnet-4-6',
       tools: [multiplyTool],
       framework: 'langgraph',
     };

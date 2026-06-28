@@ -1,18 +1,18 @@
-# @agentspan-ai/sdk
+# @conductoross/conductor-agent-sdk
 
-[![npm](https://img.shields.io/npm/v/@agentspan-ai/sdk)](https://www.npmjs.com/package/@agentspan-ai/sdk)
+[![npm](https://img.shields.io/npm/v/@conductoross/conductor-agent-sdk)](https://www.npmjs.com/package/@conductoross/conductor-agent-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 
-TypeScript SDK for building and running AI agents on [Agentspan](https://agentspan.dev). Define agents and tools in TypeScript, run them durably on the platform with crash recovery, distributed workers, and human-in-the-loop approval.
+TypeScript SDK for building and running AI agents on [Agentspan](https://agentspan.ai). Define agents and tools in TypeScript, run them durably on the platform with crash recovery, distributed workers, and human-in-the-loop approval.
 
 ## Quick Start
 
 ```bash
-npm install @agentspan-ai/sdk zod
+npm install @conductoross/conductor-agent-sdk zod
 ```
 
 ```typescript
-import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool } from '@conductoross/conductor-agent-sdk';
 import { z } from 'zod';
 
 const getWeather = tool(
@@ -42,12 +42,12 @@ One import change. Your code stays identical.
 
 ```diff
 -import { generateText } from 'ai';
-+import { generateText } from '@agentspan-ai/sdk/vercel-ai';
++import { generateText } from '@conductoross/conductor-agent-sdk/vercel-ai';
 ```
 
 That's it. `generateText` and `streamText` are intercepted, compiled to an agent execution, and run on Agentspan. Tools, model, prompt, result shape -- all unchanged.
 
-When you need Agentspan-specific features (guardrails, termination, multi-agent handoff), switch to the Agent API. See [`examples/vercel-ai/README.md`](examples/vercel-ai/README.md) for the full before/after.
+When you need Agentspan–specific features (guardrails, termination, multi-agent handoff), switch to the Agent API. See [`examples/vercel-ai/README.md`](examples/vercel-ai/README.md) for the full before/after.
 
 ## Already using another framework?
 
@@ -59,7 +59,7 @@ Pass your existing agent objects directly to `runtime.run()`:
 
 ```typescript
 import { Agent } from '@openai/agents';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'helper', model: 'gpt-4o-mini',
@@ -76,7 +76,7 @@ await runtime.run(agent, 'Weather in SF?');
 
 ```typescript
 import { LlmAgent } from '@google/adk';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const agent = new LlmAgent({
   name: 'helper', model: 'gemini-2.5-flash',
@@ -95,7 +95,7 @@ await runtime.run(agent, 'Weather in Tokyo?');
 import { createReactAgent }
   from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const graph = createReactAgent({
   llm: new ChatOpenAI({ model: 'gpt-4o-mini' }),
@@ -103,7 +103,7 @@ const graph = createReactAgent({
 });
 // Add metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [searchTool],
   framework: 'langgraph',
 };
@@ -153,7 +153,7 @@ const team = new Agent({ name: 'team', agents: [coder, reviewer], strategy: 'han
 ### Guardrails
 
 ```typescript
-import { guardrail, RegexGuardrail, LLMGuardrail } from '@agentspan-ai/sdk';
+import { guardrail, RegexGuardrail, LLMGuardrail } from '@conductoross/conductor-agent-sdk';
 
 const piiBlocker = new RegexGuardrail({
   name: 'pii_blocker',
@@ -189,7 +189,7 @@ const result = await handle.wait();
 ### Termination Conditions
 
 ```typescript
-import { TextMention, MaxMessage } from '@agentspan-ai/sdk';
+import { TextMention, MaxMessage } from '@conductoross/conductor-agent-sdk';
 
 const agent = new Agent({
   name: 'analyst',
@@ -201,7 +201,7 @@ const agent = new Agent({
 ### Testing
 
 ```typescript
-import { mockRun, expectResult } from '@agentspan-ai/sdk/testing';
+import { mockRun, expectResult } from '@conductoross/conductor-agent-sdk/testing';
 
 const result = await mockRun(agent, 'Write an article', {
   mockTools: { search: async () => ({ results: ['paper1'] }) },
@@ -229,7 +229,7 @@ All config can also be passed to the `AgentRuntime` constructor.
 
 | Directory | Count | Description |
 |-----------|-------|-------------|
-| [`examples/`](examples/) | 107 | Native Agentspan agents |
+| [`examples/`](examples/) | 107 | Native agents |
 | [`examples/vercel-ai/`](examples/vercel-ai/) | 10 | Vercel AI SDK integration |
 | [`examples/langgraph/`](examples/langgraph/) | 10 | LangGraph integration |
 | [`examples/langchain/`](examples/langchain/) | 10 | LangChain integration |

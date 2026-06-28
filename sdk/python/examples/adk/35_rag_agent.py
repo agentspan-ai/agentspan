@@ -31,7 +31,7 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash in .env or environment
 """
 
-from agentspan.agents import Agent, AgentRuntime, search_tool, index_tool
+from conductor.ai.agents import Agent, AgentRuntime, search_tool, index_tool
 
 from settings import settings
 

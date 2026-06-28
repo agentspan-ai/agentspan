@@ -14,7 +14,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // Specialist agents (as plain compiled graphs)
@@ -28,11 +28,11 @@ function makeSpecialist(systemPrompt: string) {
     return { messages: [response] };
   }
 
-  const b = new StateGraph(MessagesAnnotation);
-  b.addNode('specialist', node);
-  b.addEdge(START, 'specialist');
-  b.addEdge('specialist', END);
-  return b.compile();
+  return new StateGraph(MessagesAnnotation)
+    .addNode('specialist', node)
+    .addEdge(START, 'specialist')
+    .addEdge('specialist', END)
+    .compile();
 }
 
 const mathGraph = makeSpecialist(
@@ -122,7 +122,7 @@ const orchBuilder = new StateGraph(MessagesAnnotation)
 const graph = orchBuilder.compile({ name: "orchestrator_with_subagents" });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
   framework: 'langgraph',
 };

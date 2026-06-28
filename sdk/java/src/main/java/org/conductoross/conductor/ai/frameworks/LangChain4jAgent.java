@@ -32,7 +32,7 @@ import org.conductoross.conductor.ai.model.ToolDef;
  * <pre>{@code
  * Agent agent = LangChain4jAgent.from(
  *     "my_agent",
- *     "openai/gpt-4o-mini",
+ *     "anthropic/claude-sonnet-4-6",
  *     "You are a helpful calculator.",
  *     new CalculatorTools()
  * );
@@ -49,7 +49,7 @@ public class LangChain4jAgent {
      * Create an Agentspan {@link Agent} from one or more LangChain4j tool objects.
      *
      * @param name         agent name (must match {@code ^[a-zA-Z_][a-zA-Z0-9_-]*$})
-     * @param model        LLM model string, e.g. {@code "openai/gpt-4o-mini"}
+     * @param model        LLM model string, e.g. {@code "anthropic/claude-sonnet-4-6"}
      * @param instructions system prompt / instructions for the agent
      * @param toolObjects  objects with {@code @dev.langchain4j.agent.tool.Tool} methods
      * @return an Agentspan Agent ready to pass to

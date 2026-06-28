@@ -208,7 +208,7 @@ try (AgentStream stream = runtime.stream(agent, "Tell me a story")) {
         }
     }
 }
-// After iteration, stream.waitForResult() returns the completed AgentResult
+// After iteration, stream.getResult() returns the completed AgentResult
 ```
 
 `AgentStream` implements `Iterable<AgentEvent>` and `AutoCloseable`.

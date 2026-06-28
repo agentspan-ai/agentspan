@@ -1,52 +1,51 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Credentials — non-isolated tools using get_credential().
+"""Credentials — accessing injected secrets in-process with get_secret().
 
 Demonstrates:
-    - @tool(isolated=False, credentials=["STRIPE_SECRET_KEY"])
-    - get_credential() to access the injected value in-process
-    - When to use isolated=False: SDK clients that can't be pickled across
-      subprocess boundaries (e.g. existing SDK objects, shared state)
+    - @tool(credentials=["STRIPE_SECRET_KEY"]) to declare a tool's secret needs
+    - get_secret() to read the injected value inside the tool, in-process
     - CredentialNotFoundError handling for graceful degradation
+    - declaring the same credential at the agent level
 
-When to use isolated=False vs isolated=True (default):
-    isolated=True  — runs tool in a fresh subprocess; safer (no env bleed between
-                     concurrent tasks); use for shell commands, scripts, any new code
-    isolated=False — runs tool in the same worker process; use only when the tool
-                     holds shared state or uses objects that can't be serialized
-                     (e.g. database connection pools, SDK clients initialized at import)
+Secrets are resolved by the server from its secret store and injected into the
+tool's execution context; get_secret(name) reads them inside the worker. Nothing
+is read from process environment variables.
 
 Requirements:
     - Agentspan server running at AGENTSPAN_SERVER_URL
-    - AGENTSPAN_LLM_MODEL set (or defaults to openai/gpt-5.4)
+    - AGENTSPAN_LLM_MODEL set (or defaults via settings)
     - STRIPE_SECRET_KEY stored: agentspan credentials set STRIPE_SECRET_KEY <your-stripe-secret-key>
 """
 
-from agentspan.agents import (
-    Agent,
-    AgentRuntime,
-    CredentialFile,
-    CredentialNotFoundError,
-    get_credential,
-    tool,
-)
 from settings import settings
 
+from conductor.ai.agents import (
+    Agent,
+    AgentRuntime,
+    CredentialNotFoundError,
+    get_secret,
+    tool,
+)
 
-@tool(isolated=False, credentials=["STRIPE_SECRET_KEY"])
+
+@tool(credentials=["STRIPE_SECRET_KEY"])
 def get_customer_balance(customer_id: str) -> dict:
     """Look up a Stripe customer's balance.
 
-    Uses get_credential() to retrieve the injected secret in-process.
+    Uses get_secret() to retrieve the injected secret in-process.
     """
     try:
-        api_key = get_credential("STRIPE_SECRET_KEY")
+        api_key = get_secret("STRIPE_SECRET_KEY")
     except CredentialNotFoundError:
-        return {"error": "STRIPE_SECRET_KEY not configured — run: agentspan credentials set STRIPE_SECRET_KEY <your-value>"}
-    import urllib.request
-    import json
+        return {
+            "error": "STRIPE_SECRET_KEY not configured — run: agentspan credentials set STRIPE_SECRET_KEY <your-value>"
+        }
+
     import base64
+    import json
+    import urllib.request
 
     auth = base64.b64encode(f"{api_key}:".encode()).decode()
     req = urllib.request.Request(
@@ -66,17 +65,17 @@ def get_customer_balance(customer_id: str) -> dict:
         return {"error": f"Stripe API error {e.code}: {e.reason}"}
 
 
-@tool(isolated=False, credentials=["STRIPE_SECRET_KEY"])
+@tool(credentials=["STRIPE_SECRET_KEY"])
 def list_recent_charges(limit: int = 5) -> dict:
     """List the most recent Stripe charges."""
     try:
-        api_key = get_credential("STRIPE_SECRET_KEY")
+        api_key = get_secret("STRIPE_SECRET_KEY")
     except CredentialNotFoundError:
         return {"error": "STRIPE_SECRET_KEY not configured"}
 
-    import urllib.request
-    import json
     import base64
+    import json
+    import urllib.request
 
     auth = base64.b64encode(f"{api_key}:".encode()).decode()
     req = urllib.request.Request(
@@ -103,18 +102,6 @@ def list_recent_charges(limit: int = 5) -> dict:
         return {"error": f"Stripe API error {e.code}: {e.reason}"}
 
 
-# Example: CredentialFile for kubeconfig (file-based credential)
-# Uncomment and add credentials=["KUBECONFIG"] to use:
-#
-# @tool(isolated=True, credentials=["KUBECONFIG"])  # isolated=True writes the file to temp HOME
-# def get_cluster_nodes() -> dict:
-#     """List Kubernetes cluster nodes using the injected kubeconfig."""
-#     import subprocess
-#     result = subprocess.run(["kubectl", "get", "nodes", "-o", "json"],
-#                             capture_output=True, text=True)
-#     ...
-
-
 agent = Agent(
     name="billing_agent",
     model=settings.llm_model,
@@ -134,10 +121,6 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(agent)
-        # CLI alternative:
-        # agentspan deploy --package examples.16b_credentials_non_isolated
-        #
-        # 2. In a separate long-lived worker process:
-        # runtime.serve(agent)
-
+        #    runtime.deploy(agent)
+        #    CLI alternative: agentspan deploy --package examples.16b_credentials_non_isolated
+        # 2. In a separate long-lived worker process: runtime.serve(agent)

@@ -2,7 +2,7 @@
  * Basic agent — the simplest possible agentspan example.
  */
 
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from '../settings.js';
 
 export const agent = new Agent({

@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -86,25 +86,22 @@ async function mergeAndSummarize(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(ParallelState);
-builder.addNode('pros_node', analyzePros);
-builder.addNode('cons_node', analyzeCons);
-builder.addNode('merge', mergeAndSummarize);
-
-// Fan-out: both branches run in parallel from START
-builder.addEdge(START, 'pros_node');
-builder.addEdge(START, 'cons_node');
-
-// Fan-in: both branches feed into merge
-builder.addEdge('pros_node', 'merge');
-builder.addEdge('cons_node', 'merge');
-builder.addEdge('merge', END);
-
-const graph = builder.compile({ name: "parallel_analysis" });
+const graph = new StateGraph(ParallelState)
+  .addNode('pros_node', analyzePros)
+  .addNode('cons_node', analyzeCons)
+  .addNode('merge', mergeAndSummarize)
+  // Fan-out: both branches run in parallel from START
+  .addEdge(START, 'pros_node')
+  .addEdge(START, 'cons_node')
+  // Fan-in: both branches feed into merge
+  .addEdge('pros_node', 'merge')
+  .addEdge('cons_node', 'merge')
+  .addEdge('merge', END)
+  .compile({ name: "parallel_analysis" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

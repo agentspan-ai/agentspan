@@ -186,6 +186,16 @@ public class AgentCompiler {
 
         // ── Post-processing: runs for ALL compilation paths ──────────────
 
+        // Apply masked fields to the (user-visible) top-level workflow so that
+        // Conductor redacts them in execution history / UI. This runs for every
+        // compile shape (simple, tools/DoWhile, hybrid, multi-agent, router,
+        // graph, passthrough) because all paths converge here on ``wf``.
+        // Recursively-compiled sub-agents flow back through this same method, so
+        // each sub-agent workflow carries its own config's masked fields too.
+        if (config.getMaskedFields() != null && !config.getMaskedFields().isEmpty()) {
+            wf.setMaskedFields(config.getMaskedFields());
+        }
+
         // Stamp agent capability tags and agentDef into workflow metadata.
         // Done here (not only in AgentService) so sub-workflows compiled recursively
         // also carry their own agentDef — AgentService only stamps the top-level def.

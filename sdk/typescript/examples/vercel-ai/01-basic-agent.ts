@@ -10,7 +10,7 @@
 
 import { tool as aiTool } from 'ai';
 import { z } from 'zod';
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ── Vercel AI SDK tool (auto-detected by superset tool system) ──
 const weatherTool = aiTool({
@@ -26,7 +26,7 @@ const weatherTool = aiTool({
 // ── Native agentspan Agent with AI SDK tool ─────────────
 export const agent = new Agent({
   name: 'weather_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'You are a helpful assistant. Use available tools to answer questions.',
   tools: [weatherTool], // AI SDK tool auto-converted by superset system
 });

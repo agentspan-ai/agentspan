@@ -26,7 +26,7 @@ public class SearchTools {
 
 Agent agent = Agent.builder()
     .name("research_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .tools(ToolRegistry.fromInstance(new SearchTools()))
     .build();
 ```
@@ -48,24 +48,43 @@ public String createIssue(
 
 ### ToolContext
 
-Inject `ToolContext` as the last parameter to access execution metadata, session state, and credentials:
+Inject `ToolContext` as the last parameter to access execution metadata, shared state, and credentials:
 
 ```java
-@Tool(name = "send_email", description = "Send an email")
+@Tool(name = "send_email", description = "Send an email", credentials = {"SENDGRID_API_KEY"})
 public String sendEmail(String to, String subject, String body, ToolContext ctx) {
-    String apiKey = Credentials.get("SENDGRID_API_KEY");
-    String executionId = ctx.getExecutionId();
+    String apiKey       = ctx.getCredential("SENDGRID_API_KEY");
+    String executionId  = ctx.getExecutionId();
+    String sessionId    = ctx.getSessionId();
     // ...
 }
 ```
 
+`ToolContext.getState()` is a mutable `Map<String,Object>` that persists across tool calls
+within the same execution — use it to pass data between tools without routing it through the LLM.
+
 ### Credentials in tools
 
-Declare which secrets a tool needs via `Agent.builder().credentials(...)`. The SDK fetches them from the Agentspan secrets store and injects them at runtime:
+Declare which secrets a tool needs and read them off the `ToolContext`. There is **no** static
+`Credentials` class — Java cannot mutate `System.getenv()` at runtime, so the SDK passes resolved
+secrets on the per-call context. Declare credentials per tool with `@Tool(credentials = {...})`,
+or for all of an agent's tools with `Agent.builder().credentials(...)`:
 
 ```java
+public class GitHubTools {
+    @Tool(name = "create_issue", description = "Create a GitHub issue",
+          credentials = {"GITHUB_TOKEN"})
+    public String createIssue(String title, ToolContext ctx) {
+        String token = ctx.getCredential("GITHUB_TOKEN");      // throws if unresolved
+        // String token = ctx.getCredentialOrNull("GITHUB_TOKEN"); // null if unresolved
+        // ...
+    }
+}
+
+// Agent-level declaration (applies to every tool the agent calls):
 Agent agent = Agent.builder()
     .name("github_agent")
+    .model("anthropic/claude-sonnet-4-6")
     .credentials("GITHUB_TOKEN")
     .tools(ToolRegistry.fromInstance(new GitHubTools()))
     .build();
@@ -73,6 +92,10 @@ Agent agent = Agent.builder()
 // Store the secret once via the CLI or API:
 // agentspan secrets set GITHUB_TOKEN ghp_xxxxx
 ```
+
+The worker fetches each declared secret from the server (via the execution token) before the
+handler runs; if a declared secret is missing on the server, the task fails terminally before
+your code executes.
 
 ---
 
@@ -92,7 +115,7 @@ ToolDef searchTool = HttpTool.builder()
 
 Agent agent = Agent.builder()
     .name("shop_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .tools(searchTool)
     .build();
 ```
@@ -124,7 +147,7 @@ import org.conductoross.conductor.ai.execution.CliConfig;
 
 Agent agent = Agent.builder()
     .name("devops_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Run git commands as requested.")
     .cliConfig(CliConfig.builder()
         .allowedCommands(List.of("git status", "git log", "git diff"))
@@ -152,7 +175,7 @@ ToolDef approvalTool = HumanTool.create(
 
 Agent agent = Agent.builder()
     .name("deploy_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .tools(approvalTool)
     .build();
 ```
@@ -182,53 +205,86 @@ ToolDef pdfTool = PdfTool.create("generate_report", "Generate a formatted PDF re
 
 ---
 
-## Image / media tools
+## Media generation tools
+
+`MediaTools` produces server-side generation tools — image, audio, video, and PDF. Each takes a
+name, description, LLM provider, and model (plus an optional trailing `Map<String,Object>` input
+schema to override the defaults):
 
 ```java
 import org.conductoross.conductor.ai.tools.MediaTools;
 
-ToolDef imageTool = MediaTools.imageTool(
-    "generate_image",
-    "Generate an image from a description",
-    "openai",
-    "dall-e-3"
-);
+ToolDef imageTool = MediaTools.imageTool("generate_image", "Generate an image", "openai", "dall-e-3");
+ToolDef audioTool = MediaTools.audioTool("generate_speech", "Text to speech", "openai", "tts-1");
+ToolDef videoTool = MediaTools.videoTool("generate_video", "Generate a clip", "openai", "sora");
 ```
+
+---
+
+## RAG tools
+
+Search and index against a vector database configured on the server (e.g. `pgvectordb`). Provide
+the vector DB integration name, index, and embedding provider/model:
+
+```java
+import org.conductoross.conductor.ai.tools.RagTools;
+
+ToolDef searchDocs = RagTools.searchTool(
+    "search_docs", "Search the knowledge base",
+    "pgvectordb", "my_index", "openai", "text-embedding-3-small",
+    3);                                   // maxResults
+
+ToolDef indexDoc = RagTools.indexTool(
+    "index_doc", "Index a document into the knowledge base",
+    "pgvectordb", "my_index", "openai", "text-embedding-3-small");
+```
+
+Both have an extra `String namespace` overload (inserted before the last argument); the default
+namespace is `"default_ns"`.
 
 ---
 
 ## Async message tools
 
-Wait for an external event before continuing:
+Pause the agent loop until an external event delivers a message to the workflow:
 
 ```java
 import org.conductoross.conductor.ai.tools.WaitForMessageTool;
 
+// Blocking, single message
 ToolDef waitTool = WaitForMessageTool.create(
     "wait_for_payment",
-    "Wait until the payment webhook confirms the transaction"
-);
+    "Wait until the payment webhook confirms the transaction");
+
+// Pull a batch (server cap 100); set blocking=false for a non-blocking poll
+ToolDef pullBatch = WaitForMessageTool.create("pull_updates", "Pull queued updates", 10, false);
 ```
 
 ---
 
 ## Agent tools (sub-agents)
 
-Any `Agent` can be a tool for another agent. This is the building block for all multi-agent patterns:
+Any `Agent` can be wrapped as a tool with `AgentTool.from(...)`. Unlike handoff sub-agents, an
+agent tool is invoked **inline** by the parent LLM — like a function call — and the child runs its
+own workflow before returning its output:
 
 ```java
+import org.conductoross.conductor.ai.tools.AgentTool;
+
 Agent researcher = Agent.builder()
     .name("researcher")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Research a topic and return a summary.")
     .build();
 
-Agent writer = Agent.builder()
-    .name("writer")
-    .model("openai/gpt-4o-mini")
-    .instructions("Write an article given a research summary.")
-    .agents(researcher)              // researcher becomes a callable tool
+Agent manager = Agent.builder()
+    .name("manager")
+    .model("anthropic/claude-sonnet-4-6")
+    .instructions("Use the researcher tool to gather information.")
+    .tools(AgentTool.from(researcher))            // callable like a function
+    // AgentTool.from(researcher, "custom description") to override the description
     .build();
 ```
 
-See [Multi-Agent](multi-agent.md) for orchestration patterns.
+Adding a sub-agent via `.agents(researcher)` (with a [strategy](multi-agent.md)) instead delegates
+control rather than calling inline. See [Multi-Agent](multi-agent.md) for orchestration patterns.

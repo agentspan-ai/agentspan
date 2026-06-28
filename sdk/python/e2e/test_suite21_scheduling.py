@@ -28,12 +28,12 @@ from typing import Iterator
 import pytest
 import requests
 
-from agentspan.agents.schedule import (
+from conductor.ai.agents.schedule import (
     Schedule,
     ScheduleNameConflict,
     ScheduleNotFound,
 )
-from agentspan.agents.schedule.client import ScheduleClient
+from conductor.ai.agents.schedule.client import ScheduleClient
 
 pytestmark = [pytest.mark.e2e]
 

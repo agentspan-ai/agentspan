@@ -19,8 +19,8 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
-from agentspan.agents import AgentRuntime
-from agentspan.agents.ext import GPTAssistantAgent
+from conductor.ai.agents import AgentRuntime
+from conductor.ai.agents.ext import GPTAssistantAgent
 from settings import settings
 
 # ── Example 1: Create assistant on the fly ───────────────────────────

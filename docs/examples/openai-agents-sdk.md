@@ -122,7 +122,7 @@ account_agent = Agent(
 
 triage_agent = Agent(
     name="support_triage",
-    model="gpt-4o-mini",  # fast, cheap — just routes
+    model="anthropic/claude-sonnet-4-6",  # fast, cheap — just routes
     instructions="""You are a support triage agent. Understand the customer's issue
     and hand off to the right specialist immediately.
 
@@ -148,7 +148,7 @@ print(result.final_output)
 Replace `Runner.run_sync(triage_agent, message)` with `runtime.run(triage_agent, message)`. That's the only change. Agentspan auto-detects OpenAI Agents SDK agents — no extra imports or agent modifications needed.
 
 ```python
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 message = "Hi, I was charged $99 twice last month (invoice INV-8821). Can I get a refund?"
 
@@ -196,7 +196,7 @@ ticket → [support_triage] → handoff → [billing_specialist] → tools → f
 
 ```python
 import asyncio
-from agentspan.agents import run_async
+from conductor.ai.agents import run_async
 
 async def handle_ticket(message: str):
     result = await run_async(triage_agent, message)
@@ -210,7 +210,7 @@ asyncio.run(handle_ticket("I was charged twice last month"))
 Use `start` to submit a ticket and return immediately without blocking.
 
 ```python
-from agentspan.agents import start
+from conductor.ai.agents import start
 
 handle = start(triage_agent, customer_message)
 print(f"Ticket queued: {handle.execution_id}")
@@ -225,7 +225,7 @@ print(result.output)
 Use `stream` to process handoffs and tool calls in real time as the agents work through the ticket.
 
 ```python
-from agentspan.agents import stream
+from conductor.ai.agents import stream
 
 for event in stream(triage_agent, customer_message):
     if event.type == "handoff":
@@ -243,7 +243,7 @@ for event in stream(triage_agent, customer_message):
 Wrap any sensitive tool with Agentspan's `@tool` decorator and set `approval_required=True`. Execution pauses at that tool call until a human approves or rejects it in the UI.
 
 ```python
-from agentspan.agents import tool
+from conductor.ai.agents import tool
 
 @tool(approval_required=True)
 def process_refund(invoice_id: str, reason: str) -> dict:
@@ -265,7 +265,7 @@ billing_agent = Agent(
 Use `mock_run` to test the multi-agent flow without a live server or real API calls. Supply the expected sequence of handoffs and tool calls; `mock_run` drives the agents through them and returns an `AgentResult` you can assert against.
 
 ```python
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 
 result = mock_run(
     triage_agent,

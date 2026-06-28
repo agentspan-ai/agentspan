@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime, httpTool, apiTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, httpTool, apiTool } from '@conductoross/conductor-agent-sdk';
 import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import {
   checkServerHealth,
@@ -46,7 +46,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  credentialDelete(CRED_NAME);
+  await credentialDelete(CRED_NAME);
   await runtime.shutdown();
 });
 
@@ -192,7 +192,7 @@ describe('Suite 5: HTTP Tools', { timeout: 600_000 }, () => {
       const unauthResp = await fetch(HTTP_SPEC_URL, { signal: AbortSignal.timeout(5_000) });
       expect([401, 403]).toContain(unauthResp.status);
 
-      credentialSet(CRED_NAME, HTTP_AUTH_KEY);
+      await credentialSet(CRED_NAME, HTTP_AUTH_KEY);
 
       const authAgent = new Agent({
         name: 'e2e_ts_http_auth',

@@ -22,7 +22,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, OnTextMention } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, OnTextMention } from '@conductoross/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Specialist agents --------------------------------------------------------

@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductoross/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -95,27 +95,25 @@ function routeToSpecialist(state: State): string {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(HandoffState);
-builder.addNode('triage', triage);
-builder.addNode('billing', billingAgent);
-builder.addNode('technical', technicalAgent);
-builder.addNode('general', generalAgent);
-
-builder.addEdge(START, 'triage');
-builder.addConditionalEdges('triage', routeToSpecialist, {
-  billing: 'billing',
-  technical: 'technical',
-  general: 'general',
-});
-builder.addEdge('billing', END);
-builder.addEdge('technical', END);
-builder.addEdge('general', END);
-
-const graph = builder.compile({ name: "agent_handoff" });
+const graph = new StateGraph(HandoffState)
+  .addNode('triage', triage)
+  .addNode('billing', billingAgent)
+  .addNode('technical', technicalAgent)
+  .addNode('general', generalAgent)
+  .addEdge(START, 'triage')
+  .addConditionalEdges('triage', routeToSpecialist, {
+    billing: 'billing',
+    technical: 'technical',
+    general: 'general',
+  })
+  .addEdge('billing', END)
+  .addEdge('technical', END)
+  .addEdge('general', END)
+  .compile({ name: "agent_handoff" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 
