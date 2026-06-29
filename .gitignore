@@ -58,3 +58,6 @@ obj/
 # Editor / tooling local config
 .vscode/
 .claude/
+
+# e2e bundle export output
+/dist/

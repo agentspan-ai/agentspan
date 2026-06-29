@@ -1,0 +1,74 @@
+name: Export E2E Bundle
+
+# Builds the SDK e2e bundle (all four SDKs + CLI + e2e/TEST_SETUP.md) and
+# attaches it to the GitHub release as:
+#   - agentspan-e2e-bundle.tar.gz
+#   - agentspan-e2e-bundle.manifest.txt
+#
+# Tying the bundle to the release tag lets downstream hosts pin ONE tag for both
+# the published `conductor-agentspan` lib and the matching e2e suites. The
+# consumer is orkes-conductor's .github/workflows/agentspan-sdk-e2e.yaml, which
+# downloads these assets (optionally for a pinned tag) and runs each SDK suite
+# against its embedded server.
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach the bundle to (blank = current ref / latest release)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write # upload release assets
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Export the release tag's commit. On a release event github.ref is
+          # refs/tags/<tag>; on manual dispatch use the provided tag (or the
+          # dispatched branch when blank). fetch-depth 0 so git archive +
+          # git describe see full history/tags.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Build e2e bundle
+        run: |
+          chmod +x e2e/export-e2e-bundle.sh
+          e2e/export-e2e-bundle.sh dist
+
+      - name: Resolve release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="$(gh release view --json tagName -q .tagName)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Attaching bundle to release: $TAG"
+
+      - name: Upload bundle to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.tag.outputs.tag }}" \
+            dist/agentspan-e2e-bundle.tar.gz \
+            dist/agentspan-e2e-bundle.manifest.txt \
+            --clobber
+
+      - name: Upload bundle as workflow artifact (inspection / fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentspan-e2e-bundle
+          path: dist/agentspan-e2e-bundle.*
+          retention-days: 14
