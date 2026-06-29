@@ -58,3 +58,6 @@ obj/
 # Editor / tooling local config
 .vscode/
 .claude/
+
+# Packaged SDK e2e release bundles (build output)
+e2e/release/dist/
