@@ -133,6 +133,38 @@ def _has_stateful_tools(agent: Any) -> bool:
     return False
 
 
+def _agent_model_str(agent: Any) -> str:
+    """Best-effort string model id for the conversation summarizer."""
+    m = getattr(agent, "model", "")
+    if isinstance(m, str) and m:
+        return m
+    return "openai/gpt-4o-mini"
+
+
+def _parse_summary_output(output: Any) -> "tuple[str, list, list]":
+    """Extract (summary, facts, tags) from a summarizer run's output.
+
+    Handles a pydantic MemorySummary, a plain dict (optionally wrapped under a
+    ``result`` key), or any other value (stringified as the summary).
+    """
+    # pydantic model instance
+    if hasattr(output, "summary"):
+        return (
+            str(getattr(output, "summary", "") or ""),
+            list(getattr(output, "facts", []) or []),
+            list(getattr(output, "tags", []) or []),
+        )
+    if isinstance(output, dict):
+        data = output.get("result", output)
+        if isinstance(data, dict):
+            return (
+                str(data.get("summary", "") or ""),
+                list(data.get("facts", []) or []),
+                list(data.get("tags", []) or []),
+            )
+    return (str(output) if output is not None else "", [], [])
+
+
 # Thread count for system-level async workers (guardrails, handoff checks, etc.).
 # User-defined tool workers keep the per-worker default from @worker_task.
 _SYSTEM_WORKER_THREADS = 10
@@ -2725,6 +2757,9 @@ class AgentRuntime:
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
         self._validate_execution_input(resolved_prompt, media=media, context=context)
 
+        # OCG long-term memory: inject relevant past memories into the prompt.
+        agent = self._apply_memory_retrieval(agent, resolved_prompt)
+
         correlation_id = str(uuid.uuid4())
 
         logger.info("Executing agent '%s'", agent.name)
@@ -2804,7 +2839,7 @@ class AgentRuntime:
             error_reason = task_failure_reason or status.reason
 
         logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
-        return AgentResult(
+        result = AgentResult(
             output=output,
             execution_id=execution_id,
             correlation_id=correlation_id,
@@ -2816,6 +2851,118 @@ class AgentRuntime:
             token_usage=token_usage,
             sub_results=self._extract_sub_results(output),
         )
+
+        # OCG long-term memory: summarize the conversation into a memory and
+        # hand the human good/bad capability links to the agent's feedback_sink.
+        self._maybe_save_conversation_memory(agent, result, session_id)
+
+        return result
+
+    # ── OCG long-term memory hooks ─────────────────────────────────
+
+    def _apply_memory_retrieval(self, agent: "Agent", prompt: str) -> "Agent":
+        """Prepend relevant OCG memories to a COPY of the agent's instructions.
+
+        No-op (returns the original agent) when the agent has no ``semantic_memory``
+        or nothing relevant is found. Never mutates the shared agent instance.
+        """
+        sm = getattr(agent, "semantic_memory", None)
+        if sm is None:
+            return agent
+        try:
+            context = sm.get_context(prompt)
+        except Exception as exc:  # retrieval is best-effort
+            logger.warning("memory retrieval failed for agent '%s': %s", agent.name, exc)
+            return agent
+        if not context:
+            return agent
+
+        import copy as _copy
+
+        augmented = _copy.copy(agent)
+        base = agent.instructions if isinstance(agent.instructions, str) else ""
+        augmented.instructions = (context + "\n\n" + base) if base else context
+        return augmented
+
+    def _maybe_save_conversation_memory(
+        self, agent: "Agent", result: "AgentResult", session_id: Optional[str]
+    ) -> None:
+        """Summarize the run's conversation into an OCG memory (best-effort).
+
+        Runs an internal summarizer agent (server-side) to distill durable facts,
+        stores the result via the agent's ``semantic_memory`` store, then mints the
+        good/bad capability links and passes them to ``agent.feedback_sink``. All
+        failures are swallowed — memory saving must never fail the primary run.
+        """
+        sm = getattr(agent, "semantic_memory", None)
+        if sm is None or getattr(result, "status", None) != "COMPLETED":
+            return
+        if not getattr(result, "messages", None):
+            return
+        try:
+            from conductor.ai.agents.ocg_memory import (
+                FeedbackEvent,
+                build_memory_summarizer,
+            )
+
+            transcript = self._transcript_text(result.messages)
+            model = getattr(agent, "memory_summary_model", None) or _agent_model_str(agent)
+            summarizer = build_memory_summarizer(model)
+            summary_result = self.run(summarizer, transcript)
+
+            summary, facts, tags = _parse_summary_output(summary_result.output)
+            content = summary
+            if facts:
+                content += "\n\nFacts:\n" + "\n".join(f"- {f}" for f in facts)
+
+            key = f"conversation:{session_id or result.execution_id}"
+            store = sm.store
+            from conductor.ai.agents.semantic_memory import MemoryEntry
+
+            store.add(
+                MemoryEntry(
+                    id=key,
+                    content=content,
+                    metadata={"key": key, "tags": list(tags) + ["conversation"]},
+                )
+            )
+            logger.info("saved conversation memory '%s' for agent '%s'", key, agent.name)
+
+            sink = getattr(agent, "feedback_sink", None)
+            if sink is None:
+                return
+            links: Dict[str, Any] = {}
+            if hasattr(store, "feedback_links"):
+                try:
+                    links = store.feedback_links(key)
+                except Exception as exc:
+                    logger.warning("could not mint feedback links for '%s': %s", key, exc)
+            event = FeedbackEvent(
+                memory_key=key,
+                summary=summary,
+                facts=list(facts),
+                tags=list(tags),
+                good_url=links.get("good_url"),
+                bad_url=links.get("bad_url"),
+                expires_at=links.get("expires_at"),
+                agent=getattr(store, "_agent", None),
+                user=getattr(store, "_user", None),
+                session_id=session_id,
+            )
+            sink(event)
+        except Exception as exc:  # never fail the primary run
+            logger.warning("conversation memory save failed for agent '%s': %s", agent.name, exc)
+
+    @staticmethod
+    def _transcript_text(messages: List[Dict[str, Any]]) -> str:
+        lines: List[str] = []
+        for m in messages:
+            role = str(m.get("role", "")) or "?"
+            content = m.get("content", "")
+            if not isinstance(content, str):
+                content = json.dumps(content)
+            lines.append(f"{role}: {content}")
+        return "\n".join(lines)
 
     # ── Run-by-name (pre-deployed agents) ──────────────────────────
 
