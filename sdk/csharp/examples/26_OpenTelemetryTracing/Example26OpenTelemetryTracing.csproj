@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Agentspan/Agentspan.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI/Conductor.AI.csproj" />
     <Compile Include="../Shared/Settings.cs" />
   </ItemGroup>
   <ItemGroup>

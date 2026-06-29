@@ -2,7 +2,7 @@
   "external": false,
   "instructions": "You are a weather reporter. Get the weather and provide a recommendation.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "weather_reporter",
   "outputType": {
     "className": "WeatherReport",

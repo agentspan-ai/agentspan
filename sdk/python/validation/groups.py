@@ -38,7 +38,6 @@ GROUPS: dict[str, list[str]] = {
         "18_manual_selection",
         "19_composable_termination",
         "20_constrained_transitions",
-        "27_user_proxy_agent",
         "29_agent_introductions",
         "30_multimodal_agent",
         "32_human_guardrail",

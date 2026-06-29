@@ -1,23 +1,25 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.annotations.Tool;
-import ai.agentspan.enums.AgentStatus;
-import ai.agentspan.enums.EventType;
-import ai.agentspan.enums.Strategy;
-import ai.agentspan.internal.ToolRegistry;
-import ai.agentspan.model.AgentEvent;
-import ai.agentspan.model.AgentResult;
-import ai.agentspan.model.AgentStream;
-import ai.agentspan.model.ToolDef;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.enums.AgentStatus;
+import org.conductoross.conductor.ai.enums.EventType;
+import org.conductoross.conductor.ai.enums.Strategy;
+import org.conductoross.conductor.ai.internal.ToolRegistry;
+import org.conductoross.conductor.ai.model.AgentEvent;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.model.AgentStream;
+import org.conductoross.conductor.ai.model.PendingToolCall;
+import org.conductoross.conductor.ai.model.ToolDef;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 12: Handoff + Human-in-the-Loop.
@@ -37,7 +39,7 @@ class Suite12HandoffApprove extends BaseTest {
 
     @BeforeAll
     static void setup() {
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -48,10 +50,9 @@ class Suite12HandoffApprove extends BaseTest {
     /** Approval-required tool that lives on the sub-agent. */
     public static class ApprovalTools {
         @Tool(
-            name = "submit_change",
-            description = "Submit a configuration change after human approval",
-            approvalRequired = true
-        )
+                name = "submit_change",
+                description = "Submit a configuration change after human approval",
+                approvalRequired = true)
         public String submitChange(String change) {
             return "Change submitted: " + change;
         }
@@ -61,12 +62,12 @@ class Suite12HandoffApprove extends BaseTest {
         List<ToolDef> approvalTools = ToolRegistry.fromInstance(new ApprovalTools());
 
         Agent reviewer = Agent.builder()
-            .name(name + "_reviewer")
-            .model(MODEL)
-            .instructions("You submit configuration changes. Always call submit_change with the requested change.")
-            .tools(approvalTools)
-            .maxTurns(2)
-            .build();
+                .name(name + "_reviewer")
+                .model(MODEL)
+                .instructions("You submit configuration changes. Always call submit_change with the requested change.")
+                .tools(approvalTools)
+                .maxTurns(2)
+                .build();
 
         // maxTurns(1) on the parent bounds the orchestrator's DO_WHILE: one
         // LLM call routes the handoff and the loop exits. Without this,
@@ -74,13 +75,62 @@ class Suite12HandoffApprove extends BaseTest {
         // sub-agent replies, queueing another HUMAN approval that the test
         // never sees — the workflow hangs until the JUnit timeout fires.
         return Agent.builder()
-            .name(name)
-            .model(MODEL)
-            .instructions("Route every configuration change request to the reviewer sub-agent ONCE, then you are done. Do not answer directly.")
-            .agents(reviewer)
-            .strategy(Strategy.HANDOFF)
-            .maxTurns(1)
-            .build();
+                .name(name)
+                .model(MODEL)
+                .instructions(
+                        "Route every configuration change request to the reviewer sub-agent ONCE, then you are done. Do not answer directly.")
+                .agents(reviewer)
+                .strategy(Strategy.HANDOFF)
+                .maxTurns(1)
+                .build();
+    }
+
+    /**
+     * Regression test for issue #226: the {@code WAITING} SSE event must
+     * carry the pending tool name(s) and arguments so SDK consumers can
+     * decide whether to approve or reject. Before the fix, the server
+     * read the singular {@code tool_name} / {@code parameters} keys (which
+     * the compiler never writes) and shipped {@code null} for both — making
+     * approve/reject decisions blind. Assertion is deterministic: the
+     * approval-required tool in this suite is {@code submit_change}, so
+     * exactly that name must surface on the first WAITING event.
+     */
+    @Test
+    @Order(0)
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    void test_waiting_event_surfaces_pending_tool_calls() {
+        Agent support = buildHandoffAgent("e2e_java_handoff_pending_tool");
+
+        try (AgentStream stream = runtime.stream(
+                support, "Please submit this configuration change: enable feature flag java_e2e_pending_tool.")) {
+
+            AgentEvent firstWaiting = null;
+            int approvals = 0;
+            for (AgentEvent event : stream) {
+                if (event.getType() == EventType.WAITING) {
+                    if (firstWaiting == null) firstWaiting = event;
+                    stream.approve(event);
+                    approvals++;
+                    assertTrue(approvals <= 5, "too many approval prompts; handoff did not settle");
+                }
+            }
+
+            assertNotNull(firstWaiting, "expected a WAITING event from the sub-agent's approval-required tool");
+
+            List<PendingToolCall> calls = firstWaiting.getPendingToolCalls();
+            assertFalse(
+                    calls.isEmpty(),
+                    "WAITING event must surface the pending tool(s); got an empty list. "
+                            + "Before issue #226 fix the server shipped pendingTool.tool_name=null "
+                            + "and toolCalls was unset, leaving SDK consumers blind.");
+            assertEquals(
+                    "submit_change",
+                    calls.get(0).getName(),
+                    "first pending tool must be submit_change (the only approval-required tool in this fixture)");
+            assertNotNull(
+                    calls.get(0).getArgs(),
+                    "pending tool args must be present so consumers can decide whether to approve");
+        }
     }
 
     /**
@@ -93,8 +143,8 @@ class Suite12HandoffApprove extends BaseTest {
     void test_waiting_event_carries_sub_execution_id() {
         Agent support = buildHandoffAgent("e2e_java_handoff_waiting_id");
 
-        try (AgentStream stream = runtime.stream(support,
-                "Please submit this configuration change: enable feature flag java_e2e_hitl.")) {
+        try (AgentStream stream = runtime.stream(
+                support, "Please submit this configuration change: enable feature flag java_e2e_hitl.")) {
 
             String topExecutionId = stream.getExecutionId();
             assertNotNull(topExecutionId);
@@ -116,9 +166,11 @@ class Suite12HandoffApprove extends BaseTest {
             String waitingExecId = waiting.getExecutionId();
             assertNotNull(waitingExecId, "WAITING event must carry an execution id");
             assertFalse(waitingExecId.isEmpty(), "WAITING event execution id must not be empty");
-            assertNotEquals(topExecutionId, waitingExecId,
-                "under HANDOFF the HUMAN task lives in the sub-execution, "
-                + "so the WAITING event id must differ from the top-level execution id");
+            assertNotEquals(
+                    topExecutionId,
+                    waitingExecId,
+                    "under HANDOFF the HUMAN task lives in the sub-execution, "
+                            + "so the WAITING event id must differ from the top-level execution id");
         }
     }
 
@@ -149,7 +201,7 @@ class Suite12HandoffApprove extends BaseTest {
                 lastErr = e;
                 if (attempt < maxAttempts) {
                     System.err.println("[Suite12 HITL] attempt " + attempt + " failed ("
-                        + e.getClass().getSimpleName() + "): " + e.getMessage() + " — retrying.");
+                            + e.getClass().getSimpleName() + "): " + e.getMessage() + " — retrying.");
                 }
             }
         }
@@ -160,8 +212,8 @@ class Suite12HandoffApprove extends BaseTest {
     private void runApproveWithEventOnce() throws Exception {
         Agent support = buildHandoffAgent("e2e_java_handoff_approve_event");
 
-        try (AgentStream stream = runtime.stream(support,
-                "Please submit this configuration change: enable feature flag java_e2e_hitl.")) {
+        try (AgentStream stream = runtime.stream(
+                support, "Please submit this configuration change: enable feature flag java_e2e_hitl.")) {
 
             int approvals = 0;
             for (AgentEvent event : stream) {
@@ -176,9 +228,11 @@ class Suite12HandoffApprove extends BaseTest {
             // Poll the server-side workflow status instead of waiting on the
             // original SSE stream, which won't see the post-approve resume.
             AgentResult result = stream.waitForResult(180_000, 1_000);
-            assertEquals(AgentStatus.COMPLETED, result.getStatus(),
-                "workflow did not complete after approve(event). status=" + result.getStatus()
-                + " error=" + result.getError());
+            assertEquals(
+                    AgentStatus.COMPLETED,
+                    result.getStatus(),
+                    "workflow did not complete after approve(event). status=" + result.getStatus() + " error="
+                            + result.getError());
         }
     }
 
@@ -191,11 +245,11 @@ class Suite12HandoffApprove extends BaseTest {
     @Order(3)
     void test_approve_with_event_rejects_empty_execution_id() {
         Agent solo = Agent.builder()
-            .name("e2e_java_handoff_guard")
-            .model(MODEL)
-            .instructions("Say hello.")
-            .maxTurns(1)
-            .build();
+                .name("e2e_java_handoff_guard")
+                .model(MODEL)
+                .instructions("Say hello.")
+                .maxTurns(1)
+                .build();
 
         try (AgentStream stream = runtime.stream(solo, "hi")) {
             for (AgentEvent ignored : stream) {
@@ -203,24 +257,23 @@ class Suite12HandoffApprove extends BaseTest {
             }
 
             AgentEvent eventWithNoId = new AgentEvent(
-                EventType.WAITING,
-                /*content*/ null,
-                /*toolName*/ "submit_change",
-                /*args*/ null,
-                /*result*/ null,
-                /*output*/ null,
-                /*executionId*/ "",
-                /*guardrailName*/ null,
-                /*target*/ null
-            );
+                    EventType.WAITING,
+                    /*content*/ null,
+                    /*toolName*/ "submit_change",
+                    /*args*/ null,
+                    /*result*/ null,
+                    /*output*/ null,
+                    /*executionId*/ "",
+                    /*guardrailName*/ null,
+                    /*target*/ null);
 
-            IllegalArgumentException thrown = assertThrows(
-                IllegalArgumentException.class,
-                () -> stream.approve(eventWithNoId));
+            IllegalArgumentException thrown =
+                    assertThrows(IllegalArgumentException.class, () -> stream.approve(eventWithNoId));
 
             assertNotNull(thrown.getMessage());
-            assertTrue(thrown.getMessage().contains("execution id"),
-                "exception should mention the missing execution id, got: " + thrown.getMessage());
+            assertTrue(
+                    thrown.getMessage().contains("execution id"),
+                    "exception should mention the missing execution id, got: " + thrown.getMessage());
         }
     }
 }

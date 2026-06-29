@@ -5,7 +5,7 @@
 
 import pytest
 
-from agentspan.agents.agent import Agent, AgentDef, _resolve_agent, agent
+from conductor.ai.agents.agent import Agent, AgentDef, _resolve_agent, agent
 
 
 class TestAgentDecorator:
@@ -42,7 +42,7 @@ class TestAgentDecorator:
         assert my_func._agent_def.name == "custom_name"
 
     def test_decorator_with_tools(self):
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.tool import tool
 
         @tool
         def search(query: str) -> str:

@@ -2,7 +2,7 @@
   "external": false,
   "instructions": "Research thoroughly. Only provide your FINAL ANSWER after using the search tool at least twice.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "deliberator",
   "termination": {
     "conditions": [

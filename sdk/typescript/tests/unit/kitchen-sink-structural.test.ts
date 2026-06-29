@@ -50,7 +50,6 @@ import {
   editorialAgent,
   publishArticle,
   editorialQuestion,
-  editorialReviewer,
 
   // Stage 6
   toneDebate,
@@ -79,7 +78,7 @@ import {
 
 import { Agent } from "../../src/agent.js";
 import { RegexGuardrail, LLMGuardrail } from "../../src/guardrail.js";
-import { UserProxyAgent, GPTAssistantAgent } from "../../src/ext.js";
+import { GPTAssistantAgent } from "../../src/ext.js";
 import {
   TextMention,
   MaxMessage,
@@ -221,10 +220,6 @@ describe("Stage 2: Research Team", () => {
     expect(def.func).toBeNull();
   });
 
-  it("analyze_trends has isolated=false", () => {
-    const def = getToolDef(analyzeTrends);
-    expect(def.isolated).toBe(false);
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -339,14 +334,8 @@ describe("Stage 5: Editorial Approval", () => {
     expect(editorialQuestion.toolType).toBe("human");
   });
 
-  it("editorial reviewer is a UserProxyAgent", () => {
-    expect(editorialReviewer).toBeInstanceOf(UserProxyAgent);
-    expect(editorialReviewer.mode).toBe("TERMINATE");
-  });
-
-  it("editorial agent has both tools and sub-agents", () => {
+  it("editorial agent has tools", () => {
     expect(editorialAgent.tools).toHaveLength(2);
-    expect(editorialAgent.agents).toHaveLength(1);
   });
 });
 

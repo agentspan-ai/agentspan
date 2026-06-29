@@ -15,6 +15,6 @@ def _clear_tool_def_registry():
     a tool named ``my_tool`` registered with ``credentials=["X"]`` in one test
     poisons every subsequent test that reuses the same name.
     """
-    from agentspan.agents.runtime._dispatch import _tool_def_registry
+    from conductor.ai.agents.runtime._dispatch import _tool_def_registry
 
     _tool_def_registry.clear()

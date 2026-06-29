@@ -8,7 +8,7 @@ Usage:
     CLAUDECODE= uv run python examples/claude_agent_sdk/03_subagent_demo.py
 """
 
-from agentspan.agents import Agent, AgentRuntime, ClaudeCode
+from conductor.ai.agents import Agent, AgentRuntime, ClaudeCode
 
 
 def main():

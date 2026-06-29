@@ -9,7 +9,7 @@
  * - Scheduler definitions and executions
  * - Queue monitor
  * - API reference
- * - Credentials management
+ * - Secrets management
  *
  * Enterprise routes (registered via plugins):
  * - Auth (login, callbacks, RBAC pages)
@@ -29,7 +29,7 @@
 import { App } from "components/App";
 import DefaultAuthGuard from "components/auth/AuthGuard";
 import ApiReferencePage from "pages/apiDocs/ApiReferencePage";
-import { CredentialsPage } from "pages/credentials";
+import { SecretsPage } from "pages/secrets";
 import WorkflowDefinition from "pages/definition/WorkflowDefinition";
 import {
   Schedules as ScheduleDefinitions,
@@ -42,7 +42,7 @@ import { pluginRegistry } from "plugins/registry";
 import { featureFlags, FEATURES } from "utils";
 import {
   API_REFERENCE_URL,
-  CREDENTIALS_URL,
+  SECRETS_URL,
   RUN_AGENT_URL,
   SCHEDULER_DEFINITION_URL,
   TASK_QUEUE_URL,
@@ -90,10 +90,10 @@ const getCoreAuthenticatedRoutes = () => [
     element: <SkillDetailPage />,
   },
 
-  // Credentials
+  // Secrets
   {
-    path: CREDENTIALS_URL,
-    element: <CredentialsPage />,
+    path: SECRETS_URL.BASE,
+    element: <SecretsPage />,
   },
 
   // Scheduler Definitions

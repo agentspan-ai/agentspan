@@ -15,7 +15,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Agentspan/Agentspan.csproj" />
-    <ProjectReference Include="../../src/Agentspan.OpenAI/Agentspan.OpenAI.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI/Conductor.AI.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI.OpenAI/Conductor.AI.OpenAI.csproj" />
   </ItemGroup>
 </Project>

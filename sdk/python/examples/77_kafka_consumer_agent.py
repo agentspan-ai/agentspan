@@ -24,7 +24,7 @@ Requirements:
 
 from confluent_kafka import Consumer, KafkaError
 
-from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
+from conductor.ai.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 from settings import settings
 
 KAFKA_BOOTSTRAP = "localhost:9092"

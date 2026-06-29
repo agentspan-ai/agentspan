@@ -122,7 +122,7 @@ sequenceDiagram
 ## Import
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, run, start, stream
+from conductor.ai.agents import Agent, AgentRuntime, run, start, stream
 ```
 
 ## Constructor
@@ -182,7 +182,7 @@ Agent(name="bot", model="openai/gpt-4o",
 
 ```python
 from pydantic import BaseModel
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 class Report(BaseModel):
     title: str
@@ -215,7 +215,7 @@ agent = Agent(
 ### `AgentRuntime` context manager (recommended)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="assistant", model="openai/gpt-4o")
 
@@ -235,7 +235,7 @@ with AgentRuntime() as runtime:
 ### Module-level functions
 
 ```python
-from agentspan.agents import run, start, stream
+from conductor.ai.agents import run, start, stream
 
 result = run(agent, "Hello")       # Uses a shared singleton runtime
 handle = start(agent, "Hello")
@@ -245,7 +245,7 @@ for event in stream(agent, "Hi"): ...
 ### Async variants
 
 ```python
-from agentspan.agents import run_async, start_async, stream_async
+from conductor.ai.agents import run_async, start_async, stream_async
 
 result = await run_async(agent, "Hello")
 handle = await start_async(agent, "Hello")
@@ -312,7 +312,7 @@ elif status.is_complete:
 ### Reconnect to an existing execution
 
 ```python
-from agentspan.agents import AgentHandle, AgentRuntime
+from conductor.ai.agents import AgentHandle, AgentRuntime
 
 runtime = AgentRuntime()
 runtime.serve(agent, blocking=False)   # Start workers for @tool functions
@@ -347,7 +347,7 @@ with AgentRuntime() as runtime:
 Compile the agent without executing it:
 
 ```python
-from agentspan.agents import plan
+from conductor.ai.agents import plan
 
 workflow = plan(agent)
 print(workflow)    # Compiled workflow definition (server-side execution graph)

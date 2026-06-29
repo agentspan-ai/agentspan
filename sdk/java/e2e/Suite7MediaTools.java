@@ -1,21 +1,21 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.model.AgentResult;
-import ai.agentspan.model.ToolDef;
-import ai.agentspan.tools.MediaTools;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.model.ToolDef;
+import org.conductoross.conductor.ai.tools.MediaTools;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 16: Media Tools — structural plan() assertions for {@link MediaTools}.
@@ -36,7 +36,7 @@ class Suite7MediaTools extends BaseTest {
 
     @BeforeAll
     static void setup() {
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -51,13 +51,13 @@ class Suite7MediaTools extends BaseTest {
         List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
         assertNotNull(tools, "agentDef has no 'tools' key");
         return tools.stream()
-            .filter(t -> name.equals(t.get("name")))
-            .findFirst()
-            .orElseGet(() -> {
-                fail("Tool '" + name + "' not found. Available: "
-                    + tools.stream().map(t -> (String) t.get("name")).collect(Collectors.toList()));
-                return null;
-            });
+                .filter(t -> name.equals(t.get("name")))
+                .findFirst()
+                .orElseGet(() -> {
+                    fail("Tool '" + name + "' not found. Available: "
+                            + tools.stream().map(t -> (String) t.get("name")).collect(Collectors.toList()));
+                    return null;
+                });
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────
@@ -73,35 +73,34 @@ class Suite7MediaTools extends BaseTest {
     @Order(1)
     @SuppressWarnings("unchecked")
     void test_image_tool_basic_properties() {
-        ToolDef img = MediaTools.imageTool(
-            "e2e_s16_image",
-            "Generate an image.",
-            "openai",
-            "dall-e-3");
+        ToolDef img = MediaTools.imageTool("e2e_s16_image", "Generate an image.", "openai", "dall-e-3");
 
         assertEquals("e2e_s16_image", img.getName(), "image tool name must round-trip.");
-        assertEquals("generate_image", img.getToolType(),
-            "image tool toolType should be 'generate_image'. Got: " + img.getToolType());
+        assertEquals(
+                "generate_image",
+                img.getToolType(),
+                "image tool toolType should be 'generate_image'. Got: " + img.getToolType());
 
         Map<String, Object> config = img.getConfig();
         assertNotNull(config, "image tool config null");
-        assertEquals("openai", config.get("llmProvider"),
-            "config.llmProvider should be 'openai'. Got: " + config.get("llmProvider"));
-        assertEquals("dall-e-3", config.get("model"),
-            "config.model should be 'dall-e-3'. Got: " + config.get("model"));
-        assertEquals("GENERATE_IMAGE", config.get("taskType"),
-            "config.taskType should be 'GENERATE_IMAGE'. Got: " + config.get("taskType"));
+        assertEquals(
+                "openai",
+                config.get("llmProvider"),
+                "config.llmProvider should be 'openai'. Got: " + config.get("llmProvider"));
+        assertEquals("dall-e-3", config.get("model"), "config.model should be 'dall-e-3'. Got: " + config.get("model"));
+        assertEquals(
+                "GENERATE_IMAGE",
+                config.get("taskType"),
+                "config.taskType should be 'GENERATE_IMAGE'. Got: " + config.get("taskType"));
 
         // Counterfactual contrast — an audioTool must produce a distinct toolType.
-        ToolDef aud = MediaTools.audioTool(
-            "e2e_s16_image_contrast_audio",
-            "Generate audio.",
-            "openai",
-            "tts-1");
-        assertNotEquals(img.getToolType(), aud.getToolType(),
-            "imageTool and audioTool must have DIFFERENT toolTypes. Got both='" + img.getToolType() + "'."
-            + " COUNTERFACTUAL: if every media factory returned the same toolType, the server "
-            + "would dispatch all media tasks to the same Conductor task.");
+        ToolDef aud = MediaTools.audioTool("e2e_s16_image_contrast_audio", "Generate audio.", "openai", "tts-1");
+        assertNotEquals(
+                img.getToolType(),
+                aud.getToolType(),
+                "imageTool and audioTool must have DIFFERENT toolTypes. Got both='" + img.getToolType() + "'."
+                        + " COUNTERFACTUAL: if every media factory returned the same toolType, the server "
+                        + "would dispatch all media tasks to the same Conductor task.");
     }
 
     /**
@@ -112,29 +111,26 @@ class Suite7MediaTools extends BaseTest {
     @Test
     @Order(2)
     void test_audio_tool_basic_properties() {
-        ToolDef aud = MediaTools.audioTool(
-            "e2e_s16_audio",
-            "TTS.",
-            "openai",
-            "tts-1");
+        ToolDef aud = MediaTools.audioTool("e2e_s16_audio", "TTS.", "openai", "tts-1");
 
-        assertEquals("generate_audio", aud.getToolType(),
-            "audio tool toolType should be 'generate_audio'. Got: " + aud.getToolType());
+        assertEquals(
+                "generate_audio",
+                aud.getToolType(),
+                "audio tool toolType should be 'generate_audio'. Got: " + aud.getToolType());
         Map<String, Object> config = aud.getConfig();
-        assertEquals("tts-1", config.get("model"),
-            "config.model should be 'tts-1'. Got: " + config.get("model"));
-        assertEquals("GENERATE_AUDIO", config.get("taskType"),
-            "config.taskType should be 'GENERATE_AUDIO'. Got: " + config.get("taskType"));
+        assertEquals("tts-1", config.get("model"), "config.model should be 'tts-1'. Got: " + config.get("model"));
+        assertEquals(
+                "GENERATE_AUDIO",
+                config.get("taskType"),
+                "config.taskType should be 'GENERATE_AUDIO'. Got: " + config.get("taskType"));
 
         // Counterfactual: audio vs video must differ.
-        ToolDef vid = MediaTools.videoTool(
-            "e2e_s16_audio_contrast_video",
-            "Video.",
-            "openai",
-            "sora-2");
-        assertNotEquals(aud.getToolType(), vid.getToolType(),
-            "audioTool and videoTool must have DIFFERENT toolTypes. "
-            + "COUNTERFACTUAL: a stub would make both identical.");
+        ToolDef vid = MediaTools.videoTool("e2e_s16_audio_contrast_video", "Video.", "openai", "sora-2");
+        assertNotEquals(
+                aud.getToolType(),
+                vid.getToolType(),
+                "audioTool and videoTool must have DIFFERENT toolTypes. "
+                        + "COUNTERFACTUAL: a stub would make both identical.");
     }
 
     /**
@@ -145,20 +141,23 @@ class Suite7MediaTools extends BaseTest {
     @Test
     @Order(3)
     void test_video_tool_basic_properties() {
-        ToolDef vid = MediaTools.videoTool(
-            "e2e_s16_video",
-            "Video gen.",
-            "openai",
-            "sora-2");
-        assertEquals("generate_video", vid.getToolType(),
-            "video tool toolType should be 'generate_video'. Got: " + vid.getToolType());
-        assertEquals("GENERATE_VIDEO", vid.getConfig().get("taskType"),
-            "config.taskType should be 'GENERATE_VIDEO'. Got: " + vid.getConfig().get("taskType"));
+        ToolDef vid = MediaTools.videoTool("e2e_s16_video", "Video gen.", "openai", "sora-2");
+        assertEquals(
+                "generate_video",
+                vid.getToolType(),
+                "video tool toolType should be 'generate_video'. Got: " + vid.getToolType());
+        assertEquals(
+                "GENERATE_VIDEO",
+                vid.getConfig().get("taskType"),
+                "config.taskType should be 'GENERATE_VIDEO'. Got: "
+                        + vid.getConfig().get("taskType"));
 
         ToolDef pdf = MediaTools.pdfTool();
-        assertNotEquals(vid.getToolType(), pdf.getToolType(),
-            "videoTool and pdfTool must have DIFFERENT toolTypes. "
-            + "COUNTERFACTUAL: a stub would collapse them.");
+        assertNotEquals(
+                vid.getToolType(),
+                pdf.getToolType(),
+                "videoTool and pdfTool must have DIFFERENT toolTypes. "
+                        + "COUNTERFACTUAL: a stub would collapse them.");
     }
 
     /**
@@ -172,31 +171,37 @@ class Suite7MediaTools extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_pdf_tool_basic_properties() {
         ToolDef pdf = MediaTools.pdfTool();
-        assertEquals("generate_pdf", pdf.getToolType(),
-            "pdf tool toolType should be 'generate_pdf'. Got: " + pdf.getToolType());
-        assertEquals("GENERATE_PDF", pdf.getConfig().get("taskType"),
-            "config.taskType should be 'GENERATE_PDF'. Got: " + pdf.getConfig().get("taskType"));
+        assertEquals(
+                "generate_pdf",
+                pdf.getToolType(),
+                "pdf tool toolType should be 'generate_pdf'. Got: " + pdf.getToolType());
+        assertEquals(
+                "GENERATE_PDF",
+                pdf.getConfig().get("taskType"),
+                "config.taskType should be 'GENERATE_PDF'. Got: "
+                        + pdf.getConfig().get("taskType"));
 
         // Required field check — pdf requires 'markdown'
         Map<String, Object> schema = pdf.getInputSchema();
         List<String> required = (List<String>) schema.get("required");
         assertNotNull(required, "pdf inputSchema.required is null");
-        assertTrue(required.contains("markdown"),
-            "pdf required must include 'markdown'. Got: " + required);
-        assertFalse(required.contains("prompt"),
-            "pdf required must NOT include 'prompt' (that's for image). Got: " + required
-            + ". COUNTERFACTUAL: if the schema is shared/cloned, prompt would leak in.");
+        assertTrue(required.contains("markdown"), "pdf required must include 'markdown'. Got: " + required);
+        assertFalse(
+                required.contains("prompt"),
+                "pdf required must NOT include 'prompt' (that's for image). Got: " + required
+                        + ". COUNTERFACTUAL: if the schema is shared/cloned, prompt would leak in.");
 
         // Contrast with image's required field
         ToolDef img = MediaTools.imageTool("e2e_s16_pdf_contrast_img", "img", "openai", "dall-e-3");
         Map<String, Object> imgSchema = img.getInputSchema();
         List<String> imgRequired = (List<String>) imgSchema.get("required");
         assertNotNull(imgRequired, "image inputSchema.required is null");
-        assertTrue(imgRequired.contains("prompt"),
-            "image required should include 'prompt'. Got: " + imgRequired);
-        assertNotEquals(required, imgRequired,
-            "pdf and image required lists must differ. Got pdf=" + required + " img=" + imgRequired
-            + ". COUNTERFACTUAL: if schemas leak, both would be identical.");
+        assertTrue(imgRequired.contains("prompt"), "image required should include 'prompt'. Got: " + imgRequired);
+        assertNotEquals(
+                required,
+                imgRequired,
+                "pdf and image required lists must differ. Got pdf=" + required + " img=" + imgRequired
+                        + ". COUNTERFACTUAL: if schemas leak, both would be identical.");
     }
 
     /**
@@ -209,28 +214,17 @@ class Suite7MediaTools extends BaseTest {
     @Order(5)
     @SuppressWarnings("unchecked")
     void test_media_tools_serialize_to_plan_with_distinct_models() {
-        ToolDef img = MediaTools.imageTool(
-            "e2e_s16_plan_image",
-            "Image.",
-            "openai",
-            "dall-e-3");
+        ToolDef img = MediaTools.imageTool("e2e_s16_plan_image", "Image.", "openai", "dall-e-3");
         ToolDef gemImg = MediaTools.imageTool(
-            "e2e_s16_plan_gem_image",
-            "Image gemini.",
-            "google_gemini",
-            "imagen-3.0-generate-002");
-        ToolDef aud = MediaTools.audioTool(
-            "e2e_s16_plan_audio",
-            "Audio.",
-            "openai",
-            "tts-1");
+                "e2e_s16_plan_gem_image", "Image gemini.", "google_gemini", "imagen-3.0-generate-002");
+        ToolDef aud = MediaTools.audioTool("e2e_s16_plan_audio", "Audio.", "openai", "tts-1");
 
         Agent agent = Agent.builder()
-            .name("e2e_s16_plan_agent")
-            .model(MODEL)
-            .instructions("Generate media.")
-            .tools(List.of(img, gemImg, aud))
-            .build();
+                .name("e2e_s16_plan_agent")
+                .model(MODEL)
+                .instructions("Generate media.")
+                .tools(List.of(img, gemImg, aud))
+                .build();
 
         Map<String, Object> agentDef = getAgentDef(runtime.plan(agent));
 
@@ -238,25 +232,36 @@ class Suite7MediaTools extends BaseTest {
         Map<String, Object> gemPlan = findToolByName(agentDef, "e2e_s16_plan_gem_image");
         Map<String, Object> audPlan = findToolByName(agentDef, "e2e_s16_plan_audio");
 
-        assertEquals("generate_image", imgPlan.get("toolType"),
-            "Image plan toolType wrong. Got: " + imgPlan.get("toolType"));
-        assertEquals("generate_image", gemPlan.get("toolType"),
-            "Gemini-image plan toolType wrong. Got: " + gemPlan.get("toolType"));
-        assertEquals("generate_audio", audPlan.get("toolType"),
-            "Audio plan toolType wrong. Got: " + audPlan.get("toolType")
-            + ". COUNTERFACTUAL: if every media tool serialized as 'generate_image', this would fail.");
+        assertEquals(
+                "generate_image",
+                imgPlan.get("toolType"),
+                "Image plan toolType wrong. Got: " + imgPlan.get("toolType"));
+        assertEquals(
+                "generate_image",
+                gemPlan.get("toolType"),
+                "Gemini-image plan toolType wrong. Got: " + gemPlan.get("toolType"));
+        assertEquals(
+                "generate_audio",
+                audPlan.get("toolType"),
+                "Audio plan toolType wrong. Got: " + audPlan.get("toolType")
+                        + ". COUNTERFACTUAL: if every media tool serialized as 'generate_image', this would fail.");
 
         Map<String, Object> imgConfig = (Map<String, Object>) imgPlan.get("config");
         Map<String, Object> gemConfig = (Map<String, Object>) gemPlan.get("config");
-        assertEquals("dall-e-3", imgConfig.get("model"),
-            "OpenAI image model wrong. Got: " + imgConfig.get("model"));
-        assertEquals("imagen-3.0-generate-002", gemConfig.get("model"),
-            "Gemini image model wrong. Got: " + gemConfig.get("model"));
-        assertNotEquals(imgConfig.get("model"), gemConfig.get("model"),
-            "OpenAI vs Gemini models must differ in plan. "
-            + "COUNTERFACTUAL: if config.model were dropped or shared, both would match.");
-        assertNotEquals(imgConfig.get("llmProvider"), gemConfig.get("llmProvider"),
-            "OpenAI vs Gemini providers must differ. Got both='" + imgConfig.get("llmProvider") + "'.");
+        assertEquals("dall-e-3", imgConfig.get("model"), "OpenAI image model wrong. Got: " + imgConfig.get("model"));
+        assertEquals(
+                "imagen-3.0-generate-002",
+                gemConfig.get("model"),
+                "Gemini image model wrong. Got: " + gemConfig.get("model"));
+        assertNotEquals(
+                imgConfig.get("model"),
+                gemConfig.get("model"),
+                "OpenAI vs Gemini models must differ in plan. "
+                        + "COUNTERFACTUAL: if config.model were dropped or shared, both would match.");
+        assertNotEquals(
+                imgConfig.get("llmProvider"),
+                gemConfig.get("llmProvider"),
+                "OpenAI vs Gemini providers must differ. Got both='" + imgConfig.get("llmProvider") + "'.");
     }
 
     /**
@@ -270,31 +275,34 @@ class Suite7MediaTools extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_no_media_tool_means_no_generate_in_plan() {
         ToolDef worker = ToolDef.builder()
-            .name("e2e_s16_no_media_worker")
-            .description("worker")
-            .inputSchema(Map.of("type", "object", "properties", Map.of()))
-            .toolType("worker")
-            .func(input -> input)
-            .build();
+                .name("e2e_s16_no_media_worker")
+                .description("worker")
+                .inputSchema(Map.of("type", "object", "properties", Map.of()))
+                .toolType("worker")
+                .func(input -> input)
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_s16_no_media_agent")
-            .model(MODEL)
-            .instructions("No media.")
-            .tools(List.of(worker))
-            .build();
+                .name("e2e_s16_no_media_agent")
+                .model(MODEL)
+                .instructions("No media.")
+                .tools(List.of(worker))
+                .build();
 
         Map<String, Object> agentDef = getAgentDef(runtime.plan(agent));
         List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
         assertNotNull(tools, "tools null");
 
         boolean anyMedia = tools.stream()
-            .map(t -> (String) t.get("toolType"))
-            .anyMatch(tt -> tt != null && tt.startsWith("generate_"));
-        assertFalse(anyMedia,
-            "Plan must not have generate_* toolType when no media tool was added. Got: "
-            + tools.stream().map(t -> t.get("name") + "[" + t.get("toolType") + "]").collect(Collectors.toList())
-            + ". COUNTERFACTUAL: if media types are always emitted, all plans would have them.");
+                .map(t -> (String) t.get("toolType"))
+                .anyMatch(tt -> tt != null && tt.startsWith("generate_"));
+        assertFalse(
+                anyMedia,
+                "Plan must not have generate_* toolType when no media tool was added. Got: "
+                        + tools.stream()
+                                .map(t -> t.get("name") + "[" + t.get("toolType") + "]")
+                                .collect(Collectors.toList())
+                        + ". COUNTERFACTUAL: if media types are always emitted, all plans would have them.");
     }
 
     /**
@@ -315,56 +323,51 @@ class Suite7MediaTools extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_image_generation_openai_runtime_completes() {
         String apiKey = System.getenv("OPENAI_API_KEY");
-        assumeTrue(apiKey != null && !apiKey.isEmpty(),
-            "OPENAI_API_KEY not set — skipping live image generation test.");
+        assumeTrue(
+                apiKey != null && !apiKey.isEmpty(), "OPENAI_API_KEY not set — skipping live image generation test.");
 
-        ToolDef img = MediaTools.imageTool(
-            "generate_image",
-            "Generate an image from a text prompt.",
-            "openai",
-            "dall-e-3");
+        ToolDef img =
+                MediaTools.imageTool("generate_image", "Generate an image from a text prompt.", "openai", "dall-e-3");
 
         Agent agent = Agent.builder()
-            .name("e2e_s16_image_openai_runtime")
-            .model(MODEL)
-            .instructions(
-                "You generate images. When the user asks for an image, call generate_image "
-                + "with the user's prompt.")
-            .tools(List.of(img))
-            .build();
+                .name("e2e_s16_image_openai_runtime")
+                .model(MODEL)
+                .instructions("You generate images. When the user asks for an image, call generate_image "
+                        + "with the user's prompt.")
+                .tools(List.of(img))
+                .build();
 
-        AgentResult result = runtime.run(
-            agent,
-            "Generate an image of a single red apple on a white background.");
+        AgentResult result = runtime.run(agent, "Generate an image of a single red apple on a white background.");
 
-        assertTrue(result.isSuccess(),
-            "Agent run did not succeed: status=" + result.getStatus()
-            + ", error=" + result.getError());
+        assertTrue(
+                result.isSuccess(),
+                "Agent run did not succeed: status=" + result.getStatus() + ", error=" + result.getError());
 
         Map<String, Object> wf = getWorkflow(result.getExecutionId());
         List<Map<String, Object>> tasks = (List<Map<String, Object>>) wf.get("tasks");
         assertNotNull(tasks, "Workflow has no tasks. wfId=" + result.getExecutionId());
 
         Map<String, Object> imgTask = tasks.stream()
-            .filter(t -> {
-                String tt = String.valueOf(t.getOrDefault("taskType", ""));
-                String tdn = String.valueOf(t.getOrDefault("taskDefName", ""));
-                return tt.contains("GENERATE_IMAGE") || tdn.contains("generate_image");
-            })
-            .findFirst()
-            .orElseGet(() -> {
-                fail("No GENERATE_IMAGE task found in workflow. Task types: "
-                    + tasks.stream().map(t -> t.get("taskType")).collect(Collectors.toList())
-                    + ". COUNTERFACTUAL: an image tool MUST cause the server to dispatch a "
-                    + "GENERATE_IMAGE system task.");
-                return null;
-            });
+                .filter(t -> {
+                    String tt = String.valueOf(t.getOrDefault("taskType", ""));
+                    String tdn = String.valueOf(t.getOrDefault("taskDefName", ""));
+                    return tt.contains("GENERATE_IMAGE") || tdn.contains("generate_image");
+                })
+                .findFirst()
+                .orElseGet(() -> {
+                    fail("No GENERATE_IMAGE task found in workflow. Task types: "
+                            + tasks.stream().map(t -> t.get("taskType")).collect(Collectors.toList())
+                            + ". COUNTERFACTUAL: an image tool MUST cause the server to dispatch a "
+                            + "GENERATE_IMAGE system task.");
+                    return null;
+                });
 
         // COMPLETED_WITH_ERRORS is acceptable: the OpenAI image API sometimes returns
         // soft errors (e.g., moderation warnings) while still producing a valid image;
         // Conductor surfaces this as COMPLETED_WITH_ERRORS.
         String status = String.valueOf(imgTask.get("status"));
-        assertTrue("COMPLETED".equals(status) || "COMPLETED_WITH_ERRORS".equals(status),
-            "GENERATE_IMAGE task status should be COMPLETED or COMPLETED_WITH_ERRORS. Got: " + status);
+        assertTrue(
+                "COMPLETED".equals(status) || "COMPLETED_WITH_ERRORS".equals(status),
+                "GENERATE_IMAGE task status should be COMPLETED or COMPLETED_WITH_ERRORS. Got: " + status);
     }
 }

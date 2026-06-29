@@ -2,9 +2,8 @@
  * 08 - Credentials
  *
  * Demonstrates credential management:
- * - Tool with credentials (isolated mode: env vars)
+ * - Tool that declares credentials and reads them with getCredential()
  * - httpTool with ${CREDENTIAL} header substitution
- * - In-process mode with getCredential()
  */
 
 import {
@@ -13,20 +12,24 @@ import {
   tool,
   httpTool,
   getCredential,
-} from '@agentspan-ai/sdk';
-import type { ToolContext } from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
+import type { ToolContext } from '@conductor-oss/conductor-agent-sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
-// -- Tool with isolated credentials (env var injection) --
+// -- Tool that declares a credential and reads it at runtime --
 const dbLookup = tool(
   async (args: { query: string }, ctx?: ToolContext) => {
-    // In isolated mode, credential is available as process.env.DB_API_KEY
-    const apiKey = process.env.DB_API_KEY ?? 'not-set';
+    let apiKey: string;
+    try {
+      apiKey = await getCredential('DB_API_KEY');
+    } catch {
+      apiKey = '';
+    }
     return {
       query: args.query,
       session: ctx?.sessionId ?? 'unknown',
-      keyPresent: apiKey !== 'not-set',
+      keyPresent: apiKey !== '',
     };
   },
   {
@@ -39,14 +42,13 @@ const dbLookup = tool(
       },
       required: ['query'],
     },
-    credentials: [{ envVar: 'DB_API_KEY' }],
+    credentials: ['DB_API_KEY'],
   },
 );
 
-// -- Tool with in-process credential access --
+// -- Another tool reading a credential at runtime --
 const analyticsTool = tool(
   async (args: { topic: string }) => {
-    // In-process mode: use getCredential() to fetch at runtime
     let key: string;
     try {
       key = await getCredential('ANALYTICS_KEY');
@@ -65,7 +67,6 @@ const analyticsTool = tool(
       },
       required: ['topic'],
     },
-    isolated: false,
     credentials: ['ANALYTICS_KEY'],
   },
 );

@@ -17,7 +17,7 @@ import ConductorInput from "components/v1/ConductorInput";
 import { MessageContext } from "components/v1/layout/MessageContext";
 import { ConductorSectionHeader } from "components/v1/layout/section/ConductorSectionHeader";
 import { IdempotencyStrategyEnum } from "pages/runWorkflow/types";
-import { useCallback, useContext, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useLocation, useParams } from "react-router";
 import SectionContainer from "shared/SectionContainer";
@@ -83,6 +83,13 @@ export function Schedule() {
   const isNewScheduleDef = location.pathname === SCHEDULER_DEFINITION_URL.NEW;
   let scheduleNameFromUrl = "New Scheduler";
   const isMDWidth = useMediaQuery((theme: Theme) => theme.breakpoints.up("md"));
+
+  // Pre-fill agent name when arriving from an agent's Schedules tab via ?workflowName=
+  const prefilledAgent = useMemo(
+    () => (isNewScheduleDef ? new URLSearchParams(location.search).get("workflowName") ?? "" : ""),
+    [isNewScheduleDef, location.search],
+  );
+  const prefillApplied = useRef(false);
 
   if (!isNewScheduleDef) {
     scheduleNameFromUrl = params.name || "New Scheduler";
@@ -225,6 +232,18 @@ export function Schedule() {
     },
     [setWorkflowVersion, setScheduleState, scheduleState.workflowType],
   );
+
+  // Pre-fill agent when workflowNames loads (only on new-schedule path with ?workflowName=)
+  useEffect(() => {
+    if (
+      prefilledAgent &&
+      !prefillApplied.current &&
+      workflowNames.includes(prefilledAgent)
+    ) {
+      prefillApplied.current = true;
+      handleWorkflowTypeChange(prefilledAgent);
+    }
+  }, [prefilledAgent, workflowNames, handleWorkflowTypeChange]);
 
   // Initialize state when schedule data changes
   useMemo(() => {
@@ -738,6 +757,12 @@ export function Schedule() {
                           }
                           paused={scheduleState.paused}
                           setCronPausedState={formHandlers.setCronPausedState}
+                          runCatchupScheduleInstances={
+                            scheduleState.runCatchupScheduleInstances
+                          }
+                          setRunCatchupScheduleInstances={
+                            formHandlers.setRunCatchupScheduleInstances
+                          }
                         />
                       </Grid>
                     </Box>

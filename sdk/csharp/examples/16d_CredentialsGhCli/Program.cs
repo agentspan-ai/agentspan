@@ -19,8 +19,8 @@
 //   - GITHUB_TOKEN stored via `agentspan credentials set`
 //   - gh CLI installed (https://cli.github.com)
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // CliTool.Create with credentials — GITHUB_TOKEN is injected before each gh invocation.
 // Only `gh` is whitelisted; any other command is rejected by the SDK.

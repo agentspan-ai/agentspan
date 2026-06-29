@@ -20,8 +20,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 //   - GITHUB_TOKEN stored via `agentspan credentials set`
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // HTTP tool with credential-bearing headers.
 // ${GITHUB_TOKEN} is resolved server-side from the credential store.

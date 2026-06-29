@@ -1,19 +1,21 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.model.AgentResult;
-import ai.agentspan.model.ToolDef;
-import ai.agentspan.tools.PdfTool;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.model.CompileResponse;
+import org.conductoross.conductor.ai.model.ToolDef;
+import org.conductoross.conductor.ai.tools.PdfTool;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 6: PDF Tools — structural plan() assertions for {@link PdfTool}.
@@ -33,7 +35,7 @@ class Suite6PdfTools extends BaseTest {
 
     @BeforeAll
     static void setup() {
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -48,13 +50,13 @@ class Suite6PdfTools extends BaseTest {
         List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
         assertNotNull(tools, "agentDef has no 'tools' key");
         return tools.stream()
-            .filter(t -> name.equals(t.get("name")))
-            .findFirst()
-            .orElseGet(() -> {
-                fail("Tool '" + name + "' not found. Available: "
-                    + tools.stream().map(t -> (String) t.get("name")).collect(Collectors.toList()));
-                return null;
-            });
+                .filter(t -> name.equals(t.get("name")))
+                .findFirst()
+                .orElseGet(() -> {
+                    fail("Tool '" + name + "' not found. Available: "
+                            + tools.stream().map(t -> (String) t.get("name")).collect(Collectors.toList()));
+                    return null;
+                });
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────
@@ -71,31 +73,35 @@ class Suite6PdfTools extends BaseTest {
     void test_pdf_tool_def_basic_properties() {
         ToolDef pdf = PdfTool.create();
 
-        assertEquals("generate_pdf", pdf.getName(),
-            "Default PDF tool name should be 'generate_pdf'. Got: " + pdf.getName());
-        assertEquals("generate_pdf", pdf.getToolType(),
-            "PDF tool toolType must be 'generate_pdf'. Got: " + pdf.getToolType()
-            + ". COUNTERFACTUAL: paired with the contrast assertion below.");
-        assertNull(pdf.getFunc(),
-            "PDF tool must NOT have a local func — the server runs GENERATE_PDF. Got: " + pdf.getFunc());
-        assertNotNull(pdf.getDescription(),
-            "PDF tool description must be non-null.");
-        assertTrue(pdf.getDescription().toLowerCase().contains("pdf"),
-            "PDF tool description should mention 'pdf'. Got: " + pdf.getDescription());
+        assertEquals(
+                "generate_pdf", pdf.getName(), "Default PDF tool name should be 'generate_pdf'. Got: " + pdf.getName());
+        assertEquals(
+                "generate_pdf",
+                pdf.getToolType(),
+                "PDF tool toolType must be 'generate_pdf'. Got: " + pdf.getToolType()
+                        + ". COUNTERFACTUAL: paired with the contrast assertion below.");
+        assertNull(
+                pdf.getFunc(),
+                "PDF tool must NOT have a local func — the server runs GENERATE_PDF. Got: " + pdf.getFunc());
+        assertNotNull(pdf.getDescription(), "PDF tool description must be non-null.");
+        assertTrue(
+                pdf.getDescription().toLowerCase().contains("pdf"),
+                "PDF tool description should mention 'pdf'. Got: " + pdf.getDescription());
 
         // Counterfactual contrast — a worker ToolDef must NOT be classified as generate_pdf.
         ToolDef worker = ToolDef.builder()
-            .name("e2e_s6_contrast_worker")
-            .description("A worker tool")
-            .inputSchema(Map.of("type", "object", "properties", Map.of()))
-            .toolType("worker")
-            .func(input -> input)
-            .build();
-        assertEquals("worker", worker.getToolType(),
-            "Worker tool must remain toolType='worker'.");
-        assertNotEquals(pdf.getToolType(), worker.getToolType(),
-            "PDF and worker tools must have distinct toolTypes. COUNTERFACTUAL: if PdfTool.create() doesn't "
-            + "override the default 'worker', these would collide.");
+                .name("e2e_s6_contrast_worker")
+                .description("A worker tool")
+                .inputSchema(Map.of("type", "object", "properties", Map.of()))
+                .toolType("worker")
+                .func(input -> input)
+                .build();
+        assertEquals("worker", worker.getToolType(), "Worker tool must remain toolType='worker'.");
+        assertNotEquals(
+                pdf.getToolType(),
+                worker.getToolType(),
+                "PDF and worker tools must have distinct toolTypes. COUNTERFACTUAL: if PdfTool.create() doesn't "
+                        + "override the default 'worker', these would collide.");
     }
 
     /**
@@ -109,18 +115,24 @@ class Suite6PdfTools extends BaseTest {
     void test_pdf_tool_custom_name_and_description() {
         ToolDef custom = PdfTool.create("write_report", "Render a report into PDF.");
 
-        assertEquals("write_report", custom.getName(),
-            "Custom PDF tool name must round-trip. Got: " + custom.getName());
-        assertEquals("Render a report into PDF.", custom.getDescription(),
-            "Custom PDF tool description must round-trip. Got: " + custom.getDescription());
-        assertEquals("generate_pdf", custom.getToolType(),
-            "Custom name must NOT change toolType. Got: " + custom.getToolType());
+        assertEquals(
+                "write_report", custom.getName(), "Custom PDF tool name must round-trip. Got: " + custom.getName());
+        assertEquals(
+                "Render a report into PDF.",
+                custom.getDescription(),
+                "Custom PDF tool description must round-trip. Got: " + custom.getDescription());
+        assertEquals(
+                "generate_pdf",
+                custom.getToolType(),
+                "Custom name must NOT change toolType. Got: " + custom.getToolType());
 
         // Counterfactual: a second PDF tool with a different name produces a distinct ToolDef.
         ToolDef other = PdfTool.create("export_pdf", "Export.");
-        assertNotEquals(custom.getName(), other.getName(),
-            "Two PDF tools with different names must have distinct ToolDef.name. "
-            + "COUNTERFACTUAL: if the name parameter were ignored, both would share the same name.");
+        assertNotEquals(
+                custom.getName(),
+                other.getName(),
+                "Two PDF tools with different names must have distinct ToolDef.name. "
+                        + "COUNTERFACTUAL: if the name parameter were ignored, both would share the same name.");
     }
 
     /**
@@ -138,36 +150,42 @@ class Suite6PdfTools extends BaseTest {
 
         Map<String, Object> schema = pdf.getInputSchema();
         assertNotNull(schema, "Default PDF input schema must not be null.");
-        assertEquals("object", schema.get("type"),
-            "Default PDF schema must be a JSON object schema. Got type=" + schema.get("type"));
+        assertEquals(
+                "object",
+                schema.get("type"),
+                "Default PDF schema must be a JSON object schema. Got type=" + schema.get("type"));
 
         Map<String, Object> props = (Map<String, Object>) schema.get("properties");
         assertNotNull(props, "Default PDF schema must have 'properties'.");
-        assertTrue(props.containsKey("markdown"),
-            "Default PDF schema MUST expose a 'markdown' property. Got keys: " + props.keySet()
-            + ". COUNTERFACTUAL: without this, the LLM cannot pass markdown content.");
+        assertTrue(
+                props.containsKey("markdown"),
+                "Default PDF schema MUST expose a 'markdown' property. Got keys: " + props.keySet()
+                        + ". COUNTERFACTUAL: without this, the LLM cannot pass markdown content.");
 
         List<String> required = (List<String>) schema.get("required");
         assertNotNull(required, "Default PDF schema must declare a 'required' list.");
-        assertTrue(required.contains("markdown"),
-            "Default PDF schema must require 'markdown'. Got required=" + required
-            + ". COUNTERFACTUAL: if markdown were optional, calls with empty input would silently produce blank PDFs.");
+        assertTrue(
+                required.contains("markdown"),
+                "Default PDF schema must require 'markdown'. Got required=" + required
+                        + ". COUNTERFACTUAL: if markdown were optional, calls with empty input would silently produce blank PDFs.");
 
         // Counterfactual contrast — a custom inputSchema must REPLACE the default,
         // not be merged with it. Build with a schema that lacks 'markdown'.
         Map<String, Object> customSchema = Map.of(
-            "type", "object",
-            "properties", Map.of("title", Map.of("type", "string")),
-            "required", List.of("title")
-        );
+                "type", "object",
+                "properties", Map.of("title", Map.of("type", "string")),
+                "required", List.of("title"));
         ToolDef customSchemaPdf = PdfTool.create("titled_pdf", "Title-only PDF.", customSchema);
-        Map<String, Object> customProps = (Map<String, Object>) customSchemaPdf.getInputSchema().get("properties");
-        assertFalse(customProps.containsKey("markdown"),
-            "Custom inputSchema must REPLACE the default — 'markdown' should be absent. "
-            + "Got props=" + customProps.keySet()
-            + ". COUNTERFACTUAL: if the default were always merged in, this would fail.");
-        assertTrue(customProps.containsKey("title"),
-            "Custom schema's properties must be preserved. Got: " + customProps.keySet());
+        Map<String, Object> customProps =
+                (Map<String, Object>) customSchemaPdf.getInputSchema().get("properties");
+        assertFalse(
+                customProps.containsKey("markdown"),
+                "Custom inputSchema must REPLACE the default — 'markdown' should be absent. "
+                        + "Got props=" + customProps.keySet()
+                        + ". COUNTERFACTUAL: if the default were always merged in, this would fail.");
+        assertTrue(
+                customProps.containsKey("title"),
+                "Custom schema's properties must be preserved. Got: " + customProps.keySet());
     }
 
     /**
@@ -184,26 +202,29 @@ class Suite6PdfTools extends BaseTest {
         ToolDef pdf = PdfTool.create();
 
         Agent agent = Agent.builder()
-            .name("e2e_s6_agent_with_pdf")
-            .model(MODEL)
-            .instructions("Generate PDFs.")
-            .tools(List.of(pdf))
-            .build();
+                .name("e2e_s6_agent_with_pdf")
+                .model(MODEL)
+                .instructions("Generate PDFs.")
+                .tools(List.of(pdf))
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         Map<String, Object> tool = findToolByName(agentDef, "generate_pdf");
-        assertEquals("generate_pdf", tool.get("toolType"),
-            "Plan toolType should be 'generate_pdf'. Got: " + tool.get("toolType")
-            + ". COUNTERFACTUAL: if serializer drops it, server won't dispatch to GENERATE_PDF task.");
+        assertEquals(
+                "generate_pdf",
+                tool.get("toolType"),
+                "Plan toolType should be 'generate_pdf'. Got: " + tool.get("toolType")
+                        + ". COUNTERFACTUAL: if serializer drops it, server won't dispatch to GENERATE_PDF task.");
 
         Map<String, Object> config = (Map<String, Object>) tool.get("config");
-        assertNotNull(config,
-            "PDF tool plan must carry a config (taskType). Got null config.");
-        assertEquals("GENERATE_PDF", config.get("taskType"),
-            "config.taskType should be 'GENERATE_PDF'. Got: " + config.get("taskType")
-            + ". COUNTERFACTUAL: without this, server can't route the tool call to the right system task.");
+        assertNotNull(config, "PDF tool plan must carry a config (taskType). Got null config.");
+        assertEquals(
+                "GENERATE_PDF",
+                config.get("taskType"),
+                "config.taskType should be 'GENERATE_PDF'. Got: " + config.get("taskType")
+                        + ". COUNTERFACTUAL: without this, server can't route the tool call to the right system task.");
     }
 
     /**
@@ -217,31 +238,34 @@ class Suite6PdfTools extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_no_pdf_tool_means_no_pdf_in_plan() {
         ToolDef worker = ToolDef.builder()
-            .name("e2e_s6_just_worker")
-            .description("Plain worker.")
-            .inputSchema(Map.of("type", "object", "properties", Map.of()))
-            .toolType("worker")
-            .func(input -> input)
-            .build();
+                .name("e2e_s6_just_worker")
+                .description("Plain worker.")
+                .inputSchema(Map.of("type", "object", "properties", Map.of()))
+                .toolType("worker")
+                .func(input -> input)
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_s6_no_pdf_agent")
-            .model(MODEL)
-            .instructions("No PDF here.")
-            .tools(List.of(worker))
-            .build();
+                .name("e2e_s6_no_pdf_agent")
+                .model(MODEL)
+                .instructions("No PDF here.")
+                .tools(List.of(worker))
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
         assertNotNull(tools, "agentDef.tools is null");
 
         boolean anyPdf = tools.stream().anyMatch(t -> "generate_pdf".equals(t.get("toolType")));
-        assertFalse(anyPdf,
-            "Plan must contain NO toolType='generate_pdf' entries when no PDF tool was added. Got tools: "
-            + tools.stream().map(t -> t.get("name") + "[" + t.get("toolType") + "]").collect(Collectors.toList())
-            + ". COUNTERFACTUAL: if every tool were serialized as generate_pdf, the server would dispatch them all to GENERATE_PDF.");
+        assertFalse(
+                anyPdf,
+                "Plan must contain NO toolType='generate_pdf' entries when no PDF tool was added. Got tools: "
+                        + tools.stream()
+                                .map(t -> t.get("name") + "[" + t.get("toolType") + "]")
+                                .collect(Collectors.toList())
+                        + ". COUNTERFACTUAL: if every tool were serialized as generate_pdf, the server would dispatch them all to GENERATE_PDF.");
     }
 
     /**
@@ -254,48 +278,47 @@ class Suite6PdfTools extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_pdf_tool_defaults_propagate_to_plan_config() {
         ToolDef pdfWithDefaults = PdfTool.create(
-            "fancy_pdf",
-            "PDF with baked-in defaults.",
-            null,
-            Map.of("pageSize", "LETTER", "theme", "compact")
-        );
+                "fancy_pdf", "PDF with baked-in defaults.", null, Map.of("pageSize", "LETTER", "theme", "compact"));
 
         Agent agent = Agent.builder()
-            .name("e2e_s6_defaults_agent")
-            .model(MODEL)
-            .instructions("Render with defaults.")
-            .tools(List.of(pdfWithDefaults))
-            .build();
+                .name("e2e_s6_defaults_agent")
+                .model(MODEL)
+                .instructions("Render with defaults.")
+                .tools(List.of(pdfWithDefaults))
+                .build();
 
         Map<String, Object> agentDef = getAgentDef(runtime.plan(agent));
         Map<String, Object> tool = findToolByName(agentDef, "fancy_pdf");
         Map<String, Object> config = (Map<String, Object>) tool.get("config");
 
         assertNotNull(config, "Config null on PDF tool with defaults.");
-        assertEquals("GENERATE_PDF", config.get("taskType"),
-            "config.taskType should remain 'GENERATE_PDF'. Got: " + config.get("taskType"));
-        assertEquals("LETTER", config.get("pageSize"),
-            "config.pageSize should be 'LETTER'. Got: " + config.get("pageSize")
-            + ". COUNTERFACTUAL: if defaults were dropped, server-side rendering wouldn't honor them.");
-        assertEquals("compact", config.get("theme"),
-            "config.theme should be 'compact'. Got: " + config.get("theme"));
+        assertEquals(
+                "GENERATE_PDF",
+                config.get("taskType"),
+                "config.taskType should remain 'GENERATE_PDF'. Got: " + config.get("taskType"));
+        assertEquals(
+                "LETTER",
+                config.get("pageSize"),
+                "config.pageSize should be 'LETTER'. Got: " + config.get("pageSize")
+                        + ". COUNTERFACTUAL: if defaults were dropped, server-side rendering wouldn't honor them.");
+        assertEquals("compact", config.get("theme"), "config.theme should be 'compact'. Got: " + config.get("theme"));
 
         // Contrast: PDF tool with NO defaults must NOT have pageSize/theme.
         ToolDef plain = PdfTool.create("plain_pdf", "No defaults.");
         Agent agent2 = Agent.builder()
-            .name("e2e_s6_plain_agent")
-            .model(MODEL)
-            .instructions("Plain PDF.")
-            .tools(List.of(plain))
-            .build();
+                .name("e2e_s6_plain_agent")
+                .model(MODEL)
+                .instructions("Plain PDF.")
+                .tools(List.of(plain))
+                .build();
         Map<String, Object> agentDef2 = getAgentDef(runtime.plan(agent2));
         Map<String, Object> tool2 = findToolByName(agentDef2, "plain_pdf");
         Map<String, Object> config2 = (Map<String, Object>) tool2.get("config");
-        assertNull(config2.get("pageSize"),
-            "Plain PDF tool must have NO pageSize. Got: " + config2.get("pageSize")
-            + ". COUNTERFACTUAL: if defaults were always emitted, this would fail.");
-        assertNull(config2.get("theme"),
-            "Plain PDF tool must have NO theme. Got: " + config2.get("theme"));
+        assertNull(
+                config2.get("pageSize"),
+                "Plain PDF tool must have NO pageSize. Got: " + config2.get("pageSize")
+                        + ". COUNTERFACTUAL: if defaults were always emitted, this would fail.");
+        assertNull(config2.get("theme"), "Plain PDF tool must have NO theme. Got: " + config2.get("theme"));
     }
 
     /**
@@ -318,62 +341,63 @@ class Suite6PdfTools extends BaseTest {
     @Order(7)
     @SuppressWarnings("unchecked")
     void test_pdf_generation_task_completes_and_has_output() {
-        String sampleMarkdown =
-            "# Agentspan Parity Report\n\n"
-            + "## Overview\n"
-            + "This PDF validates the GENERATE_PDF pipeline end-to-end.\n\n"
-            + "## Numbers\n"
-            + "- Tests run: 12\n"
-            + "- Passed:    11\n";
+        String sampleMarkdown = "# Agentspan Parity Report\n\n"
+                + "## Overview\n"
+                + "This PDF validates the GENERATE_PDF pipeline end-to-end.\n\n"
+                + "## Numbers\n"
+                + "- Tests run: 12\n"
+                + "- Passed:    11\n";
 
         ToolDef pdf = PdfTool.create();
         Agent agent = Agent.builder()
-            .name("e2e_s6_pdf_gen_runtime")
-            .model(MODEL)
-            .instructions(
-                "You generate PDFs. When the user asks, call generate_pdf with the EXACT "
-                + "markdown they provide. Do not paraphrase, do not summarize.")
-            .tools(List.of(pdf))
-            .build();
+                .name("e2e_s6_pdf_gen_runtime")
+                .model(MODEL)
+                .instructions("You generate PDFs. When the user asks, call generate_pdf with the EXACT "
+                        + "markdown they provide. Do not paraphrase, do not summarize.")
+                .tools(List.of(pdf))
+                .build();
 
         AgentResult result = runtime.run(
-            agent,
-            "Convert the following markdown to a PDF. Pass it exactly to generate_pdf:\n\n" + sampleMarkdown);
+                agent,
+                "Convert the following markdown to a PDF. Pass it exactly to generate_pdf:\n\n" + sampleMarkdown);
 
-        assertNotNull(result.getExecutionId(),
-            "Agent run must produce an executionId. status=" + result.getStatus()
-            + " error=" + result.getError());
-        assertTrue(result.isSuccess(),
-            "Agent run did not succeed: status=" + result.getStatus()
-            + ", error=" + result.getError());
+        assertNotNull(
+                result.getExecutionId(),
+                "Agent run must produce an executionId. status=" + result.getStatus() + " error=" + result.getError());
+        assertTrue(
+                result.isSuccess(),
+                "Agent run did not succeed: status=" + result.getStatus() + ", error=" + result.getError());
 
         Map<String, Object> wf = getWorkflow(result.getExecutionId());
         List<Map<String, Object>> tasks = (List<Map<String, Object>>) wf.get("tasks");
         assertNotNull(tasks, "Workflow has no tasks array. wfId=" + result.getExecutionId());
 
         Map<String, Object> pdfTask = tasks.stream()
-            .filter(t -> {
-                String tt = String.valueOf(t.getOrDefault("taskType", ""));
-                String tdn = String.valueOf(t.getOrDefault("taskDefName", ""));
-                return tt.contains("GENERATE_PDF") || tdn.contains("generate_pdf");
-            })
-            .findFirst()
-            .orElseGet(() -> {
-                fail("No GENERATE_PDF task found in workflow. Got task types: "
-                    + tasks.stream().map(t -> t.get("taskType")).collect(Collectors.toList())
-                    + ". COUNTERFACTUAL: a PdfTool MUST cause the server to dispatch a "
-                    + "GENERATE_PDF system task.");
-                return null;
-            });
+                .filter(t -> {
+                    String tt = String.valueOf(t.getOrDefault("taskType", ""));
+                    String tdn = String.valueOf(t.getOrDefault("taskDefName", ""));
+                    return tt.contains("GENERATE_PDF") || tdn.contains("generate_pdf");
+                })
+                .findFirst()
+                .orElseGet(() -> {
+                    fail("No GENERATE_PDF task found in workflow. Got task types: "
+                            + tasks.stream().map(t -> t.get("taskType")).collect(Collectors.toList())
+                            + ". COUNTERFACTUAL: a PdfTool MUST cause the server to dispatch a "
+                            + "GENERATE_PDF system task.");
+                    return null;
+                });
 
-        assertEquals("COMPLETED", pdfTask.get("status"),
-            "GENERATE_PDF task status should be COMPLETED. Got: " + pdfTask.get("status"));
+        assertEquals(
+                "COMPLETED",
+                pdfTask.get("status"),
+                "GENERATE_PDF task status should be COMPLETED. Got: " + pdfTask.get("status"));
 
         Object outputData = pdfTask.get("outputData");
         assertNotNull(outputData, "GENERATE_PDF task outputData is null.");
         String outputStr = outputData.toString();
-        assertTrue(outputStr.length() > 20,
-            "GENERATE_PDF outputData should not be effectively empty. Got: " + outputStr
-            + ". COUNTERFACTUAL: an empty payload means the renderer ran but produced nothing.");
+        assertTrue(
+                outputStr.length() > 20,
+                "GENERATE_PDF outputData should not be effectively empty. Got: " + outputStr
+                        + ". COUNTERFACTUAL: an empty payload means the renderer ran but produced nothing.");
     }
 }

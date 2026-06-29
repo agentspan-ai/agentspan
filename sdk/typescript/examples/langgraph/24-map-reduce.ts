@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation, Send } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -111,21 +111,19 @@ async function reduceSummaries(state: OverallStateType): Promise<Partial<Overall
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(OverallState);
-builder.addNode('generate_documents', generateDocuments);
-builder.addNode('summarize_doc', summarizeDoc);
-builder.addNode('reduce', reduceSummaries);
-
-builder.addEdge(START, 'generate_documents');
-builder.addConditionalEdges('generate_documents', fanOut, ['summarize_doc']);
-builder.addEdge('summarize_doc', 'reduce');
-builder.addEdge('reduce', END);
-
-const graph = builder.compile({ name: "map_reduce_agent" });
+const graph = new StateGraph(OverallState)
+  .addNode('generate_documents', generateDocuments)
+  .addNode('summarize_doc', summarizeDoc)
+  .addNode('reduce', reduceSummaries)
+  .addEdge(START, 'generate_documents')
+  .addConditionalEdges('generate_documents', fanOut, ['summarize_doc'])
+  .addEdge('summarize_doc', 'reduce')
+  .addEdge('reduce', END)
+  .compile({ name: "map_reduce_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

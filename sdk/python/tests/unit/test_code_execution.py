@@ -5,13 +5,13 @@
 
 import pytest
 
-from agentspan.agents.agent import Agent, agent
-from agentspan.agents.code_execution_config import (
+from conductor.ai.agents.agent import Agent, agent
+from conductor.ai.agents.code_execution_config import (
     CodeExecutionConfig,
     CommandValidator,
     _make_code_execution_tool,
 )
-from agentspan.agents.code_executor import LocalCodeExecutor
+from conductor.ai.agents.code_executor import LocalCodeExecutor
 
 # ── CodeExecutionConfig ────────────────────────────────────────────────
 
@@ -303,7 +303,7 @@ class TestAgentCodeExecution:
         assert len(a.tools) == 0
 
     def test_coexists_with_manual_tools(self):
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.tool import tool
 
         @tool
         def my_tool(x: str) -> str:
@@ -327,7 +327,7 @@ class TestAgentCodeExecution:
             """You write code."""
 
         # Resolve to Agent
-        from agentspan.agents.agent import _resolve_agent
+        from conductor.ai.agents.agent import _resolve_agent
 
         a = _resolve_agent(coder)
         assert a.code_execution_config is not None

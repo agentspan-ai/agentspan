@@ -21,11 +21,11 @@ Run with:
 
 import pytest
 
-from agentspan.agents import Agent, Strategy, tool
-from agentspan.agents.result import AgentEvent, EventType
-from agentspan.agents.runtime.config import AgentConfig
-from agentspan.agents.runtime.runtime import AgentRuntime
-from agentspan.agents.testing import (
+from conductor.ai.agents import Agent, Strategy, tool
+from conductor.ai.agents.result import AgentEvent, EventType
+from conductor.ai.agents.runtime.config import AgentConfig
+from conductor.ai.agents.runtime.runtime import AgentRuntime
+from conductor.ai.agents.testing import (
     CorrectnessEval,
     EvalCase,
     assert_handoff_to,
@@ -102,7 +102,7 @@ class TestSingleAgentTools:
         """Agent should call get_weather for a weather question."""
         agent = Agent(
             name="weather_bot",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="You are a weather assistant. Always use the get_weather tool to answer weather questions.",
             tools=[get_weather],
         )
@@ -121,7 +121,7 @@ class TestSingleAgentTools:
         """Agent should call calculate for a math question."""
         agent = Agent(
             name="math_bot",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="You are a math assistant. Always use the calculate tool to compute answers. Never calculate in your head.",
             tools=[calculate],
         )
@@ -139,7 +139,7 @@ class TestSingleAgentTools:
         """Agent should NOT use tools when they aren't needed."""
         agent = Agent(
             name="greeting_bot",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="You are a friendly assistant with weather tools. Only use tools when asked about weather.",
             tools=[get_weather],
         )
@@ -166,19 +166,19 @@ class TestHandoffLive:
     def support_agent(self):
         billing = Agent(
             name="billing",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="You handle billing and order questions. Use lookup_order to find orders.",
             tools=[lookup_order],
         )
         weather = Agent(
             name="weather",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="You handle weather questions. Use get_weather to check weather.",
             tools=[get_weather],
         )
         return Agent(
             name="support",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are a support router. Route billing/order questions to 'billing' "
                 "and weather questions to 'weather'. Always delegate, never answer directly."
@@ -223,12 +223,12 @@ class TestSequentialLive:
         """Researcher → writer pipeline should produce researched content."""
         researcher = Agent(
             name="researcher",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="Research the topic. List 3 key facts. Be brief.",
         )
         writer = Agent(
             name="writer",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="Take the research and write a short 2-sentence summary.",
         )
         pipeline = researcher >> writer
@@ -257,17 +257,17 @@ class TestParallelLive:
         """Both analysts should run and contribute to the output."""
         pros = Agent(
             name="pros_analyst",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="List 2 pros/advantages. Be brief, one sentence each.",
         )
         cons = Agent(
             name="cons_analyst",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="List 2 cons/disadvantages. Be brief, one sentence each.",
         )
         team = Agent(
             name="analysis",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[pros, cons],
             strategy=Strategy.PARALLEL,
         )
@@ -296,23 +296,23 @@ class TestRouterLive:
     def dev_team(self):
         router = Agent(
             name="router",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="Route coding tasks to 'coder' and math tasks to 'calculator'.",
         )
         coder = Agent(
             name="coder",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="Write Python code. Be brief.",
         )
         calculator = Agent(
             name="calculator",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="Solve math problems. Use the calculate tool.",
             tools=[calculate],
         )
         return Agent(
             name="dev_team",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[coder, calculator],
             strategy=Strategy.ROUTER,
             router=router,
@@ -353,17 +353,17 @@ class TestRoundRobinLive:
         """Two debaters should alternate: optimist → pessimist → optimist → pessimist."""
         optimist = Agent(
             name="optimist",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="Argue ONE positive point about the topic. One sentence only.",
         )
         pessimist = Agent(
             name="pessimist",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="Argue ONE negative point about the topic. One sentence only.",
         )
         debate = Agent(
             name="debate",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[optimist, pessimist],
             strategy=Strategy.ROUND_ROBIN,
             max_turns=4,
@@ -384,7 +384,7 @@ class TestRoundRobinLive:
         assert_handoff_to(result, "pessimist")
 
         # Verify alternation — no agent runs twice in a row
-        from agentspan.agents.testing.strategy_validators import (
+        from conductor.ai.agents.testing.strategy_validators import (
             _get_handoff_targets,
         )
         targets = _get_handoff_targets(result)
@@ -408,13 +408,13 @@ class TestEvalRunnerLive:
         """Run multiple correctness checks in one eval suite."""
         weather_agent = Agent(
             name="weather_eval",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="You are a weather assistant. Always use the get_weather tool.",
             tools=[get_weather],
         )
         math_agent = Agent(
             name="math_eval",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions="You are a math assistant. Always use the calculate tool. Never calculate in your head.",
             tools=[calculate],
         )

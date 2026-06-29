@@ -17,8 +17,8 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { guardrail } from '@agentspan-ai/sdk';
-import type { GuardrailResult, GuardrailDef } from '@agentspan-ai/sdk';
+import { guardrail } from '@conductor-oss/conductor-agent-sdk';
+import type { GuardrailResult, GuardrailDef } from '@conductor-oss/conductor-agent-sdk';
 
 // -- Define guardrails -------------------------------------------------------
 

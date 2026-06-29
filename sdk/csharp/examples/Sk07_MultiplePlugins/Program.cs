@@ -12,12 +12,12 @@
 
 using System.ComponentModel;
 using System.Globalization;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.SemanticKernel;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.SemanticKernel;
 using Microsoft.SemanticKernel;
 
-namespace Agentspan.Examples.Sk07;
+namespace Conductor.AI.Examples.Sk07;
 
 public sealed class MathPlugin
 {

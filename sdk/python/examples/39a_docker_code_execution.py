@@ -13,8 +13,8 @@ Requirements:
     - export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 """
 
-from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
-from agentspan.agents.code_executor import DockerCodeExecutor
+from conductor.ai.agents import Agent, AgentRuntime, CodeExecutionConfig
+from conductor.ai.agents.code_executor import DockerCodeExecutor
 from settings import settings
 
 docker_coder = Agent(

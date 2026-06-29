@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Agent with tools — define a tool function, agent calls it."""
 
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 
 @tool
@@ -12,14 +12,16 @@ def get_weather(city: str) -> str:
 
 agent = Agent(
     name="weather_bot",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="Use the get_weather tool to answer weather questions.",
     tools=[get_weather],
 )
 
+prompt = "What's the weather in Tokyo?"
+
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        result = rt.run(agent, "What's the weather in Tokyo?")
+        result = rt.run(agent, prompt)
         result.print_result()
 
         # Production pattern:

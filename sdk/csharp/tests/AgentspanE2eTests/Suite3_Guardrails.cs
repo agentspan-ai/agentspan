@@ -12,9 +12,9 @@
 using System.Text.RegularExpressions;
 using System.Threading;
 using Xunit;
-using Agentspan.Examples;
+using Conductor.AI.Examples;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite3_Guardrails

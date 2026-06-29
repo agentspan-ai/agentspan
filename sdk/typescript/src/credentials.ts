@@ -110,7 +110,7 @@ export function extractExecutionToken(taskInput: Record<string, unknown>): strin
 /**
  * Resolve credentials from the server.
  *
- * POST ${serverUrl}/credentials/resolve with { executionToken, names }
+ * POST ${serverUrl}/workers/secrets with { executionToken, names }
  *
  * Error mapping:
  * - 404 -> CredentialNotFoundError
@@ -124,7 +124,7 @@ export async function resolveCredentials(
   executionToken: string,
   names: string[],
 ): Promise<Record<string, string>> {
-  const url = `${serverUrl}/credentials/resolve`;
+  const url = `${serverUrl}/workers/secrets`;
   let response: Response;
 
   try {
@@ -213,50 +213,68 @@ export async function getCredential(name: string): Promise<string> {
   return value;
 }
 
-// ── Credential injection ─────────────────────────────────
+// ── Concurrency-safe injection (Tier 2 fallback) ───────────────────────────────
+//
+// See docs/design/secret-injection-contract.md.
+//
+// A single module-scoped Promise chain serializes mutate-invoke-restore across
+// all callers in this process. Node is single-threaded, but `process.env` is
+// still shared across all in-flight async operations — two concurrent
+// invocations would interleave across `await` boundaries and clobber each
+// other's env if there were no lock.
+
+let _envInjectionMutex: Promise<void> = Promise.resolve();
 
 /**
- * Inject resolved credentials into the execution environment.
+ * Run `invoke()` with `secrets` injected into `process.env` for the duration
+ * of the call. Mutation, invocation, and restoration happen atomically with
+ * respect to any other call to this function in this process — concurrent
+ * callers serialize.
  *
- * @param serverUrl - Server URL for credential resolution
- * @param headers - Authorization headers
- * @param executionToken - Scoped execution token
- * @param credentials - Map of credential name -> resolved value
- * @param isolated - If true (default), set as process.env vars; if false, store in context for getCredential()
- * @returns Cleanup function that removes injected credentials
+ * Tier-1 (explicit-key) integrations should NOT use this — they should pass
+ * resolved values directly to model client constructors, bypassing `process.env`
+ * entirely.
+ *
+ * @param secrets - name → plaintext (non-string values silently skipped)
+ * @param invoke - async function that runs the framework
+ * @returns Whatever `invoke()` resolves with.
  */
-export function injectCredentials(
-  serverUrl: string,
-  headers: Record<string, string>,
-  executionToken: string,
+export async function injectSecretsForInvocation<T>(
   credentials: Record<string, string>,
-  isolated: boolean = true,
-): () => void {
-  if (isolated) {
-    // Set credentials as environment variables
-    const previousValues: Record<string, string | undefined> = {};
-    for (const [name, value] of Object.entries(credentials)) {
-      previousValues[name] = process.env[name];
-      process.env[name] = value;
+  invoke: () => Promise<T>,
+): Promise<T> {
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(credentials)) {
+    if (typeof v === "string") clean[k] = v;
+  }
+  if (Object.keys(clean).length === 0) {
+    return invoke();
+  }
+
+  // Enqueue this call after the current tail of the chain.
+  const previous = _envInjectionMutex;
+  let resolveSlot!: () => void;
+  _envInjectionMutex = new Promise<void>((res) => {
+    resolveSlot = res;
+  });
+
+  try {
+    await previous;
+    const restorers: Array<() => void> = [];
+    for (const [k, v] of Object.entries(clean)) {
+      const prev = process.env[k];
+      process.env[k] = v;
+      restorers.push(() => {
+        if (prev === undefined) delete process.env[k];
+        else process.env[k] = prev;
+      });
     }
-
-    // Return cleanup function
-    return () => {
-      for (const [name] of Object.entries(credentials)) {
-        if (previousValues[name] === undefined) {
-          delete process.env[name];
-        } else {
-          process.env[name] = previousValues[name];
-        }
-      }
-    };
-  } else {
-    // In-process mode: set credential context for getCredential()
-    setCredentialContext(serverUrl, headers, executionToken);
-
-    // Return cleanup function
-    return () => {
-      clearCredentialContext();
-    };
+    try {
+      return await invoke();
+    } finally {
+      for (const r of restorers) r();
+    }
+  } finally {
+    resolveSlot();
   }
 }

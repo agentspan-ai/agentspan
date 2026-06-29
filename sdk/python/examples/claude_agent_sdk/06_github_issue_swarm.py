@@ -31,8 +31,8 @@ import re
 import shlex
 import subprocess
 
-from agentspan.agents import Agent, AgentRuntime, ClaudeCode, Strategy, tool
-from agentspan.agents.handoff import OnTextMention
+from conductor.ai.agents import Agent, AgentRuntime, ClaudeCode, Strategy, tool
+from conductor.ai.agents.handoff import OnTextMention
 
 
 # ---------------------------------------------------------------------------

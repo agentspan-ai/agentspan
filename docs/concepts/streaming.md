@@ -10,7 +10,7 @@ Stream events from an agent execution as they happen — tool calls, thinking st
 ## Basic Streaming
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="writer", model="openai/gpt-4o")
 
@@ -32,7 +32,7 @@ with AgentRuntime() as runtime:
 ## Module-level stream()
 
 ```python
-from agentspan.agents import Agent, stream
+from conductor.ai.agents import Agent, stream
 
 agent = Agent(name="writer", model="openai/gpt-4o")
 for event in stream(agent, "Write a poem"):
@@ -43,7 +43,7 @@ for event in stream(agent, "Write a poem"):
 ## Async Streaming
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="writer", model="openai/gpt-4o")
 
@@ -86,7 +86,7 @@ async def main():
 ## Streaming with Tools
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def search_web(query: str) -> str:
@@ -115,7 +115,7 @@ with AgentRuntime() as runtime:
 When an agent is waiting for approval, the `waiting` event fires. Handle it from a separate process using the execution ID:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, AgentHandle, tool
+from conductor.ai.agents import Agent, AgentRuntime, AgentHandle, tool
 
 @tool(approval_required=True)
 def send_email(to: str, subject: str, body: str) -> dict:
@@ -147,7 +147,7 @@ if workflow_id:
 To get the final `AgentResult` after streaming:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, start
+from conductor.ai.agents import Agent, AgentRuntime, start
 
 agent = Agent(name="writer", model="openai/gpt-4o")
 

@@ -10,7 +10,7 @@ Usage:
     uv run python examples/claude_agent_sdk/01_basic_agent.py
 """
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 reviewer = Agent(
     name="file_lister",

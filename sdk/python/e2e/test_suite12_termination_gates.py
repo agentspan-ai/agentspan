@@ -17,14 +17,14 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     MaxMessageTermination,
     Strategy,
     TextMentionTermination,
     tool,
 )
-from agentspan.agents.gate import TextGate
+from conductor.ai.agents.gate import TextGate
 
 pytestmark = [pytest.mark.e2e]
 

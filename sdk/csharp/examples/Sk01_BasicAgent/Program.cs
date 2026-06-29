@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using System.ComponentModel;
-using Agentspan;
-using Agentspan.SemanticKernel;
+using Conductor.AI;
+using Conductor.AI.SemanticKernel;
 using Microsoft.SemanticKernel;
 
-namespace Agentspan.Examples.Sk01;
+namespace Conductor.AI.Examples.Sk01;
 
 /// <summary>
 /// Bridge a plain C# class with [KernelFunction] methods into Agentspan.

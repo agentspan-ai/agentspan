@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import pytest
 
-from agentspan.agents._internal.schema_utils import (
+from conductor.ai.agents._internal.schema_utils import (
     _type_to_json_schema,
     schema_from_function,
     schema_from_pydantic,
@@ -136,7 +136,7 @@ class TestSchemaFromFunction:
         from unittest.mock import patch
 
         with patch(
-            "agentspan.agents._internal.schema_utils.get_type_hints",
+            "conductor.ai.agents._internal.schema_utils.get_type_hints",
             side_effect=Exception("broken"),
         ):
             result = schema_from_function(func)

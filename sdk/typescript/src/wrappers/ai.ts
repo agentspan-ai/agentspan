@@ -8,7 +8,7 @@
  * Usage:
  *   // BEFORE: import { generateText } from 'ai';
  *   // AFTER:
- *   import { generateText } from '@agentspan-ai/sdk/vercel-ai';
+ *   import { generateText } from '@conductor-oss/conductor-agent-sdk/vercel-ai';
  *
  * Everything else in user code stays UNCHANGED.
  */
@@ -25,7 +25,7 @@ async function _loadAI(): Promise<any> {
     return _ai;
   } catch {
     throw new Error(
-      `The 'ai' package is required by @agentspan-ai/sdk/vercel-ai but was not found. ` +
+      `The 'ai' package is required by @conductor-oss/conductor-agent-sdk/vercel-ai but was not found. ` +
         `Install it with: npm install ai`,
     );
   }
@@ -60,7 +60,7 @@ try {
  */
 export function extractModelString(model: unknown): string {
   if (typeof model === "string") return model;
-  if (typeof model !== "object" || model === null) return "openai/gpt-4o-mini";
+  if (typeof model !== "object" || model === null) return "anthropic/claude-sonnet-4-6";
 
   const m = model as Record<string, unknown>;
 
@@ -69,7 +69,7 @@ export function extractModelString(model: unknown): string {
     (typeof m.modelId === "string" && m.modelId) ||
     (typeof m.modelName === "string" && m.modelName) ||
     (typeof m.model === "string" && m.model) ||
-    "gpt-4o-mini";
+    "anthropic/claude-sonnet-4-6";
 
   // Already has provider prefix
   if (modelId.includes("/")) return modelId;
@@ -252,7 +252,7 @@ export function getAIModule(): Record<string, unknown> {
     return _aiModule!;
   } catch {
     throw new Error(
-      `The 'ai' package is required by @agentspan-ai/sdk/vercel-ai but was not found. ` +
+      `The 'ai' package is required by @conductor-oss/conductor-agent-sdk/vercel-ai but was not found. ` +
         `Install it with: npm install ai`,
     );
   }

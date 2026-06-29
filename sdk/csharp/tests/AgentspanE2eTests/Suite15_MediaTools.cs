@@ -11,9 +11,9 @@
 // generation pipeline; gated by OPENAI_API_KEY availability.
 
 using Xunit;
-using Agentspan.Examples;
+using Conductor.AI.Examples;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite15_MediaTools

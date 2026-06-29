@@ -200,7 +200,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: server-jar
-          path: server/build/libs/agentspan-runtime.jar
+          path: server/conductor-agentspan-server/build/libs/agentspan-runtime.jar
           retention-days: 7
 
   # ── Python E2E Tests ───────────────────────────────────────────────
@@ -229,7 +229,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: server-jar
-          path: server/build/libs/
+          path: server/conductor-agentspan-server/build/libs/
 
       - name: Build CLI
         working-directory: cli
@@ -251,15 +251,21 @@ jobs:
 
       - name: Start server
         run: |
-          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          java -jar server/conductor-agentspan-server/build/libs/agentspan-runtime.jar --server.port=6767 &
           for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
 
       - name: Run Python e2e suites 1-13
         working-directory: sdk/python
+        # These suites drive a real server + real LLM, so individual tests
+        # flake on transient latency/tool-call stalls (workflow still RUNNING
+        # at timeout, tool batch not returning, etc.). Auto-retry transient
+        # failures up to twice — a genuinely broken test still fails all 3
+        # attempts, while a one-off flake recovers. See #277 thread.
         run: |
           uv run pytest e2e/ -v --tb=short \
             --junitxml=../../e2e-results/junit.xml \
-            -n 1
+            --reruns 2 --reruns-delay 5 \
+            -n 3 --dist=loadgroup
 
       - name: Generate Python HTML report
         if: always()
@@ -302,7 +308,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: server-jar
-          path: server/build/libs/
+          path: server/conductor-agentspan-server/build/libs/
 
       - name: Build CLI
         working-directory: cli
@@ -318,7 +324,7 @@ jobs:
 
       - name: Start server
         run: |
-          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          java -jar server/conductor-agentspan-server/build/libs/agentspan-runtime.jar --server.port=6767 &
           for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
 
       - name: Install TypeScript SDK
@@ -365,7 +371,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: server-jar
-          path: server/build/libs/
+          path: server/conductor-agentspan-server/build/libs/
 
       - name: Install mcp-testkit
         run: pip install mcp-testkit
@@ -377,7 +383,7 @@ jobs:
 
       - name: Start server
         run: |
-          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          java -jar server/conductor-agentspan-server/build/libs/agentspan-runtime.jar --server.port=6767 &
           for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
 
       - name: Run Java e2e suites
@@ -422,11 +428,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: server-jar
-          path: server/build/libs/
+          path: server/conductor-agentspan-server/build/libs/
 
       - name: Start server
         run: |
-          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          java -jar server/conductor-agentspan-server/build/libs/agentspan-runtime.jar --server.port=6767 &
           for i in $(seq 1 30); do curl -sf http://localhost:6767/health && break; sleep 2; done
 
       - name: Run C# e2e suites

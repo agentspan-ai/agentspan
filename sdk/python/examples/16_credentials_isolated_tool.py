@@ -4,7 +4,7 @@
 """Credentials — per-user secrets injected into isolated tool subprocesses.
 
 Demonstrates:
-    - @tool with credentials=["GITHUB_TOKEN"] (default isolated=True)
+    - @tool with credentials=["GITHUB_TOKEN"] declares the tool's secret needs
     - Credentials injected into a fresh subprocess — parent env never touched
     - Tool reads credential from os.environ inside the subprocess
     - Fallback to os.environ when no server credential is set (non-strict mode)
@@ -29,8 +29,9 @@ Requirements:
 import os
 import subprocess
 
-from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
+
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 
 @tool(credentials=["GITHUB_TOKEN"])
@@ -45,14 +46,24 @@ def list_github_repos(username: str) -> dict:
         headers.append(f"Authorization: Bearer {token}")
 
     result = subprocess.run(
-        ["curl", "-sf", "-H", headers[0], "-H", headers[-1],
-         f"https://api.github.com/users/{username}/repos?per_page=5&sort=updated"],
-        capture_output=True, text=True, timeout=10,
+        [
+            "curl",
+            "-sf",
+            "-H",
+            headers[0],
+            "-H",
+            headers[-1],
+            f"https://api.github.com/users/{username}/repos?per_page=5&sort=updated",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode != 0:
         return {"error": result.stderr.strip()}
 
     import json
+
     repos = json.loads(result.stdout)
     return {
         "username": username,
@@ -72,15 +83,27 @@ def create_github_issue(repo: str, title: str, body: str) -> dict:
         return {"error": "GITHUB_TOKEN not available — cannot create issues without auth"}
 
     import json
+
     payload = json.dumps({"title": title, "body": body})
     result = subprocess.run(
-        ["curl", "-sf", "-X", "POST",
-         "-H", "Accept: application/vnd.github+json",
-         "-H", f"Authorization: Bearer {token}",
-         "-H", "Content-Type: application/json",
-         "-d", payload,
-         f"https://api.github.com/repos/{repo}/issues"],
-        capture_output=True, text=True, timeout=10,
+        [
+            "curl",
+            "-sf",
+            "-X",
+            "POST",
+            "-H",
+            "Accept: application/vnd.github+json",
+            "-H",
+            f"Authorization: Bearer {token}",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            payload,
+            f"https://api.github.com/repos/{repo}/issues",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if result.returncode != 0:
         return {"error": result.stderr.strip()}
@@ -118,4 +141,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(agent)
-

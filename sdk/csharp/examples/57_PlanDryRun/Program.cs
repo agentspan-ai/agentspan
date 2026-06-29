@@ -19,8 +19,8 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Define the agent (same as any other example) ──────────────
 

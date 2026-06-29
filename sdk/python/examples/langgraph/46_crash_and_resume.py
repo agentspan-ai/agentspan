@@ -49,7 +49,7 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 SESSION_FILE = "/tmp/agentspan_langgraph_resume.session"
 SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")

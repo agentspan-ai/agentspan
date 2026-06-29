@@ -28,16 +28,23 @@ WORKDIR /build
 COPY server/build.gradle server/settings.gradle server/gradle.properties ./
 COPY server/gradle/ gradle/
 COPY server/gradlew ./
+# Pre-fetch dependencies for layer caching. Multi-module build: bring each
+# module's build.gradle so dependency resolution sees the full graph.
+COPY server/conductor-agentspan/build.gradle conductor-agentspan/
+COPY server/conductor-agentspan-server/build.gradle conductor-agentspan-server/
 RUN chmod +x gradlew && ./gradlew --no-daemon dependencies || true
 
-COPY server/src/ src/
+# conductor-agentspan = library, conductor-agentspan-server = runnable server (owns bootJar)
+COPY server/conductor-agentspan/ conductor-agentspan/
+COPY server/conductor-agentspan-server/ conductor-agentspan-server/
 
 # Spring Boot automatically serves everything under classpath:/static/ at /
-# Copy the Vite dist output there before building the JAR so it gets packaged in.
-COPY --from=ui-builder /ui/dist/ src/main/resources/static/
+# Copy the Vite dist output into the server module before building the JAR so
+# it gets packaged in.
+COPY --from=ui-builder /ui/dist/ conductor-agentspan-server/src/main/resources/static/
 
 RUN ./gradlew --no-daemon bootJar
-RUN cp build/libs/agentspan-runtime.jar /build/runtime.jar
+RUN cp conductor-agentspan-server/build/libs/agentspan-runtime.jar /build/runtime.jar
 
 # ─── Stage 3: Runtime image ───────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre

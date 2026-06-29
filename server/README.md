@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/agentspan-ai/agentspan">Main Repo</a> &bull;
-  <a href="https://docs.agentspan.dev">Docs</a> &bull;
+  <a href="https://agentspan.ai/docs">Docs</a> &bull;
   <a href="https://discord.gg/agentspan">Discord</a> &bull;
   <a href="../sdk/python/">Python SDK</a> &bull;
   <a href="../cli/">CLI</a>
@@ -42,10 +42,10 @@ cd server
 ./gradlew bootJar -PbuildUI=true
 
 # Run with default config (SQLite)
-java -jar build/libs/agentspan-runtime.jar
+java -jar conductor-agentspan-server/build/libs/agentspan-runtime.jar
 
 # Run with PostgreSQL
-java -jar build/libs/agentspan-runtime.jar --spring.profiles.active=postgres
+java -jar conductor-agentspan-server/build/libs/agentspan-runtime.jar --spring.profiles.active=postgres
 ```
 
 Or use the CLI:
@@ -54,7 +54,7 @@ Or use the CLI:
 agentspan server start --local
 ```
 
-For container builds:
+For container builds (run from the **repo root** — the Dockerfile needs both `ui/` and `server/` in context):
 
 ```bash
 docker build -f server/Dockerfile -t agentspan/server:latest .
@@ -108,19 +108,19 @@ Reconnection is supported via `Last-Event-ID` header. Events are buffered in mem
 
 ### API Documentation
 
-A static API docs page is served at `/docs` (built from `docs/` at compile time). The OpenAPI JSON spec is still available at `/api-docs`.
+A static API docs page is served at `/docs` (built into the embedded UI from `ui/src/docs/` at compile time). The OpenAPI JSON spec is also available at `/api-docs`.
 
-**Regenerating API Docs** (after changing endpoints):
+**Regenerating API Docs** (after changing endpoints — run from the repo root):
 
 ```bash
 # 1. Save the latest spec from a running server
-curl http://localhost:6767/api-docs > ui/api-docs-ui/api-docs.json
+curl http://localhost:6767/api-docs > ui/api-docs.json
 
-# 2. Regenerate the TypeScript data file
-./docs/regenerate.sh
+# 2. Regenerate the TypeScript data file (ui/src/docs/generated-api-data.ts)
+ui/regenerate.sh
 
 # 3. Commit both files
-git add ui/api-docs-ui/api-docs.json ui/api-docs-ui/src/generated-api-data.ts
+git add ui/api-docs.json ui/src/docs/generated-api-data.ts
 ```
 
 The next `./gradlew build` or `bootRun` picks up the changes automatically.
@@ -151,7 +151,7 @@ This starts PostgreSQL 16 with user `conductor`, password `conductor`, database 
 **2. Run with the Postgres profile:**
 
 ```bash
-java -jar build/libs/agentspan-runtime.jar --spring.profiles.active=postgres
+java -jar conductor-agentspan-server/build/libs/agentspan-runtime.jar --spring.profiles.active=postgres
 ```
 
 Or via environment variables:
@@ -161,7 +161,7 @@ export SPRING_PROFILES_ACTIVE=postgres
 export SPRING_DATASOURCE_URL=jdbc:postgresql://your-host:5432/conductor
 export SPRING_DATASOURCE_USERNAME=your_user
 export SPRING_DATASOURCE_PASSWORD=your_password
-java -jar build/libs/agentspan-runtime.jar
+java -jar conductor-agentspan-server/build/libs/agentspan-runtime.jar
 ```
 
 ## RAG (Vector Search)
@@ -171,10 +171,10 @@ The server supports RAG (Retrieval-Augmented Generation) via built-in `LLM_INDEX
 Activate with the `rag` Spring profile:
 
 ```bash
-java -jar build/libs/agentspan-runtime.jar --spring.profiles.active=rag
+java -jar conductor-agentspan-server/build/libs/agentspan-runtime.jar --spring.profiles.active=rag
 
 # Combine with PostgreSQL backend:
-java -jar build/libs/agentspan-runtime.jar --spring.profiles.active=postgres,rag
+java -jar conductor-agentspan-server/build/libs/agentspan-runtime.jar --spring.profiles.active=postgres,rag
 ```
 
 ### Supported Vector Databases
@@ -252,7 +252,7 @@ conductor.vectordb.instances[0].mongodb.collectionName=embeddings
 ### SDK Usage
 
 ```python
-from agentspan.agents import Agent, search_tool, index_tool
+from conductor.ai.agents import Agent, search_tool, index_tool
 
 kb_search = search_tool(
     name="search_docs",
@@ -376,30 +376,60 @@ The server is a Spring Boot application (Java 21) built on top of [Conductor](ht
 
 Tests use an in-memory SQLite database with AI providers disabled.
 
+### Releasing
+
+The server splits into two Maven artifacts — `conductor-agentspan` (the library a host like
+orkes-conductor embeds) and `conductor-agentspan-server` (the runnable standalone app) — plus the
+Docker image and S3 fat jar. Releases are still **manual `workflow_dispatch`** (no tag-driven
+fan-out). Because the library declares its Conductor deps `compileOnly`, the embedded engine version
+is **not** carried in the published POM, so version coupling is a release-time convention:
+
+- **Release the platform artifacts together — same version, same commit.** Dispatch the Maven,
+  Docker, and S3 release workflows from one commit with the same version string. Nothing enforces
+  this; a given build can't produce a mismatched lib/server pair (both read `project.version` and
+  the single `conductorVersion`), but separate dispatches with different inputs can.
+- **Record the Conductor version the release was *built against* in the release notes** — read it
+  off `conductorVersion` in `build.gradle` (e.g. "built/tested against Conductor 3.30.2"). State it
+  as a **fact, not a required range**: a declared "compatible with 3.30.x" would only be honest if
+  tested across that range and kept current — maintenance we don't want. The deps stay `compileOnly`
+  so the host's version still wins; this line is just the build-against breadcrumb the POM can't
+  carry. An embedding host certifies *its own* engine version with its own tests. See design doc §9.2.
+- **Keep `conductorVersion` a single variable** in `build.gradle`. It is the source of truth for
+  both modules; splitting it reintroduces silent lib↔server drift. A Conductor bump (on whichever
+  side bumps) is the event that warrants re-running the conformance suite on that engine.
+
 ### Project structure
+
+A two-module Gradle build: `conductor-agentspan` is the runtime library, `conductor-agentspan-server` is the runnable Spring Boot app that owns the `bootJar`.
 
 ```
 server/
-├── build.gradle                           # Build config (Spring Boot 3.3.5, Java 21)
+├── build.gradle                           # Root build config (Spring Boot 3.3.5, Java 21)
+├── settings.gradle                        # Includes both modules
 ├── docker-compose.yml                     # PostgreSQL for local dev
-├── src/main/
-│   ├── java/
-│   │   ├── org/conductoross/conductor/
-│   │   │   └── AgentRuntime.java          # Spring Boot entry point
-│   │   └── dev/agentspan/runtime/
-│   │       ├── compiler/                  # AgentConfig → WorkflowDef
-│   │       ├── controller/                # REST API
-│   │       ├── service/                   # Business logic + SSE
-│   │       ├── model/                     # DTOs
-│   │       ├── normalizer/                # Config normalization
-│   │       └── util/                      # Helpers
-│   └── resources/
-│       ├── application.properties         # Default config (SQLite)
-│       ├── application-postgres.properties
-│       └── application-rag.properties     # Vector DB config (pgvector/Pinecone/MongoDB)
-└── src/test/
-    └── resources/
-        └── application-test.properties    # Test config
+├── Dockerfile                             # Multi-stage build (UI + server); context = repo root
+│
+├── conductor-agentspan/                   # Library: agent runtime logic
+│   └── src/main/java/dev/agentspan/runtime/
+│       ├── compiler/                      # AgentConfig → WorkflowDef
+│       ├── controller/                    # REST API
+│       ├── service/                       # Business logic + SSE
+│       ├── model/                         # DTOs
+│       ├── normalizer/                    # Config normalization
+│       └── util/                          # Helpers
+│
+└── conductor-agentspan-server/            # Runnable server (owns bootJar → agentspan-runtime.jar)
+    ├── src/main/
+    │   ├── java/org/conductoross/conductor/
+    │   │   └── AgentRuntime.java          # Spring Boot entry point
+    │   └── resources/
+    │       ├── application.properties     # Default config (SQLite)
+    │       ├── application-postgres.properties
+    │       ├── application-rag.properties # Vector DB config (pgvector/Pinecone/MongoDB)
+    │       └── static/                    # Embedded UI bundle
+    └── src/test/
+        └── resources/
+            └── application-test.properties # Test config
 ```
 
 ## Community

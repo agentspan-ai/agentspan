@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Basic agent — the simplest possible agentspan example."""
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(
     name="greeter",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="You are a friendly assistant. Keep responses brief.",
 )
 
+prompt = "Hello! What can you do?"
+
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        result = rt.run(agent, "Hello! What can you do?")
+        result = rt.run(agent, prompt)
         result.print_result()
 
         # Production pattern:

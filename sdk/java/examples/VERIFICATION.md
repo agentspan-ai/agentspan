@@ -6,7 +6,7 @@ confirm LLM calls, tool calls, sub-agent orchestration, and guardrails
 all execute **server-side**.
 
 - **Last full run:** 2026-05-21 against a local server at `localhost:6767`
-- **Model:** `openai/gpt-4o-mini` for every example (configurable via
+- **Model:** `anthropic/claude-sonnet-4-6` for every example (configurable via
   `AGENTSPAN_LLM_MODEL`)
 - **Examples covered:** 88 (39 ADK + 28 LangChain + 11 LangGraph + 10 OpenAI)
 - **Workflow-level pass rate:** 88 / 88 COMPLETED
@@ -16,8 +16,8 @@ all execute **server-side**.
 > **Note on OpenAI Agents:** Unlike ADK / LangChain4j / LangGraph4j, there
 > is **no native OpenAI Agents Java SDK** at the time of this writing —
 > only the raw `com.openai:openai-java` HTTP client, which has zero agent
-> abstractions. The OpenAI examples therefore use Agentspan's own
-> `OpenAIAgent.builder()` (in `ai.agentspan.frameworks`) — that builder
+> abstractions. The OpenAI examples therefore use Agentspan' own
+> `OpenAIAgent.builder()` (in `org.conductoross.conductor.ai.frameworks`) — that builder
 > IS the Java equivalent of the Python `openai-agents` library, not a
 > bridge over something native. The same bug-bounty fixes applied to
 > `AdkBridge` and `LangChain4jAgent` (rich coercion via
@@ -27,7 +27,7 @@ all execute **server-side**.
 ## What "server-side execution" means here
 
 For each example we ran the user code unchanged, captured the
-execution ID returned by `Agentspan.run(...)`, then queried
+execution ID returned by `runtime.run(...)`, then queried
 `GET /api/workflow/{executionId}?includeTasks=true` to count and
 classify the tasks the server actually scheduled. The shapes that
 should appear in those task lists, per pattern:
@@ -56,7 +56,7 @@ java -jar build/libs/agentspan-runtime.jar
 # 2. Run a single example
 cd sdk/java
 AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini \
-  ./gradlew :examples:run -PmainClass=ai.agentspan.examples.adk.Example02FunctionTools
+  ./gradlew :examples:run -PmainClass=org.conductoross.conductor.ai.examples.adk.Example02FunctionTools
 
 # 3. Inspect the workflow
 EXEC=<execution-id from the example's stdout>

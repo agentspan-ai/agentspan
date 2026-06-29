@@ -19,11 +19,12 @@ import DiscordIcon from "components/Sidebar/DiscordIcon";
 import { MenuItemType } from "components/Sidebar/types";
 
 import {
-  CREDENTIALS_URL,
+  SECRETS_URL,
   RUN_AGENT_URL,
   TASK_QUEUE_URL,
   AGENT_DEFINITION_URL,
   AGENT_EXECUTION_URL,
+  SCHEDULER_DEFINITION_URL,
   SKILLS_URL,
 } from "utils/constants/route";
 
@@ -51,7 +52,8 @@ const CORE_SIDEBAR_POSITIONS = {
   DEFINITIONS: {
     workflowDefItem: 100,
     skillsItem: 200,
-    credentialsItem: 300,
+    schedulesItem: 250,
+    secretsItem: 300,
   },
 } as const;
 
@@ -147,15 +149,26 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           position: D.skillsItem,
         },
         {
-          id: "credentialsItem",
-          title: "Credentials",
+          id: "schedulesItem",
+          title: "Schedules",
           icon: null,
-          linkTo: CREDENTIALS_URL,
-          activeRoutes: [CREDENTIALS_URL],
+          linkTo: SCHEDULER_DEFINITION_URL.BASE,
+          activeRoutes: [SCHEDULER_DEFINITION_URL.NAME, SCHEDULER_DEFINITION_URL.NEW],
           shortcuts: [],
           hotkeys: "",
           hidden: false,
-          position: D.credentialsItem,
+          position: D.schedulesItem,
+        },
+        {
+          id: "secretsItem",
+          title: "Secrets",
+          icon: null,
+          linkTo: SECRETS_URL.BASE,
+          activeRoutes: [SECRETS_URL.BASE],
+          shortcuts: [],
+          hotkeys: "",
+          hidden: false,
+          position: D.secretsItem,
         },
       ],
     },

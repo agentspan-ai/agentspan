@@ -14,7 +14,7 @@
  *   - Git configured with push access to the repo
  */
 
-import { Agent, AgentRuntime, OnTextMention, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, OnTextMention, tool } from '@conductor-oss/conductor-agent-sdk';
 import { execSync } from 'child_process';
 import { randomBytes } from 'crypto';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs';

@@ -1,0 +1,167 @@
+// Copyright (c) 2025 Agentspan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
+package org.conductoross.conductor.ai.examples;
+
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.internal.ToolRegistry;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.model.ToolContext;
+import org.conductoross.conductor.ai.model.ToolDef;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Example 16 — Credentials on Tools
+ *
+ * <p>Demonstrates the {@code credentials} field on {@code @Tool}. Declared
+ * credential names are resolved by the server before each tool call. The
+ * worker fetches the value via {@code POST /api/workers/secrets} using the
+ * execution token, then makes it available to the tool body via the per-call
+ * {@link org.conductoross.conductor.ai.model.ToolContext#getCredential(String)}.
+ *
+ * <p>Java is tier-1-only — {@code System.getenv()} is immutable at JVM
+ * runtime, so unlike Python/.NET/TypeScript there is no env-injection mode.
+ * Tools MUST read declared credentials via {@code ctx.getCredential(name)}; reading
+ * via {@code System.getenv} would only see whatever the JVM inherited from
+ * the shell at startup. See {@code docs/design/secret-injection-contract.md} §6.
+ *
+ * <p>Setup (one-time, via CLI):
+ * <pre>
+ *   agentspan secrets set GITHUB_TOKEN ghp_xxx
+ * </pre>
+ *
+ * <p>If the credential isn't set on the server, this tool's task is reported
+ * as terminally failed (non-retryable) by {@code WorkerManager} before the
+ * handler runs.
+ */
+public class Example16CredentialsTool {
+
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(10))
+        .build();
+
+    static class GithubTools {
+
+        @Tool(
+            name = "list_github_repos",
+            description = "List public repositories for a GitHub username (most recently updated)",
+            credentials = {"GITHUB_TOKEN"}
+        )
+        public Map<String, Object> listGithubRepos(String username, int limit, ToolContext ctx) {
+            try {
+                int n = limit > 0 ? Math.min(limit, 10) : 5;
+                // GITHUB_TOKEN was resolved by the worker before this handler ran
+                // (via POST /api/workers/secrets) and is available on the per-call
+                // ToolContext — no env-var mutation involved.
+                String token = ctx.getCredentialOrNull("GITHUB_TOKEN");
+                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.github.com/users/" + username
+                        + "/repos?per_page=" + n + "&sort=updated"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "agentspan-java-example/1.0");
+                if (token != null && !token.isEmpty()) {
+                    reqBuilder.header("Authorization", "Bearer " + token);
+                }
+                String body = HTTP_CLIENT.send(reqBuilder.build(),
+                    HttpResponse.BodyHandlers.ofString()).body();
+
+                // Parse minimally: count repos and extract names
+                int count = countOccurrences(body, "\"full_name\"");
+                String preview = body.length() > 300 ? body.substring(0, 300) + "..." : body;
+                return Map.of(
+                    "username", username,
+                    "repos_found", count,
+                    "authenticated", token != null && !token.isEmpty(),
+                    "preview", preview
+                );
+            } catch (IOException | InterruptedException e) {
+                return Map.of("username", username, "error", e.getMessage());
+            }
+        }
+
+        @Tool(
+            name = "get_github_user",
+            description = "Get profile information for a GitHub user",
+            credentials = {"GITHUB_TOKEN"}
+        )
+        public Map<String, Object> getGithubUser(String username, ToolContext ctx) {
+            try {
+                String token = ctx.getCredentialOrNull("GITHUB_TOKEN");
+                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.github.com/users/" + username))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "agentspan-java-example/1.0");
+                if (token != null && !token.isEmpty()) {
+                    reqBuilder.header("Authorization", "Bearer " + token);
+                }
+                String body = HTTP_CLIENT.send(reqBuilder.build(),
+                    HttpResponse.BodyHandlers.ofString()).body();
+
+                // Extract a few key fields
+                String name = extractField(body, "\"name\":");
+                String login = extractField(body, "\"login\":");
+                String publicRepos = extractField(body, "\"public_repos\":");
+                String followers = extractField(body, "\"followers\":");
+
+                return Map.of(
+                    "login", login,
+                    "name", name,
+                    "public_repos", publicRepos,
+                    "followers", followers,
+                    "authenticated", token != null && !token.isEmpty()
+                );
+            } catch (IOException | InterruptedException e) {
+                return Map.of("username", username, "error", e.getMessage());
+            }
+        }
+    }
+
+    private static String extractField(String json, String key) {
+        int idx = json.indexOf(key);
+        if (idx < 0) return "unknown";
+        String after = json.substring(idx + key.length()).trim();
+        if (after.startsWith("\"")) {
+            int end = after.indexOf("\"", 1);
+            return end > 0 ? after.substring(1, end) : "unknown";
+        }
+        return after.split("[,}\\]]")[0].trim();
+    }
+
+    private static int countOccurrences(String text, String pattern) {
+        int count = 0, idx = 0;
+        while ((idx = text.indexOf(pattern, idx)) >= 0) { count++; idx += pattern.length(); }
+        return count;
+    }
+
+    public static void main(String[] args) {
+        AgentRuntime runtime = new AgentRuntime();
+        List<ToolDef> tools = ToolRegistry.fromInstance(new GithubTools());
+
+        Agent agent = Agent.builder()
+            .name("github_agent")
+            .model(Settings.LLM_MODEL)
+            .tools(tools)
+            .instructions(
+                "You are a GitHub assistant. You can look up GitHub users and list "
+                + "their repositories. Use the available tools to answer questions.")
+            .build();
+
+        AgentResult result = runtime.run(agent,
+            "Look up the GitHub user 'torvalds' and show their most recent 3 repositories.");
+        result.printResult();
+
+        runtime.shutdown();
+    }
+}

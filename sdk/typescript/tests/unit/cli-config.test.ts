@@ -241,6 +241,97 @@ describe("makeCliTool", () => {
     expect(toolContext.state).toEqual({ existing: "value" });
   });
 
+  it("accepts a full command line packed into `command` and validates on the executable", async () => {
+    mockedSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: "repo1\nrepo2\n",
+      stderr: "",
+      pid: 1,
+      output: [],
+      signal: null,
+    } as any);
+
+    const tool = makeCliTool({ allowedCommands: ["gh"] }, "test_agent");
+    const result = await tool.func!({ command: "gh repo list --limit 5" });
+
+    expect((result as any).status).toBe("success");
+    // Executable tokenized out; remaining tokens become argv.
+    expect(mockedSpawnSync).toHaveBeenCalledWith(
+      "gh",
+      ["repo", "list", "--limit", "5"],
+      expect.any(Object),
+    );
+  });
+
+  it("rejects a disallowed full command line keyed on the executable", async () => {
+    const tool = makeCliTool({ allowedCommands: ["git"] }, "test_agent");
+
+    await expect(tool.func!({ command: "rm -rf /" })).rejects.toThrow(/Command 'rm' is not allowed/);
+  });
+
+  it("strips a path prefix from the executable before whitelist check", async () => {
+    mockedSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: "ok\n",
+      stderr: "",
+      pid: 1,
+      output: [],
+      signal: null,
+    } as any);
+
+    const tool = makeCliTool({ allowedCommands: ["git"] }, "test_agent");
+    const result = await tool.func!({ command: "/usr/bin/git status -s" });
+
+    expect((result as any).status).toBe("success");
+    expect(mockedSpawnSync).toHaveBeenCalledWith(
+      "/usr/bin/git",
+      ["status", "-s"],
+      expect.any(Object),
+    );
+  });
+
+  it("merges args embedded in the command line with the explicit args list", async () => {
+    mockedSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: "ok\n",
+      stderr: "",
+      pid: 1,
+      output: [],
+      signal: null,
+    } as any);
+
+    const tool = makeCliTool({ allowedCommands: ["git"] }, "test_agent");
+    const result = await tool.func!({ command: "git commit", args: ["-m", "msg"] });
+
+    expect((result as any).status).toBe("success");
+    expect(mockedSpawnSync).toHaveBeenCalledWith(
+      "git",
+      ["commit", "-m", "msg"],
+      expect.any(Object),
+    );
+  });
+
+  it("honors quoted arguments in the command line", async () => {
+    mockedSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: "ok\n",
+      stderr: "",
+      pid: 1,
+      output: [],
+      signal: null,
+    } as any);
+
+    const tool = makeCliTool({ allowedCommands: ["git"] }, "test_agent");
+    const result = await tool.func!({ command: 'git commit -m "hello world"' });
+
+    expect((result as any).status).toBe("success");
+    expect(mockedSpawnSync).toHaveBeenCalledWith(
+      "git",
+      ["commit", "-m", "hello world"],
+      expect.any(Object),
+    );
+  });
+
   it("context_key _state_updates does not corrupt internals", async () => {
     mockedSpawnSync.mockReturnValue({
       status: 0,

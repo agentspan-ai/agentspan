@@ -22,7 +22,7 @@ Requirements:
 import re
 import sys
 
-from agentspan.agents import GuardrailResult, guardrail
+from conductor.ai.agents import GuardrailResult, guardrail
 
 
 # ── Define guardrails ────────────────────────────────────────────────
@@ -172,7 +172,7 @@ def run_as_workers():
         print(f"  Registered worker: {name}")
 
     # Start polling — TaskHandler discovers all @worker_task functions
-    from agentspan.agents.runtime.config import AgentConfig
+    from conductor.ai.agents.runtime.config import AgentConfig
     config = Configuration(server_api_url=AgentConfig.from_env().server_url)
     handler = TaskHandler(
         workers=[],

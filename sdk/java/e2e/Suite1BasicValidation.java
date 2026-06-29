@@ -1,26 +1,26 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
+import static org.junit.jupiter.api.Assertions.*;
 
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.annotations.Tool;
-import ai.agentspan.enums.OnFail;
-import ai.agentspan.enums.Position;
-import ai.agentspan.enums.Strategy;
-import ai.agentspan.internal.ToolRegistry;
-import ai.agentspan.model.GuardrailDef;
-import ai.agentspan.model.GuardrailResult;
-import ai.agentspan.tools.HttpTool;
-import org.junit.jupiter.api.*;
-
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.enums.OnFail;
+import org.conductoross.conductor.ai.enums.Position;
+import org.conductoross.conductor.ai.enums.Strategy;
+import org.conductoross.conductor.ai.internal.ToolRegistry;
+import org.conductoross.conductor.ai.model.CompileResponse;
+import org.conductoross.conductor.ai.model.GuardrailDef;
+import org.conductoross.conductor.ai.model.GuardrailResult;
+import org.conductoross.conductor.ai.tools.HttpTool;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 1: Basic validation — plan() structural assertions.
@@ -41,7 +41,7 @@ class Suite1BasicValidation extends BaseTest {
         // Note: checkServerHealth() from BaseTest runs before setup().
         // Use BASE_URL (without /api suffix) since AgentConfig + HttpApi
         // already prepend /api to every path.
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -76,9 +76,7 @@ class Suite1BasicValidation extends BaseTest {
     private List<String> getToolNames(Map<String, Object> agentDef) {
         List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
         if (tools == null) return List.of();
-        return tools.stream()
-            .map(t -> (String) t.get("name"))
-            .collect(Collectors.toList());
+        return tools.stream().map(t -> (String) t.get("name")).collect(Collectors.toList());
     }
 
     @SuppressWarnings("unchecked")
@@ -96,9 +94,7 @@ class Suite1BasicValidation extends BaseTest {
     private List<String> getGuardrailNames(Map<String, Object> agentDef) {
         List<Map<String, Object>> guardrails = (List<Map<String, Object>>) agentDef.get("guardrails");
         if (guardrails == null) return List.of();
-        return guardrails.stream()
-            .map(g -> (String) g.get("name"))
-            .collect(Collectors.toList());
+        return guardrails.stream().map(g -> (String) g.get("name")).collect(Collectors.toList());
     }
 
     @SuppressWarnings("unchecked")
@@ -118,9 +114,7 @@ class Suite1BasicValidation extends BaseTest {
     private List<String> getSubAgentNames(Map<String, Object> agentDef) {
         List<Map<String, Object>> agents = (List<Map<String, Object>>) agentDef.get("agents");
         if (agents == null) return List.of();
-        return agents.stream()
-            .map(a -> (String) a.get("name"))
-            .collect(Collectors.toList());
+        return agents.stream().map(a -> (String) a.get("name")).collect(Collectors.toList());
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────
@@ -134,32 +128,37 @@ class Suite1BasicValidation extends BaseTest {
     @Order(1)
     void test_smoke_simple_agent_plan() {
         Agent agent = Agent.builder()
-            .name("e2e_java_smoke")
-            .model(MODEL)
-            .instructions("You are a calculator.")
-            .tools(ToolRegistry.fromInstance(new MathAndGreetTools()))
-            .build();
+                .name("e2e_java_smoke")
+                .model(MODEL)
+                .instructions("You are a calculator.")
+                .tools(ToolRegistry.fromInstance(new MathAndGreetTools()))
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
 
-        assertTrue(plan.containsKey("workflowDef"),
-            "plan() result missing 'workflowDef'. Got keys: " + plan.keySet());
-        assertTrue(plan.containsKey("requiredWorkers"),
-            "plan() result missing 'requiredWorkers'. Got keys: " + plan.keySet());
+        assertTrue(
+                plan.getWorkflowDef() != null && !plan.getWorkflowDef().isEmpty(),
+                "plan() result missing 'workflowDef'. Got keys: " + "[workflowDef, requiredWorkers]");
+        assertTrue(
+                plan.getRequiredWorkers() != null,
+                "plan() result missing 'requiredWorkers'. Got keys: " + "[workflowDef, requiredWorkers]");
 
         Map<String, Object> agentDef = getAgentDef(plan);
 
         List<String> toolNames = getToolNames(agentDef);
-        assertTrue(toolNames.contains("e2e_add"),
-            "Tool 'e2e_add' not found in agentDef.tools. Found: " + toolNames);
-        assertTrue(toolNames.contains("e2e_greet"),
-            "Tool 'e2e_greet' not found in agentDef.tools. Found: " + toolNames);
+        assertTrue(toolNames.contains("e2e_add"), "Tool 'e2e_add' not found in agentDef.tools. Found: " + toolNames);
+        assertTrue(
+                toolNames.contains("e2e_greet"), "Tool 'e2e_greet' not found in agentDef.tools. Found: " + toolNames);
 
         Map<String, String> toolTypes = getToolTypes(agentDef);
-        assertEquals("worker", toolTypes.get("e2e_add"),
-            "Tool 'e2e_add' has toolType='" + toolTypes.get("e2e_add") + "', expected 'worker'");
-        assertEquals("worker", toolTypes.get("e2e_greet"),
-            "Tool 'e2e_greet' has toolType='" + toolTypes.get("e2e_greet") + "', expected 'worker'");
+        assertEquals(
+                "worker",
+                toolTypes.get("e2e_add"),
+                "Tool 'e2e_add' has toolType='" + toolTypes.get("e2e_add") + "', expected 'worker'");
+        assertEquals(
+                "worker",
+                toolTypes.get("e2e_greet"),
+                "Tool 'e2e_greet' has toolType='" + toolTypes.get("e2e_greet") + "', expected 'worker'");
     }
 
     /**
@@ -173,62 +172,71 @@ class Suite1BasicValidation extends BaseTest {
     void test_plan_reflects_guardrails() {
         // Custom (function) guardrail
         GuardrailDef customGuardrail = GuardrailDef.builder()
-            .name("e2e_custom_guard")
-            .position(Position.INPUT)
-            .onFail(OnFail.RAISE)
-            .func(content -> GuardrailResult.pass())
-            .guardrailType("custom")
-            .build();
+                .name("e2e_custom_guard")
+                .position(Position.INPUT)
+                .onFail(OnFail.RAISE)
+                .func(content -> GuardrailResult.pass())
+                .guardrailType("custom")
+                .build();
 
         // Regex guardrail (using config map for patterns)
         GuardrailDef regexGuardrail = GuardrailDef.builder()
-            .name("e2e_regex_guard")
-            .position(Position.OUTPUT)
-            .onFail(OnFail.RETRY)
-            .guardrailType("regex")
-            .config(Map.of("patterns", List.of("BLOCKED_PATTERN")))
-            .build();
+                .name("e2e_regex_guard")
+                .position(Position.OUTPUT)
+                .onFail(OnFail.RETRY)
+                .guardrailType("regex")
+                .config(Map.of("patterns", List.of("BLOCKED_PATTERN")))
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_guardrails")
-            .model(MODEL)
-            .instructions("You are a test agent.")
-            .guardrails(List.of(customGuardrail, regexGuardrail))
-            .build();
+                .name("e2e_java_guardrails")
+                .model(MODEL)
+                .instructions("You are a test agent.")
+                .guardrails(List.of(customGuardrail, regexGuardrail))
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> guardrails = (List<Map<String, Object>>) agentDef.get("guardrails");
         assertNotNull(guardrails, "agentDef has no 'guardrails' key");
-        assertEquals(2, guardrails.size(),
-            "Expected 2 guardrails in agentDef.guardrails, got " + guardrails.size()
-            + ". Names found: " + getGuardrailNames(agentDef));
+        assertEquals(
+                2,
+                guardrails.size(),
+                "Expected 2 guardrails in agentDef.guardrails, got " + guardrails.size() + ". Names found: "
+                        + getGuardrailNames(agentDef));
 
         // Assert custom guardrail
         Map<String, Object> custom = findGuardrailByName(agentDef, "e2e_custom_guard");
-        assertEquals("custom", custom.get("guardrailType"),
-            "Guardrail 'e2e_custom_guard' has guardrailType='" + custom.get("guardrailType")
-            + "', expected 'custom'");
-        assertEquals("input", custom.get("position"),
-            "Guardrail 'e2e_custom_guard' has position='" + custom.get("position")
-            + "', expected 'input'");
-        assertEquals("raise", custom.get("onFail"),
-            "Guardrail 'e2e_custom_guard' has onFail='" + custom.get("onFail")
-            + "', expected 'raise'");
+        assertEquals(
+                "custom",
+                custom.get("guardrailType"),
+                "Guardrail 'e2e_custom_guard' has guardrailType='" + custom.get("guardrailType")
+                        + "', expected 'custom'");
+        assertEquals(
+                "input",
+                custom.get("position"),
+                "Guardrail 'e2e_custom_guard' has position='" + custom.get("position") + "', expected 'input'");
+        assertEquals(
+                "raise",
+                custom.get("onFail"),
+                "Guardrail 'e2e_custom_guard' has onFail='" + custom.get("onFail") + "', expected 'raise'");
 
         // Assert regex guardrail
         Map<String, Object> regex = findGuardrailByName(agentDef, "e2e_regex_guard");
-        assertEquals("regex", regex.get("guardrailType"),
-            "Guardrail 'e2e_regex_guard' has guardrailType='" + regex.get("guardrailType")
-            + "', expected 'regex'");
-        assertEquals("output", regex.get("position"),
-            "Guardrail 'e2e_regex_guard' has position='" + regex.get("position")
-            + "', expected 'output'");
-        assertEquals("retry", regex.get("onFail"),
-            "Guardrail 'e2e_regex_guard' has onFail='" + regex.get("onFail")
-            + "', expected 'retry'");
+        assertEquals(
+                "regex",
+                regex.get("guardrailType"),
+                "Guardrail 'e2e_regex_guard' has guardrailType='" + regex.get("guardrailType") + "', expected 'regex'");
+        assertEquals(
+                "output",
+                regex.get("position"),
+                "Guardrail 'e2e_regex_guard' has position='" + regex.get("position") + "', expected 'output'");
+        assertEquals(
+                "retry",
+                regex.get("onFail"),
+                "Guardrail 'e2e_regex_guard' has onFail='" + regex.get("onFail") + "', expected 'retry'");
     }
 
     /**
@@ -242,46 +250,47 @@ class Suite1BasicValidation extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_plan_reflects_credentials() {
         // Build tool with credentials using ToolRegistry + credential override via ToolDef
-        ai.agentspan.model.ToolDef credTool = ai.agentspan.model.ToolDef.builder()
-            .name("e2e_api_cred_tool")
-            .description("Tool that needs API credentials")
-            .inputSchema(Map.of("type", "object", "properties", Map.of()))
-            .toolType("worker")
-            .credentials(List.of("E2E_API_KEY"))
-            .build();
+        org.conductoross.conductor.ai.model.ToolDef credTool = org.conductoross.conductor.ai.model.ToolDef.builder()
+                .name("e2e_api_cred_tool")
+                .description("Tool that needs API credentials")
+                .inputSchema(Map.of("type", "object", "properties", Map.of()))
+                .toolType("worker")
+                .credentials(List.of("E2E_API_KEY"))
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_creds")
-            .model(MODEL)
-            .instructions("Use tools.")
-            .tools(List.of(credTool))
-            .build();
+                .name("e2e_java_creds")
+                .model(MODEL)
+                .instructions("Use tools.")
+                .tools(List.of(credTool))
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
         assertNotNull(tools, "agentDef has no 'tools' key");
 
         Map<String, Object> foundTool = tools.stream()
-            .filter(t -> "e2e_api_cred_tool".equals(t.get("name")))
-            .findFirst()
-            .orElse(null);
-        assertNotNull(foundTool,
-            "Tool 'e2e_api_cred_tool' not found in agentDef.tools. "
-            + "Tool credentials not serialized to agentDef");
+                .filter(t -> "e2e_api_cred_tool".equals(t.get("name")))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(
+                foundTool,
+                "Tool 'e2e_api_cred_tool' not found in agentDef.tools. "
+                        + "Tool credentials not serialized to agentDef");
 
         Map<String, Object> config = (Map<String, Object>) foundTool.get("config");
-        assertNotNull(config,
-            "Tool 'e2e_api_cred_tool' has no 'config' key. "
-            + "Tool credentials not serialized to agentDef");
+        assertNotNull(
+                config,
+                "Tool 'e2e_api_cred_tool' has no 'config' key. " + "Tool credentials not serialized to agentDef");
 
         List<String> creds = (List<String>) config.get("credentials");
-        assertNotNull(creds,
-            "Tool 'e2e_api_cred_tool'.config has no 'credentials'. "
-            + "Tool credentials not serialized to agentDef");
-        assertTrue(creds.contains("E2E_API_KEY"),
-            "Expected 'E2E_API_KEY' in tool credentials, got: " + creds);
+        assertNotNull(
+                creds,
+                "Tool 'e2e_api_cred_tool'.config has no 'credentials'. "
+                        + "Tool credentials not serialized to agentDef");
+        assertTrue(creds.contains("E2E_API_KEY"), "Expected 'E2E_API_KEY' in tool credentials, got: " + creds);
     }
 
     /**
@@ -294,39 +303,42 @@ class Suite1BasicValidation extends BaseTest {
     @Order(4)
     void test_plan_sub_agent_produces_sub_workflow() {
         Agent child = Agent.builder()
-            .name("e2e_java_child")
-            .model(MODEL)
-            .instructions("You are a helper.")
-            .build();
+                .name("e2e_java_child")
+                .model(MODEL)
+                .instructions("You are a helper.")
+                .build();
         Agent parent = Agent.builder()
-            .name("e2e_java_parent")
-            .model(MODEL)
-            .instructions("Delegate to child.")
-            .agents(child)
-            .strategy(Strategy.HANDOFF)
-            .build();
+                .name("e2e_java_parent")
+                .model(MODEL)
+                .instructions("Delegate to child.")
+                .agents(child)
+                .strategy(Strategy.HANDOFF)
+                .build();
 
-        Map<String, Object> plan = runtime.plan(parent);
+        CompileResponse plan = runtime.plan(parent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         List<String> subNames = getSubAgentNames(agentDef);
-        assertTrue(subNames.contains("e2e_java_child"),
-            "Sub-agent 'e2e_java_child' not in agentDef.agents. Found: " + subNames);
+        assertTrue(
+                subNames.contains("e2e_java_child"),
+                "Sub-agent 'e2e_java_child' not in agentDef.agents. Found: " + subNames);
 
-        assertEquals("handoff", agentDef.get("strategy"),
-            "agentDef.strategy is '" + agentDef.get("strategy") + "', expected 'handoff'");
+        assertEquals(
+                "handoff",
+                agentDef.get("strategy"),
+                "agentDef.strategy is '" + agentDef.get("strategy") + "', expected 'handoff'");
 
         // Assert SUB_WORKFLOW task exists in the compiled workflow
         @SuppressWarnings("unchecked")
-        Map<String, Object> workflowDef = (Map<String, Object>) plan.get("workflowDef");
+        Map<String, Object> workflowDef = plan.getWorkflowDef();
         List<Map<String, Object>> allTasks = allTasksFlat(workflowDef);
-        boolean hasSubWorkflow = allTasks.stream()
-            .anyMatch(t -> "SUB_WORKFLOW".equals(t.get("type")));
-        assertTrue(hasSubWorkflow,
-            "No SUB_WORKFLOW task in compiled workflow. "
-            + "Task types found: " + allTasks.stream()
-                .map(t -> (String) t.get("type")).collect(Collectors.toSet())
-            + ". An agent with sub-agents should compile to SUB_WORKFLOW tasks.");
+        boolean hasSubWorkflow = allTasks.stream().anyMatch(t -> "SUB_WORKFLOW".equals(t.get("type")));
+        assertTrue(
+                hasSubWorkflow,
+                "No SUB_WORKFLOW task in compiled workflow. "
+                        + "Task types found: "
+                        + allTasks.stream().map(t -> (String) t.get("type")).collect(Collectors.toSet())
+                        + ". An agent with sub-agents should compile to SUB_WORKFLOW tasks.");
     }
 
     /**
@@ -341,10 +353,10 @@ class Suite1BasicValidation extends BaseTest {
     void test_plan_all_8_strategies() {
         // Create a router agent for the ROUTER strategy
         Agent routerLead = Agent.builder()
-            .name("e2e_java_router_lead")
-            .model(MODEL)
-            .instructions("Route to the correct agent.")
-            .build();
+                .name("e2e_java_router_lead")
+                .model(MODEL)
+                .instructions("Route to the correct agent.")
+                .build();
 
         // Build 8 sub-agents with every strategy, each having 2 sub-sub-agents
         Strategy[] strategies = {
@@ -363,14 +375,21 @@ class Suite1BasicValidation extends BaseTest {
             Strategy strat = strategies[i];
             String stratName = strategyNames[i];
             Agent.Builder b = Agent.builder()
-                .name("e2e_java_strat_" + stratName)
-                .model(MODEL)
-                .instructions("Agent with " + stratName + " strategy.")
-                .agents(
-                    Agent.builder().name("e2e_java_" + stratName + "_s1").model(MODEL).instructions("Sub1.").build(),
-                    Agent.builder().name("e2e_java_" + stratName + "_s2").model(MODEL).instructions("Sub2.").build()
-                )
-                .strategy(strat);
+                    .name("e2e_java_strat_" + stratName)
+                    .model(MODEL)
+                    .instructions("Agent with " + stratName + " strategy.")
+                    .agents(
+                            Agent.builder()
+                                    .name("e2e_java_" + stratName + "_s1")
+                                    .model(MODEL)
+                                    .instructions("Sub1.")
+                                    .build(),
+                            Agent.builder()
+                                    .name("e2e_java_" + stratName + "_s2")
+                                    .model(MODEL)
+                                    .instructions("Sub2.")
+                                    .build())
+                    .strategy(strat);
             if (strat == Strategy.ROUTER) {
                 b.router(routerLead);
             }
@@ -378,14 +397,14 @@ class Suite1BasicValidation extends BaseTest {
         }
 
         Agent parent = Agent.builder()
-            .name("e2e_java_all_strategies")
-            .model(MODEL)
-            .instructions("Top-level agent with all strategies as sub-agents.")
-            .agents(subAgents.toArray(new Agent[0]))
-            .strategy(Strategy.HANDOFF)
-            .build();
+                .name("e2e_java_all_strategies")
+                .model(MODEL)
+                .instructions("Top-level agent with all strategies as sub-agents.")
+                .agents(subAgents.toArray(new Agent[0]))
+                .strategy(Strategy.HANDOFF)
+                .build();
 
-        Map<String, Object> plan = runtime.plan(parent);
+        CompileResponse plan = runtime.plan(parent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         List<Map<String, Object>> compiledAgents = (List<Map<String, Object>>) agentDef.get("agents");
@@ -398,14 +417,16 @@ class Suite1BasicValidation extends BaseTest {
         for (int i = 0; i < strategies.length; i++) {
             String stratName = strategyNames[i];
             String agentName = "e2e_java_strat_" + stratName;
-            assertTrue(agentByName.containsKey(agentName),
-                "Sub-agent '" + agentName + "' not found in agentDef.agents. "
-                + "Found: " + agentByName.keySet());
+            assertTrue(
+                    agentByName.containsKey(agentName),
+                    "Sub-agent '" + agentName + "' not found in agentDef.agents. " + "Found: " + agentByName.keySet());
             Object actualStrategy = agentByName.get(agentName).get("strategy");
-            assertEquals(stratName, actualStrategy,
-                "Sub-agent '" + agentName + "' has strategy='" + actualStrategy
-                + "', expected '" + stratName + "'. "
-                + "Strategy enum may not serialize to the correct JSON value.");
+            assertEquals(
+                    stratName,
+                    actualStrategy,
+                    "Sub-agent '" + agentName + "' has strategy='" + actualStrategy
+                            + "', expected '" + stratName + "'. "
+                            + "Strategy enum may not serialize to the correct JSON value.");
         }
     }
 
@@ -417,31 +438,34 @@ class Suite1BasicValidation extends BaseTest {
     @Test
     @Order(6)
     void test_plan_http_tool() {
-        ai.agentspan.model.ToolDef httpTool = HttpTool.builder()
-            .name("e2e_java_http_tool")
-            .description("Calls a remote HTTP endpoint")
-            .url("https://api.example.com/data")
-            .method("GET")
-            .build();
+        org.conductoross.conductor.ai.model.ToolDef httpTool = HttpTool.builder()
+                .name("e2e_java_http_tool")
+                .description("Calls a remote HTTP endpoint")
+                .url("https://api.example.com/data")
+                .method("GET")
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_http_agent")
-            .model(MODEL)
-            .instructions("Use the HTTP tool.")
-            .tools(List.of(httpTool))
-            .build();
+                .name("e2e_java_http_agent")
+                .model(MODEL)
+                .instructions("Use the HTTP tool.")
+                .tools(List.of(httpTool))
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         List<String> toolNames = getToolNames(agentDef);
-        assertTrue(toolNames.contains("e2e_java_http_tool"),
-            "HTTP tool 'e2e_java_http_tool' not found in agentDef.tools. Found: " + toolNames);
+        assertTrue(
+                toolNames.contains("e2e_java_http_tool"),
+                "HTTP tool 'e2e_java_http_tool' not found in agentDef.tools. Found: " + toolNames);
 
         Map<String, String> toolTypes = getToolTypes(agentDef);
-        assertEquals("http", toolTypes.get("e2e_java_http_tool"),
-            "HTTP tool 'e2e_java_http_tool' has toolType='" + toolTypes.get("e2e_java_http_tool")
-            + "', expected 'http'. HttpTool should serialize as type 'http'.");
+        assertEquals(
+                "http",
+                toolTypes.get("e2e_java_http_tool"),
+                "HTTP tool 'e2e_java_http_tool' has toolType='" + toolTypes.get("e2e_java_http_tool")
+                        + "', expected 'http'. HttpTool should serialize as type 'http'.");
     }
 
     /**
@@ -453,29 +477,33 @@ class Suite1BasicValidation extends BaseTest {
     @Order(7)
     void test_sequential_pipeline_plan() {
         Agent a = Agent.builder()
-            .name("e2e_java_seq_a")
-            .model(MODEL)
-            .instructions("First step.")
-            .build();
+                .name("e2e_java_seq_a")
+                .model(MODEL)
+                .instructions("First step.")
+                .build();
         Agent b = Agent.builder()
-            .name("e2e_java_seq_b")
-            .model(MODEL)
-            .instructions("Second step.")
-            .build();
+                .name("e2e_java_seq_b")
+                .model(MODEL)
+                .instructions("Second step.")
+                .build();
 
         Agent pipeline = a.then(b);
 
-        Map<String, Object> plan = runtime.plan(pipeline);
+        CompileResponse plan = runtime.plan(pipeline);
         Map<String, Object> agentDef = getAgentDef(plan);
 
-        assertEquals("sequential", agentDef.get("strategy"),
-            "Pipeline agentDef.strategy is '" + agentDef.get("strategy")
-            + "', expected 'sequential'. Agent.then() should produce SEQUENTIAL strategy.");
+        assertEquals(
+                "sequential",
+                agentDef.get("strategy"),
+                "Pipeline agentDef.strategy is '" + agentDef.get("strategy")
+                        + "', expected 'sequential'. Agent.then() should produce SEQUENTIAL strategy.");
 
         List<String> subNames = getSubAgentNames(agentDef);
-        assertTrue(subNames.contains("e2e_java_seq_a"),
-            "Agent 'e2e_java_seq_a' not in agentDef.agents. Found: " + subNames);
-        assertTrue(subNames.contains("e2e_java_seq_b"),
-            "Agent 'e2e_java_seq_b' not in agentDef.agents. Found: " + subNames);
+        assertTrue(
+                subNames.contains("e2e_java_seq_a"),
+                "Agent 'e2e_java_seq_a' not in agentDef.agents. Found: " + subNames);
+        assertTrue(
+                subNames.contains("e2e_java_seq_b"),
+                "Agent 'e2e_java_seq_b' not in agentDef.agents. Found: " + subNames);
     }
 }

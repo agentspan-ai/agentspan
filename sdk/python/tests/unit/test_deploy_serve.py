@@ -6,16 +6,16 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from agentspan.agents.agent import Agent
-from agentspan.agents.result import DeploymentInfo
+from conductor.ai.agents.agent import Agent
+from conductor.ai.agents.result import DeploymentInfo
 
 
 def _make_runtime():
     """Create an AgentRuntime with mocked Conductor clients."""
     with patch("conductor.client.orkes_clients.OrkesClients"):
-        with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-            from agentspan.agents.runtime.runtime import AgentRuntime
-            from agentspan.agents.runtime.config import AgentConfig
+        with patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True):
+            from conductor.ai.agents.runtime.runtime import AgentRuntime
+            from conductor.ai.agents.runtime.config import AgentConfig
 
             config = AgentConfig(
                 server_url="http://fake:8080",
@@ -54,7 +54,7 @@ class TestDeploy:
         rt = _make_runtime()
         discovered = Agent(name="discovered", model="openai/gpt-4o")
         with patch(
-            "agentspan.agents.runtime.discovery.discover_agents",
+            "conductor.ai.agents.runtime.discovery.discover_agents",
             return_value=[discovered],
         ):
             with patch.object(rt, "_deploy_via_server", return_value="disc_wf"):
@@ -67,7 +67,7 @@ class TestDeploy:
         explicit = Agent(name="explicit", model="openai/gpt-4o")
         discovered = Agent(name="discovered", model="openai/gpt-4o")
         with patch(
-            "agentspan.agents.runtime.discovery.discover_agents",
+            "conductor.ai.agents.runtime.discovery.discover_agents",
             return_value=[discovered],
         ):
             with patch.object(
@@ -118,7 +118,7 @@ class TestServe:
         rt = _make_runtime()
         discovered = Agent(name="disc", model="openai/gpt-4o")
         with patch(
-            "agentspan.agents.runtime.discovery.discover_agents",
+            "conductor.ai.agents.runtime.discovery.discover_agents",
             return_value=[discovered],
         ):
             with patch.object(rt, "_register_workers"):

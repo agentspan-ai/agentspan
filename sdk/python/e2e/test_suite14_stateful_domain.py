@@ -23,13 +23,13 @@ import time
 import pytest
 import requests
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     OnTextMention,
     Strategy,
     tool,
 )
-from agentspan.agents.termination import TextMentionTermination
+from conductor.ai.agents.termination import TextMentionTermination
 
 pytestmark = [
     pytest.mark.e2e,
@@ -48,7 +48,7 @@ def fresh_runtime():
     runtime would carry stale domain registrations from previous tests,
     causing workers to poll the wrong domain. Fresh runtime per test avoids this.
     """
-    from agentspan.agents import AgentRuntime
+    from conductor.ai.agents import AgentRuntime
 
     with AgentRuntime() as rt:
         yield rt
@@ -458,7 +458,7 @@ class TestSuite14StatefulDomain:
         execution per agent (workers register under one domain at a time).
         Validates: different domain UUIDs, both complete independently.
         """
-        from agentspan.agents import AgentRuntime
+        from conductor.ai.agents import AgentRuntime
 
         def _make_agent(suffix):
             return Agent(

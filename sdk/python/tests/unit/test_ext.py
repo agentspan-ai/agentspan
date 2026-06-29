@@ -1,35 +1,11 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Unit tests for extended agent types — UserProxyAgent, GPTAssistantAgent."""
+"""Unit tests for extended agent types — GPTAssistantAgent."""
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from agentspan.agents.ext import GPTAssistantAgent, UserProxyAgent
-
-
-class TestUserProxyAgent:
-    def test_basic_creation(self):
-        agent = UserProxyAgent()
-        assert agent.name == "user"
-        assert agent.human_input_mode == "ALWAYS"
-        assert agent.metadata["_agent_type"] == "user_proxy"
-
-    def test_custom_mode(self):
-        agent = UserProxyAgent(name="operator", human_input_mode="TERMINATE")
-        assert agent.human_input_mode == "TERMINATE"
-
-    def test_invalid_mode(self):
-        with pytest.raises(ValueError, match="Invalid human_input_mode"):
-            UserProxyAgent(human_input_mode="INVALID")
-
-    def test_repr(self):
-        agent = UserProxyAgent(name="user", human_input_mode="ALWAYS")
-        r = repr(agent)
-        assert "UserProxyAgent" in r
-        assert "user" in r
+from conductor.ai.agents.ext import GPTAssistantAgent
 
 
 class TestGPTAssistantAgent:
@@ -62,7 +38,7 @@ class TestGPTAssistantAgent:
 
     def test_run_assistant_missing_api_key(self):
         agent = GPTAssistantAgent(name="test")
-        with patch("agentspan.agents.ext.GPTAssistantAgent._run_assistant") as mock_run:
+        with patch("conductor.ai.agents.ext.GPTAssistantAgent._run_assistant") as mock_run:
             # Use the actual implementation but mock the openai import
             mock_openai = MagicMock()
             with patch.dict("sys.modules", {"openai": mock_openai}):
