@@ -17,6 +17,29 @@ def test_parses_real_alert():
     assert a.organization == "Vizient"
 
 
+# The EXACT string Slack receives: HealthCheckIssuesWorker emits markdown
+# (*`[SEV]`* … _Org's_ env *`cluster`*) and the notify_on_slack HTTP task prepends an
+# emoji and appends the execution URL on its own line. Build it from those two sources
+# so the parser is tested against what actually ships, not a hand-cleaned sample.
+REAL_SLACK = (
+    "🚨 *`[CRITICAL]`* The health-checking has FAILED for the _Vizient's_ prod "
+    "*`viz-stage`* cluster with the following issue:\n"
+    "*CRITICAL:* The Redis instance is at 66%, above the CRITICAL threshold of 65%\n"
+    "https://ah5r-prod.orkesconductor.com/execution/364b459a-689f-11f1-94b6-de01f12a4ed9"
+)
+
+
+def test_parses_real_slack_markdown_alert():
+    a = parse_alert(REAL_SLACK)
+    assert a is not None
+    # Load-bearing: the execution id always parses regardless of decoration.
+    assert a.execution_id == "364b459a-689f-11f1-94b6-de01f12a4ed9"
+    assert a.severity == "CRITICAL"
+    # Best-effort, but must survive the markdown the worker actually emits.
+    assert a.cluster == "viz-stage"
+    assert a.organization == "Vizient"
+
+
 def test_warning_severity_and_no_org_block():
     text = "[WARNING] something off https://ah5r-prod.orkesconductor.com/execution/abc12345-dead-beef"
     a = parse_alert(text)
