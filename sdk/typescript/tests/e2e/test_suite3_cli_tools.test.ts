@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execSync } from 'node:child_process';
-import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,
@@ -33,7 +33,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  credentialDelete(CRED_NAME);
+  await credentialDelete(CRED_NAME);
   await runtime.shutdown();
 });
 
@@ -135,7 +135,7 @@ describe('Suite 3: CLI Tools', { timeout: 600_000 }, () => {
     const agent = makeAgent();
 
     // ── Step 1: Clean slate ────────────────────────────────────
-    credentialDelete(CRED_NAME);
+    await credentialDelete(CRED_NAME);
 
     // ── Step 2: Export to env (should NOT be used by server) ───
     process.env.GITHUB_TOKEN = realToken;
@@ -151,7 +151,7 @@ describe('Suite 3: CLI Tools', { timeout: 600_000 }, () => {
     expect(output1).not.toContain('gh_ok');
 
     // ── Step 4: Add credential ─────────────────────────────────
-    credentialSet(CRED_NAME, realToken);
+    await credentialSet(CRED_NAME, realToken);
 
     // ── Step 5: All three succeed ──────────────────────────────
     const result2 = await runtime.run(agent, PROMPT, { timeout: TIMEOUT });

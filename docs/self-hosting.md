@@ -81,7 +81,7 @@ python my_agent.py
 Your agent code uses `AgentRuntime` as usual:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def process_data(input: str) -> str:
@@ -115,7 +115,7 @@ export AGENTSPAN_AUTH_SECRET=your-app-secret
 Or configure in code:
 
 ```python
-from agentspan.agents import configure
+from conductor.ai.agents import configure
 
 configure(
     server_url="https://your-server.example.com",

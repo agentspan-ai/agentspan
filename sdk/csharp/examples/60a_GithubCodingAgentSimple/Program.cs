@@ -26,8 +26,8 @@
 //   - gh CLI authenticated: gh auth status
 //   - Git configured with push access to the repo
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 const string Repo    = "agentspan/codingexamples";
 var          WorkDir = $"/tmp/codingexamples-{Guid.NewGuid():N}"[..36];

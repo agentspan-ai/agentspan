@@ -22,7 +22,7 @@ from typing import Any, List
 
 import httpx
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 # Import agents and prompts from quickstart examples (filenames start with digits)
 _quickstart_dir = Path(__file__).parent

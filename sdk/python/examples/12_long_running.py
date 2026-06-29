@@ -15,7 +15,7 @@ Requirements:
 
 import time
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 from settings import settings
 
 agent = Agent(

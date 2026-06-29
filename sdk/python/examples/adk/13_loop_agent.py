@@ -11,7 +11,7 @@ The loop runs up to max_iterations times, allowing iterative improvement.
 
 from google.adk.agents import Agent, LoopAgent, SequentialAgent
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

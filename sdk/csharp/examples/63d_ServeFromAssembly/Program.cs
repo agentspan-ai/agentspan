@@ -20,8 +20,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 
 using System.Reflection;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Agent definitions (in AgentLibrary below) ─────────────────────────
 //

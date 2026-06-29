@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code agent — uses Claude's built-in tools (Read, Glob, Grep)."""
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(
     name="code_explorer",

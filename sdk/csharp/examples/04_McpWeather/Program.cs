@@ -26,8 +26,8 @@
 //   - mcp-testkit running on http://localhost:3001 (see above)
 //   - AGENTSPAN_LLM_MODEL set in environment
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // MCP tool — Conductor discovers tools from mcp-testkit at runtime.
 // ${MCP_TEST_API_KEY} is resolved server-side from the credential store.

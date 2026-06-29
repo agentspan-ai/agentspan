@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.OpenAI;
+using Conductor.AI;
+using Conductor.AI.OpenAI;
 using Xunit;
 
-namespace Agentspan.OpenAI.Tests;
+namespace Conductor.AI.OpenAI.Tests;
 
 /// <summary>
 /// Plan-level (no LLM) tests for the OpenAI Agents SDK → Agentspan bridge.
@@ -30,7 +30,7 @@ public class OpenAIAgentTests
     [Fact]
     public void Build_sets_framework_to_openai()
     {
-        var agent = OpenAIAgent.Builder().Name("a").Model("openai/gpt-4o-mini").Build();
+        var agent = OpenAIAgent.Builder().Name("a").Model("anthropic/claude-sonnet-4-6").Build();
         // COUNTERFACTUAL: if Builder drops the framework tag, this is null.
         Assert.Equal("openai", agent.Framework);
     }
@@ -46,10 +46,10 @@ public class OpenAIAgentTests
     [Fact]
     public void Handoffs_land_in_framework_config()
     {
-        var sub = new Agent("sub") { Model = "openai/gpt-4o-mini", Instructions = "I am sub." };
+        var sub = new Agent("sub") { Model = "anthropic/claude-sonnet-4-6", Instructions = "I am sub." };
         var agent = OpenAIAgent.Builder()
             .Name("root")
-            .Model("openai/gpt-4o-mini")
+            .Model("anthropic/claude-sonnet-4-6")
             .Handoffs(sub)
             .Build();
 
@@ -97,7 +97,7 @@ public class OpenAIAgentTests
     // so we go through the public AgentRuntime path that calls it via the wire.
     private static JsonObject SerializeAgentForTest(Agent agent)
     {
-        var t  = typeof(Agent).Assembly.GetType("Agentspan.AgentConfigSerializer", throwOnError: true)!;
+        var t  = typeof(Agent).Assembly.GetType("Conductor.AI.AgentConfigSerializer", throwOnError: true)!;
         var mi = t.GetMethod("SerializeAgent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         return (JsonObject)mi.Invoke(null, new object[] { agent })!;
     }

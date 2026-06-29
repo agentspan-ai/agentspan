@@ -8,7 +8,7 @@
 
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // Build the graph
@@ -18,7 +18,7 @@ const graph = createReactAgent({ llm, tools: [], name: "hello_world_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [],
   framework: 'langgraph',
 };

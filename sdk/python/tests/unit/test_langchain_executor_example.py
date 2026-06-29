@@ -23,11 +23,11 @@ def agent_executor():
 
 class TestLangChainExecutorDetection:
     def test_detect_framework_returns_langchain(self, agent_executor):
-        from agentspan.agents.frameworks.serializer import detect_framework
+        from conductor.ai.agents.frameworks.serializer import detect_framework
         assert detect_framework(agent_executor) == "langchain"
 
     def test_serialize_returns_single_worker(self, agent_executor):
-        from agentspan.agents.frameworks.langchain import serialize_langchain
+        from conductor.ai.agents.frameworks.langchain import serialize_langchain
         raw_config, workers = serialize_langchain(agent_executor)
         assert len(workers) == 1
         assert raw_config["name"] == "math_executor"
@@ -35,14 +35,14 @@ class TestLangChainExecutorDetection:
 
 class TestLangChainWorkerInvocation:
     def test_worker_returns_executor_output(self, agent_executor):
-        from agentspan.agents.frameworks.langchain import make_langchain_worker
+        from conductor.ai.agents.frameworks.langchain import make_langchain_worker
 
         task = MagicMock()
         task.task_id = "t-lc"
         task.workflow_instance_id = "wf-lc-1"
         task.input_data = {"prompt": "What is 6*7?", "session_id": ""}
 
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
+        with patch("conductor.ai.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
                 agent_executor, "math_executor", "http://localhost:8080", "k", "s"
             )
@@ -53,14 +53,14 @@ class TestLangChainWorkerInvocation:
 
     def test_worker_injects_callback_handler(self, agent_executor):
         """Verify that AgentspanCallbackHandler is passed to executor.invoke."""
-        from agentspan.agents.frameworks.langchain import make_langchain_worker, AgentspanCallbackHandler
+        from conductor.ai.agents.frameworks.langchain import make_langchain_worker, AgentspanCallbackHandler
 
         task = MagicMock()
         task.task_id = "t-cb"
         task.workflow_instance_id = "wf-cb-1"
         task.input_data = {"prompt": "test", "session_id": ""}
 
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
+        with patch("conductor.ai.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
                 agent_executor, "math_executor", "http://localhost:8080", "k", "s"
             )
@@ -75,11 +75,11 @@ class TestLangChainWorkerInvocation:
     def test_callback_on_tool_start_pushes_event(self):
         """Callback pushes tool_call event on tool start."""
         pytest.importorskip("langchain_core")
-        from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
+        from conductor.ai.agents.frameworks.langchain import AgentspanCallbackHandler
         from uuid import uuid4
 
         pushed = []
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking",
+        with patch("conductor.ai.agents.frameworks.langchain._push_event_nonblocking",
                    side_effect=lambda exec_id, event, *a: pushed.append(event)):
             run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-1", "http://localhost:8080", "k", "s")
@@ -92,11 +92,11 @@ class TestLangChainWorkerInvocation:
     def test_callback_on_tool_end_pushes_event(self):
         """Callback pushes tool_result event on tool end."""
         pytest.importorskip("langchain_core")
-        from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
+        from conductor.ai.agents.frameworks.langchain import AgentspanCallbackHandler
         from uuid import uuid4
 
         pushed = []
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking",
+        with patch("conductor.ai.agents.frameworks.langchain._push_event_nonblocking",
                    side_effect=lambda exec_id, event, *a: pushed.append(event)):
             run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-1", "http://localhost:8080", "k", "s")

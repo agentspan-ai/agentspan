@@ -1,21 +1,21 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.enums.AgentStatus;
-import ai.agentspan.enums.OnFail;
-import ai.agentspan.enums.Position;
-import ai.agentspan.model.AgentResult;
-import ai.agentspan.model.GuardrailDef;
-import ai.agentspan.model.GuardrailResult;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.enums.AgentStatus;
+import org.conductoross.conductor.ai.enums.OnFail;
+import org.conductoross.conductor.ai.enums.Position;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.model.GuardrailDef;
+import org.conductoross.conductor.ai.model.GuardrailResult;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 3: Guardrails — runtime behavior tests.
@@ -46,7 +46,7 @@ class Suite8Guardrails extends BaseTest {
     static void setup() {
         // Use BASE_URL (without /api suffix) since AgentConfig + HttpApi
         // already prepend /api to every path.
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -71,32 +71,31 @@ class Suite8Guardrails extends BaseTest {
         // A guardrail that always fails with RETRY and maxRetries=1.
         // After 1 retry the runtime escalates to RAISE, blocking the agent.
         GuardrailDef escalatingGuardrail = GuardrailDef.builder()
-            .name("e2e_escalate_guard")
-            .position(Position.OUTPUT)
-            .onFail(OnFail.RETRY)
-            .maxRetries(1)
-            .func(content -> GuardrailResult.fail("always fails for escalation test"))
-            .guardrailType("custom")
-            .build();
+                .name("e2e_escalate_guard")
+                .position(Position.OUTPUT)
+                .onFail(OnFail.RETRY)
+                .maxRetries(1)
+                .func(content -> GuardrailResult.fail("always fails for escalation test"))
+                .guardrailType("custom")
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_escalate_guard_agent")
-            .model(MODEL)
-            .instructions("Say hello.")
-            .guardrails(List.of(escalatingGuardrail))
-            .maxTurns(3)
-            .build();
+                .name("e2e_java_escalate_guard_agent")
+                .model(MODEL)
+                .instructions("Say hello.")
+                .guardrails(List.of(escalatingGuardrail))
+                .maxTurns(3)
+                .build();
 
         AgentResult result = runtime.run(agent, "Say anything.");
 
         // After maxRetries=1 is exceeded the guardrail escalates to RAISE
         // which should cause the agent to fail or terminate
         assertTrue(
-            result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
-            "Expected agent to FAIL or TERMINATE after guardrail maxRetries=1 escalation. "
-            + "Got status: " + result.getStatus()
-            + ". COUNTERFACTUAL: if the custom guardrail doesn't fire, agent completes normally."
-        );
+                result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
+                "Expected agent to FAIL or TERMINATE after guardrail maxRetries=1 escalation. "
+                        + "Got status: " + result.getStatus()
+                        + ". COUNTERFACTUAL: if the custom guardrail doesn't fire, agent completes normally.");
     }
 
     /**
@@ -111,29 +110,28 @@ class Suite8Guardrails extends BaseTest {
     void test_custom_guardrail_raise_on_output() {
         // A guardrail that always blocks output
         GuardrailDef alwaysBlockGuardrail = GuardrailDef.builder()
-            .name("e2e_always_block_guard")
-            .position(Position.OUTPUT)
-            .onFail(OnFail.RAISE)
-            .func(content -> GuardrailResult.fail("blocked by e2e test guardrail"))
-            .guardrailType("custom")
-            .build();
+                .name("e2e_always_block_guard")
+                .position(Position.OUTPUT)
+                .onFail(OnFail.RAISE)
+                .func(content -> GuardrailResult.fail("blocked by e2e test guardrail"))
+                .guardrailType("custom")
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_custom_guard_agent")
-            .model(MODEL)
-            .instructions("Say hello.")
-            .guardrails(List.of(alwaysBlockGuardrail))
-            .maxTurns(3)
-            .build();
+                .name("e2e_java_custom_guard_agent")
+                .model(MODEL)
+                .instructions("Say hello.")
+                .guardrails(List.of(alwaysBlockGuardrail))
+                .maxTurns(3)
+                .build();
 
         AgentResult result = runtime.run(agent, "Say anything.");
 
         // The always-blocking guardrail should cause the agent to fail or terminate
         assertTrue(
-            result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
-            "Expected agent to FAIL or TERMINATE when custom guardrail always blocks. "
-            + "Got status: " + result.getStatus()
-            + ". COUNTERFACTUAL: if the custom guardrail doesn't fire, agent completes normally."
-        );
+                result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
+                "Expected agent to FAIL or TERMINATE when custom guardrail always blocks. "
+                        + "Got status: " + result.getStatus()
+                        + ". COUNTERFACTUAL: if the custom guardrail doesn't fire, agent completes normally.");
     }
 }

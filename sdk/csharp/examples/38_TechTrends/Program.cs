@@ -18,8 +18,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Web;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Researcher tools ──────────────────────────────────────────
 

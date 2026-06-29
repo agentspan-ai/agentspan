@@ -14,7 +14,7 @@ Agents are great at finding the right action. Humans are better at authorizing r
 Add `approval_required=True` to any `@tool` decorator. That's it.
 
 ```python
-from agentspan.agents import tool
+from conductor.ai.agents import tool
 
 @tool(approval_required=True)
 def process_refund(order_id: str, amount: float) -> dict:
@@ -42,7 +42,7 @@ When the LLM calls this tool, Agentspan automatically:
 
 ```python
 import time
-from agentspan.agents import Agent, tool, start
+from conductor.ai.agents import Agent, tool, start
 
 # Tools that run automatically
 @tool
@@ -63,7 +63,7 @@ def process_refund(order_id: str, amount: float) -> dict:
 
 agent = Agent(
     name="refund_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[get_order, get_customer, process_refund],
     instructions="""You handle refund requests.
     1. Look up the order
@@ -134,7 +134,7 @@ notify_approver(handle.execution_id)
 
 ```python
 # Later — your approval endpoint (FastAPI, Flask, Lambda, etc.)
-from agentspan.agents import AgentRuntime, AgentHandle
+from conductor.ai.agents import AgentRuntime, AgentHandle
 
 # In a web app, the agent (with its tools) must already be served.
 # Call runtime.serve(agent, blocking=False) at app startup, then reconnect here.
@@ -177,7 +177,7 @@ Each time the agent calls one of these tools, it pauses and waits for a fresh `h
 ## Stream events including approval pauses
 
 ```python
-from agentspan.agents import stream
+from conductor.ai.agents import stream
 
 agent_stream = stream(agent, customer_message)
 for event in agent_stream:
@@ -199,7 +199,7 @@ for event in agent_stream:
 `MockEvent.waiting()` simulates the approval pause, then `MockEvent.done()` simulates the post-approval response:
 
 ```python
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 
 result = mock_run(
     agent,

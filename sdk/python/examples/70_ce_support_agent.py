@@ -36,7 +36,7 @@ from typing import List, Optional
 import requests
 from pydantic import BaseModel, Field
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentRuntime,
     Guardrail,

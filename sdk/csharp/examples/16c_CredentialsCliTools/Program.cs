@@ -24,8 +24,8 @@
 //   - GITHUB_TOKEN stored via `agentspan credentials set`
 //   - gh CLI installed (https://cli.github.com)
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 var agent = new Agent("devops_agent_16c")
 {

@@ -24,9 +24,9 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
 from settings import settings
-from agentspan.agents.handoff import OnTextMention
+from conductor.ai.agents.handoff import OnTextMention
 
 # ── Specialist agents ────────────────────────────────────────────────
 

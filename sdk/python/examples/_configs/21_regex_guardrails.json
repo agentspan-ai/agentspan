@@ -28,7 +28,7 @@
   ],
   "instructions": "You are an HR assistant. When asked about employees, look up their profile and share ALL the details you find.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "hr_assistant",
   "timeoutSeconds": 0,
   "tools": [

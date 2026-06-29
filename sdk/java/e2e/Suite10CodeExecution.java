@@ -1,22 +1,23 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.enums.AgentStatus;
-import ai.agentspan.execution.DockerCodeExecutor;
-import ai.agentspan.execution.ExecutionResult;
-import ai.agentspan.model.AgentResult;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.enums.AgentStatus;
+import org.conductoross.conductor.ai.execution.DockerCodeExecutor;
+import org.conductoross.conductor.ai.execution.ExecutionResult;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.model.CompileResponse;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 9: Local Code Execution — plan-level and runtime tests for the
@@ -47,7 +48,7 @@ class Suite10CodeExecution extends BaseTest {
 
     @BeforeAll
     static void setup() {
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -67,15 +68,15 @@ class Suite10CodeExecution extends BaseTest {
         List<Map<String, Object>> allTasks = (List<Map<String, Object>>) workflow.get("tasks");
         if (allTasks == null) return List.of();
         return allTasks.stream()
-            .filter(t -> {
-                String ref = (String) t.getOrDefault("referenceTaskName", "");
-                String defName = (String) t.getOrDefault("taskDefName", "");
-                String taskType = (String) t.getOrDefault("taskType", "");
-                return ref.contains("execute_code")
-                    || defName.contains("execute_code")
-                    || taskType.contains("execute_code");
-            })
-            .collect(Collectors.toList());
+                .filter(t -> {
+                    String ref = (String) t.getOrDefault("referenceTaskName", "");
+                    String defName = (String) t.getOrDefault("taskDefName", "");
+                    String taskType = (String) t.getOrDefault("taskType", "");
+                    return ref.contains("execute_code")
+                            || defName.contains("execute_code")
+                            || taskType.contains("execute_code");
+                })
+                .collect(Collectors.toList());
     }
 
     /** Convert a task's outputData to a string for searching. */
@@ -99,69 +100,76 @@ class Suite10CodeExecution extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_code_execution_compiles() {
         Agent agent = Agent.builder()
-            .name("e2e_java_ce_compile")
-            .model(MODEL)
-            .instructions("You can run code.")
-            .localCodeExecution(true)
-            .allowedLanguages(List.of("python", "bash"))
-            .codeExecutionTimeout(30)
-            .build();
+                .name("e2e_java_ce_compile")
+                .model(MODEL)
+                .instructions("You can run code.")
+                .localCodeExecution(true)
+                .allowedLanguages(List.of("python", "bash"))
+                .codeExecutionTimeout(30)
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         // Assert codeExecution block exists
         Map<String, Object> codeExec = (Map<String, Object>) agentDef.get("codeExecution");
-        assertNotNull(codeExec,
-            "agentDef has no 'codeExecution' key — localCodeExecution not serialized. "
-            + "agentDef keys: " + agentDef.keySet()
-            + ". COUNTERFACTUAL: if codeExecution is not serialized, this fails.");
+        assertNotNull(
+                codeExec,
+                "agentDef has no 'codeExecution' key — localCodeExecution not serialized. "
+                        + "agentDef keys: " + agentDef.keySet()
+                        + ". COUNTERFACTUAL: if codeExecution is not serialized, this fails.");
 
         // enabled == true
-        assertEquals(true, codeExec.get("enabled"),
-            "codeExecution.enabled should be true. Got: " + codeExec.get("enabled")
-            + ". COUNTERFACTUAL: if the enabled flag is not set, this fails.");
+        assertEquals(
+                true,
+                codeExec.get("enabled"),
+                "codeExecution.enabled should be true. Got: " + codeExec.get("enabled")
+                        + ". COUNTERFACTUAL: if the enabled flag is not set, this fails.");
 
         // allowedLanguages contains python and bash
         List<String> langs = (List<String>) codeExec.get("allowedLanguages");
-        assertNotNull(langs,
-            "codeExecution.allowedLanguages is null. codeExecution keys: " + codeExec.keySet());
-        assertTrue(langs.contains("python"),
-            "Expected 'python' in allowedLanguages. Got: " + langs);
-        assertTrue(langs.contains("bash"),
-            "Expected 'bash' in allowedLanguages. Got: " + langs);
+        assertNotNull(langs, "codeExecution.allowedLanguages is null. codeExecution keys: " + codeExec.keySet());
+        assertTrue(langs.contains("python"), "Expected 'python' in allowedLanguages. Got: " + langs);
+        assertTrue(langs.contains("bash"), "Expected 'bash' in allowedLanguages. Got: " + langs);
 
         // timeout == 30
         Object timeout = codeExec.get("timeout");
         assertNotNull(timeout, "codeExecution.timeout is null");
-        assertEquals(30, ((Number) timeout).intValue(),
-            "Expected codeExecution.timeout == 30. Got: " + timeout
-            + ". COUNTERFACTUAL: if timeout is not serialized, this fails.");
+        assertEquals(
+                30,
+                ((Number) timeout).intValue(),
+                "Expected codeExecution.timeout == 30. Got: " + timeout
+                        + ". COUNTERFACTUAL: if timeout is not serialized, this fails.");
 
         // execute_code tool injected into agentDef.tools
         List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
-        assertNotNull(tools,
-            "agentDef has no 'tools' key — execute_code tool not injected. "
-            + "COUNTERFACTUAL: if tool injection is missing, the LLM cannot call execute_code.");
+        assertNotNull(
+                tools,
+                "agentDef has no 'tools' key — execute_code tool not injected. "
+                        + "COUNTERFACTUAL: if tool injection is missing, the LLM cannot call execute_code.");
 
         List<Map<String, Object>> execTools = tools.stream()
-            .filter(t -> {
-                String name = (String) t.getOrDefault("name", "");
-                return name.contains("execute_code");
-            })
-            .collect(Collectors.toList());
+                .filter(t -> {
+                    String name = (String) t.getOrDefault("name", "");
+                    return name.contains("execute_code");
+                })
+                .collect(Collectors.toList());
 
-        assertFalse(execTools.isEmpty(),
-            "No tool containing 'execute_code' found in agentDef.tools. "
-            + "Tool names: " + tools.stream().map(t -> (String) t.get("name")).collect(Collectors.toList())
-            + ". COUNTERFACTUAL: if execute_code tool is not injected, LLM cannot call it.");
+        assertFalse(
+                execTools.isEmpty(),
+                "No tool containing 'execute_code' found in agentDef.tools. "
+                        + "Tool names: "
+                        + tools.stream().map(t -> (String) t.get("name")).collect(Collectors.toList())
+                        + ". COUNTERFACTUAL: if execute_code tool is not injected, LLM cannot call it.");
 
         Map<String, Object> execTool = execTools.get(0);
-        assertEquals("e2e_java_ce_compile_execute_code", execTool.get("name"),
-            "Expected tool name 'e2e_java_ce_compile_execute_code'. Got: " + execTool.get("name")
-            + ". COUNTERFACTUAL: if tool naming is wrong, workers won't dispatch correctly.");
-        assertEquals("worker", execTool.get("toolType"),
-            "Expected toolType 'worker'. Got: " + execTool.get("toolType"));
+        assertEquals(
+                "e2e_java_ce_compile_execute_code",
+                execTool.get("name"),
+                "Expected tool name 'e2e_java_ce_compile_execute_code'. Got: " + execTool.get("name")
+                        + ". COUNTERFACTUAL: if tool naming is wrong, workers won't dispatch correctly.");
+        assertEquals(
+                "worker", execTool.get("toolType"), "Expected toolType 'worker'. Got: " + execTool.get("toolType"));
     }
 
     /**
@@ -177,44 +185,48 @@ class Suite10CodeExecution extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_tool_naming_no_collision() {
         Agent agentA = Agent.builder()
-            .name("e2e_java_ce_a")
-            .model(MODEL)
-            .instructions("Run code.")
-            .localCodeExecution(true)
-            .allowedLanguages(List.of("python"))
-            .build();
+                .name("e2e_java_ce_a")
+                .model(MODEL)
+                .instructions("Run code.")
+                .localCodeExecution(true)
+                .allowedLanguages(List.of("python"))
+                .build();
 
         Agent agentB = Agent.builder()
-            .name("e2e_java_ce_b")
-            .model(MODEL)
-            .instructions("Run code.")
-            .localCodeExecution(true)
-            .allowedLanguages(List.of("python"))
-            .build();
+                .name("e2e_java_ce_b")
+                .model(MODEL)
+                .instructions("Run code.")
+                .localCodeExecution(true)
+                .allowedLanguages(List.of("python"))
+                .build();
 
-        Map<String, Object> planA = runtime.plan(agentA);
-        Map<String, Object> planB = runtime.plan(agentB);
+        CompileResponse planA = runtime.plan(agentA);
+        CompileResponse planB = runtime.plan(agentB);
 
         Map<String, Object> adA = getAgentDef(planA);
         Map<String, Object> adB = getAgentDef(planB);
 
-        List<String> toolsA = ((List<Map<String, Object>>) adA.get("tools")).stream()
-            .map(t -> (String) t.get("name")).collect(Collectors.toList());
-        List<String> toolsB = ((List<Map<String, Object>>) adB.get("tools")).stream()
-            .map(t -> (String) t.get("name")).collect(Collectors.toList());
+        List<String> toolsA = ((List<Map<String, Object>>) adA.get("tools"))
+                .stream().map(t -> (String) t.get("name")).collect(Collectors.toList());
+        List<String> toolsB = ((List<Map<String, Object>>) adB.get("tools"))
+                .stream().map(t -> (String) t.get("name")).collect(Collectors.toList());
 
-        assertTrue(toolsA.contains("e2e_java_ce_a_execute_code"),
-            "'e2e_java_ce_a_execute_code' not in agentA tools: " + toolsA
-            + ". COUNTERFACTUAL: if naming is wrong, tool won't dispatch to correct worker.");
-        assertTrue(toolsB.contains("e2e_java_ce_b_execute_code"),
-            "'e2e_java_ce_b_execute_code' not in agentB tools: " + toolsB);
+        assertTrue(
+                toolsA.contains("e2e_java_ce_a_execute_code"),
+                "'e2e_java_ce_a_execute_code' not in agentA tools: " + toolsA
+                        + ". COUNTERFACTUAL: if naming is wrong, tool won't dispatch to correct worker.");
+        assertTrue(
+                toolsB.contains("e2e_java_ce_b_execute_code"),
+                "'e2e_java_ce_b_execute_code' not in agentB tools: " + toolsB);
 
         // No cross-contamination
-        assertFalse(toolsA.contains("e2e_java_ce_b_execute_code"),
-            "agentA has agentB's tool name — collision! toolsA=" + toolsA
-            + ". COUNTERFACTUAL: if naming collapses, both agents share the same worker.");
-        assertFalse(toolsB.contains("e2e_java_ce_a_execute_code"),
-            "agentB has agentA's tool name — collision! toolsB=" + toolsB);
+        assertFalse(
+                toolsA.contains("e2e_java_ce_b_execute_code"),
+                "agentA has agentB's tool name — collision! toolsA=" + toolsA
+                        + ". COUNTERFACTUAL: if naming collapses, both agents share the same worker.");
+        assertFalse(
+                toolsB.contains("e2e_java_ce_a_execute_code"),
+                "agentB has agentA's tool name — collision! toolsB=" + toolsB);
     }
 
     /**
@@ -233,14 +245,14 @@ class Suite10CodeExecution extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_language_restriction_plan() {
         Agent agent = Agent.builder()
-            .name("e2e_java_ce_py_only")
-            .model(MODEL)
-            .instructions("You can only run Python code.")
-            .localCodeExecution(true)
-            .allowedLanguages(List.of("python"))  // bash NOT allowed
-            .build();
+                .name("e2e_java_ce_py_only")
+                .model(MODEL)
+                .instructions("You can only run Python code.")
+                .localCodeExecution(true)
+                .allowedLanguages(List.of("python")) // bash NOT allowed
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         Map<String, Object> codeExec = (Map<String, Object>) agentDef.get("codeExecution");
@@ -249,12 +261,14 @@ class Suite10CodeExecution extends BaseTest {
         List<String> allowed = (List<String>) codeExec.get("allowedLanguages");
         assertNotNull(allowed, "codeExecution.allowedLanguages is null");
 
-        assertTrue(allowed.contains("python"),
-            "'python' not in allowedLanguages: " + allowed
-            + ". COUNTERFACTUAL: if python is missing, the restriction is broken.");
-        assertFalse(allowed.contains("bash"),
-            "'bash' should NOT be in allowedLanguages: " + allowed
-            + ". COUNTERFACTUAL: if bash leaks into allowedLanguages, restriction is broken.");
+        assertTrue(
+                allowed.contains("python"),
+                "'python' not in allowedLanguages: " + allowed
+                        + ". COUNTERFACTUAL: if python is missing, the restriction is broken.");
+        assertFalse(
+                allowed.contains("bash"),
+                "'bash' should NOT be in allowedLanguages: " + allowed
+                        + ". COUNTERFACTUAL: if bash leaks into allowedLanguages, restriction is broken.");
     }
 
     // ── Runtime tests ─────────────────────────────────────────────────────
@@ -277,45 +291,51 @@ class Suite10CodeExecution extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_local_python_execution() {
         Agent agent = Agent.builder()
-            .name("e2e_java_ce_python")
-            .model(MODEL)
-            .instructions("You can execute code using the execute_code tool. "
-                + "When asked to run Python code, you MUST call execute_code with "
-                + "language='python' and the exact code provided. Do not compute mentally — "
-                + "always use the execute_code tool.")
-            .localCodeExecution(true)
-            .allowedLanguages(List.of("python"))
-            .maxTurns(5)
-            .build();
+                .name("e2e_java_ce_python")
+                .model(MODEL)
+                .instructions("You can execute code using the execute_code tool. "
+                        + "When asked to run Python code, you MUST call execute_code with "
+                        + "language='python' and the exact code provided. Do not compute mentally — "
+                        + "always use the execute_code tool.")
+                .localCodeExecution(true)
+                .allowedLanguages(List.of("python"))
+                .maxTurns(5)
+                .build();
 
-        AgentResult result = runtime.run(agent,
-            "Run this exact Python code using execute_code: print(42 * 73)");
+        AgentResult result = runtime.run(agent, "Run this exact Python code using execute_code: print(42 * 73)");
 
-        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
-            "Agent with Python code execution should complete. "
-            + "Status: " + result.getStatus()
-            + ". Error: " + result.getError());
+        assertEquals(
+                AgentStatus.COMPLETED,
+                result.getStatus(),
+                "Agent with Python code execution should complete. "
+                        + "Status: " + result.getStatus()
+                        + ". Error: " + result.getError());
 
         String executionId = result.getExecutionId();
         assertNotNull(executionId, "executionId is null");
 
         List<Map<String, Object>> execTasks = findExecuteCodeTasks(executionId);
 
-        assertFalse(execTasks.isEmpty(),
-            "No execute_code task found in workflow. "
-            + "COUNTERFACTUAL: if execute_code tool not injected or worker not dispatched, "
-            + "no execute_code task appears.");
+        assertFalse(
+                execTasks.isEmpty(),
+                "No execute_code task found in workflow. "
+                        + "COUNTERFACTUAL: if execute_code tool not injected or worker not dispatched, "
+                        + "no execute_code task appears.");
 
         // Verify at least one task has "3066" in output
-        boolean foundOutput = execTasks.stream()
-            .anyMatch(t -> taskOutputStr(t).contains("3066"));
+        boolean foundOutput = execTasks.stream().anyMatch(t -> taskOutputStr(t).contains("3066"));
 
-        assertTrue(foundOutput,
-            "Expected '3066' (42 * 73) in execute_code task output. "
-            + "execute_code task outputs: " + execTasks.stream()
-                .map(t -> taskOutputStr(t).substring(0, Math.min(200, taskOutputStr(t).length())))
-                .collect(Collectors.toList())
-            + ". COUNTERFACTUAL: if wrong code ran or output is malformed, '3066' won't appear.");
+        assertTrue(
+                foundOutput,
+                "Expected '3066' (42 * 73) in execute_code task output. "
+                        + "execute_code task outputs: "
+                        + execTasks.stream()
+                                .map(t -> taskOutputStr(t)
+                                        .substring(
+                                                0,
+                                                Math.min(200, taskOutputStr(t).length())))
+                                .collect(Collectors.toList())
+                        + ". COUNTERFACTUAL: if wrong code ran or output is malformed, '3066' won't appear.");
     }
 
     /**
@@ -331,43 +351,49 @@ class Suite10CodeExecution extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_local_bash_execution() {
         Agent agent = Agent.builder()
-            .name("e2e_java_ce_bash")
-            .model(MODEL)
-            .instructions("You can execute code using the execute_code tool. "
-                + "When asked to run bash code, you MUST call execute_code with "
-                + "language='bash' and the exact code provided. Always use execute_code — "
-                + "never compute the answer yourself.")
-            .localCodeExecution(true)
-            .allowedLanguages(List.of("bash"))
-            .maxTurns(5)
-            .build();
+                .name("e2e_java_ce_bash")
+                .model(MODEL)
+                .instructions("You can execute code using the execute_code tool. "
+                        + "When asked to run bash code, you MUST call execute_code with "
+                        + "language='bash' and the exact code provided. Always use execute_code — "
+                        + "never compute the answer yourself.")
+                .localCodeExecution(true)
+                .allowedLanguages(List.of("bash"))
+                .maxTurns(5)
+                .build();
 
-        AgentResult result = runtime.run(agent,
-            "Run a bash script using execute_code that prints: echo $((17 + 29))");
+        AgentResult result = runtime.run(agent, "Run a bash script using execute_code that prints: echo $((17 + 29))");
 
-        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
-            "Agent with bash code execution should complete. "
-            + "Status: " + result.getStatus()
-            + ". Error: " + result.getError());
+        assertEquals(
+                AgentStatus.COMPLETED,
+                result.getStatus(),
+                "Agent with bash code execution should complete. "
+                        + "Status: " + result.getStatus()
+                        + ". Error: " + result.getError());
 
         String executionId = result.getExecutionId();
         assertNotNull(executionId, "executionId is null");
 
         List<Map<String, Object>> execTasks = findExecuteCodeTasks(executionId);
 
-        assertFalse(execTasks.isEmpty(),
-            "No execute_code task found in workflow. "
-            + "COUNTERFACTUAL: if execute_code tool not injected, no task appears.");
+        assertFalse(
+                execTasks.isEmpty(),
+                "No execute_code task found in workflow. "
+                        + "COUNTERFACTUAL: if execute_code tool not injected, no task appears.");
 
-        boolean foundOutput = execTasks.stream()
-            .anyMatch(t -> taskOutputStr(t).contains("46"));
+        boolean foundOutput = execTasks.stream().anyMatch(t -> taskOutputStr(t).contains("46"));
 
-        assertTrue(foundOutput,
-            "Expected '46' (17 + 29) in execute_code bash task output. "
-            + "execute_code task outputs: " + execTasks.stream()
-                .map(t -> taskOutputStr(t).substring(0, Math.min(200, taskOutputStr(t).length())))
-                .collect(Collectors.toList())
-            + ". COUNTERFACTUAL: if bash output is wrong, '46' won't appear.");
+        assertTrue(
+                foundOutput,
+                "Expected '46' (17 + 29) in execute_code bash task output. "
+                        + "execute_code task outputs: "
+                        + execTasks.stream()
+                                .map(t -> taskOutputStr(t)
+                                        .substring(
+                                                0,
+                                                Math.min(200, taskOutputStr(t).length())))
+                                .collect(Collectors.toList())
+                        + ". COUNTERFACTUAL: if bash output is wrong, '46' won't appear.");
     }
 
     /**
@@ -387,25 +413,25 @@ class Suite10CodeExecution extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_local_timeout() {
         Agent agent = Agent.builder()
-            .name("e2e_java_ce_timeout")
-            .model(MODEL)
-            .instructions("You MUST use execute_code to run the exact Python code given. "
-                + "Do not modify the code. Always call execute_code — never simulate execution.")
-            .localCodeExecution(true)
-            .allowedLanguages(List.of("python"))
-            .codeExecutionTimeout(2)  // 2-second timeout
-            .maxTurns(3)
-            .build();
+                .name("e2e_java_ce_timeout")
+                .model(MODEL)
+                .instructions("You MUST use execute_code to run the exact Python code given. "
+                        + "Do not modify the code. Always call execute_code — never simulate execution.")
+                .localCodeExecution(true)
+                .allowedLanguages(List.of("python"))
+                .codeExecutionTimeout(2) // 2-second timeout
+                .maxTurns(3)
+                .build();
 
-        AgentResult result = runtime.run(agent,
-            "Run this Python code using execute_code: import time; time.sleep(60); print('done')");
+        AgentResult result = runtime.run(
+                agent, "Run this Python code using execute_code: import time; time.sleep(60); print('done')");
 
         // Accept COMPLETED/FAILED/TERMINATED — the LLM may report the timeout gracefully
         assertTrue(
-            result.getStatus() == AgentStatus.COMPLETED
-                || result.getStatus() == AgentStatus.FAILED
-                || result.getStatus() == AgentStatus.TERMINATED,
-            "Expected a terminal status. Got: " + result.getStatus());
+                result.getStatus() == AgentStatus.COMPLETED
+                        || result.getStatus() == AgentStatus.FAILED
+                        || result.getStatus() == AgentStatus.TERMINATED,
+                "Expected a terminal status. Got: " + result.getStatus());
 
         String executionId = result.getExecutionId();
         assertNotNull(executionId, "executionId is null");
@@ -415,43 +441,48 @@ class Suite10CodeExecution extends BaseTest {
         if (!execTasks.isEmpty()) {
             // Verify that the timeout error message appears in at least one task
             // The error field should contain "timed out" and exit_code should be -1
-            boolean timeoutErrorFound = execTasks.stream()
-                .anyMatch(t -> {
-                    Object outputData = t.get("outputData");
-                    if (!(outputData instanceof Map)) return false;
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> outMap = (Map<String, Object>) outputData;
-                    Object errorVal = outMap.get("error");
-                    Object exitCode = outMap.get("exit_code");
-                    Object success = outMap.get("success");
-                    boolean hasTimeoutError = errorVal != null
+            boolean timeoutErrorFound = execTasks.stream().anyMatch(t -> {
+                Object outputData = t.get("outputData");
+                if (!(outputData instanceof Map)) return false;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> outMap = (Map<String, Object>) outputData;
+                Object errorVal = outMap.get("error");
+                Object exitCode = outMap.get("exit_code");
+                Object success = outMap.get("success");
+                boolean hasTimeoutError = errorVal != null
                         && (errorVal.toString().toLowerCase().contains("timed out")
-                            || errorVal.toString().toLowerCase().contains("timeout"));
-                    boolean timedOutByExit = exitCode instanceof Number
-                        && ((Number) exitCode).intValue() == -1;
-                    // The test's invariant: long-running code did NOT complete
-                    // successfully. The happy path is timeout (exit_code == -1 +
-                    // "timed out" message). But gpt-4o-mini occasionally emits
-                    // syntactically invalid Python (stray indentation on
-                    // ``time.sleep(60)``); the worker rejects it with exit_code
-                    // 1 before any timeout fires. Either outcome proves the
-                    // worker prevented the sleep from running for its full 60s
-                    // — accept both. The negative assertion below
-                    // (``done`` MUST NOT appear in stdout) is still the
-                    // counterfactual we care about.
-                    boolean executionPrevented = Boolean.FALSE.equals(success)
+                                || errorVal.toString().toLowerCase().contains("timeout"));
+                boolean timedOutByExit = exitCode instanceof Number && ((Number) exitCode).intValue() == -1;
+                // The test's invariant: long-running code did NOT complete
+                // successfully. The happy path is timeout (exit_code == -1 +
+                // "timed out" message). But gpt-4o-mini occasionally emits
+                // syntactically invalid Python (stray indentation on
+                // ``time.sleep(60)``); the worker rejects it with exit_code
+                // 1 before any timeout fires. Either outcome proves the
+                // worker prevented the sleep from running for its full 60s
+                // — accept both. The negative assertion below
+                // (``done`` MUST NOT appear in stdout) is still the
+                // counterfactual we care about.
+                boolean executionPrevented = Boolean.FALSE.equals(success)
                         || (exitCode instanceof Number && ((Number) exitCode).intValue() != 0);
-                    return (hasTimeoutError && timedOutByExit) || executionPrevented;
-                });
+                return (hasTimeoutError && timedOutByExit) || executionPrevented;
+            });
 
-            assertTrue(timeoutErrorFound,
-                "Expected at least one execute_code task to be prevented from running — "
-                + "either by timing out (exit_code == -1, 'timed out' message) OR by "
-                + "rejecting bad code (non-zero exit, success=false). "
-                + "execute_code task outputs: " + execTasks.stream()
-                    .map(t -> taskOutputStr(t).substring(0, Math.min(300, taskOutputStr(t).length())))
-                    .collect(Collectors.toList())
-                + ". COUNTERFACTUAL: a successful long sleep would have exit_code == 0.");
+            assertTrue(
+                    timeoutErrorFound,
+                    "Expected at least one execute_code task to be prevented from running — "
+                            + "either by timing out (exit_code == -1, 'timed out' message) OR by "
+                            + "rejecting bad code (non-zero exit, success=false). "
+                            + "execute_code task outputs: "
+                            + execTasks.stream()
+                                    .map(t -> taskOutputStr(t)
+                                            .substring(
+                                                    0,
+                                                    Math.min(
+                                                            300,
+                                                            taskOutputStr(t).length())))
+                                    .collect(Collectors.toList())
+                            + ". COUNTERFACTUAL: a successful long sleep would have exit_code == 0.");
             // No symmetric "no 'done' in any stdout" check — the LLM may
             // legitimately run multiple execute_code attempts across turns;
             // one may hit timeout while another (LLM rewrote the script
@@ -474,7 +505,8 @@ class Suite10CodeExecution extends BaseTest {
     private static boolean dockerAvailable() {
         try {
             Process p = new ProcessBuilder("docker", "--version")
-                .redirectErrorStream(true).start();
+                    .redirectErrorStream(true)
+                    .start();
             boolean finished = p.waitFor(5, TimeUnit.SECONDS);
             return finished && p.exitValue() == 0;
         } catch (Exception e) {
@@ -501,16 +533,20 @@ class Suite10CodeExecution extends BaseTest {
         DockerCodeExecutor executor = new DockerCodeExecutor("python:3.12-slim", "python", 30);
         ExecutionResult result = executor.execute("print(42 * 73)");
 
-        assertEquals(0, result.getExitCode(),
-            "DockerCodeExecutor must exit 0 for valid Python. output=" + result.getOutput()
-            + " error=" + result.getError()
-            + ". COUNTERFACTUAL: a broken docker invocation would produce a non-zero exit code.");
-        assertTrue(result.getOutput().contains("3066"),
-            "DockerCodeExecutor stdout must contain '3066' (42*73). Got output='" + result.getOutput()
-            + "', error='" + result.getError() + "'"
-            + ". COUNTERFACTUAL: empty/wrong stdout means the script never ran in the container.");
-        assertFalse(result.isTimedOut(),
-            "DockerCodeExecutor must NOT time out for a one-line print. timedOut=true is wrong.");
+        assertEquals(
+                0,
+                result.getExitCode(),
+                "DockerCodeExecutor must exit 0 for valid Python. output=" + result.getOutput()
+                        + " error=" + result.getError()
+                        + ". COUNTERFACTUAL: a broken docker invocation would produce a non-zero exit code.");
+        assertTrue(
+                result.getOutput().contains("3066"),
+                "DockerCodeExecutor stdout must contain '3066' (42*73). Got output='" + result.getOutput()
+                        + "', error='" + result.getError() + "'"
+                        + ". COUNTERFACTUAL: empty/wrong stdout means the script never ran in the container.");
+        assertFalse(
+                result.isTimedOut(),
+                "DockerCodeExecutor must NOT time out for a one-line print. timedOut=true is wrong.");
     }
 
     /**
@@ -529,22 +565,24 @@ class Suite10CodeExecution extends BaseTest {
         assumeTrue(dockerAvailable(), "Docker is not available — skipping Docker network test.");
 
         DockerCodeExecutor executor = new DockerCodeExecutor("python:3.12-slim", "python", 20);
-        String code =
-            "import urllib.request, sys\n"
-            + "try:\n"
-            + "    urllib.request.urlopen('http://example.com', timeout=5)\n"
-            + "    print('NET_OK')\n"
-            + "except Exception as e:\n"
-            + "    print('NET_FAIL:' + type(e).__name__, file=sys.stderr)\n"
-            + "    sys.exit(2)\n";
+        String code = "import urllib.request, sys\n"
+                + "try:\n"
+                + "    urllib.request.urlopen('http://example.com', timeout=5)\n"
+                + "    print('NET_OK')\n"
+                + "except Exception as e:\n"
+                + "    print('NET_FAIL:' + type(e).__name__, file=sys.stderr)\n"
+                + "    sys.exit(2)\n";
         ExecutionResult result = executor.execute(code);
 
-        assertNotEquals(0, result.getExitCode(),
-            "DockerCodeExecutor with --network=none must REFUSE outbound HTTP. "
-            + "output=" + result.getOutput() + " error=" + result.getError()
-            + ". COUNTERFACTUAL: a zero exit code means network isolation isn't enforced.");
-        assertFalse(result.getOutput().contains("NET_OK"),
-            "stdout must NOT contain 'NET_OK' — the urlopen call must fail under --network=none. "
-            + "Got output='" + result.getOutput() + "'.");
+        assertNotEquals(
+                0,
+                result.getExitCode(),
+                "DockerCodeExecutor with --network=none must REFUSE outbound HTTP. "
+                        + "output=" + result.getOutput() + " error=" + result.getError()
+                        + ". COUNTERFACTUAL: a zero exit code means network isolation isn't enforced.");
+        assertFalse(
+                result.getOutput().contains("NET_OK"),
+                "stdout must NOT contain 'NET_OK' — the urlopen call must fail under --network=none. " + "Got output='"
+                        + result.getOutput() + "'.");
     }
 }

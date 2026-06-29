@@ -13,7 +13,7 @@ Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
 """
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 
 if __name__ == "__main__":

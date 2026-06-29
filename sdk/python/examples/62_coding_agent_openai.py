@@ -50,9 +50,9 @@ import re
 import sys
 from pathlib import Path
 
-from agentspan.agents import Agent, AgentRuntime, ConversationMemory, Strategy
-from agentspan.agents.cli_config import CliConfig
-from agentspan.agents.tool import tool
+from conductor.ai.agents import Agent, AgentRuntime, ConversationMemory, Strategy
+from conductor.ai.agents.cli_config import CliConfig
+from conductor.ai.agents.tool import tool
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 

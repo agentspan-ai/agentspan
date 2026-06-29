@@ -32,7 +32,7 @@ import sys
 
 import requests
 
-from agentspan.agents import AgentRuntime, plan_execute, tool
+from conductor.ai.agents import AgentRuntime, plan_execute, tool
 from settings import settings
 
 

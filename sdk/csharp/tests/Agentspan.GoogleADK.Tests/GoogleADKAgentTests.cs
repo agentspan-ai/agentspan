@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.GoogleADK;
+using Conductor.AI;
+using Conductor.AI.GoogleADK;
 using Xunit;
 
-namespace Agentspan.GoogleADK.Tests;
+namespace Conductor.AI.GoogleADK.Tests;
 
 /// <summary>
 /// Plan-level (no LLM) tests for the Google ADK → Agentspan bridge. Mirrors
@@ -77,7 +77,7 @@ public class GoogleADKAgentTests
 
     private static JsonObject SerializeAgentForTest(Agent agent)
     {
-        var t  = typeof(Agent).Assembly.GetType("Agentspan.AgentConfigSerializer", throwOnError: true)!;
+        var t  = typeof(Agent).Assembly.GetType("Conductor.AI.AgentConfigSerializer", throwOnError: true)!;
         var mi = t.GetMethod("SerializeAgent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         return (JsonObject)mi.Invoke(null, new object[] { agent })!;
     }

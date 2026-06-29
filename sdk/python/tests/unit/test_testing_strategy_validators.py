@@ -1,13 +1,13 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for agentspan.agents.testing.strategy_validators."""
+"""Tests for conductor.ai.agents.testing.strategy_validators."""
 
 import pytest
 
-from agentspan.agents.result import AgentEvent, AgentResult, EventType
-from agentspan.agents.testing.mock import MockEvent, mock_run
-from agentspan.agents.testing.strategy_validators import (
+from conductor.ai.agents.result import AgentEvent, AgentResult, EventType
+from conductor.ai.agents.testing.mock import MockEvent, mock_run
+from conductor.ai.agents.testing.strategy_validators import (
     StrategyViolation,
     validate_constrained_transitions,
     validate_handoff,
@@ -400,7 +400,7 @@ class TestMockRunWithValidation:
     """Show how validate_strategy works with mock_run results."""
 
     def test_sequential_mock_valid(self):
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         a = Agent(name="step_a", model="openai/gpt-4o", instructions="Step A")
         b = Agent(name="step_b", model="openai/gpt-4o", instructions="Step B")
@@ -418,7 +418,7 @@ class TestMockRunWithValidation:
         validate_strategy(pipeline, result)  # passes
 
     def test_sequential_mock_violation(self):
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         a = Agent(name="step_a", model="openai/gpt-4o", instructions="Step A")
         b = Agent(name="step_b", model="openai/gpt-4o", instructions="Step B")
@@ -437,7 +437,7 @@ class TestMockRunWithValidation:
             validate_strategy(pipeline, result)
 
     def test_parallel_mock_valid(self):
-        from agentspan.agents import Agent, Strategy
+        from conductor.ai.agents import Agent, Strategy
 
         analyst1 = Agent(name="market", model="openai/gpt-4o", instructions="Market")
         analyst2 = Agent(name="risk", model="openai/gpt-4o", instructions="Risk")
@@ -460,7 +460,7 @@ class TestMockRunWithValidation:
         validate_strategy(team, result)  # passes
 
     def test_parallel_mock_violation(self):
-        from agentspan.agents import Agent, Strategy
+        from conductor.ai.agents import Agent, Strategy
 
         analyst1 = Agent(name="market", model="openai/gpt-4o", instructions="Market")
         analyst2 = Agent(name="risk", model="openai/gpt-4o", instructions="Risk")
@@ -484,7 +484,7 @@ class TestMockRunWithValidation:
             validate_strategy(team, result)
 
     def test_round_robin_mock_wrong_pattern(self):
-        from agentspan.agents import Agent, Strategy
+        from conductor.ai.agents import Agent, Strategy
 
         opt = Agent(name="optimist", model="openai/gpt-4o", instructions="Positive")
         skp = Agent(name="skeptic", model="openai/gpt-4o", instructions="Negative")
@@ -510,7 +510,7 @@ class TestMockRunWithValidation:
             validate_strategy(debate, result)
 
     def test_router_mock_multiple_agents(self):
-        from agentspan.agents import Agent, Strategy
+        from conductor.ai.agents import Agent, Strategy
 
         coder = Agent(name="coder", model="openai/gpt-4o", instructions="Code")
         reviewer = Agent(name="reviewer", model="openai/gpt-4o", instructions="Review")

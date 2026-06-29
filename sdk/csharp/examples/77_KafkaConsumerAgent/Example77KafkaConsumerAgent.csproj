@@ -4,10 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>Agentspan.Examples</RootNamespace>
+    <RootNamespace>Conductor.AI.Examples</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Agentspan/Agentspan.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI/Conductor.AI.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Confluent.Kafka" Version="2.6.0" />

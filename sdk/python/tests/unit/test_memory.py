@@ -3,7 +3,7 @@
 
 """Unit tests for ConversationMemory."""
 
-from agentspan.agents.memory import ConversationMemory
+from conductor.ai.agents.memory import ConversationMemory
 
 
 class TestConversationMemoryBasic:

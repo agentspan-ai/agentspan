@@ -19,9 +19,9 @@
 //   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 //   - AGENT_SECONDARY_LLM_MODEL=openai/gpt-4o (optional; falls back to LlmModel)
 
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.OpenAI;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.OpenAI;
 
 var secondaryModel = Environment.GetEnvironmentVariable("AGENT_SECONDARY_LLM_MODEL")
                      ?? Settings.LlmModel;

@@ -19,7 +19,7 @@ import {
   tool,
   SemanticMemory,
   InMemoryStore,
-} from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Build up a knowledge base ---------------------------------------------
@@ -39,7 +39,7 @@ memory.add('Alice\'s timezone is US/Pacific.');
 const getCustomerContext = tool(
   async (args: { query: string }) => {
     const results = memory.search(args.query, 3);
-    return results.map((r) => r.content).join('\n');
+    return results.join('\n');
   },
   {
     name: 'get_customer_context',

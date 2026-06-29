@@ -13,8 +13,8 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Tool ─────────────────────────────────────────────────────────────
 

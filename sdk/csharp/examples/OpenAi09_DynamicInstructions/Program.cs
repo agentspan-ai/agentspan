@@ -16,9 +16,9 @@
 //   - AGENTSPAN_SERVER_URL=http://localhost:6767/api
 //   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.OpenAI;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.OpenAI;
 
 var agent = OpenAIAgent.Builder()
     .Name("personal_assistant")

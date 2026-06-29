@@ -58,25 +58,30 @@ export function runDiagnostic(result: Record<string, unknown>): string {
   return parts.join(' | ');
 }
 
-// ── Credential CLI helper ───────────────────────────────────────────────
+// ── Credential helper ────────────────────────────────────────────────────
+// Writes directly to the server's secret store (PUT/DELETE /api/secrets/{name}) —
+// the same store the agentspan CLI targets, and what tools resolve at runtime.
+// Using the API keeps these tests deterministic regardless of the local CLI's
+// ambient config (~/.agentspan/config.json may point at a different/managed server).
 
-import { execSync } from 'node:child_process';
-
-export function credentialSet(name: string, value: string): void {
-  execSync(`${CLI_PATH} credentials set ${name} ${value}`, {
-    env: { ...process.env, AGENTSPAN_SERVER_URL: BASE_URL },
-    timeout: 15_000,
+export async function credentialSet(name: string, value: string): Promise<void> {
+  const resp = await fetch(`${SERVER_URL}/secrets/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/plain' },
+    body: value,
+    signal: AbortSignal.timeout(15_000),
   });
+  if (!resp.ok) throw new Error(`credentialSet(${name}) failed: HTTP ${resp.status}`);
 }
 
-export function credentialDelete(name: string): void {
+export async function credentialDelete(name: string): Promise<void> {
   try {
-    execSync(`${CLI_PATH} credentials delete ${name}`, {
-      env: { ...process.env, AGENTSPAN_SERVER_URL: BASE_URL },
-      timeout: 15_000,
+    await fetch(`${SERVER_URL}/secrets/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(15_000),
     });
   } catch {
-    // Ignore "not found" errors during cleanup
+    // Ignore errors during cleanup (e.g., already deleted).
   }
 }
 

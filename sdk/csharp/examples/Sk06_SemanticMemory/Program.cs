@@ -14,12 +14,12 @@
 
 using System.Collections.Concurrent;
 using System.ComponentModel;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.SemanticKernel;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.SemanticKernel;
 using Microsoft.SemanticKernel;
 
-namespace Agentspan.Examples.Sk06;
+namespace Conductor.AI.Examples.Sk06;
 
 public sealed class MemoryPlugin
 {

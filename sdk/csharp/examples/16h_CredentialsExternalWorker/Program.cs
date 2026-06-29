@@ -8,7 +8,7 @@
 //     Credentials = ["GITHUB_TOKEN"]. In C#, external tools must be
 //     created as ToolDef objects directly (unlike local tools which use
 //     [Tool] attributes and ToolRegistry.FromInstance).
-//   - The external worker calls AgentHttpClient.ResolveCredentialsAsync()
+//   - The external worker calls AgentClient.ResolveCredentialsAsync()
 //     to fetch the plaintext credential value at runtime.
 //   - Works for workers running in separate processes, containers, or machines.
 //
@@ -26,8 +26,8 @@
 //   - An external worker polling for "github_lookup" tasks (see comments below)
 
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── External tool declaration ─────────────────────────────────
 //
@@ -83,18 +83,18 @@ result.PrintResult();
  * ── External worker side (runs in a separate process) ─────────────────
  *
  * The external worker polls Conductor for tasks named "github_lookup".
- * It uses AgentHttpClient.ResolveCredentialsAsync() to fetch the
+ * It uses AgentClient.ResolveCredentialsAsync() to fetch the
  * GITHUB_TOKEN value from the Agentspan server at runtime.
  *
  * Implementation sketch:
  *
- *   using Agentspan;
+ *   using Conductor.AI;
  *   using OrchestratorSDK.Client;           // Conductor .NET SDK
  *   using System.Net.Http.Headers;
  *   using System.Text.Json;
  *
  *   var serverUrl = Environment.GetEnvironmentVariable("AGENTSPAN_SERVER_URL")!;
- *   var http = new AgentHttpClient(serverUrl);
+ *   var http = new AgentClient(serverUrl);
  *   var taskClient = new TaskResourceApi(new Configuration { BasePath = serverUrl });
  *
  *   while (true)

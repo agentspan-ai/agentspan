@@ -1,9 +1,11 @@
 plugins {
     id 'java-library'
+    id 'jacoco'
     id 'com.vanniktech.maven.publish' version '0.34.0'
+    id 'com.diffplug.spotless' version '7.0.2'
 }
 
-group = 'ai.agentspan'
+group = 'org.conductoross.conductor'
 
 java {
     toolchain {
@@ -22,6 +24,11 @@ ext {
     langchain4jVersion = '1.0.0'
     googleAdkVersion   = '1.3.0'
     langgraph4jVersion = '1.6.0-beta5'
+    // Official Conductor Java client SDK (conductor-oss/java-sdk). Versioned
+    // separately from the server engine (engine = 3.30.2); wire-compatible with
+    // the 3.x task REST API, bundles the common DTOs, and provides native auth
+    // via io.orkes.conductor.client.ApiClient (key/secret → token).
+    conductorClientVersion = '5.0.1'
 }
 
 dependencies {
@@ -33,11 +40,18 @@ dependencies {
 
     implementation "org.slf4j:slf4j-api:${slf4jVersion}"
 
+    // Official Conductor worker client — battle-tested task polling with
+    // automatic lease extension (heartbeat), backoff, and managed threads.
+    // `api` (not `implementation`): the Conductor ApiClient/ConductorClient is part
+    // of the SDK's public surface (AgentRuntime accepts/returns it), so downstream
+    // modules (spring) and user code must see it transitively.
+    api "org.conductoross:conductor-client:${conductorClientVersion}"
+
     compileOnly "dev.langchain4j:langchain4j:${langchain4jVersion}"
     compileOnly "dev.langchain4j:langchain4j-open-ai:${langchain4jVersion}"
     // Google ADK + LangGraph4j are compileOnly so the SDK doesn't force users
     // onto them. The framework bridge classes only link at runtime when the
-    // user passes a native object to Agentspan.run/start/stream/deploy/serve —
+    // user passes a native object to runtime.run/start/stream/deploy/serve —
     // at which point that framework must obviously be on the user's classpath
     // already.
     compileOnly "com.google.adk:google-adk:${googleAdkVersion}"
@@ -71,10 +85,49 @@ test {
             excludeTags 'e2e'
         }
     }
+    // For coverage runs: don't let a flaky e2e abort the JaCoCo report.
+    if (project.hasProperty('ignoreTestFailures')) {
+        ignoreFailures = true
+    }
+    // e2e suites are I/O-bound (LLM calls, docker) and use unique agent/task names,
+    // so they can safely run concurrently. 2 JVMs roughly halves wall-clock time.
+    // Unit tests are fast enough that parallelism doesn't matter for them.
+    if (project.hasProperty('e2e')) {
+        maxParallelForks = 3
+    }
+}
+
+spotless {
+    java {
+        target fileTree('.') {
+            include 'src/main/java/**/*.java', 'src/test/**/*.java', 'e2e/**/*.java',
+                    'spring/src/main/java/**/*.java', 'spring/src/test/**/*.java'
+            exclude '**/build/**'
+        }
+        palantirJavaFormat('2.50.0')
+        removeUnusedImports()
+        importOrder('java', 'javax', 'jakarta', 'org', 'com', 'dev', 'io')
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }
 
 tasks.withType(Javadoc).configureEach {
     options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+// Code coverage. `jacocoTestReport` aggregates whatever ran in the `test` task —
+// unit-only by default, or unit+e2e when run with `-Pe2e` (needs a live server).
+jacoco {
+    toolVersion = '0.8.12'
+}
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        csv.required = true
+        html.required = true
+    }
 }
 
 mavenPublishing {
@@ -83,7 +136,7 @@ mavenPublishing {
         signAllPublications()
     }
 
-    coordinates('ai.agentspan', 'java-sdk', project.version.toString())
+    coordinates('org.conductoross.conductor', 'conductor-agent-sdk', project.version.toString())
 
     pom {
         name = 'Agentspan Java SDK'

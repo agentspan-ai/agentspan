@@ -18,7 +18,7 @@ Requirements:
 import os
 from datetime import datetime
 
-from agentspan.agents import Agent, AgentRuntime, agent_tool, tool, mcp_tool
+from conductor.ai.agents import Agent, AgentRuntime, agent_tool, tool, mcp_tool
 from settings import settings
 
 

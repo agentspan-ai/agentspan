@@ -13,7 +13,7 @@
  *   - GH_TOKEN in environment (optional, for GitHub MCP)
  */
 
-import { Agent, AgentRuntime, agentTool, tool, mcpTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, agentTool, tool, mcpTool } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- In-memory ticket store --------------------------------------------------

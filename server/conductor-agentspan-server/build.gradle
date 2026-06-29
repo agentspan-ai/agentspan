@@ -1,0 +1,172 @@
+plugins {
+    id 'org.springframework.boot'
+    id 'java'
+    id 'com.vanniktech.maven.publish'
+}
+
+def uiDir = file("${rootDir}/../ui")
+def uiDistDir = file("${uiDir}/dist")
+def serverStaticDir = file("${projectDir}/src/main/resources/static")
+def buildUiProperty = project.findProperty('buildUI')
+def buildUiEnabled = buildUiProperty != null && (
+    buildUiProperty.toString().trim().isEmpty() ||
+    buildUiProperty.toString().toBoolean()
+)
+def nodeOptionsWithMoreHeap = {
+    def current = System.getenv('NODE_OPTIONS')
+    current ? "${current} --max-old-space-size=4096" : '--max-old-space-size=4096'
+}
+def shellCommand = { String command ->
+    org.gradle.internal.os.OperatingSystem.current().isWindows()
+        ? ['cmd', '/c', command]
+        : ['bash', '-lc', command]
+}
+def pnpmCommand = { String args ->
+    org.gradle.internal.os.OperatingSystem.current().isWindows()
+        ? "where pnpm >NUL 2>NUL && pnpm ${args} || (where corepack >NUL 2>NUL && corepack pnpm ${args} || (echo pnpm or corepack is required to build the UI & exit /b 127))"
+        : "if command -v pnpm >/dev/null 2>&1; then pnpm ${args}; elif command -v corepack >/dev/null 2>&1; then corepack pnpm ${args}; else echo 'pnpm or corepack is required to build the UI' >&2; exit 127; fi"
+}
+
+springBoot {
+    mainClass = 'dev.agentspan.runtime.AgentRuntime'
+    buildInfo()
+}
+
+dependencies {
+    implementation project(':conductor-agentspan')
+
+    // SPI default implementations — JDBC, crypto, and their infra deps
+    // (Phase 0: impls still live in conductor-agentspan; these deps are there too.
+    //  Phase 1: impls move here, these deps become permanent server deps.)
+    implementation 'org.springframework:spring-jdbc'
+    implementation 'com.zaxxer:HikariCP'
+    implementation "org.xerial:sqlite-jdbc:${sqliteJdbcVersion}"
+
+    // Conductor OSS runtime — the only place a runnable engine ships
+    implementation "org.conductoross:conductor-common:${conductorVersion}"
+    implementation "org.conductoross:conductor-core:${conductorVersion}"
+    implementation "org.conductoross:conductor-ai:${conductorVersion}"
+    implementation "org.conductoross:conductor-rest:${conductorVersion}"
+    implementation "org.conductoross:conductor-sqlite-persistence:${conductorVersion}"
+    implementation "org.conductoross:conductor-postgres-persistence:${conductorVersion}"
+    implementation "org.conductoross:conductor-postgres-external-storage:${conductorVersion}"
+    implementation "org.conductoross:conductor-scheduler-core:${conductorVersion}"
+    implementation "org.conductoross:conductor-scheduler-sqlite-persistence:${conductorVersion}"
+    implementation "org.conductoross:conductor-scheduler-postgres-persistence:${conductorVersion}"
+    implementation "org.conductoross:conductor-http-task:${conductorVersion}"
+    implementation "org.conductoross:conductor-json-jq-task:${conductorVersion}"
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.retry:spring-retry'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+    implementation 'org.springframework.boot:spring-boot-starter-log4j2'
+    implementation 'org.apache.logging.log4j:log4j-web'
+    // OpenAPI docs endpoint (configured via springdoc.* in application.properties) — a
+    // runtime/app concern, so it lives in the server, not the library.
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.6.0'
+
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    // Test dependencies
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+    testImplementation "org.assertj:assertj-core:${assertjVersion}"
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    testImplementation 'org.graalvm.polyglot:polyglot:25.0.2'
+    testImplementation 'org.graalvm.js:js:25.0.2'
+}
+
+bootJar {
+    if (buildUiEnabled) dependsOn 'syncUiStatic'
+    archiveFileName = 'agentspan-runtime.jar'
+}
+
+// Publish the plain (non-fat) jar as conductor-agentspan-server.jar (no "-plain"
+// classifier). The runnable fat jar (agentspan-runtime.jar) is released separately
+// via the S3/GitHub workflow, not to Maven Central.
+jar {
+    archiveClassifier = ''
+}
+
+mavenPublishing {
+    publishToMavenCentral(true)
+    if (project.findProperty('signingInMemoryKey') != null) {
+        signAllPublications()
+    }
+
+    coordinates('org.conductoross', 'conductor-agentspan-server', project.version.toString())
+
+    pom {
+        name = 'Conductor AgentSpan Server'
+        description = 'Standalone AgentSpan server — default SPI implementations and OSS runtime over conductor-agentspan'
+        url = 'https://github.com/agentspan-ai/agentspan'
+        licenses {
+            license {
+                name = 'MIT License'
+                url = 'https://opensource.org/licenses/MIT'
+            }
+        }
+        developers {
+            developer {
+                organization = 'Orkes'
+                organizationUrl = 'https://orkes.io'
+                name = 'Orkes Development Team'
+                email = 'developers@orkes.io'
+            }
+        }
+        scm {
+            connection = 'scm:git:git://github.com/agentspan-ai/agentspan.git'
+            developerConnection = 'scm:git:ssh://github.com/agentspan-ai/agentspan.git'
+            url = 'https://github.com/agentspan-ai/agentspan'
+        }
+    }
+}
+
+tasks.register('installUiDependencies', Exec) {
+    group = 'build'
+    description = 'Install UI dependencies with pnpm when the UI workspace is available'
+    onlyIf { uiDir.exists() }
+    workingDir uiDir
+    commandLine shellCommand(pnpmCommand('install --frozen-lockfile'))
+    environment 'CI', 'true'
+    inputs.files(file("${uiDir}/package.json"), file("${uiDir}/pnpm-lock.yaml"))
+    outputs.file(file("${uiDir}/node_modules/.modules.yaml"))
+}
+
+tasks.register('buildUi', Exec) {
+    group = 'build'
+    description = 'Build the latest UI bundle for the embedded server UI (opt-in via -PbuildUI for bootJar)'
+    onlyIf { uiDir.exists() }
+    dependsOn 'installUiDependencies'
+    workingDir uiDir
+    commandLine shellCommand(pnpmCommand('build'))
+    environment 'CI', 'true'
+    environment 'NODE_OPTIONS', nodeOptionsWithMoreHeap()
+    inputs.files(
+        file("${uiDir}/package.json"), file("${uiDir}/pnpm-lock.yaml"),
+        file("${uiDir}/index.html"), file("${uiDir}/vite.config.ts"),
+        file("${uiDir}/vite-plugin-csp-nonce.ts"), file("${uiDir}/tsconfig.json")
+    )
+    inputs.dir(file("${uiDir}/src"))
+    inputs.dir(file("${uiDir}/public"))
+    outputs.dir(uiDistDir)
+}
+
+tasks.register('syncUiStatic', Sync) {
+    group = 'build'
+    description = 'Sync the latest built UI assets into server/src/main/resources/static'
+    onlyIf { uiDir.exists() }
+    dependsOn 'buildUi'
+    from(uiDistDir)
+    into(serverStaticDir)
+    includeEmptyDirs = false
+}
+
+tasks.named('processResources') {
+    if (buildUiEnabled) dependsOn 'syncUiStatic'
+}

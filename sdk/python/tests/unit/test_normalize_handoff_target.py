@@ -3,7 +3,7 @@
 
 """Tests for _normalize_handoff_target in runtime.py."""
 
-from agentspan.agents.runtime.runtime import _normalize_handoff_target
+from conductor.ai.agents.runtime.runtime import _normalize_handoff_target
 
 
 class TestNormalizeHandoffTarget:

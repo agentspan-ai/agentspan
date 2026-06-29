@@ -2,7 +2,7 @@
   "external": false,
   "instructions": "You are a project manager. Use the researcher tool to gather information and the calculate tool for math. Synthesize findings.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "manager_45",
   "timeoutSeconds": 0,
   "tools": [
@@ -12,7 +12,7 @@
           "external": false,
           "instructions": "You are a research assistant. Use search_knowledge_base to find information about topics. Provide concise summaries.",
           "maxTurns": 25,
-          "model": "openai/gpt-4o-mini",
+          "model": "anthropic/claude-sonnet-4-6",
           "name": "researcher_45",
           "timeoutSeconds": 0,
           "tools": [

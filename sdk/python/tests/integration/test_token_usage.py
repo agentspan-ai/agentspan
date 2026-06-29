@@ -18,7 +18,7 @@ Run with:
 
 import pytest
 
-from agentspan.agents import Agent, Strategy
+from conductor.ai.agents import Agent, Strategy
 
 pytestmark = pytest.mark.integration
 

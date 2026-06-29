@@ -121,7 +121,7 @@ Worker pods connect via `AGENTSPAN_SERVER_URL`:
 import os
 os.environ["AGENTSPAN_SERVER_URL"] = "http://agentspan-server:6767"
 
-from agentspan.agents import Agent, run
+from conductor.ai.agents import Agent, run
 agent = Agent(name="my_agent", model="openai/gpt-4o")
 result = run(agent, "Hello")
 ```
@@ -141,7 +141,7 @@ export AGENTSPAN_AUTH_SECRET=my-secret
 Or via code:
 
 ```python
-from agentspan.agents import configure
+from conductor.ai.agents import configure
 
 configure(
     server_url="https://my-server.example.com",

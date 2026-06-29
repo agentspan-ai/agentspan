@@ -19,7 +19,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 
 @tool

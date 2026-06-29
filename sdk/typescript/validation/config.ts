@@ -230,7 +230,7 @@ export function parseToml(input: string): ValidationConfig {
     const merged = { ...defaults, ...raw };
     runConfigs.push({
       name,
-      model: (merged.model as string) ?? 'openai/gpt-4o-mini',
+      model: (merged.model as string) ?? 'anthropic/claude-sonnet-4-6',
       group: merged.group as string | undefined,
       native: (merged.native as boolean) ?? false,
       parallel: (merged.parallel as boolean) ?? true,
@@ -247,7 +247,7 @@ export function parseToml(input: string): ValidationConfig {
     const name = (merged.name as string) ?? `run-${runConfigs.length}`;
     runConfigs.push({
       name,
-      model: (merged.model as string) ?? 'openai/gpt-4o-mini',
+      model: (merged.model as string) ?? 'anthropic/claude-sonnet-4-6',
       group: merged.group as string | undefined,
       native: (merged.native as boolean) ?? false,
       parallel: (merged.parallel as boolean) ?? true,

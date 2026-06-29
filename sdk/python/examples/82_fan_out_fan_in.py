@@ -41,7 +41,7 @@ from pathlib import Path
 
 from settings import settings
 
-from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
+from conductor.ai.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 
 # ---------------------------------------------------------------------------
 # Filesystem IPC

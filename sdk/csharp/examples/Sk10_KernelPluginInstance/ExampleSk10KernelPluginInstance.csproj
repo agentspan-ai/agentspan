@@ -5,12 +5,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>Agentspan.Examples.Sk10</RootNamespace>
+    <RootNamespace>Conductor.AI.Examples.Sk10</RootNamespace>
     <NoWarn>$(NoWarn);SKEXP0001;SKEXP0010</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Agentspan/Agentspan.csproj" />
-    <ProjectReference Include="../../src/Agentspan.SemanticKernel/Agentspan.SemanticKernel.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI/Conductor.AI.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI.SemanticKernel/Conductor.AI.SemanticKernel.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/Settings.cs" />

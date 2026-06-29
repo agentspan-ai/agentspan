@@ -28,7 +28,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool, httpTool, mcpTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool, httpTool, mcpTool } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // TypeScript tool (needs a worker)

@@ -6,6 +6,7 @@ invocation.  Only the external credential server HTTP call is stubbed.
 Everything else — serialize_agent, make_tool_worker, Conductor Task,
 os.environ injection — is real.
 """
+
 import pytest
 
 pytest.importorskip("langchain_core", reason="langchain_core not installed")
@@ -19,6 +20,7 @@ from conductor.client.http.models import Task, TaskResult
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _real_conductor_task(workflow_instance_id="wf-integ-001"):
     """Build a real Conductor Task object (not a mock)."""
@@ -57,7 +59,7 @@ def _make_lc_tool_and_graph():
 
 
 # Patch target: the credential fetcher factory in _dispatch (the only external dep)
-_FETCHER_PATCH = "agentspan.agents.runtime._dispatch._get_credential_fetcher"
+_FETCHER_PATCH = "conductor.ai.agents.runtime._dispatch._get_credential_fetcher"
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +74,7 @@ class TestFullExtractionPathIntegration:
     def test_serialize_agent_takes_full_extraction_path(self):
         """Verify that a create_react_agent graph with tools goes through
         full extraction (not passthrough or graph-structure)."""
-        from agentspan.agents.frameworks.serializer import serialize_agent
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
 
         graph, _ = _make_lc_tool_and_graph()
         raw_config, workers = serialize_agent(graph)
@@ -88,8 +90,8 @@ class TestFullExtractionPathIntegration:
     def test_extracted_tool_receives_credential_in_environ(self):
         """The extracted tool function sees GITHUB_TOKEN in os.environ when
         invoked through make_tool_worker with credential_names."""
-        from agentspan.agents.frameworks.serializer import serialize_agent
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         graph, _ = _make_lc_tool_and_graph()
         _, workers = serialize_agent(graph)
@@ -98,7 +100,9 @@ class TestFullExtractionPathIntegration:
         tool_func = workers[0].func
         tool_func._agentspan_framework_callable = True
         worker_fn = make_tool_worker(
-            tool_func, workers[0].name, credential_names=["GITHUB_TOKEN"],
+            tool_func,
+            workers[0].name,
+            credential_names=["GITHUB_TOKEN"],
         )
 
         fake_fetcher = MagicMock()
@@ -120,8 +124,8 @@ class TestFullExtractionPathIntegration:
 
     def test_extracted_tool_without_credentials_sees_empty_env(self):
         """Without credential_names, the tool sees no GITHUB_TOKEN."""
-        from agentspan.agents.frameworks.serializer import serialize_agent
-        from agentspan.agents.runtime._dispatch import (
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
+        from conductor.ai.agents.runtime._dispatch import (
             _workflow_credentials,
             _workflow_credentials_lock,
             make_tool_worker,
@@ -152,7 +156,7 @@ class TestFullExtractionPathIntegration:
 
     def test_credential_cleanup_on_tool_exception(self):
         """Credentials are cleaned up even when the tool raises."""
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         def failing_tool():
             """A tool that checks env then raises."""
@@ -160,7 +164,9 @@ class TestFullExtractionPathIntegration:
             raise RuntimeError("intentional failure")
 
         worker_fn = make_tool_worker(
-            failing_tool, "failing_tool", credential_names=["SECRET_KEY"],
+            failing_tool,
+            "failing_tool",
+            credential_names=["SECRET_KEY"],
         )
 
         fake_fetcher = MagicMock()
@@ -179,8 +185,8 @@ class TestFullExtractionPathIntegration:
 
         This is the exact flow that was broken: credentials were passed to
         runtime.run() but never reached the tool worker's closure."""
-        from agentspan.agents.frameworks.serializer import serialize_agent
-        from agentspan.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
 
         graph, _ = _make_lc_tool_and_graph()
         _, workers = serialize_agent(graph)
@@ -193,8 +199,8 @@ class TestFullExtractionPathIntegration:
             captured_calls.append((args, kwargs))
             return original_make_tool_worker(*args, **kwargs)
 
-        from agentspan.agents.runtime.runtime import AgentRuntime
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         config = AgentConfig(
             server_url="http://testserver:8080/api",
@@ -208,8 +214,13 @@ class TestFullExtractionPathIntegration:
         runtime._registered_tool_names = set()
         runtime._workers_started = False
 
-        with patch("agentspan.agents.runtime._dispatch.make_tool_worker", side_effect=spy_make_tool_worker), \
-             patch("conductor.client.worker.worker_task.worker_task", return_value=lambda f: f):
+        with (
+            patch(
+                "conductor.ai.agents.runtime._dispatch.make_tool_worker",
+                side_effect=spy_make_tool_worker,
+            ),
+            patch("conductor.client.worker.worker_task.worker_task", return_value=lambda f: f),
+        ):
             runtime._register_framework_workers(workers, credentials=["GITHUB_TOKEN"])
 
         assert len(captured_calls) == 1

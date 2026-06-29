@@ -49,7 +49,7 @@ Run this script. It starts the agent, prints the execution ID, checks status, th
 
 ```python
 # start.py
-from agentspan.agents import Agent, tool, start
+from conductor.ai.agents import Agent, tool, start
 
 @tool
 def analyze_chunk(chunk_id: int, data: str) -> dict:
@@ -63,7 +63,7 @@ def aggregate_results(results: list) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk, aggregate_results],
     instructions="""Analyze data in chunks using analyze_chunk, then aggregate with aggregate_results.
     Process each chunk sequentially. Report progress as you go.""",
@@ -84,7 +84,7 @@ Paste the execution ID from Step 1 and run this script. It re-registers the tool
 
 ```python
 # reconnect.py
-from agentspan.agents import Agent, tool, AgentRuntime, AgentHandle
+from conductor.ai.agents import Agent, tool, AgentRuntime, AgentHandle
 
 # Same agent and tools as start.py — workers need to be registered to handle tool calls
 @tool
@@ -99,7 +99,7 @@ def aggregate_results(results: list) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk, aggregate_results],
     instructions="...",
 )
@@ -136,7 +136,7 @@ The execution ID is all you need to reconnect from any process, any machine.
 **If your agent has no `@tool` functions** (LLM-only agent), reconnecting is straightforward:
 
 ```python
-from agentspan.agents import AgentRuntime, AgentHandle
+from conductor.ai.agents import AgentRuntime, AgentHandle
 
 with AgentRuntime() as runtime:
     handle = AgentHandle(execution_id="<execution-id>", runtime=runtime)
@@ -162,7 +162,7 @@ In production, keep the worker process (which handles tool calls) separate from 
 
 ```python
 # worker.py — runs continuously, handles tool execution
-from agentspan.agents import Agent, tool, AgentRuntime
+from conductor.ai.agents import Agent, tool, AgentRuntime
 
 @tool
 def analyze_chunk(chunk_id: int, data: str) -> dict:
@@ -171,7 +171,7 @@ def analyze_chunk(chunk_id: int, data: str) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk],
     instructions="...",
 )
@@ -182,7 +182,7 @@ with AgentRuntime() as runtime:
 
 ```python
 # invoker.py — runs once per job (REST endpoint, cron, CLI, etc.)
-from agentspan.agents import Agent, tool, start
+from conductor.ai.agents import Agent, tool, start
 
 @tool
 def analyze_chunk(chunk_id: int, data: str) -> dict:
@@ -191,7 +191,7 @@ def analyze_chunk(chunk_id: int, data: str) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk],
     instructions="...",
 )
@@ -208,7 +208,7 @@ print(f"Job ID: {handle.execution_id}")
 Use `get_status()` to skip work that's already done before starting a new run:
 
 ```python
-from agentspan.agents import Agent, start, AgentRuntime, AgentHandle
+from conductor.ai.agents import Agent, start, AgentRuntime, AgentHandle
 
 def ensure_analysis_running(execution_id: str | None, agent, prompt: str):
     """Start a new run or reconnect to an existing one."""
@@ -233,7 +233,7 @@ def ensure_analysis_running(execution_id: str | None, agent, prompt: str):
 Stream events from a run — whether it's new or already in progress:
 
 ```python
-from agentspan.agents import Agent, tool, AgentRuntime, AgentHandle
+from conductor.ai.agents import Agent, tool, AgentRuntime, AgentHandle
 
 # Re-define (or import) agent and tools so workers can be registered
 @tool
@@ -243,7 +243,7 @@ def analyze_chunk(chunk_id: int, data: str) -> dict:
 
 agent = Agent(
     name="data_analysis_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     tools=[analyze_chunk],
     instructions="...",
 )

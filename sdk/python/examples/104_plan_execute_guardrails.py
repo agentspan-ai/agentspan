@@ -34,7 +34,7 @@ import sys
 
 import requests
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentRuntime,
     OnFail,

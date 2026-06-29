@@ -25,11 +25,11 @@ import re
 
 import pytest
 
-from agentspan.agents import Agent, Strategy, tool
-from agentspan.agents.result import EventType
-from agentspan.agents.runtime.config import AgentConfig
-from agentspan.agents.runtime.runtime import AgentRuntime
-from agentspan.agents.testing import (
+from conductor.ai.agents import Agent, Strategy, tool
+from conductor.ai.agents.result import EventType
+from conductor.ai.agents.runtime.config import AgentConfig
+from conductor.ai.agents.runtime.runtime import AgentRuntime
+from conductor.ai.agents.testing import (
     assert_handoff_to,
     assert_no_errors,
     assert_output_contains,
@@ -38,7 +38,7 @@ from agentspan.agents.testing import (
     expect,
     validate_strategy,
 )
-from agentspan.agents.testing.strategy_validators import _get_handoff_targets
+from conductor.ai.agents.testing.strategy_validators import _get_handoff_targets
 
 
 # ── Mark all tests as integration ──────────────────────────────────────
@@ -138,7 +138,7 @@ class TestHandoffBehavioral:
     def ecommerce_support(self):
         order_agent = Agent(
             name="order_agent",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You handle order inquiries. ALWAYS use the lookup_order tool "
                 "to find order details. Report the exact status and total from "
@@ -148,7 +148,7 @@ class TestHandoffBehavioral:
         )
         inventory_agent = Agent(
             name="inventory_agent",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You handle inventory questions. ALWAYS use check_inventory "
                 "to look up stock levels. Report the exact quantity from the tool."
@@ -157,7 +157,7 @@ class TestHandoffBehavioral:
         )
         shipping_agent = Agent(
             name="shipping_agent",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You handle shipping questions. ALWAYS use get_shipping_rate "
                 "to check rates. Report the exact rate and delivery days."
@@ -166,7 +166,7 @@ class TestHandoffBehavioral:
         )
         return Agent(
             name="ecommerce_support",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are an e-commerce support router. "
                 "Route order/status questions to 'order_agent'. "
@@ -241,7 +241,7 @@ class TestSequentialBehavioral:
         """
         extractor = Agent(
             name="keyword_extractor",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are a keyword extractor. Use the extract_keywords tool "
                 "on the input text. Output ONLY the keywords as a comma-separated "
@@ -251,7 +251,7 @@ class TestSequentialBehavioral:
         )
         analyzer = Agent(
             name="sentiment_analyzer",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You receive keywords from the previous stage. Use the "
                 "analyze_sentiment tool on them. Output the sentiment and "
@@ -262,7 +262,7 @@ class TestSequentialBehavioral:
         )
         reporter = Agent(
             name="report_writer",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You receive analysis from previous stages containing keywords "
                 "and sentiment. Write a brief 2-sentence analysis report that "
@@ -299,7 +299,7 @@ class TestSequentialBehavioral:
         """Writer → translator: output must be transformed, not identical."""
         writer = Agent(
             name="content_writer",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Write exactly one sentence about the given topic. "
                 "Keep it under 20 words. Output only the sentence."
@@ -307,7 +307,7 @@ class TestSequentialBehavioral:
         )
         translator = Agent(
             name="translator",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You receive text from the previous stage. Use the translate_text "
                 "tool to translate it to Spanish. Output ONLY the translated text."
@@ -342,7 +342,7 @@ class TestParallelBehavioral:
         """Three analysts with different tools — each must contribute data."""
         weather_analyst = Agent(
             name="weather_analyst",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are a weather analyst. You MUST ALWAYS call the get_weather "
                 "tool for 'Tokyo' — no exceptions, regardless of the prompt. "
@@ -352,7 +352,7 @@ class TestParallelBehavioral:
         )
         market_analyst = Agent(
             name="market_analyst",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You analyze market/inventory. Use check_inventory for 'electronics'. "
                 "Report the stock quantity. Be brief, 1-2 sentences."
@@ -361,7 +361,7 @@ class TestParallelBehavioral:
         )
         logistics_analyst = Agent(
             name="logistics_analyst",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You analyze shipping logistics. You MUST ALWAYS call the "
                 "get_shipping_rate tool with destination 'London' — no exceptions. "
@@ -371,7 +371,7 @@ class TestParallelBehavioral:
         )
         team = Agent(
             name="analysis_team",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[weather_analyst, market_analyst, logistics_analyst],
             strategy=Strategy.PARALLEL,
         )
@@ -413,7 +413,7 @@ class TestParallelBehavioral:
         """Two agents analyzing different aspects — outputs must differ."""
         technical = Agent(
             name="technical_reviewer",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Analyze ONLY the technical aspects: performance, scalability, "
                 "architecture. Write exactly 2 bullet points. Do NOT discuss costs."
@@ -421,7 +421,7 @@ class TestParallelBehavioral:
         )
         financial = Agent(
             name="financial_reviewer",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Analyze ONLY the financial aspects: cost, ROI, pricing. "
                 "Write exactly 2 bullet points. Do NOT discuss technical details."
@@ -429,7 +429,7 @@ class TestParallelBehavioral:
         )
         team = Agent(
             name="review_team",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[technical, financial],
             strategy=Strategy.PARALLEL,
         )
@@ -468,7 +468,7 @@ class TestRouterBehavioral:
     def service_desk(self):
         router = Agent(
             name="desk_router",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Route requests to the right specialist:\n"
                 "- Weather/climate questions → 'weather_specialist'\n"
@@ -479,7 +479,7 @@ class TestRouterBehavioral:
         )
         weather_spec = Agent(
             name="weather_specialist",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are a weather specialist. ALWAYS use get_weather. "
                 "Report the exact temperature and conditions from the tool."
@@ -488,7 +488,7 @@ class TestRouterBehavioral:
         )
         math_spec = Agent(
             name="math_specialist",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are a math specialist. ALWAYS use calculate tool. "
                 "Report the exact numeric result from the tool."
@@ -497,7 +497,7 @@ class TestRouterBehavioral:
         )
         order_spec = Agent(
             name="order_specialist",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are an order specialist. ALWAYS use lookup_order. "
                 "Report the exact status and total from the tool."
@@ -506,7 +506,7 @@ class TestRouterBehavioral:
         )
         return Agent(
             name="service_desk",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[weather_spec, math_spec, order_spec],
             strategy=Strategy.ROUTER,
             router=router,
@@ -572,7 +572,7 @@ class TestRoundRobinBehavioral:
         """
         writer_a = Agent(
             name="writer_a",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are Writer A in a collaborative story. Add exactly ONE "
                 "new sentence that continues the story. You MUST reference or "
@@ -581,7 +581,7 @@ class TestRoundRobinBehavioral:
         )
         writer_b = Agent(
             name="writer_b",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are Writer B in a collaborative story. Add exactly ONE "
                 "new sentence that continues the story. You MUST reference or "
@@ -590,7 +590,7 @@ class TestRoundRobinBehavioral:
         )
         story = Agent(
             name="story_collab",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[writer_a, writer_b],
             strategy=Strategy.ROUND_ROBIN,
             max_turns=4,
@@ -633,7 +633,7 @@ class TestRoundRobinBehavioral:
         """Two agents with different tools alternate — both tools must be used."""
         weather_turn = Agent(
             name="weather_reporter",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are a weather reporter. You MUST ALWAYS call the get_weather "
                 "tool for 'Chicago'. Report the exact temperature from the tool. "
@@ -643,7 +643,7 @@ class TestRoundRobinBehavioral:
         )
         inventory_turn = Agent(
             name="stock_reporter",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are a stock reporter. You MUST ALWAYS call the check_inventory "
                 "tool for 'umbrellas'. Report the exact stock quantity from the tool. "
@@ -653,7 +653,7 @@ class TestRoundRobinBehavioral:
         )
         roundtable = Agent(
             name="roundtable",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[weather_turn, inventory_turn],
             strategy=Strategy.ROUND_ROBIN,
             max_turns=2,
@@ -700,7 +700,7 @@ class TestMultiTopicHandoff:
         """Support agent whose sub-agents each have unique tools with unique data."""
         order_agent = Agent(
             name="order_handler",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You handle order lookups ONLY. ALWAYS use lookup_order tool. "
                 "Report the exact status and total from the tool. Be brief."
@@ -709,7 +709,7 @@ class TestMultiTopicHandoff:
         )
         shipping_agent = Agent(
             name="shipping_handler",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You handle shipping cost questions ONLY. ALWAYS use "
                 "get_shipping_rate tool. Report the exact rate and days. Be brief."
@@ -718,7 +718,7 @@ class TestMultiTopicHandoff:
         )
         inventory_agent = Agent(
             name="inventory_handler",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You handle stock/availability questions ONLY. ALWAYS use "
                 "check_inventory tool. Report the exact quantity. Be brief."
@@ -727,7 +727,7 @@ class TestMultiTopicHandoff:
         )
         return Agent(
             name="multi_service",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You are a customer service coordinator. You MUST delegate to "
                 "the right specialist for each part of the customer's question:\n"
@@ -796,7 +796,7 @@ class TestMultiTopicHandoff:
         """
         order_stage = Agent(
             name="order_stage",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Your ONLY job: call lookup_order with order_id='ORD-123'. "
                 "Do this immediately. Output format:\n"
@@ -806,7 +806,7 @@ class TestMultiTopicHandoff:
         )
         inventory_stage = Agent(
             name="inventory_stage",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Your ONLY job: call check_inventory with product='laptops'. "
                 "Do this immediately. Then output ALL of the following:\n"
@@ -817,7 +817,7 @@ class TestMultiTopicHandoff:
         )
         shipping_stage = Agent(
             name="shipping_stage",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Your ONLY job: call get_shipping_rate with destination='Tokyo'. "
                 "Do this immediately. Then output ALL of the following:\n"
@@ -867,7 +867,7 @@ class TestMultiTopicHandoff:
         """
         order_analyst = Agent(
             name="order_analyst",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Your ONLY job: immediately call lookup_order with "
                 "order_id='ORD-100'. No questions, no clarification needed. "
@@ -877,7 +877,7 @@ class TestMultiTopicHandoff:
         )
         stock_analyst = Agent(
             name="stock_analyst",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Your ONLY job: immediately call check_inventory with "
                 "product='tablets'. No questions, no clarification needed. "
@@ -887,7 +887,7 @@ class TestMultiTopicHandoff:
         )
         shipping_analyst = Agent(
             name="shipping_analyst",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Your ONLY job: immediately call get_shipping_rate with "
                 "destination='Dubai'. No questions, no clarification needed. "
@@ -897,7 +897,7 @@ class TestMultiTopicHandoff:
         )
         team = Agent(
             name="full_report",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[order_analyst, stock_analyst, shipping_analyst],
             strategy=Strategy.PARALLEL,
         )
@@ -939,7 +939,7 @@ class TestCrossStrategyBehavioral:
         """Parallel agents each use different tools — all data in output."""
         weather_bot = Agent(
             name="weather_bot",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Use get_weather for 'New York'. Report temperature. "
                 "ONE sentence only."
@@ -948,7 +948,7 @@ class TestCrossStrategyBehavioral:
         )
         calc_bot = Agent(
             name="calc_bot",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Use calculate tool to compute '365 * 24'. Report the result. "
                 "ONE sentence only."
@@ -957,7 +957,7 @@ class TestCrossStrategyBehavioral:
         )
         inventory_bot = Agent(
             name="inventory_bot",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Use check_inventory for 'laptops'. Report the quantity. "
                 "ONE sentence only."
@@ -966,7 +966,7 @@ class TestCrossStrategyBehavioral:
         )
         team = Agent(
             name="data_team",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             agents=[weather_bot, calc_bot, inventory_bot],
             strategy=Strategy.PARALLEL,
         )
@@ -995,7 +995,7 @@ class TestCrossStrategyBehavioral:
         """
         data_fetcher = Agent(
             name="data_fetcher",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "Use the get_shipping_rate tool for destination 'Mars'. "
                 "Output ONLY the raw data: 'Rate: $X, Days: Y'. Nothing else."
@@ -1004,7 +1004,7 @@ class TestCrossStrategyBehavioral:
         )
         report_formatter = Agent(
             name="report_formatter",
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-sonnet-4-6",
             instructions=(
                 "You receive shipping data from the previous stage. "
                 "Format it as: 'SHIPPING REPORT: It costs $X and takes Y days to ship to Mars.' "

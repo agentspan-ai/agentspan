@@ -1,172 +1,122 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.3.5'
-    id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.springframework.boot' version '3.3.5' apply false
+    id 'io.spring.dependency-management' version '1.1.7' apply false
     id 'com.diffplug.spotless' version '7.0.2'
+    id 'com.vanniktech.maven.publish' version '0.34.0' apply false
 }
 
-def uiDir = file("${projectDir}/../ui")
-def uiDistDir = file("${uiDir}/dist")
-def serverStaticDir = file("${projectDir}/src/main/resources/static")
-def buildUiProperty = project.findProperty('buildUI')
-def buildUiEnabled = buildUiProperty != null && (
-    buildUiProperty.toString().trim().isEmpty() ||
-    buildUiProperty.toString().toBoolean()
-)
-def nodeOptionsWithMoreHeap = {
-    def current = System.getenv('NODE_OPTIONS')
-    current ? "${current} --max-old-space-size=4096" : '--max-old-space-size=4096'
-}
-def shellCommand = { String command ->
-    org.gradle.internal.os.OperatingSystem.current().isWindows()
-        ? ['cmd', '/c', command]
-        : ['bash', '-lc', command]
-}
-def pnpmCommand = { String args ->
-    org.gradle.internal.os.OperatingSystem.current().isWindows()
-        ? "where pnpm >NUL 2>NUL && pnpm ${args} || (where corepack >NUL 2>NUL && corepack pnpm ${args} || (echo pnpm or corepack is required to build the UI & exit /b 127))"
-        : "if command -v pnpm >/dev/null 2>&1; then pnpm ${args}; elif command -v corepack >/dev/null 2>&1; then corepack pnpm ${args}; else echo 'pnpm or corepack is required to build the UI' >&2; exit 127; fi"
+// Root project needs repositories too — spotless (applied here) resolves
+// the palantir-java-format artifact at the root level.
+repositories {
+    mavenCentral()
+    mavenLocal()
 }
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.30.0.rc17'
+    conductorVersion   = '3.30.2'
     lombokVersion      = '1.18.42'
-    log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
+    log4jVersion       = '2.24.3'
     sqliteJdbcVersion  = '3.47.0.0'
-    springSecVersion   = '6.3.5'  // bumped for GHSA-mg83-c7gq-rv5c (BCrypt 72-char)
+    springSecVersion   = '6.3.5'
     jsonSchemaVersion  = '1.0.73'
     junitVersion       = '5.10.2'
     assertjVersion     = '3.25.1'
     mockitoVersion     = '5.10.0'
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'io.spring.dependency-management'
+
+    // Published Maven coordinates: org.conductoross.conductor:<module>:<version>.
+    // Version comes from gradle.properties (default) or -Pversion=X in CI.
+    group = 'org.conductoross'
+    version = rootProject.version
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
     }
-}
 
-repositories {
-    mavenCentral()
-    mavenLocal()
-}
+    repositories {
+        mavenCentral()
+        mavenLocal()
+    }
 
-springBoot {
-    mainClass = 'dev.agentspan.runtime.AgentRuntime'
-    buildInfo()
-}
+    configurations.all {
+        // conductor-ai -> spring-ai -> mcp-json-jackson2 drags in json-schema-validator 2.0.0,
+        // which removed com.networknt.schema.JsonSchema. conductor-common's JsonSchemaValidator
+        // bean is compiled against the 1.x class, so pin to the version conductor needs.
+        resolutionStrategy {
+            force "com.networknt:json-schema-validator:${jsonSchemaVersion}"
+        }
 
-dependencies {
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
+        exclude group: 'org.graalvm.python'
+        exclude group: 'com.oracle.coherence.ce'
+        exclude group: 'com.microsoft.azure', module: 'applicationinsights-core'
+        exclude group: 'org.conscrypt'
+        exclude group: 'org.openjdk.nashorn'
+        exclude group: 'com.ibm.icu'
+        exclude group: 'org.bouncycastle'
+        exclude group: 'io.micrometer', module: 'micrometer-registry-statsd'
+        exclude group: 'io.micrometer', module: 'micrometer-registry-atlas'
+        exclude group: 'com.netflix.spectator'
+        exclude group: 'org.apache.groovy'
+    }
 
-    // Conductor core
-    implementation "org.conductoross:conductor-core:${conductorVersion}"
-    implementation "org.conductoross:conductor-rest:${conductorVersion}"
-    implementation "org.conductoross:conductor-common:${conductorVersion}"
-    implementation "org.conductoross:conductor-ai:${conductorVersion}"
-    implementation "org.conductoross:conductor-metrics:${conductorVersion}"
+    test {
+        useJUnitPlatform()
+        testLogging {
+            exceptionFormat = 'full'
+            events 'failed'
+        }
+    }
 
-    // PostgreSQL persistence + queue + indexing + locking
-    implementation "org.conductoross:conductor-postgres-persistence:${conductorVersion}"
-    implementation "org.conductoross:conductor-postgres-external-storage:${conductorVersion}"
+    // vanniktech publishing builds a javadoc jar (required by Maven Central).
+    // Relax doclint, and don't fail on errors: Lombok's @RequiredArgsConstructor
+    // (onConstructor_) isn't understood by the javadoc tool, which would otherwise
+    // abort jar generation. The jar is still produced for what resolves.
+    tasks.withType(Javadoc).configureEach {
+        options.addStringOption('Xdoclint:none', '-quiet')
+        failOnError = false
+    }
 
-    // SQLite persistence (activate with conductor.db.type=sqlite)
-    implementation "org.conductoross:conductor-sqlite-persistence:${conductorVersion}"
-
-    // Common system tasks
-    implementation "org.conductoross:conductor-http-task:${conductorVersion}"
-    implementation "org.conductoross:conductor-json-jq-task:${conductorVersion}"
-
-    // Swagger / OpenAPI UI
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.6.0'
-
-    // Spring Boot
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.springframework.retry:spring-retry'
-    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-
-    // Logging
-    implementation 'org.springframework.boot:spring-boot-starter-log4j2'
-    implementation 'org.apache.logging.log4j:log4j-web'
-
-    compileOnly "org.projectlombok:lombok:${lombokVersion}"
-    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
-
-    // JSON Schema
-    implementation "com.networknt:json-schema-validator:${jsonSchemaVersion}"
-
-    // SQLite JDBC driver (for credential DataSource)
-    implementation "org.xerial:sqlite-jdbc:${sqliteJdbcVersion}"
-    // Spring Security Crypto (BCrypt password hashing, no full Security stack)
-    implementation "org.springframework.security:spring-security-crypto:${springSecVersion}"
-
-    // Test dependencies
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
-    testImplementation "org.assertj:assertj-core:${assertjVersion}"
-    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
-    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
-    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
-
-    // GraalVM polyglot API — needed to compile/run the PLAN_EXECUTE compiler
-    // script tests (SynthOutputScriptTest, EnrichToolsScriptTest). Runtime jars
-    // come transitively via conductor-graalvm, but the compile-only API jar
-    // must be on the test classpath so javac can resolve org.graalvm.polyglot.
-    testImplementation 'org.graalvm.polyglot:polyglot:25.0.2'
-    testImplementation 'org.graalvm.js:js:25.0.2'
-
-    // Logging
-    implementation('org.apache.logging.log4j:log4j-core')
-    implementation('org.apache.logging.log4j:log4j-api')
-    implementation('org.apache.logging.log4j:log4j-slf4j-impl')
-    implementation('org.apache.logging.log4j:log4j-jul')
-    implementation('org.apache.logging.log4j:log4j-web')
-
-}
-
-configurations.all {
-    exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
-
-    // GraalVM polyglot engines — Python (~144MB), JS (~62MB), Truffle runtime
-    // Conductor uses these for inline script evaluation; agents use HTTP instead
-    exclude group: 'org.graalvm.python'
-
-    // Oracle Coherence vector store (~22MB) — not used
-    exclude group: 'com.oracle.coherence.ce'
-
-    // Google Cloud Vertex AI / gRPC protos (~69MB) — not used
-    //exclude group: 'com.google.cloud', module: 'google-cloud-aiplatform'
-
-    // Azure Application Insights (~7MB) — not used
-    exclude group: 'com.microsoft.azure', module: 'applicationinsights-core'
-
-    // Conscrypt (~4.5MB) — alternate TLS provider, JDK built-in is fine
-    exclude group: 'org.conscrypt'
-
-    // Nashorn JS engine (~2MB) — not needed without inline scripts
-    exclude group: 'org.openjdk.nashorn'
-
-    // ICU4J (~14MB) — Unicode library pulled by Groovy, JDK handles this
-    exclude group: 'com.ibm.icu'
-
-    // BouncyCastle (~9MB) — crypto provider, JDK built-in is sufficient
-    exclude group: 'org.bouncycastle'
-
-    // Micrometer StatsD + Atlas + Spectator (~8MB) — we keep basic actuator metrics only
-    exclude group: 'io.micrometer', module: 'micrometer-registry-statsd'
-    exclude group: 'io.micrometer', module: 'micrometer-registry-atlas'
-    exclude group: 'com.netflix.spectator'
-
-    // Groovy
-    exclude group: 'org.apache.groovy'
+    // Second publish target: GitHub Packages (Maven registry at
+    // https://maven.pkg.github.com/<owner>/<repo>). Maven Central itself is
+    // configured per-module via the vanniktech `mavenPublishing` block and the
+    // `publishAndReleaseToMavenCentral` task; this adds GitHub Packages as an
+    // additional standard maven-publish repository. CI publishes to it with
+    // `publishAllPublicationsToGitHubPackagesRepository`. Credentials are read
+    // from the GITHUB_ACTOR / GITHUB_TOKEN env vars set by the release workflow;
+    // they are only required when the publish task actually runs, so local
+    // `./gradlew tasks` and Maven Central publishing are unaffected.
+    plugins.withId('maven-publish') {
+        publishing {
+            repositories {
+                maven {
+                    name = 'GitHubPackages'
+                    url = uri("https://maven.pkg.github.com/${System.getenv('GITHUB_REPOSITORY') ?: 'agentspan-ai/agentspan'}")
+                    credentials {
+                        username = System.getenv('GITHUB_ACTOR')
+                        password = System.getenv('GITHUB_TOKEN')
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ── Code formatting ──────────────────────────────────────────────
 spotless {
     java {
-        target 'src/main/java/**/*.java', 'src/test/**/*.java'
+        target fileTree('.') {
+            include '**/src/main/java/**/*.java', '**/src/test/**/*.java'
+            exclude '**/build/**'
+        }
         palantirJavaFormat('2.50.0')
         removeUnusedImports()
         importOrder('java', 'javax', 'jakarta', 'org', 'com', 'dev')
@@ -176,23 +126,21 @@ spotless {
 }
 
 // ── Detect fully qualified names used inline ─────────────────────
-// Catches patterns like: new com.foo.Bar(), java.util.List<>, etc.
-// in code (not import statements). Fails the build with file:line.
 tasks.register('checkNoInlineFQN') {
     group = 'verification'
     description = 'Detect fully qualified class names used inline (should be imports)'
     doLast {
         def violations = []
         def fqnPattern = ~/(?:new\s+|[\s(,<])(?:java|javax|jakarta|com|org|net)\.[a-z]+(?:\.[a-z]+)*\.[A-Z]\w+/
-        fileTree('src/main/java').matching { include '**/*.java' }.each { file ->
-            file.eachLine { line, lineNum ->
-                if (line.trim().startsWith('import ') || line.trim().startsWith('package ')
-                    || line.trim().startsWith('//') || line.trim().startsWith('*')) {
-                    return // skip imports, package, comments
-                }
-                def matcher = fqnPattern.matcher(line)
-                if (matcher.find()) {
-                    violations << "${file.path}:${lineNum}: ${line.trim()}"
+        subprojects.each { sub ->
+            fileTree("${sub.projectDir}/src/main/java").matching { include '**/*.java' }.each { file ->
+                file.eachLine { line, lineNum ->
+                    if (line.trim().startsWith('import ') || line.trim().startsWith('package ')
+                        || line.trim().startsWith('//') || line.trim().startsWith('*')) return
+                    def matcher = fqnPattern.matcher(line)
+                    if (matcher.find()) {
+                        violations << "${file.path}:${lineNum}: ${line.trim()}"
+                    }
                 }
             }
         }
@@ -205,70 +153,6 @@ tasks.register('checkNoInlineFQN') {
     }
 }
 
-// Run both spotless and FQN check as part of the build
 tasks.named('check') {
     dependsOn 'spotlessCheck', 'checkNoInlineFQN'
-}
-
-test {
-    useJUnitPlatform()
-}
-
-tasks.register('installUiDependencies', Exec) {
-    group = 'build'
-    description = 'Install UI dependencies with pnpm when the UI workspace is available'
-    onlyIf { uiDir.exists() }
-    workingDir uiDir
-    commandLine shellCommand(pnpmCommand('install --frozen-lockfile'))
-    environment 'CI', 'true'
-    inputs.files(
-        file("${uiDir}/package.json"),
-        file("${uiDir}/pnpm-lock.yaml")
-    )
-    outputs.file(file("${uiDir}/node_modules/.modules.yaml"))
-}
-
-tasks.register('buildUi', Exec) {
-    group = 'build'
-    description = 'Build the latest UI bundle for the embedded server UI (opt-in via -PbuildUI for bootJar)'
-    onlyIf { uiDir.exists() }
-    dependsOn 'installUiDependencies'
-    workingDir uiDir
-    commandLine shellCommand(pnpmCommand('build'))
-    environment 'CI', 'true'
-    environment 'NODE_OPTIONS', nodeOptionsWithMoreHeap()
-    inputs.files(
-        file("${uiDir}/package.json"),
-        file("${uiDir}/pnpm-lock.yaml"),
-        file("${uiDir}/index.html"),
-        file("${uiDir}/vite.config.ts"),
-        file("${uiDir}/vite-plugin-csp-nonce.ts"),
-        file("${uiDir}/tsconfig.json")
-    )
-    inputs.dir(file("${uiDir}/src"))
-    inputs.dir(file("${uiDir}/public"))
-    outputs.dir(uiDistDir)
-}
-
-tasks.register('syncUiStatic', Sync) {
-    group = 'build'
-    description = 'Sync the latest built UI assets into server/src/main/resources/static'
-    onlyIf { uiDir.exists() }
-    dependsOn 'buildUi'
-    from(uiDistDir)
-    into(serverStaticDir)
-    includeEmptyDirs = false
-}
-
-tasks.named('processResources') {
-    if (buildUiEnabled) {
-        dependsOn 'syncUiStatic'
-    }
-}
-
-tasks.named('bootJar') {
-    if (buildUiEnabled) {
-        dependsOn 'syncUiStatic'
-    }
-    archiveFileName = 'agentspan-runtime.jar'
 }

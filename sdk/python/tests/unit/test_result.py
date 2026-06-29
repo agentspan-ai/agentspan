@@ -5,7 +5,7 @@
 
 from unittest.mock import MagicMock
 
-from agentspan.agents.result import (
+from conductor.ai.agents.result import (
     AgentEvent,
     AgentHandle,
     AgentResult,
@@ -471,7 +471,7 @@ class TestExtractFailedTaskReason:
     """_extract_failed_task_reason returns the first FAILED task's reason for diagnosing issue #41."""
 
     def _call(self, tasks):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
         from unittest.mock import MagicMock
 
         wf = MagicMock()
@@ -488,7 +488,7 @@ class TestExtractFailedTaskReason:
     def test_no_tasks_returns_none(self):
         wf = MagicMock()
         wf.tasks = []
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         assert AgentRuntime._extract_failed_task_reason(wf) is None
 
@@ -521,7 +521,7 @@ class TestExtractFailedTaskReason:
         assert "second_fail" not in result
 
     def test_no_tasks_attribute_returns_none(self):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         wf = MagicMock(spec=[])  # no .tasks attribute
         assert AgentRuntime._extract_failed_task_reason(wf) is None

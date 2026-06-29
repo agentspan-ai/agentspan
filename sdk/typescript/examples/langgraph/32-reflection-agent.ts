@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -99,24 +99,22 @@ function finalize(state: State): Partial<State> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(ReflectionState);
-builder.addNode('generate', generate);
-builder.addNode('reflect', reflect);
-builder.addNode('finalize', finalize);
-
-builder.addEdge(START, 'generate');
-builder.addEdge('generate', 'reflect');
-builder.addConditionalEdges('reflect', shouldContinue, {
-  improve: 'generate',
-  done: 'finalize',
-});
-builder.addEdge('finalize', END);
-
-const graph = builder.compile({ name: "reflection_agent" });
+const graph = new StateGraph(ReflectionState)
+  .addNode('generate', generate)
+  .addNode('reflect', reflect)
+  .addNode('finalize', finalize)
+  .addEdge(START, 'generate')
+  .addEdge('generate', 'reflect')
+  .addConditionalEdges('reflect', shouldContinue, {
+    improve: 'generate',
+    done: 'finalize',
+  })
+  .addEdge('finalize', END)
+  .compile({ name: "reflection_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

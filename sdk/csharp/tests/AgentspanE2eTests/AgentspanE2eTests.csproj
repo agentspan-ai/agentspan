@@ -16,7 +16,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Agentspan/Agentspan.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI/Conductor.AI.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../../examples/Shared/Settings.cs" />

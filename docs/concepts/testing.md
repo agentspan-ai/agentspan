@@ -10,7 +10,7 @@ Agentspan has a first-class testing module that lets you test agent behavior wit
 ## Import
 
 ```python
-from agentspan.agents.testing import mock_run, MockEvent, expect, record, replay
+from conductor.ai.agents.testing import mock_run, MockEvent, expect, record, replay
 ```
 
 ## mock_run
@@ -18,8 +18,8 @@ from agentspan.agents.testing import mock_run, MockEvent, expect, record, replay
 `mock_run` runs an agent with a scripted sequence of events instead of calling an LLM:
 
 ```python
-from agentspan.agents import Agent, tool
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents import Agent, tool
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 
 @tool
 def search_web(query: str) -> str:
@@ -122,8 +122,8 @@ assert data["city"] == "San Francisco"
 Test that tools are called with correct arguments and that state is managed properly:
 
 ```python
-from agentspan.agents import Agent, tool
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents import Agent, tool
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 
 @tool
 def send_email(to: str, subject: str, body: str) -> dict:
@@ -161,8 +161,8 @@ expect(result).completed().used_tool("send_email", args={
 Test human-in-the-loop interactions:
 
 ```python
-from agentspan.agents import Agent, tool
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents import Agent, tool
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 
 @tool(approval_required=True)
 def delete_file(path: str) -> dict:
@@ -230,7 +230,7 @@ expect(result).completed().used_tool("search_web")
 Record a real execution (with an actual LLM) and replay it deterministically in tests:
 
 ```python
-from agentspan.agents.testing import record, replay
+from conductor.ai.agents.testing import record, replay
 
 # Record a real run (calls LLM)
 recording = record(agent, "What's the capital of France?")
@@ -250,7 +250,7 @@ This is useful for:
 
 ```python
 import pytest
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 
 # Mark as unit test — no LLM, no server, fast
 class TestWeatherAgent:
@@ -282,7 +282,7 @@ class TestWeatherAgent:
 @pytest.mark.integration
 class TestWeatherAgentIntegration:
     def test_real_weather_query(self, weather_agent):
-        from agentspan.agents import run
+        from conductor.ai.agents import run
         result = run(weather_agent, "Weather in San Francisco?")
         assert result.status == "COMPLETED"
         assert len(result.output) > 10
@@ -327,8 +327,8 @@ real worker execution.
 For evaluating LLM output quality (not just structure), use `CorrectnessEval`:
 
 ```python
-from agentspan.agents import AgentRuntime
-from agentspan.agents.testing import CorrectnessEval, EvalCase
+from conductor.ai.agents import AgentRuntime
+from conductor.ai.agents.testing import CorrectnessEval, EvalCase
 
 eval_runner = CorrectnessEval(runtime=AgentRuntime())
 

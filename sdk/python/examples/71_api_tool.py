@@ -34,7 +34,7 @@ Requirements:
     - For GitHub example: agentspan credentials set GITHUB_TOKEN ghp_xxx
 """
 
-from agentspan.agents import Agent, AgentRuntime, api_tool, tool
+from conductor.ai.agents import Agent, AgentRuntime, api_tool, tool
 from settings import settings
 
 MCP_TEST_SERVER_SPEC = "http://localhost:3001/api-docs"

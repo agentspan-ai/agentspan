@@ -21,7 +21,7 @@ import subprocess
 import shutil
 from pathlib import Path
 
-from agentspan.agents import tool
+from conductor.ai.agents import tool
 
 # ── Working directory ──────────────────────────────────────────
 

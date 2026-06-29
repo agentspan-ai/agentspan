@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 using System.Text.Json.Nodes;
-using Agentspan.Examples;
+using Conductor.AI.Examples;
 using Xunit;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite16_Skills

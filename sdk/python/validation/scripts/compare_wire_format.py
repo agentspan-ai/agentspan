@@ -270,7 +270,7 @@ def judge_example(
     if not api_key:
         return "ERROR", 0, "OPENAI_API_KEY not set"
 
-    judge_model = os.environ.get("JUDGE_LLM_MODEL", "openai/gpt-4o-mini")
+    judge_model = os.environ.get("JUDGE_LLM_MODEL", "anthropic/claude-sonnet-4-6")
     # Strip provider prefix for OpenAI client
     model_name = judge_model.split("/", 1)[-1] if "/" in judge_model else judge_model
 

@@ -25,8 +25,8 @@
 //   - mcp-testkit running on http://localhost:3001 (for examples 1-3)
 //   - GITHUB_TOKEN credential set (for example 4)
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 const string McpTestServerSpec = "http://localhost:3001/api-docs";
 

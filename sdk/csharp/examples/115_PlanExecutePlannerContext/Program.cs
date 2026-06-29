@@ -23,49 +23,10 @@
 // sdk/typescript/examples/115-plan-execute-planner-context.ts,
 // and sdk/java/examples/.../Example115PlannerContext.java.
 
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.Plans;
-
-// ── Onboarding tools (deterministic, no external calls) ──────────────
-
-internal sealed class OnboardingTools
-{
-    [Tool("Validate a single KYC document. Phase 1 of onboarding.")]
-    public Dictionary<string, object> ValidateKyc(string customer_id, string doc_type) => new()
-    {
-        ["customer_id"] = customer_id,
-        ["doc_type"] = doc_type,
-        ["status"] = "verified",
-    };
-
-    [Tool("Provision the customer's account record. Phase 2 of onboarding.")]
-    public Dictionary<string, object> CreateAccount(string customer_id, string tier) => new()
-    {
-        ["customer_id"] = customer_id,
-        ["tier"] = tier,
-        ["account_id"] = $"acct_{customer_id}_{tier}",
-        ["status"] = "active",
-    };
-
-    [Tool("Send the tier-appropriate welcome email. Phase 3 of onboarding.")]
-    public Dictionary<string, object> SendWelcomeEmail(string customer_id, string account_id) => new()
-    {
-        ["customer_id"] = customer_id,
-        ["account_id"] = account_id,
-        ["message_id"] = $"msg_{customer_id}",
-        ["status"] = "sent",
-    };
-
-    [Tool("Schedule the enterprise-tier kickoff call. Conditional on tier.")]
-    public Dictionary<string, object> ScheduleKickoffCall(string customer_id, string account_id) => new()
-    {
-        ["customer_id"] = customer_id,
-        ["account_id"] = account_id,
-        ["calendar_invite_id"] = $"cal_{customer_id}",
-        ["status"] = "scheduled",
-    };
-}
+using System.Net.Http.Json;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.Plans;
 
 // ── Agents ──────────────────────────────────────────────────────────
 
@@ -209,4 +170,44 @@ static async Task ShowExecutedSteps(string executionId)
     {
         Console.WriteLine("  ✓ planner picked up the 'enterprise tier needs kickoff' rule");
     }
+}
+
+// ── Onboarding tools (deterministic, no external calls) ──────────────
+
+internal sealed class OnboardingTools
+{
+    [Tool("Validate a single KYC document. Phase 1 of onboarding.")]
+    public Dictionary<string, object> ValidateKyc(string customer_id, string doc_type) => new()
+    {
+        ["customer_id"] = customer_id,
+        ["doc_type"] = doc_type,
+        ["status"] = "verified",
+    };
+
+    [Tool("Provision the customer's account record. Phase 2 of onboarding.")]
+    public Dictionary<string, object> CreateAccount(string customer_id, string tier) => new()
+    {
+        ["customer_id"] = customer_id,
+        ["tier"] = tier,
+        ["account_id"] = $"acct_{customer_id}_{tier}",
+        ["status"] = "active",
+    };
+
+    [Tool("Send the tier-appropriate welcome email. Phase 3 of onboarding.")]
+    public Dictionary<string, object> SendWelcomeEmail(string customer_id, string account_id) => new()
+    {
+        ["customer_id"] = customer_id,
+        ["account_id"] = account_id,
+        ["message_id"] = $"msg_{customer_id}",
+        ["status"] = "sent",
+    };
+
+    [Tool("Schedule the enterprise-tier kickoff call. Conditional on tier.")]
+    public Dictionary<string, object> ScheduleKickoffCall(string customer_id, string account_id) => new()
+    {
+        ["customer_id"] = customer_id,
+        ["account_id"] = account_id,
+        ["calendar_invite_id"] = $"cal_{customer_id}",
+        ["status"] = "scheduled",
+    };
 }

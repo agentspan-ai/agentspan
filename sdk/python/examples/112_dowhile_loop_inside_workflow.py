@@ -58,11 +58,11 @@ import time
 
 import requests
 
-from agentspan.agents import AgentRuntime, plan_execute, tool
+from conductor.ai.agents import AgentRuntime, plan_execute, tool
 
 SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
 BASE = SERVER_URL.rstrip("/").replace("/api", "")
-MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
+MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6")
 SECRET = int(os.environ.get("AGENTSPAN_BINSEARCH_SECRET", "642"))
 MAX_ITER = int(os.environ.get("AGENTSPAN_DOWHILE_MAX_ITER", "12"))
 WORKFLOW_NAME = "pae_replan_dowhile_demo"
@@ -496,7 +496,7 @@ def main(argv: list[str]) -> None:
 
     # Serialize the tool def so PAC's allowlist + SIMPLE-task emission
     # picks check_guess up correctly.
-    from agentspan.agents.config_serializer import AgentConfigSerializer
+    from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
     ac = AgentConfigSerializer().serialize(harness)
     check_guess_def = next((t for t in ac.get("tools", []) if t.get("name") == "check_guess"), None)

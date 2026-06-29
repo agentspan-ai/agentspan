@@ -35,9 +35,9 @@ import os
 import subprocess
 import uuid
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
-from agentspan.agents.handoff import OnTextMention
-from agentspan.agents.tool import tool
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents.handoff import OnTextMention
+from conductor.ai.agents.tool import tool
 
 REPO = "agentspan/codingexamples"
 WORK_DIR = f"/tmp/codingexamples-{uuid.uuid4().hex[:8]}"

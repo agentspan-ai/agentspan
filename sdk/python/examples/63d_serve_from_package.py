@@ -20,7 +20,7 @@ Requirements:
     - A Python package with Agent instances at module level
 """
 
-from agentspan.agents import Agent, AgentRuntime, discover_agents, tool
+from conductor.ai.agents import Agent, AgentRuntime, discover_agents, tool
 from settings import settings
 
 

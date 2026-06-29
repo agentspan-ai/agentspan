@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-import org.junit.jupiter.api.BeforeAll;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -11,10 +12,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.conductoross.conductor.ai.model.CompileResponse;
+import org.junit.jupiter.api.BeforeAll;
 
-import static org.junit.jupiter.api.Assertions.fail;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Base class for all e2e tests.
@@ -30,18 +31,16 @@ public abstract class BaseTest {
 
     /** API URL for the Agentspan server (includes /api suffix). */
     protected static final String SERVER_URL =
-        System.getenv().getOrDefault("AGENTSPAN_SERVER_URL", "http://localhost:6767/api");
+            System.getenv().getOrDefault("AGENTSPAN_SERVER_URL", "http://localhost:6767/api");
 
     /** Base URL (without /api) for health checks and workflow fetches. */
     protected static final String BASE_URL = SERVER_URL.replace("/api", "");
 
     /** LLM model to use in e2e tests. */
-    protected static final String MODEL =
-        System.getenv().getOrDefault("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini");
+    protected static final String MODEL = System.getenv().getOrDefault("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini");
 
-    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(10))
-        .build();
+    private static final HttpClient HTTP_CLIENT =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -53,12 +52,11 @@ public abstract class BaseTest {
     static void checkServerHealth() {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/health"))
-                .timeout(Duration.ofSeconds(5))
-                .GET()
-                .build();
-            HttpResponse<String> response = HTTP_CLIENT.send(request,
-                HttpResponse.BodyHandlers.ofString());
+                    .uri(URI.create(BASE_URL + "/health"))
+                    .timeout(Duration.ofSeconds(5))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
             boolean healthy = false;
             if (response.statusCode() == 200 && response.body() != null) {
@@ -67,11 +65,9 @@ public abstract class BaseTest {
                 Object h = body.get("healthy");
                 healthy = Boolean.TRUE.equals(h);
             }
-            assumeTrue(healthy,
-                "Server at " + BASE_URL + " is not healthy — skipping e2e tests");
+            assumeTrue(healthy, "Server at " + BASE_URL + " is not healthy — skipping e2e tests");
         } catch (Exception e) {
-            assumeTrue(false,
-                "Server not available at " + BASE_URL + ": " + e.getMessage());
+            assumeTrue(false, "Server not available at " + BASE_URL + ": " + e.getMessage());
         }
     }
 
@@ -85,12 +81,11 @@ public abstract class BaseTest {
     protected Map<String, Object> getWorkflow(String executionId) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/api/workflow/" + executionId))
-                .timeout(Duration.ofSeconds(10))
-                .GET()
-                .build();
-            HttpResponse<String> response = HTTP_CLIENT.send(request,
-                HttpResponse.BodyHandlers.ofString());
+                    .uri(URI.create(BASE_URL + "/api/workflow/" + executionId))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
                 fail("Failed to fetch workflow " + executionId + ": HTTP " + response.statusCode());
             }
@@ -111,12 +106,11 @@ public abstract class BaseTest {
      * @return the agentDef map
      */
     @SuppressWarnings("unchecked")
-    protected Map<String, Object> getAgentDef(Map<String, Object> plan) {
-        Object wfObj = plan.get("workflowDef");
-        if (wfObj == null) {
-            fail("plan() result missing 'workflowDef'. Top-level keys: " + plan.keySet());
+    protected Map<String, Object> getAgentDef(CompileResponse plan) {
+        Map<String, Object> wf = plan.getWorkflowDef();
+        if (wf == null || wf.isEmpty()) {
+            fail("plan() result has no workflowDef");
         }
-        Map<String, Object> wf = (Map<String, Object>) wfObj;
 
         Object metaObj = wf.get("metadata");
         if (metaObj == null) {

@@ -44,7 +44,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from agentspan.agents import Agent, AgentRuntime, Strategy, tool
+from conductor.ai.agents import Agent, AgentRuntime, Strategy, tool
 from settings import settings
 
 REPO_PATH = Path(os.environ.get("REPO_PATH", "."))

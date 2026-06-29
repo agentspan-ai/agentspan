@@ -4,16 +4,16 @@
 """Kitchen Sink — Content Publishing Platform.
 
 A single mega-workflow that exercises every Agentspan SDK feature (89 features).
-See docs/sdk-design/kitchen-sink.md for the full scenario specification.
+See design/sdk-design/kitchen-sink.md for the full scenario specification.
 
 Demonstrates:
     - All 8 multi-agent strategies
     - All tool types (worker, http, mcp, api, agent_tool, human, media, RAG)
     - All guardrail types (regex, llm, custom, external) with all OnFail modes
-    - HITL (approve, reject, feedback, UserProxyAgent, human_tool)
+    - HITL (approve, reject, feedback, human_tool)
     - Memory (conversation + semantic)
     - Code execution (local, docker, jupyter, serverless)
-    - Credentials (all isolation modes, CredentialFile)
+    - Credentials (declared per-tool/agent, read in-process with get_secret)
     - Streaming (sync + async), termination, handoffs, callbacks
     - Structured output, prompt templates, agent chaining, gate conditions
     - Extended thinking, planner mode, required_tools, include_contents
@@ -44,115 +44,111 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
+from kitchen_sink_helpers import (
+    MOCK_PAST_ARTICLES,
+    MOCK_RESEARCH_DATA,
+    ArticleReport,
+    ClassificationResult,
+    callback_log,
+    contains_pii,
+    contains_sql_injection,
+)
 from pydantic import BaseModel
+from settings import settings
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     # Core
     Agent,
-    AgentRuntime,
     AgentConfig,
-    PromptTemplate,
-    Strategy,
-    agent,
-    scatter_gather,
-    # Tools
-    tool,
-    ToolContext,
-    ToolDef,
-    http_tool,
-    mcp_tool,
-    api_tool,
-    agent_tool,
-    human_tool,
-    image_tool,
-    audio_tool,
-    video_tool,
-    pdf_tool,
-    search_tool,
-    index_tool,
-    # Guardrails
-    guardrail,
-    Guardrail,
-    GuardrailResult,
-    OnFail,
-    Position,
-    RegexGuardrail,
-    LLMGuardrail,
+    AgentEvent,
+    AgentHandle,
     # Results
     AgentResult,
-    AgentHandle,
+    AgentRuntime,
     AgentStatus,
     AgentStream,
     AsyncAgentStream,
-    AgentEvent,
-    EventType,
-    FinishReason,
-    Status,
-    TokenUsage,
-    DeploymentInfo,
-    # Termination
-    TerminationCondition,
-    TextMentionTermination,
-    StopMessageTermination,
-    MaxMessageTermination,
-    TokenUsageTermination,
-    # Handoffs
-    HandoffCondition,
-    OnToolResult,
-    OnTextMention,
-    OnCondition,
-    # Memory
-    ConversationMemory,
-    SemanticMemory,
-    MemoryStore,
-    MemoryEntry,
+    CallbackHandler,
+    CliConfig,
     # Code execution
     CodeExecutionConfig,
     CodeExecutor,
-    LocalCodeExecutor,
+    # Exceptions
+    ConfigurationError,
+    # Memory
+    ConversationMemory,
+    DeploymentInfo,
     DockerCodeExecutor,
-    JupyterCodeExecutor,
-    ServerlessCodeExecutor,
+    EventType,
     ExecutionResult,
+    FinishReason,
     # Extended
-    UserProxyAgent,
     GPTAssistantAgent,
-    CallbackHandler,
-    CliConfig,
-    # Credentials
-    get_credential,
-    CredentialFile,
+    Guardrail,
+    GuardrailResult,
+    # Handoffs
+    HandoffCondition,
+    JupyterCodeExecutor,
+    LLMGuardrail,
+    LocalCodeExecutor,
+    MaxMessageTermination,
+    MemoryEntry,
+    MemoryStore,
+    OnCondition,
+    OnFail,
+    OnTextMention,
+    OnToolResult,
+    Position,
+    PromptTemplate,
+    RegexGuardrail,
+    SemanticMemory,
+    ServerlessCodeExecutor,
+    Status,
+    StopMessageTermination,
+    Strategy,
+    # Termination
+    TerminationCondition,
+    TextMentionTermination,
+    TokenUsage,
+    TokenUsageTermination,
+    ToolContext,
+    ToolDef,
+    agent,
+    agent_tool,
+    api_tool,
+    audio_tool,
     # Execution (top-level convenience + runtime)
     configure,
+    deploy,
+    deploy_async,
+    # Discovery & tracing
+    discover_agents,
+    # Credentials
+    get_secret,
+    # Guardrails
+    guardrail,
+    http_tool,
+    human_tool,
+    image_tool,
+    index_tool,
+    is_tracing_enabled,
+    mcp_tool,
+    pdf_tool,
+    plan,
     run,
     run_async,
+    scatter_gather,
+    search_tool,
+    serve,
+    shutdown,
     start,
     start_async,
     stream,
     stream_async,
-    deploy,
-    deploy_async,
-    serve,
-    plan,
-    shutdown,
-    # Discovery & tracing
-    discover_agents,
-    is_tracing_enabled,
-    # Exceptions
-    ConfigurationError,
+    # Tools
+    tool,
+    video_tool,
 )
-
-from settings import settings
-from kitchen_sink_helpers import (
-    ClassificationResult,
-    ArticleReport,
-    MOCK_RESEARCH_DATA,
-    MOCK_PAST_ARTICLES,
-    contains_pii,
-    contains_sql_injection,
-    callback_log,
-)
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # STAGE 1: Intake & Classification
@@ -200,13 +196,13 @@ intake_router = Agent(
 # STAGE 2: Research Team
 # Features: #4 Parallel, #76 scatter_gather, #10 native tool,
 #   #11 http_tool, #12 mcp_tool, #89 api_tool, #18 ToolContext,
-#   #19 tool credentials, #21 external tool, #52 isolated creds,
-#   #53 in-process creds, #55 HTTP header creds, #56 MCP creds, CredentialFile
+#   #19 tool credentials, #21 external tool, #52 declared creds,
+#   #53 in-process creds, #55 HTTP header creds, #56 MCP creds
 # ═══════════════════════════════════════════════════════════════════════
 
 
-# -- Native tool with ToolContext injection + file-based credentials --
-@tool(credentials=[CredentialFile(env_var="RESEARCH_API_KEY", relative_path=".research/api_key")])
+# -- Native tool with ToolContext injection + declared credentials --
+@tool(credentials=["RESEARCH_API_KEY"])
 def research_database(query: str, ctx: ToolContext = None) -> dict:
     """Search internal research database."""
     session = ctx.session_id if ctx else "unknown"
@@ -219,11 +215,11 @@ def research_database(query: str, ctx: ToolContext = None) -> dict:
     }
 
 
-# -- Native tool with in-process credential access (isolated=False) --
-@tool(isolated=False, credentials=["ANALYTICS_KEY"])
+# -- Native tool with in-process credential access via get_secret() --
+@tool(credentials=["ANALYTICS_KEY"])
 def analyze_trends(topic: str) -> dict:
     """Analyze trending topics using analytics API."""
-    key = get_credential("ANALYTICS_KEY")
+    key = get_secret("ANALYTICS_KEY")
     return {"topic": topic, "trend_score": 0.87, "key_present": bool(key)}
 
 
@@ -258,6 +254,7 @@ petstore_api = api_tool(
     name="petstore",
     max_tools=5,
 )
+
 
 # -- External tool (by-reference, no local worker) --
 @tool(external=True)
@@ -399,7 +396,7 @@ pii_guardrail = RegexGuardrail(
 # -- LLM guardrail (server-side judge, on_fail=FIX) --
 bias_guardrail = LLMGuardrail(
     name="bias_detector",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     policy="Check for biased language or stereotypes. If found, provide corrected version.",
     position=Position.OUTPUT,
     on_fail=OnFail.FIX,
@@ -435,11 +432,7 @@ def sql_injection_guard(content: str) -> GuardrailResult:
     return GuardrailResult(passed=True)
 
 
-@tool(
-    guardrails=[
-        Guardrail(sql_injection_guard, position=Position.INPUT, on_fail=OnFail.RAISE)
-    ]
-)
+@tool(guardrails=[Guardrail(sql_injection_guard, position=Position.INPUT, on_fail=OnFail.RAISE)])
 def safe_search(query: str) -> dict:
     """Search with SQL injection protection."""
     return {"query": query, "results": ["result1", "result2"]}
@@ -462,7 +455,7 @@ review_agent = Agent(
 # ═══════════════════════════════════════════════════════════════════════
 # STAGE 5: Editorial Approval
 # Features: #17 approval_required, #40 approve, #41 reject,
-#   #42 feedback/respond, #14 human_tool, #65 UserProxyAgent
+#   #42 feedback/respond, #14 human_tool
 # ═══════════════════════════════════════════════════════════════════════
 
 
@@ -482,19 +475,11 @@ editorial_question = human_tool(
     },
 )
 
-editorial_reviewer = UserProxyAgent(
-    name="editorial_reviewer",
-    model=settings.llm_model,
-    instructions="You are the editorial reviewer. Provide feedback on article quality.",
-    human_input_mode="TERMINATE",
-)
-
 editorial_agent = Agent(
     name="editorial_approval",
     model=settings.llm_model,
     instructions="Review the article, ask questions, get approval before publishing.",
     tools=[publish_article, editorial_question],
-    agents=[editorial_reviewer],
     strategy=Strategy.HANDOFF,
 )
 
@@ -601,7 +586,7 @@ external_publisher = Agent(
     instructions="Publish to the CMS platform.",
 )
 
-from agentspan.agents.gate import TextGate
+from conductor.ai.agents.gate import TextGate
 
 publishing_pipeline = Agent(
     name="publishing_pipeline",
@@ -611,9 +596,7 @@ publishing_pipeline = Agent(
     strategy=Strategy.HANDOFF,
     handoffs=[
         OnToolResult(target="external_publisher", tool_name="format_check"),  # #34
-        OnCondition(
-            target="external_publisher", condition=should_handoff_to_publisher
-        ),  # #36
+        OnCondition(target="external_publisher", condition=should_handoff_to_publisher),  # #36
     ],
     termination=(  # #33 composable
         TextMentionTermination("PUBLISHED")
@@ -741,7 +724,7 @@ analytics_agent = Agent(
     ),
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     metadata={"stage": "analytics", "version": "1.0"},
-    planner=True,  # #69
+    enable_planning=True,  # #69
 )
 
 
@@ -768,9 +751,7 @@ full_pipeline = Agent(
         analytics_agent,  # Stage 8
     ],
     strategy=Strategy.SEQUENTIAL,
-    termination=(
-        TextMentionTermination("PIPELINE_COMPLETE") | MaxMessageTermination(200)
-    ),
+    termination=(TextMentionTermination("PIPELINE_COMPLETE") | MaxMessageTermination(200)),
 )
 
 

@@ -78,7 +78,7 @@ func init() {
 	serverStartCmd.Flags().StringVarP(&serverModel, "model", "m", "", "Default LLM model (e.g. openai/gpt-4o)")
 	serverStartCmd.Flags().StringVar(&serverVersion, "version", "", "Specific server version to download (e.g. 0.1.0)")
 	serverStartCmd.Flags().StringVar(&serverJar, "jar", "", "Path to a local JAR file to use directly")
-	serverStartCmd.Flags().BoolVar(&serverLocal, "local", false, "Use locally built JAR from server/build/libs/")
+	serverStartCmd.Flags().BoolVar(&serverLocal, "local", false, "Use locally built JAR from server/conductor-agentspan-server/build/libs/")
 
 	serverLogsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
 	serverLogsCmd.Flags().IntVarP(&tailLines, "lines", "n", 20, "Number of lines to show before following (with -f)")
@@ -409,7 +409,8 @@ func lastNLinesOffset(f *os.File, n int) (int64, error) {
 // --- Local JAR helpers ---
 
 func findLocalJAR() (string, error) {
-	// Try CWD first, then walk up to find 'server/build/libs/agentspan-runtime.jar'
+	// Try CWD first, then walk up to find
+	// 'server/conductor-agentspan-server/build/libs/agentspan-runtime.jar'
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("get working directory: %w", err)
@@ -417,15 +418,16 @@ func findLocalJAR() (string, error) {
 
 	// Check common relative paths from likely CWD locations
 	candidates := []string{
-		filepath.Join(cwd, "server", "build", "libs", jarName),
+		filepath.Join(cwd, "server", "conductor-agentspan-server", "build", "libs", jarName),
+		filepath.Join(cwd, "conductor-agentspan-server", "build", "libs", jarName),
 		filepath.Join(cwd, "build", "libs", jarName),
-		filepath.Join(cwd, "..", "server", "build", "libs", jarName),
+		filepath.Join(cwd, "..", "server", "conductor-agentspan-server", "build", "libs", jarName),
 	}
 
-	// Also walk up from CWD looking for server/build/libs/
+	// Also walk up from CWD looking for server/conductor-agentspan-server/build/libs/
 	dir := cwd
 	for i := 0; i < 5; i++ {
-		candidate := filepath.Join(dir, "server", "build", "libs", jarName)
+		candidate := filepath.Join(dir, "server", "conductor-agentspan-server", "build", "libs", jarName)
 		candidates = append(candidates, candidate)
 		parent := filepath.Dir(dir)
 		if parent == dir {

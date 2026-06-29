@@ -121,7 +121,7 @@ if $DO_START; then
   echo "mcp-testkit started (PID $MCP_PID)"
 
   echo "=== Starting agentspan server on port $SERVER_PORT ==="
-  java -jar "$REPO_ROOT/server/build/libs/agentspan-runtime.jar" \
+  java -jar "$REPO_ROOT/server/conductor-agentspan-server/build/libs/agentspan-runtime.jar" \
     --server.port="$SERVER_PORT" &
   SERVER_PID=$!
   echo "Server started (PID $SERVER_PID)"

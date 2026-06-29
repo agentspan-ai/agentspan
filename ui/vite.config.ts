@@ -56,7 +56,7 @@ function contextJsHashPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, packageDir);
-  const BASE_URL = env.VITE_PUBLIC_URL || "/";
+  const BASE_URL = env.VITE_PUBLIC_URL || "/ui/";
 
   // Library build mode - creates npm package
   // Note: Type declarations (dts) disabled due to compatibility issues

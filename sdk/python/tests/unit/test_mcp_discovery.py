@@ -7,18 +7,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentspan.agents.runtime.mcp_discovery import (
+from conductor.ai.agents.runtime.mcp_discovery import (
     _discovery_cache,
     clear_discovery_cache,
     discover_mcp_tools,
     expand_mcp_tool_def,
 )
-from agentspan.agents.tool import mcp_tool
+from conductor.ai.agents.tool import mcp_tool
 
 # Patch targets — these are the *source* modules for deferred imports
 _CW_PATH = "conductor.client.workflow.conductor_workflow.ConductorWorkflow"
 _LIST_PATH = "conductor.client.workflow.task.llm_tasks.list_mcp_tools.ListMcpTools"
-_DISCOVER_PATH = "agentspan.agents.runtime.mcp_discovery.discover_mcp_tools"
+_DISCOVER_PATH = "conductor.ai.agents.runtime.mcp_discovery.discover_mcp_tools"
 
 
 @pytest.fixture(autouse=True)

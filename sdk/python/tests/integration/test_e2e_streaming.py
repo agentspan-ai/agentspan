@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentEvent,
     AgentRuntime,
@@ -36,7 +36,7 @@ from agentspan.agents import (
 pytestmark = pytest.mark.integration
 
 # Default model — cheap and fast for integration tests
-DEFAULT_MODEL = "openai/gpt-4o-mini"
+DEFAULT_MODEL = "anthropic/claude-sonnet-4-6"
 
 
 def _model() -> str:

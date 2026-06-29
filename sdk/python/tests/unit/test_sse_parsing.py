@@ -9,7 +9,7 @@ into AgentEvent objects.  Zero external dependencies.
 
 import json
 
-from agentspan.agents.runtime.runtime import AgentRuntime
+from conductor.ai.agents.runtime.runtime import AgentRuntime
 
 # ── Helpers ──────────────────────────────────────────────────────────
 

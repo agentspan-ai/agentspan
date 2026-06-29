@@ -1,13 +1,13 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for agentspan.agents.testing.expect (fluent API)."""
+"""Tests for conductor.ai.agents.testing.expect (fluent API)."""
 
 import pytest
 
-from agentspan.agents.result import AgentEvent, AgentResult, EventType
-from agentspan.agents.testing.expect import expect
-from agentspan.agents.testing.mock import MockEvent, mock_run
+from conductor.ai.agents.result import AgentEvent, AgentResult, EventType
+from conductor.ai.agents.testing.expect import expect
+from conductor.ai.agents.testing.mock import MockEvent, mock_run
 
 
 class _FakeAgent:

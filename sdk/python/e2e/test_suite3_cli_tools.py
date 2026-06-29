@@ -17,8 +17,8 @@ import subprocess
 import pytest
 import requests
 
-from agentspan.agents import Agent, tool
-from agentspan.agents.cli_config import _validate_cli_command
+from conductor.ai.agents import Agent, tool
+from conductor.ai.agents.cli_config import _validate_cli_command
 
 pytestmark = [
     pytest.mark.e2e,

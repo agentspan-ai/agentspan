@@ -6,7 +6,7 @@
           "external": false,
           "instructions": "You are a backend developer. You design APIs, databases, and server architecture. Provide technical recommendations with code examples.",
           "maxTurns": 25,
-          "model": "openai/gpt-4o-mini",
+          "model": "anthropic/claude-sonnet-4-6",
           "name": "backend_dev",
           "timeoutSeconds": 0
         },
@@ -14,7 +14,7 @@
           "external": false,
           "instructions": "You are a frontend developer. You design UI components, user flows, and client-side architecture. Provide recommendations with code examples.",
           "maxTurns": 25,
-          "model": "openai/gpt-4o-mini",
+          "model": "anthropic/claude-sonnet-4-6",
           "name": "frontend_dev",
           "timeoutSeconds": 0
         }
@@ -22,7 +22,7 @@
       "external": false,
       "instructions": "You are the engineering lead. Route technical questions to the right specialist: backend_dev for APIs/databases/servers, frontend_dev for UI/UX/client-side.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "engineering_lead",
       "strategy": "handoff",
       "timeoutSeconds": 0
@@ -33,7 +33,7 @@
           "external": false,
           "instructions": "You are a content writer. You create blog posts, landing page copy, and marketing materials. Write engaging, clear content.",
           "maxTurns": 25,
-          "model": "openai/gpt-4o-mini",
+          "model": "anthropic/claude-sonnet-4-6",
           "name": "content_writer",
           "timeoutSeconds": 0
         },
@@ -41,7 +41,7 @@
           "external": false,
           "instructions": "You are an SEO specialist. You optimize content for search engines, suggest keywords, and improve page rankings.",
           "maxTurns": 25,
-          "model": "openai/gpt-4o-mini",
+          "model": "anthropic/claude-sonnet-4-6",
           "name": "seo_specialist",
           "timeoutSeconds": 0
         }
@@ -49,7 +49,7 @@
       "external": false,
       "instructions": "You are the marketing lead. Route marketing questions to the right specialist: content_writer for blog posts/copy, seo_specialist for SEO/keywords/rankings.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "marketing_lead",
       "strategy": "handoff",
       "timeoutSeconds": 0
@@ -70,7 +70,7 @@
   ],
   "instructions": "You are the CEO. Route requests to the right department: engineering_lead for technical/development questions, marketing_lead for marketing/content/SEO questions.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "ceo",
   "strategy": "swarm",
   "timeoutSeconds": 0

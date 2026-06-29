@@ -139,7 +139,7 @@ print(result["messages"][-1].content)
 Replace `app.invoke({...})` with `runtime.run(app, {...})`. That's the only change. Agentspan auto-detects LangGraph apps — no extra imports or graph modifications needed.
 
 ```python
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 with AgentRuntime() as runtime:
     result = runtime.run(app, {
@@ -185,7 +185,7 @@ Use `run_async` in async contexts, such as FastAPI route handlers or async worke
 
 ```python
 import asyncio
-from agentspan.agents import run_async
+from conductor.ai.agents import run_async
 
 async def review_pr(pr_number: int, repo: str):
     result = await run_async(app, {
@@ -201,7 +201,7 @@ asyncio.run(review_pr(142, "acme-corp/backend"))
 Use `start` to submit a review and return immediately. Useful when reviews are slow (large diffs, many tool calls) and you don't want to block.
 
 ```python
-from agentspan.agents import start
+from conductor.ai.agents import start
 
 # Returns immediately — graph runs in the background on the server
 handle = start(app, {
@@ -220,7 +220,7 @@ print(result.output["messages"][-1].content)
 `start` works in a loop — each call submits immediately without waiting for the previous one to finish.
 
 ```python
-from agentspan.agents import start
+from conductor.ai.agents import start
 
 prs = [(142, "acme-corp/backend"), (87, "acme-corp/frontend"), (23, "acme-corp/infra")]
 
@@ -258,7 +258,7 @@ Agentspan handles crash recovery at the run level. If your worker dies, the grap
 Use `mock_run` to test the graph without a live server or real API calls. You supply the expected sequence of tool calls and results; `mock_run` drives the graph through them and returns an `AgentResult` you can assert against.
 
 ```python
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 from langchain_core.messages import HumanMessage
 
 result = mock_run(

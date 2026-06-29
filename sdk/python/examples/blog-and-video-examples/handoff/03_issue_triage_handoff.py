@@ -17,7 +17,7 @@ Setup:
     python 03_issue_triage_handoff.py
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
 
 
 # ── Specialist Agents ────────────────────────────────────────────

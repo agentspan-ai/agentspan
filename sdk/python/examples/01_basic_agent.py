@@ -12,7 +12,7 @@ Requirements:
     - AGENTSPAN_LLM_MODEL set in .env or environment (optional)
 """
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 from settings import settings
 
 agent = Agent(

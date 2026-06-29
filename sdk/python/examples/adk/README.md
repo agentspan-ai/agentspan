@@ -7,7 +7,7 @@ The agents are defined using standard ADK classes — the Conductor runtime auto
 ## Prerequisites
 
 ```bash
-uv pip install google-adk agentspan
+uv pip install google-adk conductor-agent-sdk
 ```
 
 | Package | Required | Notes |

@@ -8,7 +8,7 @@
  * Usage:
  *   // BEFORE: import { createReactAgent } from '@langchain/langgraph/prebuilt';
  *   // AFTER:
- *   import { createReactAgent } from '@agentspan-ai/sdk/langgraph';
+ *   import { createReactAgent } from '@conductor-oss/conductor-agent-sdk/langgraph';
  *
  * Everything else in user code stays UNCHANGED.
  */
@@ -25,7 +25,7 @@ function _loadLangGraph(): Record<string, unknown> {
     return _lgModule!;
   } catch {
     throw new Error(
-      `The '@langchain/langgraph' package is required by @agentspan-ai/sdk/langgraph but was not found. ` +
+      `The '@langchain/langgraph' package is required by @conductor-oss/conductor-agent-sdk/langgraph but was not found. ` +
         `Install it with: npm install @langchain/langgraph`,
     );
   }
@@ -56,7 +56,7 @@ export interface AgentspanMetadata {
  */
 export function extractModelFromLLM(llm: unknown): string {
   if (typeof llm === "string") return llm;
-  if (typeof llm !== "object" || llm === null) return "openai/gpt-4o-mini";
+  if (typeof llm !== "object" || llm === null) return "anthropic/claude-sonnet-4-6";
 
   const l = llm as Record<string, unknown>;
 
@@ -64,7 +64,7 @@ export function extractModelFromLLM(llm: unknown): string {
     (typeof l.model === "string" && l.model) ||
     (typeof l.modelName === "string" && l.modelName) ||
     (typeof l.model_name === "string" && l.model_name) ||
-    "gpt-4o-mini";
+    "anthropic/claude-sonnet-4-6";
 
   // Already has provider prefix
   if (modelName.includes("/")) return modelName;

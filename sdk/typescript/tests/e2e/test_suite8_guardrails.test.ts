@@ -13,8 +13,8 @@ import {
   tool,
   guardrail,
   RegexGuardrail,
-} from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
+import type { GuardrailResult } from '@conductor-oss/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

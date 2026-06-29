@@ -2,34 +2,38 @@
 
 The official .NET SDK for [Agentspan](https://agentspan.ai) — durable, scalable, observable AI agents.
 
-- **Target**: .NET 8
-- **Dependencies**: BCL only (`System.Text.Json`, `System.Net.Http`) — no external packages
+- **Target**: .NET 10
+- **Dependencies**: `conductor-csharp` (worker polling / Conductor client) and `Newtonsoft.Json`; agent I/O uses `System.Text.Json`
 
 ## Quick Start
 
 ### 1. Prerequisites
 
-- .NET 8 SDK (`dotnet --version` should show `8.x.x`)
+- .NET 10 SDK (`dotnet --version` should show `10.x.x`)
 - Agentspan server running (default: `http://localhost:6767`)
 
-### 2. Reference the library
+### 2. Add the package
 
-In your `.csproj`:
+```bash
+dotnet add package conductor-agent-sdk
+```
+
+Or, for in-repo / unpublished use, reference the project directly in your `.csproj`:
 
 ```xml
 <ItemGroup>
-  <ProjectReference Include="path/to/sdk/csharp/src/Agentspan/Agentspan.csproj" />
+  <ProjectReference Include="path/to/sdk/csharp/src/Conductor.AI/Conductor.AI.csproj" />
 </ItemGroup>
 ```
 
 ### 3. Hello World
 
 ```csharp
-using Agentspan;
+using Conductor.AI;
 
 var agent = new Agent("greeter")
 {
-    Model = "openai/gpt-4o-mini",
+    Model = "anthropic/claude-sonnet-4-6",
     Instructions = "You are a friendly assistant. Keep responses brief.",
 };
 
@@ -56,7 +60,7 @@ The fundamental unit. An agent is an LLM with optional tools and/or sub-agents:
 ```csharp
 var agent = new Agent("my_agent")
 {
-    Model = "openai/gpt-4o-mini",
+    Model = "anthropic/claude-sonnet-4-6",
     Instructions = "You are helpful.",
     Tools = myTools,        // optional: local worker tools
     Agents = [subAgent],    // optional: sub-agents (for multi-agent)
@@ -188,13 +192,13 @@ dotnet build Agentspan.sln
 sdk/csharp/
 ├── Agentspan.sln
 ├── src/
-│   └── Agentspan/
-│       ├── Agentspan.csproj
+│   └── Conductor.AI/
+│       ├── Conductor.AI.csproj
 │       ├── Agent.cs                  # Agent + Strategy + >> operator
 │       ├── Tool.cs                   # [Tool] attribute + ToolRegistry
 │       ├── Result.cs                 # AgentResult, AgentHandle, AgentEvent
 │       ├── AgentConfigSerializer.cs  # Wire format serializer
-│       ├── AgentHttpClient.cs        # HTTP + SSE client
+│       ├── AgentClient.cs        # HTTP + SSE client
 │       ├── WorkerManager.cs          # Tool polling loop
 │       └── AgentRuntime.cs           # Main entry point
 └── examples/
@@ -216,7 +220,7 @@ The SDK serializes agents to the format the Agentspan server expects:
 {
   "agentConfig": {
     "name": "my_agent",
-    "model": "openai/gpt-4o-mini",
+    "model": "anthropic/claude-sonnet-4-6",
     "instructions": "...",
     "tools": [
       {

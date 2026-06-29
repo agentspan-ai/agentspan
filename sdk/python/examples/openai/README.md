@@ -7,7 +7,7 @@ The agents are defined using standard OpenAI SDK classes and decorators — the 
 ## Prerequisites
 
 ```bash
-uv pip install openai-agents agentspan
+uv pip install openai-agents conductor-agent-sdk
 ```
 
 | Package | Required | Notes |

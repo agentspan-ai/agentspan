@@ -11,7 +11,7 @@
  *   - AGENTSPAN_LLM_MODEL   (e.g. openai/gpt-4o-mini)
  */
 
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 export const agent = new Agent({
@@ -34,7 +34,7 @@ async function main() {
   try {
     const result = await runtime.run(agent, prompt);
     result.printResult();
-    const output = result.output ?? '';
+    const output = String(result.output ?? '');
 
     // Verify the agent saw the error output
     const saw = output.includes('No such file or directory') || output.includes('nonexistent');

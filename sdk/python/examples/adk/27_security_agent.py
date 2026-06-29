@@ -22,7 +22,7 @@ Requirements:
 
 from google.adk.agents import Agent, SequentialAgent
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

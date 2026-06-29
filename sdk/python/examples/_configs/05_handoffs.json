@@ -4,7 +4,7 @@
       "external": false,
       "instructions": "You handle billing questions: balances, payments, invoices.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "billing",
       "timeoutSeconds": 0,
       "tools": [
@@ -34,7 +34,7 @@
       "external": false,
       "instructions": "You handle technical questions: order status, shipping, returns.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "technical",
       "timeoutSeconds": 0,
       "tools": [
@@ -64,7 +64,7 @@
       "external": false,
       "instructions": "You handle sales questions: pricing, products, promotions.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "sales",
       "timeoutSeconds": 0,
       "tools": [
@@ -94,7 +94,7 @@
   "external": false,
   "instructions": "Route customer requests to the right specialist: billing, technical, or sales.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "support",
   "strategy": "handoff",
   "timeoutSeconds": 0

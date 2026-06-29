@@ -35,10 +35,16 @@ jobs:
 
       - name: Pack
         run: |
-          dotnet pack src/Agentspan/Agentspan.csproj \
-            --configuration Release \
-            -p:Version=${{ steps.version.outputs.version }} \
-            --output ./nupkg
+          for proj in \
+            src/Conductor.AI/Conductor.AI.csproj \
+            src/Conductor.AI.OpenAI/Conductor.AI.OpenAI.csproj \
+            src/Conductor.AI.SemanticKernel/Conductor.AI.SemanticKernel.csproj \
+            src/Conductor.AI.GoogleADK/Conductor.AI.GoogleADK.csproj; do
+            dotnet pack "$proj" \
+              --configuration Release \
+              -p:Version=${{ steps.version.outputs.version }} \
+              --output ./nupkg
+          done
 
       - name: Publish to NuGet
         run: |

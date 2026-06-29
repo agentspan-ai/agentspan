@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentspan.agents.agent import Agent
+from conductor.ai.agents.agent import Agent
 
 
 def _get_run_module():
     """Get the actual run module (not the run function)."""
-    return sys.modules["agentspan.agents.run"]
+    return sys.modules["conductor.ai.agents.run"]
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +35,7 @@ class TestRunFunction:
         mock_runtime.run.return_value = MagicMock(output="Hello")
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        from agentspan.agents.run import run
+        from conductor.ai.agents.run import run
 
         result = run(agent, "Hi", runtime=mock_runtime)
 
@@ -46,7 +46,7 @@ class TestRunFunction:
         mock_runtime = MagicMock()
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        from agentspan.agents.run import run
+        from conductor.ai.agents.run import run
 
         run(agent, "Hi", media=["img.png"], session_id="s1", runtime=mock_runtime)
 
@@ -58,7 +58,7 @@ class TestRunFunction:
         mock_runtime = MagicMock()
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        from agentspan.agents.run import run
+        from conductor.ai.agents.run import run
 
         run(agent, "Hi", credentials=["OPENAI_API_KEY"], runtime=mock_runtime)
 
@@ -74,7 +74,7 @@ class TestStartFunction:
         mock_runtime.start.return_value = MagicMock(execution_id="wf-1")
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        from agentspan.agents.run import start
+        from conductor.ai.agents.run import start
 
         handle = start(agent, "Go", runtime=mock_runtime)
 
@@ -91,7 +91,7 @@ class TestStreamFunction:
         mock_runtime.stream.return_value = iter([mock_event])
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        from agentspan.agents.run import stream
+        from conductor.ai.agents.run import stream
 
         events = list(stream(agent, "Go", runtime=mock_runtime))
 
@@ -107,7 +107,7 @@ class TestPlanFunction:
         mock_runtime.plan.return_value = MagicMock(name="test_wf")
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        from agentspan.agents.run import plan
+        from conductor.ai.agents.run import plan
 
         result = plan(agent, runtime=mock_runtime)
 
@@ -128,7 +128,7 @@ class TestShutdown:
         assert mod._default_runtime is None
 
     def test_shutdown_noop_when_no_runtime(self):
-        from agentspan.agents.run import shutdown
+        from conductor.ai.agents.run import shutdown
 
         # Should not raise
         shutdown()
@@ -143,7 +143,7 @@ class TestRunAsyncFunction:
         mock_runtime.run_async = AsyncMock(return_value=MagicMock(output="Async result"))
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        from agentspan.agents.run import run_async
+        from conductor.ai.agents.run import run_async
 
         result = await run_async(agent, "Hi", runtime=mock_runtime)
 
@@ -156,7 +156,7 @@ class TestRunAsyncFunction:
         mock_runtime.run_async = AsyncMock(return_value=MagicMock(output="Async result"))
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        from agentspan.agents.run import run_async
+        from conductor.ai.agents.run import run_async
 
         await run_async(agent, "Hi", credentials=["OPENAI_API_KEY"], runtime=mock_runtime)
 
@@ -168,8 +168,8 @@ class TestConfigure:
     """Test the configure() function."""
 
     def test_configure_stores_config(self):
-        from agentspan.agents.run import configure
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.run import configure
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         config = AgentConfig(server_url="https://prod:8080/api", auto_start_server=False)
         configure(config=config)
@@ -178,7 +178,7 @@ class TestConfigure:
         assert mod._default_config is config
 
     def test_configure_kwargs_override_env(self):
-        from agentspan.agents.run import configure
+        from conductor.ai.agents.run import configure
 
         configure(server_url="https://custom:9090/api", auto_start_server=False)
 
@@ -190,19 +190,19 @@ class TestConfigure:
         mod = _get_run_module()
         mod._default_runtime = MagicMock()
 
-        from agentspan.agents.run import configure
+        from conductor.ai.agents.run import configure
 
         with pytest.raises(RuntimeError, match="configure.*must be called before"):
             configure(auto_start_server=False)
 
     def test_configure_raises_for_unknown_field(self):
-        from agentspan.agents.run import configure
+        from conductor.ai.agents.run import configure
 
         with pytest.raises(TypeError, match="no field 'bogus_field'"):
             configure(bogus_field=42)
 
     def test_shutdown_preserves_config(self):
-        from agentspan.agents.run import configure, shutdown
+        from conductor.ai.agents.run import configure, shutdown
 
         configure(auto_start_server=False)
 
@@ -219,8 +219,8 @@ class TestDeployFunction:
     """Test the top-level deploy() function."""
 
     def test_deploy_delegates_to_runtime(self):
-        from agentspan.agents.result import DeploymentInfo
-        from agentspan.agents.run import deploy
+        from conductor.ai.agents.result import DeploymentInfo
+        from conductor.ai.agents.run import deploy
 
         mock_runtime = MagicMock()
         mock_runtime.deploy.return_value = [DeploymentInfo(registered_name="wf", agent_name="a")]
@@ -230,7 +230,7 @@ class TestDeployFunction:
         assert len(result) == 1
 
     def test_deploy_multiple_agents(self):
-        from agentspan.agents.run import deploy
+        from conductor.ai.agents.run import deploy
 
         mock_runtime = MagicMock()
         mock_runtime.deploy.return_value = []
@@ -240,7 +240,7 @@ class TestDeployFunction:
         mock_runtime.deploy.assert_called_once_with(a1, a2, packages=None)
 
     def test_deploy_with_packages(self):
-        from agentspan.agents.run import deploy
+        from conductor.ai.agents.run import deploy
 
         mock_runtime = MagicMock()
         mock_runtime.deploy.return_value = []
@@ -252,7 +252,7 @@ class TestServeFunction:
     """Test the top-level serve() function."""
 
     def test_serve_delegates_to_runtime(self):
-        from agentspan.agents.run import serve
+        from conductor.ai.agents.run import serve
 
         mock_runtime = MagicMock()
         agent = Agent(name="a", model="openai/gpt-4o")
@@ -260,7 +260,7 @@ class TestServeFunction:
         mock_runtime.serve.assert_called_once_with(agent, packages=None, blocking=True)
 
     def test_serve_multiple_agents(self):
-        from agentspan.agents.run import serve
+        from conductor.ai.agents.run import serve
 
         mock_runtime = MagicMock()
         a1 = Agent(name="a1", model="openai/gpt-4o")
@@ -269,7 +269,7 @@ class TestServeFunction:
         mock_runtime.serve.assert_called_once_with(a1, a2, packages=None, blocking=True)
 
     def test_serve_with_packages(self):
-        from agentspan.agents.run import serve
+        from conductor.ai.agents.run import serve
 
         mock_runtime = MagicMock()
         serve(packages=["myapp.agents"], blocking=False, runtime=mock_runtime)

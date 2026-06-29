@@ -15,7 +15,7 @@ Requirements:
 
 from google.adk.agents import Agent
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

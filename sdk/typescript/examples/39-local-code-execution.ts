@@ -16,7 +16,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, LocalCodeExecutor } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, LocalCodeExecutor } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Example 1: Simple flag --------------------------------------------------

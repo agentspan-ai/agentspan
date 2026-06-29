@@ -12,7 +12,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Tools -------------------------------------------------------------------
@@ -66,10 +66,10 @@ export const agent = new Agent({
 
 const runtime = new AgentRuntime();
 try {
-  const workflowDef = await runtime.plan(agent);
+  const workflowDef = (await runtime.plan(agent)) as Record<string, unknown>;
 
   console.log(`Workflow name: ${workflowDef.name}`);
-  const tasks: Array<Record<string, unknown>> = (workflowDef as Record<string, unknown>).tasks as Array<Record<string, unknown>> ?? [];
+  const tasks: Array<Record<string, unknown>> = (workflowDef.tasks as Array<Record<string, unknown>>) ?? [];
   console.log(`Total tasks:   ${tasks.length}`);
   console.log();
 

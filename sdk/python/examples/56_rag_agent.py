@@ -20,7 +20,7 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
-from agentspan.agents import Agent, AgentRuntime, search_tool, index_tool
+from conductor.ai.agents import Agent, AgentRuntime, search_tool, index_tool
 
 from settings import settings
 

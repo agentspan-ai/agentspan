@@ -6,7 +6,7 @@ import copy
 import logging
 from typing import Any
 
-from agentspan.agents.result import (
+from conductor.ai.agents.result import (
     AgentResult,
     FinishReason,
     Status,

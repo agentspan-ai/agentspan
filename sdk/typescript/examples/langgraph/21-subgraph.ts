@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -74,15 +74,15 @@ async function summarizeText(state: AnalysisStateType): Promise<Partial<Analysis
 // ---------------------------------------------------------------------------
 // Build the subgraph
 // ---------------------------------------------------------------------------
-const analysisBuilder = new StateGraph(AnalysisState);
-analysisBuilder.addNode('sentiment_node', analyzeSentiment);
-analysisBuilder.addNode('keywords_node', extractKeywords);
-analysisBuilder.addNode('summarize', summarizeText);
-analysisBuilder.addEdge(START, 'sentiment_node');
-analysisBuilder.addEdge('sentiment_node', 'keywords_node');
-analysisBuilder.addEdge('keywords_node', 'summarize');
-analysisBuilder.addEdge('summarize', END);
-const analysisSubgraph = analysisBuilder.compile({ name: "analysis_subgraph" });
+const analysisSubgraph = new StateGraph(AnalysisState)
+  .addNode('sentiment_node', analyzeSentiment)
+  .addNode('keywords_node', extractKeywords)
+  .addNode('summarize', summarizeText)
+  .addEdge(START, 'sentiment_node')
+  .addEdge('sentiment_node', 'keywords_node')
+  .addEdge('keywords_node', 'summarize')
+  .addEdge('summarize', END)
+  .compile({ name: "analysis_subgraph" });
 
 // ---------------------------------------------------------------------------
 // Parent graph state schema
@@ -147,20 +147,19 @@ function buildReport(state: DocumentStateType): Partial<DocumentStateType> {
 // ---------------------------------------------------------------------------
 // Build the parent graph
 // ---------------------------------------------------------------------------
-const parentBuilder = new StateGraph(DocumentState);
-parentBuilder.addNode('prepare', prepare);
-parentBuilder.addNode('analysis', runAnalysis);
-parentBuilder.addNode('build_report', buildReport);
-parentBuilder.addEdge(START, 'prepare');
-parentBuilder.addEdge('prepare', 'analysis');
-parentBuilder.addEdge('analysis', 'build_report');
-parentBuilder.addEdge('build_report', END);
-
-const graph = parentBuilder.compile({ name: "document_pipeline_with_subgraph" });
+const graph = new StateGraph(DocumentState)
+  .addNode('prepare', prepare)
+  .addNode('analysis', runAnalysis)
+  .addNode('build_report', buildReport)
+  .addEdge(START, 'prepare')
+  .addEdge('prepare', 'analysis')
+  .addEdge('analysis', 'build_report')
+  .addEdge('build_report', END)
+  .compile({ name: "document_pipeline_with_subgraph" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

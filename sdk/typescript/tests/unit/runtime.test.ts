@@ -152,7 +152,7 @@ describe("AgentRuntime", () => {
       expect(result).toEqual({});
     });
 
-    it("includes auth headers in requests", async () => {
+    it("sends an explicit apiKey as X-Authorization (Orkes contract)", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -167,14 +167,14 @@ describe("AgentRuntime", () => {
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({
-            Authorization: "Bearer test-api-key",
+            "X-Authorization": "test-api-key",
             "Content-Type": "application/json",
           }),
         }),
       );
     });
 
-    it("includes X-Auth-Key/Secret headers when configured", async () => {
+    it("mints a JWT from authKey/authSecret and sends X-Authorization", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
@@ -185,14 +185,18 @@ describe("AgentRuntime", () => {
         authKey: "my-auth-key",
         authSecret: "my-auth-secret",
       });
+      // Stub the Conductor token mint so no network is needed.
+      vi.spyOn(runtime.client, "getClient").mockResolvedValue({
+        tokenResource: { generateToken: vi.fn().mockResolvedValue({ token: "minted-jwt" }) },
+      } as never);
+
       await runtime._httpRequest("GET", "/test");
 
       expect(global.fetch).toHaveBeenCalledWith(
         "http://localhost:6767/api/test",
         expect.objectContaining({
           headers: expect.objectContaining({
-            "X-Auth-Key": "my-auth-key",
-            "X-Auth-Secret": "my-auth-secret",
+            "X-Authorization": "minted-jwt",
           }),
         }),
       );

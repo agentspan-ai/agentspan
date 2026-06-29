@@ -83,3 +83,29 @@ func Save(cfg *Config) error {
 	}
 	return os.WriteFile(configPath(), data, 0o600)
 }
+
+// FileServerURL returns the server URL stored in config.json (no env/default merging).
+// Empty when no config file exists or it has no server_url.
+func FileServerURL() string {
+	data, err := os.ReadFile(configPath())
+	if err != nil {
+		return ""
+	}
+	var fileCfg Config
+	if json.Unmarshal(data, &fileCfg) != nil {
+		return ""
+	}
+	return fileCfg.ServerURL
+}
+
+// SaveDefaultServer persists serverURL as the default in config.json, preserving any
+// other stored fields (e.g. a legacy api_key). Used so an explicitly passed --server
+// (or the URL confirmed at login) becomes the default for subsequent commands.
+func SaveDefaultServer(serverURL string) error {
+	fileCfg := &Config{}
+	if data, err := os.ReadFile(configPath()); err == nil {
+		_ = json.Unmarshal(data, fileCfg)
+	}
+	fileCfg.ServerURL = serverURL
+	return Save(fileCfg)
+}

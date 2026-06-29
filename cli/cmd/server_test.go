@@ -175,6 +175,44 @@ func TestServerStartUsesRequestedVersion(t *testing.T) {
 	}
 }
 
+// After the server split (#271) the runnable jar lives at
+// server/conductor-agentspan-server/build/libs/, not server/build/libs/.
+// findLocalJAR must locate it both from the repo root and from a nested CWD.
+func TestFindLocalJARNewSplitPath(t *testing.T) {
+	root := t.TempDir()
+	jarDir := filepath.Join(root, "server", "conductor-agentspan-server", "build", "libs")
+	if err := os.MkdirAll(jarDir, 0o755); err != nil {
+		t.Fatalf("mkdir jar dir: %v", err)
+	}
+	jarPath := filepath.Join(jarDir, jarName)
+	if err := os.WriteFile(jarPath, []byte("fake jar"), 0o644); err != nil {
+		t.Fatalf("write jar: %v", err)
+	}
+	wantPath, err := filepath.Abs(jarPath)
+	if err != nil {
+		t.Fatalf("abs jar path: %v", err)
+	}
+
+	// Nested CWD exercises the walk-up loop; repo root exercises the candidates list.
+	nested := filepath.Join(root, "cli", "cmd")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+
+	for _, cwd := range []string{root, nested} {
+		t.Run(cwd, func(t *testing.T) {
+			t.Chdir(cwd)
+			got, err := findLocalJAR()
+			if err != nil {
+				t.Fatalf("findLocalJAR from %q returned error: %v", cwd, err)
+			}
+			if got != wantPath {
+				t.Fatalf("findLocalJAR from %q = %q, want %q", cwd, got, wantPath)
+			}
+		})
+	}
+}
+
 func freeTCPPort(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

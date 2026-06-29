@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentspan.agents.result import (
+from conductor.ai.agents.result import (
     AgentHandle,
     AgentResult,
     AgentStatus,

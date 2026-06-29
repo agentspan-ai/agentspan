@@ -20,7 +20,7 @@ Setup:
     python 02_code_review_parallel.py
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
 
 
 # ── Agents ────────────────────────────────────────────────────────

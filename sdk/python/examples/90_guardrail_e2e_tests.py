@@ -60,7 +60,7 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentRuntime,
     Guardrail,

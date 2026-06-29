@@ -21,8 +21,8 @@ import subprocess
 import pytest
 import requests
 
-from agentspan.agents import Agent, CodeExecutionConfig
-from agentspan.agents.code_executor import (
+from conductor.ai.agents import Agent, CodeExecutionConfig
+from conductor.ai.agents.code_executor import (
     DockerCodeExecutor,
     JupyterCodeExecutor,
     LocalCodeExecutor,
@@ -256,7 +256,7 @@ def _agent_jupyter(model):
 @pytest.fixture(scope="class")
 def ce_runtime():
     """Fresh runtime for code execution tests — avoids stale workers from other suites."""
-    from agentspan.agents import AgentRuntime
+    from conductor.ai.agents import AgentRuntime
 
     with AgentRuntime() as rt:
         yield rt

@@ -83,13 +83,13 @@ describe("guardrail.external()", () => {
     const def = guardrail.external({
       name: "ext_guard",
       position: "input",
-      onFail: "human",
+      onFail: "retry",
     });
 
     expect(def.name).toBe("ext_guard");
     expect(def.guardrailType).toBe("external");
     expect(def.position).toBe("input");
-    expect(def.onFail).toBe("human");
+    expect(def.onFail).toBe("retry");
     expect(def.taskName).toBe("ext_guard");
     expect(def.func).toBeNull();
   });
@@ -339,5 +339,95 @@ describe("@Guardrail decorator", () => {
 
     const defs = guardrailsFrom(new NoGuardrails());
     expect(defs).toHaveLength(0);
+  });
+});
+
+// ── human + input guardrail validation (mirrors Python ValueError) ───────
+
+describe("human + input guardrail validation", () => {
+  const fn = (_content: string): GuardrailResult => ({ passed: true });
+
+  it("guardrail() throws when onFail='human' and position='input'", () => {
+    expect(() =>
+      guardrail(fn, { name: "g", onFail: "human", position: "input" }),
+    ).toThrow(/human.*output|input/i);
+  });
+
+  it("guardrail() allows onFail='human' with position='output'", () => {
+    expect(() => guardrail(fn, { name: "g", onFail: "human", position: "output" })).not.toThrow();
+  });
+
+  it("guardrail.external throws when onFail='human' and position='input'", () => {
+    expect(() =>
+      guardrail.external({ name: "g", onFail: "human", position: "input" }),
+    ).toThrow(/human/i);
+  });
+
+  it("RegexGuardrail throws when onFail='human' and position='input'", () => {
+    expect(
+      () =>
+        new RegexGuardrail({
+          name: "r",
+          patterns: ["x"],
+          mode: "block",
+          onFail: "human",
+          position: "input",
+        }),
+    ).toThrow(/human/i);
+  });
+
+  it("LLMGuardrail throws when onFail='human' and position='input'", () => {
+    expect(
+      () =>
+        new LLMGuardrail({
+          name: "l",
+          model: "anthropic/claude-sonnet-4-6",
+          policy: "be nice",
+          onFail: "human",
+          position: "input",
+        }),
+    ).toThrow(/human/i);
+  });
+
+  it("@Guardrail decorator throws at extraction when onFail='human' and position='input'", () => {
+    class Bad {
+      @Guardrail({ onFail: "human", position: "input" })
+      check(_content: string): GuardrailResult {
+        return { passed: true };
+      }
+    }
+    expect(() => guardrailsFrom(new Bad())).toThrow(/human/i);
+  });
+});
+
+// ── default on_fail is "raise" across all surfaces ───────────────────────
+
+describe("default onFail is 'raise'", () => {
+  const fn = (_content: string): GuardrailResult => ({ passed: true });
+
+  it("guardrail()", () => {
+    expect(guardrail(fn, { name: "g" }).onFail).toBe("raise");
+  });
+
+  it("guardrail.external", () => {
+    expect(guardrail.external({ name: "g" }).onFail).toBe("raise");
+  });
+
+  it("RegexGuardrail", () => {
+    expect(new RegexGuardrail({ name: "r", patterns: ["x"], mode: "block" }).onFail).toBe("raise");
+  });
+
+  it("LLMGuardrail", () => {
+    expect(new LLMGuardrail({ name: "l", model: "openai/x", policy: "p" }).onFail).toBe("raise");
+  });
+
+  it("@Guardrail decorator", () => {
+    class C {
+      @Guardrail()
+      check(_content: string): GuardrailResult {
+        return { passed: true };
+      }
+    }
+    expect(guardrailsFrom(new C())[0].onFail).toBe("raise");
   });
 });

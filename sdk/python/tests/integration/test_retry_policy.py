@@ -17,7 +17,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import Agent, tool
+from conductor.ai.agents import Agent, tool
 
 pytestmark = pytest.mark.integration
 

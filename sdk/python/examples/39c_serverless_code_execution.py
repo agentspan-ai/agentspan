@@ -26,8 +26,8 @@ import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
-from agentspan.agents.code_executor import ServerlessCodeExecutor
+from conductor.ai.agents import Agent, AgentRuntime, CodeExecutionConfig
+from conductor.ai.agents.code_executor import ServerlessCodeExecutor
 from settings import settings
 
 

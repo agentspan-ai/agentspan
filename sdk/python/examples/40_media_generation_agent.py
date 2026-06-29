@@ -22,7 +22,7 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
-from agentspan.agents import Agent, AgentRuntime, audio_tool, image_tool, video_tool
+from conductor.ai.agents import Agent, AgentRuntime, audio_tool, image_tool, video_tool
 from settings import settings
 
 # ── Media generation tools (server-side, no worker needed) ────────────

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentspan.agents.agent import Agent
-from agentspan.agents.result import AgentHandle, AgentStatus
+from conductor.ai.agents.agent import Agent
+from conductor.ai.agents.result import AgentHandle, AgentStatus
 
 
 # ── AgentHandle.run_id ──────────────────────────────────────────────────
@@ -55,7 +55,7 @@ class TestExtractDomain:
 
     def _make_runtime(self, task_to_domain=None):
         """Create a minimal AgentRuntime with mocked workflow client."""
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         mock_wf = MagicMock()
@@ -85,7 +85,7 @@ class TestExtractDomain:
         assert rt._extract_domain("wf-4") == "aaa"
 
     def test_returns_none_on_exception(self):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         rt._workflow_client = MagicMock()
@@ -100,7 +100,7 @@ class TestResume:
     """AgentRuntime.resume() re-registers workers under the correct domain."""
 
     def _make_runtime(self, task_to_domain=None):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         mock_wf = MagicMock()
@@ -147,7 +147,7 @@ class TestResumeAsync:
 
     @pytest.mark.asyncio
     async def test_resume_async_registers_workers_with_domain(self):
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         rt = AgentRuntime.__new__(AgentRuntime)
         mock_wf = MagicMock()
@@ -169,20 +169,20 @@ class TestResumeAsync:
 
 
 class TestResumePublicExport:
-    """resume and resume_async are exported from agentspan.agents."""
+    """resume and resume_async are exported from conductor.ai.agents."""
 
     def test_resume_importable(self):
-        from agentspan.agents import resume  # noqa: F401
+        from conductor.ai.agents import resume  # noqa: F401
 
     def test_resume_async_importable(self):
-        from agentspan.agents import resume_async  # noqa: F401
+        from conductor.ai.agents import resume_async  # noqa: F401
 
 
 class TestResumeConvenienceFunction:
     """Top-level resume() delegates to AgentRuntime.resume()."""
 
     def test_resume_delegates_to_runtime(self):
-        from agentspan.agents.run import resume
+        from conductor.ai.agents.run import resume
 
         mock_runtime = MagicMock()
         mock_runtime.resume.return_value = AgentHandle(
@@ -197,7 +197,7 @@ class TestResumeConvenienceFunction:
 
     @pytest.mark.asyncio
     async def test_resume_async_delegates_to_runtime(self):
-        from agentspan.agents.run import resume_async
+        from conductor.ai.agents.run import resume_async
 
         mock_runtime = MagicMock()
         mock_runtime.resume_async = AsyncMock(

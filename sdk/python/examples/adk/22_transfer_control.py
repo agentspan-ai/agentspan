@@ -24,7 +24,7 @@ Requirements:
 
 from google.adk.agents import LlmAgent
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

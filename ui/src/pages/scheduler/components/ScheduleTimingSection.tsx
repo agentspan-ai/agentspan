@@ -20,6 +20,8 @@ interface ScheduleTimingSectionProps {
   setWorkflowTasksToDomainState: (value: string) => void;
   paused: boolean;
   setCronPausedState: () => void;
+  runCatchupScheduleInstances?: boolean;
+  setRunCatchupScheduleInstances?: (value: boolean) => void;
 }
 
 export function ScheduleTimingSection({
@@ -31,6 +33,8 @@ export function ScheduleTimingSection({
   setWorkflowTasksToDomainState,
   paused,
   setCronPausedState,
+  runCatchupScheduleInstances,
+  setRunCatchupScheduleInstances,
 }: ScheduleTimingSectionProps) {
   return (
     <>
@@ -76,6 +80,34 @@ export function ScheduleTimingSection({
           />
         </Tooltip>
       </Grid>
+      {setRunCatchupScheduleInstances && (
+        <Grid size={12}>
+          <FormControl>
+            <InputLabel sx={baseLabelStyle}>
+              Catch up missed runs on resume?
+            </InputLabel>
+          </FormControl>
+          <Tooltip
+            title="When the schedule is paused and later resumed, replay any cron fires that were missed during the pause."
+            arrow
+          >
+            <FormControlLabel
+              control={
+                <Switch
+                  color="primary"
+                  checked={!!runCatchupScheduleInstances}
+                  name="runCatchupScheduleInstances"
+                  onChange={(e) =>
+                    setRunCatchupScheduleInstances(e.target.checked)
+                  }
+                />
+              }
+              label="Catch up missed runs"
+              sx={{ mt: 3, mb: 3 }}
+            />
+          </Tooltip>
+        </Grid>
+      )}
     </>
   );
 }

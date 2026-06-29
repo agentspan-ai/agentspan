@@ -8,7 +8,7 @@
 using System.Text.Json.Nodes;
 using Xunit;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 internal static class E2eHelpers
 {

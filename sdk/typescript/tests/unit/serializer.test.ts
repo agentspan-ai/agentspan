@@ -346,7 +346,7 @@ describe("serializeAgent() — multi-agent", () => {
   });
 
   it("serializes router with Agent", () => {
-    const routerAgent = new Agent({ name: "router", model: "openai/gpt-4o-mini" });
+    const routerAgent = new Agent({ name: "router", model: "anthropic/claude-sonnet-4-6" });
     const a = new Agent({
       name: "routed",
       agents: [new Agent({ name: "a" }), new Agent({ name: "b" })],
@@ -357,7 +357,7 @@ describe("serializeAgent() — multi-agent", () => {
 
     const router = config.router as Record<string, unknown>;
     expect(router.name).toBe("router");
-    expect(router.model).toBe("openai/gpt-4o-mini");
+    expect(router.model).toBe("anthropic/claude-sonnet-4-6");
   });
 
   it("serializes router with function", () => {
@@ -591,6 +591,42 @@ describe("serializeAgent() — thinkingConfig", () => {
       budgetTokens: 2048,
     });
     expect(config).not.toHaveProperty("thinkingBudgetTokens");
+  });
+});
+
+// ── reasoningEffort / contextWindowBudget / maskedFields ──
+
+describe("serializeAgent() — reasoningEffort, contextWindowBudget, maskedFields", () => {
+  it("emits reasoningEffort when set (matches Python key)", () => {
+    const a = new Agent({ name: "test", reasoningEffort: "high" });
+    const config = serializer.serializeAgent(a);
+    expect(config.reasoningEffort).toBe("high");
+  });
+
+  it("emits contextWindowBudget when set (matches Python key)", () => {
+    const a = new Agent({ name: "test", contextWindowBudget: 100000 });
+    const config = serializer.serializeAgent(a);
+    expect(config.contextWindowBudget).toBe(100000);
+  });
+
+  it("emits maskedFields when set (matches Python key)", () => {
+    const a = new Agent({ name: "test", maskedFields: ["ssn", "password"] });
+    const config = serializer.serializeAgent(a);
+    expect(config.maskedFields).toEqual(["ssn", "password"]);
+  });
+
+  it("omits all three when unset", () => {
+    const a = new Agent({ name: "test" });
+    const config = serializer.serializeAgent(a);
+    expect(config).not.toHaveProperty("reasoningEffort");
+    expect(config).not.toHaveProperty("contextWindowBudget");
+    expect(config).not.toHaveProperty("maskedFields");
+  });
+
+  it("omits maskedFields when empty array", () => {
+    const a = new Agent({ name: "test", maskedFields: [] });
+    const config = serializer.serializeAgent(a);
+    expect(config).not.toHaveProperty("maskedFields");
   });
 });
 

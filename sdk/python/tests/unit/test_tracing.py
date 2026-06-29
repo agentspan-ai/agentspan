@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import agentspan.agents.tracing as tracing_mod
+import conductor.ai.agents.tracing as tracing_mod
 
 
 class TestNoopWhenOtelNotInstalled:

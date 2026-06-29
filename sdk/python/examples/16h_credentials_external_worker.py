@@ -26,7 +26,7 @@ Requirements:
     - GITHUB_TOKEN stored via `agentspan credentials set`
 """
 
-from agentspan.agents import Agent, AgentRuntime, tool, resolve_credentials
+from conductor.ai.agents import Agent, AgentRuntime, tool, resolve_credentials
 from settings import settings
 
 

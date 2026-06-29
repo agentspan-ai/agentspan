@@ -12,7 +12,7 @@
   "external": false,
   "instructions": "You are a helpful assistant. Use get_facts when asked about topics.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "monitored_agent_47",
   "timeoutSeconds": 0,
   "tools": [

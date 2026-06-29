@@ -5,7 +5,7 @@ using System.Net.Http;
 using System.Text.Json.Nodes;
 using Xunit;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 /// <summary>
 /// Shared fixture that checks server availability once per test collection.

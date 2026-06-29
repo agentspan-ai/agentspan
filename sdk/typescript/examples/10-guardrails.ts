@@ -30,8 +30,8 @@ import {
   LLMGuardrail,
   guardrail,
   tool,
-} from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
+import type { GuardrailResult } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // ── Tools ─────────────────────────────────────────────────
@@ -101,7 +101,7 @@ const piiBlocker = new RegexGuardrail({
 
 const sensitiveDataChecker = new LLMGuardrail({
   name: 'sensitive_data_checker',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   policy:
     'Check if the response contains any sensitive personal information ' +
     'such as full credit card numbers, SSNs, or passwords. ' +

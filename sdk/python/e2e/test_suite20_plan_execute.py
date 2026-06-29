@@ -31,7 +31,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import Agent, Context, Op, Plan, Ref, Step, Strategy, plan_execute, tool
+from conductor.ai.agents import Agent, Context, Op, Plan, Ref, Step, Strategy, plan_execute, tool
 
 pytestmark = pytest.mark.e2e
 

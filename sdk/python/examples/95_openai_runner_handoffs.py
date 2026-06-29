@@ -10,11 +10,11 @@ Before (runs directly against OpenAI):
     from agents import Runner
 
 After (runs on Agentspan — durable, observable, scalable):
-    from agentspan import Runner
+    from conductor.ai import Runner
 
 The diff:
     -from agents import Runner
-    +from agentspan import Runner
+    +from conductor.ai import Runner
 
 Agent definitions, handoffs list, and the Runner.run() call are unchanged.
 Agentspan records every handoff decision in the execution history — you can
@@ -35,7 +35,7 @@ from agents import Agent
 
 # ── Only this line changes ──────────────────────────────────────────────────
 # from agents import Runner          # ← original (runs directly on OpenAI)
-from agentspan import Runner         # ← agentspan (runs on Agentspan)
+from conductor.ai import Runner         # ← agentspan (runs on Agentspan)
 # ───────────────────────────────────────────────────────────────────────────
 
 french_agent = Agent(

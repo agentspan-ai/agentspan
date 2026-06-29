@@ -20,7 +20,7 @@ Setup:
     python 02_support_ticket_pipeline.py
 """
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 
 # ── Agents ────────────────────────────────────────────────────────

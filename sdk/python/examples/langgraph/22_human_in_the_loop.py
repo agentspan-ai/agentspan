@@ -26,8 +26,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
-from agentspan.agents import AgentRuntime, EventType
-from agentspan.agents.frameworks.langgraph import human_task
+from conductor.ai.agents import AgentRuntime, EventType
+from conductor.ai.agents.frameworks.langgraph import human_task
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 

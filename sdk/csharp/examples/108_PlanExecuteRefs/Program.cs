@@ -19,49 +19,9 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.Plans;
-
-// ── Tool implementations ─────────────────────────────────
-
-internal sealed class PipelineTools
-{
-    [Tool("Return a fixed payload.")]
-    public Dictionary<string, object> Produce(string record_id) => new()
-    {
-        ["record_id"] = record_id,
-        ["value"] = 42,
-        ["tags"] = new[] { "alpha", "beta" },
-    };
-
-    [Tool("Append a derived field. Reads the whole `produce` output via Ref.")]
-    public Dictionary<string, object?> Enrich(JsonElement record)
-    {
-        var dict = JsonSerializer.Deserialize<Dictionary<string, object?>>(record.GetRawText())!;
-        var value = ((JsonElement)dict["value"]!).GetInt32();
-        dict["value_squared"] = value * value;
-        return dict;
-    }
-
-    [Tool("Format the final report. Reads BOTH upstream steps via Refs.")]
-    public Dictionary<string, object?> Report(JsonElement record, JsonElement enriched)
-    {
-        var recordId = record.GetProperty("record_id").GetString();
-        var value = record.GetProperty("value").GetInt32();
-        var tags = record.GetProperty("tags").EnumerateArray()
-            .Select(e => e.GetString()!).ToList();
-        var squared = enriched.GetProperty("value_squared").GetInt32();
-        return new Dictionary<string, object?>
-        {
-            ["id"] = recordId,
-            ["original_value"] = value,
-            ["squared"] = squared,
-            ["tags_joined"] = string.Join(", ", tags),
-            ["summary"] = $"record={recordId} value={value} squared={squared} tags=[{string.Join(", ", tags)}]",
-        };
-    }
-}
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.Plans;
 
 // ── Main ─────────────────────────────────────────────────
 
@@ -156,5 +116,45 @@ static async Task ShowPipelineOutputsAsync(string executionId)
             Console.WriteLine($"\n{name}:");
             Console.WriteLine(t?["outputData"]?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         }
+    }
+}
+
+// ── Tool implementations ─────────────────────────────────
+
+internal sealed class PipelineTools
+{
+    [Tool("Return a fixed payload.")]
+    public Dictionary<string, object> Produce(string record_id) => new()
+    {
+        ["record_id"] = record_id,
+        ["value"] = 42,
+        ["tags"] = new[] { "alpha", "beta" },
+    };
+
+    [Tool("Append a derived field. Reads the whole `produce` output via Ref.")]
+    public Dictionary<string, object?> Enrich(JsonElement record)
+    {
+        var dict = JsonSerializer.Deserialize<Dictionary<string, object?>>(record.GetRawText())!;
+        var value = ((JsonElement)dict["value"]!).GetInt32();
+        dict["value_squared"] = value * value;
+        return dict;
+    }
+
+    [Tool("Format the final report. Reads BOTH upstream steps via Refs.")]
+    public Dictionary<string, object?> Report(JsonElement record, JsonElement enriched)
+    {
+        var recordId = record.GetProperty("record_id").GetString();
+        var value = record.GetProperty("value").GetInt32();
+        var tags = record.GetProperty("tags").EnumerateArray()
+            .Select(e => e.GetString()!).ToList();
+        var squared = enriched.GetProperty("value_squared").GetInt32();
+        return new Dictionary<string, object?>
+        {
+            ["id"] = recordId,
+            ["original_value"] = value,
+            ["squared"] = squared,
+            ["tags_joined"] = string.Join(", ", tags),
+            ["summary"] = $"record={recordId} value={value} squared={squared} tags=[{string.Join(", ", tags)}]",
+        };
     }
 }

@@ -77,11 +77,8 @@ async function mockAllApis(page: Page) {
     });
   });
 
-  // Credentials (needed by some page layouts)
-  await page.route("**/api/credentials", async (route) => {
-    return route.fulfill({ json: [] });
-  });
-  await page.route("**/api/credentials/bindings", async (route) => {
+  // Secrets (needed by some page layouts)
+  await page.route("**/api/secrets", async (route) => {
     return route.fulfill({ json: [] });
   });
 
@@ -104,7 +101,7 @@ async function mockAllApis(page: Page) {
       url.includes("/api/workflow/search") ||
       url.includes("/api/metadata/workflow") ||
       url.includes("/api/workflow/exec-abc-123") ||
-      url.includes("/api/credentials") ||
+      url.includes("/api/secrets") ||
       url.includes("/api/metadata/taskdefs") ||
       url.includes("/api/event")
     ) {

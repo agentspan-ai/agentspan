@@ -19,9 +19,9 @@ from pathlib import Path
 
 import pytest
 
-from agentspan.agents import Agent, AgentRuntime, agent_tool, skill
-from agentspan.agents.config_serializer import AgentConfigSerializer
-from agentspan.agents.tool import get_tool_def
+from conductor.ai.agents import Agent, AgentRuntime, agent_tool, skill
+from conductor.ai.agents.config_serializer import AgentConfigSerializer
+from conductor.ai.agents.tool import get_tool_def
 
 pytestmark = pytest.mark.e2e
 
@@ -390,7 +390,7 @@ class TestSuite15Skills:
 
     def test_skill_script_worker_creation(self, skill_dir):
         """Skill scripts produce worker functions that execute with arguments."""
-        from agentspan.agents.skill import create_skill_workers
+        from conductor.ai.agents.skill import create_skill_workers
 
         agent = skill(skill_dir, model=MODEL)
         workers = create_skill_workers(agent)
@@ -404,7 +404,7 @@ class TestSuite15Skills:
 
     def test_skill_script_no_args(self, skill_dir):
         """Script called without arguments returns the default marker."""
-        from agentspan.agents.skill import create_skill_workers
+        from conductor.ai.agents.skill import create_skill_workers
 
         agent = skill(skill_dir, model=MODEL)
         workers = create_skill_workers(agent)
@@ -415,7 +415,7 @@ class TestSuite15Skills:
 
     def test_skill_read_file_worker_creation(self, skill_dir):
         """Resource files produce a deterministic read_skill_file worker."""
-        from agentspan.agents.skill import create_skill_workers
+        from conductor.ai.agents.skill import create_skill_workers
 
         agent = skill(skill_dir, model=MODEL)
         workers = create_skill_workers(agent)

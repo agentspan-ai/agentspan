@@ -12,9 +12,9 @@
 // CLAUDE.md rule: no LLM for validation; write test → make it fail → confirm failure.
 
 using Xunit;
-using Agentspan.Examples;
+using Conductor.AI.Examples;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite4_Termination

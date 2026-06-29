@@ -13,7 +13,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import Agent, CallbackHandler, tool
+from conductor.ai.agents import Agent, CallbackHandler, tool
 
 pytestmark = [pytest.mark.e2e]
 

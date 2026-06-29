@@ -45,8 +45,8 @@ from agents import (
     function_tool,
 )
 
-from agentspan.agents import AgentRuntime
-from agentspan.agents.runtime.config import AgentConfig
+from conductor.ai.agents import AgentRuntime
+from conductor.ai.agents.runtime.config import AgentConfig
 
 # ---------------------------------------------------------------------------
 # Server config — loaded from environment variables

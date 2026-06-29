@@ -79,7 +79,7 @@ If you need fully agentic exploration with no fixed shape, use `Strategy.HANDOFF
 ## The shape
 
 ```python
-from agentspan.agents import Strategy, Agent, plan_execute
+from conductor.ai.agents import Strategy, Agent, plan_execute
 
 # One-call construction (recommended):
 harness = plan_execute(
@@ -149,7 +149,7 @@ The schema PAC consumes:
 For static plans (or plans you build programmatically), import the typed builders:
 
 ```python
-from agentspan.agents import Plan, Step, Op, Generate, Validation, Action
+from conductor.ai.agents import Plan, Step, Op, Generate, Validation, Action
 
 plan = Plan(
     steps=[
@@ -179,7 +179,7 @@ IDE autocomplete, Pylance type-checks, no escaping nightmares.
 Wire the **whole output** of one step into the args of a later step with `Ref("step_id")`. No JSON path, no field selection, no Conductor task-ref naming to memorise.
 
 ```python
-from agentspan.agents import Op, Plan, Ref, Step
+from conductor.ai.agents import Op, Plan, Ref, Step
 
 plan = Plan(steps=[
     Step("fetch", operations=[Op("fetch_data", args={"url": URL})]),
@@ -376,7 +376,7 @@ The planner's `instructions` are fine for "how to emit a plan." They're a poor f
 `planner_context` injects those rules into the planner's user prompt at runtime, as a `## Reference Context` block. Two entry shapes:
 
 ```python
-from agentspan.agents import Agent, Context, Strategy
+from conductor.ai.agents import Agent, Context, Strategy
 
 harness = Agent(
     name="onboarding_harness",

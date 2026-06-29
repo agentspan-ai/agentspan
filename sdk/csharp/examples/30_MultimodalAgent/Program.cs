@@ -15,8 +15,8 @@
 //   - AGENTSPAN_SERVER_URL=http://localhost:6767/api in environment
 //   - AGENTSPAN_LLM_MODEL set in environment (must be a vision model, e.g. openai/gpt-4o)
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // Sample public images for demonstration
 const string sampleImage  = "https://orkes.io/Home-Page-Prompt-to-Workflow-1.png";

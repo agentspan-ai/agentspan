@@ -32,7 +32,7 @@ jobs:
 
       - name: Start server
         run: |
-          java -jar server/build/libs/agentspan-runtime.jar --server.port=6767 &
+          java -jar server/conductor-agentspan-server/build/libs/agentspan-runtime.jar --server.port=6767 &
           echo "SERVER_PID=$!" >> $GITHUB_ENV
           for i in $(seq 1 30); do
             if curl -sf http://localhost:6767/health > /dev/null 2>&1; then

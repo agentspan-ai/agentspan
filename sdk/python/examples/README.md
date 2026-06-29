@@ -51,10 +51,10 @@ See [63_deploy.py](63_deploy.py), [63b_serve.py](63b_serve.py), and
 
 ### 1. Install dependencies
 
-The core examples (numbered files in this directory) only need the `agentspan` SDK:
+The core examples (numbered files in this directory) only need the `conductor-agent-sdk` package:
 
 ```bash
-uv pip install agentspan
+uv pip install conductor-agent-sdk
 ```
 
 Framework-specific examples require additional packages. Install only what you need:
@@ -137,7 +137,7 @@ The `AGENTSPAN_LLM_MODEL` variable uses the `provider/model-name` format. Exampl
 
 | Provider | Model string | API key env var |
 |----------|-------------|-----------------|
-| OpenAI | `openai/gpt-4o-mini` (default) | `OPENAI_API_KEY` |
+| OpenAI | `anthropic/claude-sonnet-4-6` (default) | `OPENAI_API_KEY` |
 | Anthropic | `anthropic/claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
 | Google Gemini | `google_gemini/gemini-2.0-flash` | `GOOGLE_GEMINI_API_KEY` |
 | AWS Bedrock | `aws_bedrock/...` | AWS credentials |
@@ -207,7 +207,6 @@ python examples/adk/01_basic_agent.py
 | 09 | [Human-in-the-Loop](09_human_in_the_loop.py) | Tool approval gate — approve or reject before execution | `approval_required=True` |
 | 09b | [HITL with Feedback](09b_hitl_with_feedback.py) | Custom feedback via `respond()` — editorial review with revision notes | `handle.respond()` |
 | 09c | [HITL with Streaming](09c_hitl_streaming.py) | Real-time event stream with approval pauses | `stream()` + `approve()` |
-| 27 | [User Proxy Agent](27_user_proxy_agent.py) | Human stand-in agent for interactive conversations | `UserProxyAgent` |
 
 ## Guardrails & Safety
 
@@ -340,7 +339,6 @@ Quick lookup — find the right example for any SDK feature:
 | `SemanticMemory` | 25 |
 | `TokenUsage` | 23 |
 | OpenTelemetry tracing | 26 |
-| `UserProxyAgent` | 27 |
 | `GPTAssistantAgent` | 28 |
 | `@worker_task` as tools | 14 |
 | `@tool(external=True)` | 33 |

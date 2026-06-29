@@ -56,7 +56,7 @@ import shutil
 import sys
 import tempfile
 
-from agentspan.agents import AgentRuntime, Generate, Op, Plan, Step, plan_execute, tool
+from conductor.ai.agents import AgentRuntime, Generate, Op, Plan, Step, plan_execute, tool
 
 # ── Configuration ────────────────────────────────────────────────
 WORK_DIR = os.path.join(tempfile.gettempdir(), "plan-execute-solve")
@@ -356,7 +356,7 @@ def main(argv: list[str]) -> None:
         name="sentence_solver",
         tools=[write_candidate, verify_candidates],
         planner_instructions="(planner unused; plans supplied directly each iteration)",
-        model=os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini"),
+        model=os.environ.get("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6"),
     )
 
     with AgentRuntime() as runtime:

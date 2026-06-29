@@ -2,16 +2,16 @@
  * Kitchen Sink — Content Publishing Platform
  *
  * A single mega-workflow that exercises every Agentspan SDK feature (89 features).
- * See docs/sdk-design/kitchen-sink.md for the full scenario specification.
+ * See design/sdk-design/kitchen-sink.md for the full scenario specification.
  *
  * Demonstrates:
  *   - All 8 multi-agent strategies
  *   - All tool types (worker, http, mcp, api, agent_tool, human, media, RAG)
  *   - All guardrail types (regex, llm, custom, external) with all OnFail modes
- *   - HITL (approve, reject, feedback, UserProxyAgent, human_tool)
+ *   - HITL (approve, reject, feedback, human_tool)
  *   - Memory (conversation + semantic)
  *   - Code execution (local, docker, jupyter, serverless)
- *   - Credentials (all isolation modes, CredentialFile)
+ *   - Credentials (tool-declared via credentials: string[], getCredential())
  *   - Streaming (sync), termination, handoffs, callbacks
  *   - Structured output, prompt templates, agent chaining, gate conditions
  *   - Extended thinking, planner mode, required_tools, include_contents
@@ -116,22 +116,20 @@ import {
   getCredential,
 
   // Extended
-  UserProxyAgent,
   GPTAssistantAgent,
 
   // Discovery & Tracing
   discoverAgents,
   isTracingEnabled,
-} from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 
 import type {
   GuardrailResult,
   ToolContext,
-  CredentialFile,
   CodeExecutionConfig,
   CliConfig,
   AgentResult,
-} from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 
 // ── Settings ─────────────────────────────────────────────
 
@@ -213,9 +211,8 @@ const intakeRouter = new Agent({
 // STAGE 2: Research Team
 // Features: #4 Parallel, #76 scatter_gather, #10 native tool,
 //   #11 http_tool, #12 mcp_tool, #89 api_tool, #18 ToolContext,
-//   #19 tool credentials, #21 external tool, #52 isolated creds,
-//   #53 in-process creds, #55 HTTP header creds, #56 MCP creds,
-//   CredentialFile
+//   #19 tool credentials, #21 external tool,
+//   #53 in-process creds, #55 HTTP header creds, #56 MCP creds
 // ═══════════════════════════════════════════════════════════════════════
 
 // -- Native tool with ToolContext + file-based credentials (#10, #18, #19, #52) --
@@ -240,7 +237,7 @@ const researchDatabase = tool(
       },
       required: ['query'],
     },
-    credentials: [{ envVar: 'RESEARCH_API_KEY' } as CredentialFile],
+    credentials: ['RESEARCH_API_KEY'],
   },
 );
 
@@ -265,7 +262,6 @@ const analyzeTrends = tool(
       },
       required: ['topic'],
     },
-    isolated: false,
     credentials: ['ANALYTICS_KEY'],
   },
 );
@@ -464,7 +460,7 @@ const piiGuardrail = new RegexGuardrail({
 // -- LLM guardrail (on_fail=FIX) (#23, #28) --
 const biasGuardrail = new LLMGuardrail({
   name: 'bias_detector',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   policy: 'Check for biased language or stereotypes. If found, provide corrected version.',
   position: 'output',
   onFail: 'fix',
@@ -536,7 +532,7 @@ const reviewAgent = new Agent({
 // ═══════════════════════════════════════════════════════════════════════
 // STAGE 5: Editorial Approval
 // Features: #17 approval_required, #40 approve, #41 reject,
-//   #42 feedback/respond, #14 human_tool, #65 UserProxyAgent
+//   #42 feedback/respond, #14 human_tool
 // ═══════════════════════════════════════════════════════════════════════
 
 const publishArticle = tool(
@@ -569,18 +565,11 @@ const editorialQuestion = humanTool({
   },
 });
 
-const editorialReviewer = new UserProxyAgent({
-  name: 'editorial_reviewer',
-  mode: 'TERMINATE',
-  instructions: 'You are the editorial reviewer. Provide feedback on article quality.',
-});
-
 const editorialAgent = new Agent({
   name: 'editorial_approval',
   model: LLM_MODEL,
   instructions: 'Review the article, ask questions, get approval before publishing.',
   tools: [publishArticle, editorialQuestion],
-  agents: [editorialReviewer],
   strategy: 'handoff',
 });
 
@@ -994,7 +983,6 @@ export {
   editorialAgent,
   publishArticle,
   editorialQuestion,
-  editorialReviewer,
 
   // Stage 6
   toneDebate,

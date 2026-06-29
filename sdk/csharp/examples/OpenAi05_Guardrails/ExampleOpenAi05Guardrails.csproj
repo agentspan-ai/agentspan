@@ -5,11 +5,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>Agentspan.Examples.OpenAi05</RootNamespace>
+    <RootNamespace>Conductor.AI.Examples.OpenAi05</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Agentspan/Agentspan.csproj" />
-    <ProjectReference Include="../../src/Agentspan.OpenAI/Agentspan.OpenAI.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI/Conductor.AI.csproj" />
+    <ProjectReference Include="../../src/Conductor.AI.OpenAI/Conductor.AI.OpenAI.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/Settings.cs" />

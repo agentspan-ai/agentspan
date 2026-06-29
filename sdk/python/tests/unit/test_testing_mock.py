@@ -1,10 +1,10 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for agentspan.agents.testing.mock."""
+"""Tests for conductor.ai.agents.testing.mock."""
 
-from agentspan.agents.result import EventType
-from agentspan.agents.testing.mock import MockEvent, mock_run
+from conductor.ai.agents.result import EventType
+from conductor.ai.agents.testing.mock import MockEvent, mock_run
 
 # ── Helpers ────────────────────────────────────────────────────────────
 

@@ -17,7 +17,7 @@ Requirements:
 
 from conductor.client.worker.worker_task import worker_task
 
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 

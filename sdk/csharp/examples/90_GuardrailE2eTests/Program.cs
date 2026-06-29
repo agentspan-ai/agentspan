@@ -45,8 +45,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 //   - OPENAI_API_KEY set in environment (for LLM guardrails)
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Constants ─────────────────────────────────────────────────────────
 

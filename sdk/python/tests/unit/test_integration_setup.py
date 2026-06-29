@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentspan.agents._internal.provider_registry import (
+from conductor.ai.agents._internal.provider_registry import (
     PROVIDER_REGISTRY,
     get_provider_spec,
 )
@@ -67,7 +67,7 @@ class TestEnsureModel:
         """Create an AgentRuntime with mocked Conductor clients."""
         with (
             patch("conductor.client.orkes_clients.OrkesClients") as MockClients,
-            patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True),
+            patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True),
         ):
             mock_clients = MagicMock()
             MockClients.return_value = mock_clients
@@ -75,8 +75,8 @@ class TestEnsureModel:
             mock_integration_client = MagicMock()
             mock_clients.get_integration_client.return_value = mock_integration_client
 
-            from agentspan.agents.runtime.config import AgentConfig
-            from agentspan.agents.runtime.runtime import AgentRuntime
+            from conductor.ai.agents.runtime.config import AgentConfig
+            from conductor.ai.agents.runtime.runtime import AgentRuntime
 
             config = AgentConfig(
                 server_url="http://localhost:6767/api",
@@ -236,15 +236,15 @@ class TestEnsureModelsForAgent:
         """Create an AgentRuntime with mocked clients."""
         with (
             patch("conductor.client.orkes_clients.OrkesClients") as MockClients,
-            patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True),
+            patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True),
         ):
             mock_clients = MagicMock()
             MockClients.return_value = mock_clients
             mock_integration_client = MagicMock()
             mock_clients.get_integration_client.return_value = mock_integration_client
 
-            from agentspan.agents.runtime.config import AgentConfig
-            from agentspan.agents.runtime.runtime import AgentRuntime
+            from conductor.ai.agents.runtime.config import AgentConfig
+            from conductor.ai.agents.runtime.runtime import AgentRuntime
 
             config = AgentConfig(
                 server_url="http://localhost:6767/api",
@@ -254,7 +254,7 @@ class TestEnsureModelsForAgent:
             return runtime, mock_integration_client
 
     def test_single_agent(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         runtime, mock_client = self._make_runtime()
 
@@ -267,7 +267,7 @@ class TestEnsureModelsForAgent:
         mock_client.save_integration.assert_called_once()
 
     def test_multi_agent_tree(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         runtime, mock_client = self._make_runtime()
 
@@ -293,7 +293,7 @@ class TestEnsureModelsForAgent:
         assert "anthropic/claude-sonnet-4-20250514" in runtime._ensured_models
 
     def test_deduplicates_same_model(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         runtime, mock_client = self._make_runtime()
 
@@ -319,14 +319,14 @@ class TestAutoRegisterInPrepare:
     def test_prepare_calls_ensure_when_enabled(self):
         with (
             patch("conductor.client.orkes_clients.OrkesClients") as MockClients,
-            patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True),
+            patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True),
         ):
             mock_clients = MagicMock()
             MockClients.return_value = mock_clients
 
-            from agentspan.agents.agent import Agent
-            from agentspan.agents.runtime.config import AgentConfig
-            from agentspan.agents.runtime.runtime import AgentRuntime
+            from conductor.ai.agents.agent import Agent
+            from conductor.ai.agents.runtime.config import AgentConfig
+            from conductor.ai.agents.runtime.runtime import AgentRuntime
 
             config = AgentConfig(
                 server_url="http://localhost:6767/api",
@@ -344,14 +344,14 @@ class TestAutoRegisterInPrepare:
     def test_prepare_skips_ensure_when_disabled(self):
         with (
             patch("conductor.client.orkes_clients.OrkesClients") as MockClients,
-            patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True),
+            patch("conductor.ai.agents.runtime.worker_manager.TaskHandler", create=True),
         ):
             mock_clients = MagicMock()
             MockClients.return_value = mock_clients
 
-            from agentspan.agents.agent import Agent
-            from agentspan.agents.runtime.config import AgentConfig
-            from agentspan.agents.runtime.runtime import AgentRuntime
+            from conductor.ai.agents.agent import Agent
+            from conductor.ai.agents.runtime.config import AgentConfig
+            from conductor.ai.agents.runtime.runtime import AgentRuntime
 
             config = AgentConfig(
                 server_url="http://localhost:6767/api",
@@ -371,27 +371,27 @@ class TestAgentConfigAutoRegister:
     """Test the auto_register_integrations config field."""
 
     def test_default_is_false(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         config = AgentConfig()
         assert config.auto_register_integrations is False
 
     def test_env_reads_flag(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         with patch.dict("os.environ", {"AGENTSPAN_INTEGRATIONS_AUTO_REGISTER": "true"}):
             config = AgentConfig.from_env()
             assert config.auto_register_integrations is True
 
     def test_false_by_default(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         with patch.dict("os.environ", {}, clear=True):
             config = AgentConfig.from_env()
             assert config.auto_register_integrations is False
 
     def test_various_truthy_values(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
 
         for val in ("true", "True", "TRUE", "1", "yes"):
             with patch.dict("os.environ", {"AGENTSPAN_INTEGRATIONS_AUTO_REGISTER": val}):

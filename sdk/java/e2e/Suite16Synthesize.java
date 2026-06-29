@@ -1,18 +1,19 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.annotations.Tool;
-import ai.agentspan.enums.Strategy;
-import ai.agentspan.internal.ToolRegistry;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.enums.Strategy;
+import org.conductoross.conductor.ai.internal.ToolRegistry;
+import org.conductoross.conductor.ai.model.CompileResponse;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 10: synthesize flag — structural plan() assertions.
@@ -29,7 +30,7 @@ class Suite16Synthesize extends BaseTest {
 
     @BeforeAll
     static void setup() {
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -82,18 +83,18 @@ class Suite16Synthesize extends BaseTest {
                 .agents(List.of(makeSubAgent("e2e_sub_alpha"), makeSubAgent("e2e_sub_beta")))
                 .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         // synthesize defaults to true — must NOT appear in serialized config (we only emit when false)
-        assertFalse(agentDef.containsKey("synthesize"),
+        assertFalse(
+                agentDef.containsKey("synthesize"),
                 "[default handoff] agentDef should NOT contain 'synthesize' when default. Got: " + agentDef.keySet());
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> wfDef = (Map<String, Object>) plan.get("workflowDef");
+        Map<String, Object> wfDef = plan.getWorkflowDef();
         long finalCount = countFinalTasks(wfDef, "e2e_synth_default_handoff");
-        assertEquals(1, finalCount,
-                "[default handoff] expected exactly 1 _final task, got " + finalCount);
+        assertEquals(1, finalCount, "[default handoff] expected exactly 1 _final task, got " + finalCount);
     }
 
     /**
@@ -113,17 +114,19 @@ class Suite16Synthesize extends BaseTest {
                 .synthesize(false)
                 .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
-        assertEquals(Boolean.FALSE, agentDef.get("synthesize"),
+        assertEquals(
+                Boolean.FALSE,
+                agentDef.get("synthesize"),
                 "[synthesize=false handoff] agentDef.synthesize must be false. Got: " + agentDef.get("synthesize"));
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> wfDef = (Map<String, Object>) plan.get("workflowDef");
+        Map<String, Object> wfDef = plan.getWorkflowDef();
         long finalCount = countFinalTasks(wfDef, "e2e_synth_false_handoff");
-        assertEquals(0, finalCount,
-                "[synthesize=false handoff] workflow must NOT have a _final task, got " + finalCount);
+        assertEquals(
+                0, finalCount, "[synthesize=false handoff] workflow must NOT have a _final task, got " + finalCount);
     }
 
     /**
@@ -143,17 +146,19 @@ class Suite16Synthesize extends BaseTest {
                 .synthesize(false)
                 .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
-        assertEquals(Boolean.FALSE, agentDef.get("synthesize"),
+        assertEquals(
+                Boolean.FALSE,
+                agentDef.get("synthesize"),
                 "[synthesize=false router] agentDef.synthesize must be false. Got: " + agentDef.get("synthesize"));
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> wfDef = (Map<String, Object>) plan.get("workflowDef");
+        Map<String, Object> wfDef = plan.getWorkflowDef();
         long finalCount = countFinalTasks(wfDef, "e2e_synth_false_router");
-        assertEquals(0, finalCount,
-                "[synthesize=false router] workflow must NOT have a _final task, got " + finalCount);
+        assertEquals(
+                0, finalCount, "[synthesize=false router] workflow must NOT have a _final task, got " + finalCount);
     }
 
     /**
@@ -173,16 +178,17 @@ class Suite16Synthesize extends BaseTest {
                 .synthesize(false)
                 .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
-        assertEquals(Boolean.FALSE, agentDef.get("synthesize"),
+        assertEquals(
+                Boolean.FALSE,
+                agentDef.get("synthesize"),
                 "[synthesize=false swarm] agentDef.synthesize must be false. Got: " + agentDef.get("synthesize"));
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> wfDef = (Map<String, Object>) plan.get("workflowDef");
+        Map<String, Object> wfDef = plan.getWorkflowDef();
         long finalCount = countFinalTasks(wfDef, "e2e_synth_false_swarm");
-        assertEquals(0, finalCount,
-                "[synthesize=false swarm] workflow must NOT have a _final task, got " + finalCount);
+        assertEquals(0, finalCount, "[synthesize=false swarm] workflow must NOT have a _final task, got " + finalCount);
     }
 }

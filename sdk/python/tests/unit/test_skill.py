@@ -1,4 +1,4 @@
-"""Tests for agentspan.agents.skill module."""
+"""Tests for conductor.ai.agents.skill module."""
 
 import pytest
 from pathlib import Path
@@ -13,7 +13,7 @@ class TestParseSkillMd:
     """Test SKILL.md frontmatter parsing."""
 
     def test_parse_frontmatter_extracts_name(self):
-        from agentspan.agents.skill import parse_frontmatter
+        from conductor.ai.agents.skill import parse_frontmatter
 
         content = "---\nname: my-skill\ndescription: A test skill.\n---\n# Body"
         result = parse_frontmatter(content)
@@ -21,21 +21,21 @@ class TestParseSkillMd:
         assert result["description"] == "A test skill."
 
     def test_parse_frontmatter_extracts_metadata(self):
-        from agentspan.agents.skill import parse_frontmatter
+        from conductor.ai.agents.skill import parse_frontmatter
 
         content = "---\nname: x\ndescription: y\nmetadata:\n  author: test\n---\n"
         result = parse_frontmatter(content)
         assert result["metadata"] == {"author": "test"}
 
     def test_parse_frontmatter_missing_name_raises(self):
-        from agentspan.agents.skill import parse_frontmatter
+        from conductor.ai.agents.skill import parse_frontmatter
 
         content = "---\ndescription: no name\n---\n"
         with pytest.raises(ValueError, match="missing required 'name'"):
             parse_frontmatter(content)
 
     def test_extract_body(self):
-        from agentspan.agents.skill import extract_body
+        from conductor.ai.agents.skill import extract_body
 
         content = "---\nname: x\ndescription: y\n---\n# Body\nHello"
         body = extract_body(content)
@@ -46,35 +46,35 @@ class TestDetectLanguage:
     """Test script language detection."""
 
     def test_python_extension(self, tmp_path):
-        from agentspan.agents.skill import detect_language
+        from conductor.ai.agents.skill import detect_language
 
         f = tmp_path / "script.py"
         f.write_text("print('hi')")
         assert detect_language(f) == "python"
 
     def test_bash_extension(self, tmp_path):
-        from agentspan.agents.skill import detect_language
+        from conductor.ai.agents.skill import detect_language
 
         f = tmp_path / "script.sh"
         f.write_text("echo hi")
         assert detect_language(f) == "bash"
 
     def test_node_extension(self, tmp_path):
-        from agentspan.agents.skill import detect_language
+        from conductor.ai.agents.skill import detect_language
 
         f = tmp_path / "script.js"
         f.write_text("console.log('hi')")
         assert detect_language(f) == "node"
 
     def test_no_extension_defaults_bash(self, tmp_path):
-        from agentspan.agents.skill import detect_language
+        from conductor.ai.agents.skill import detect_language
 
         f = tmp_path / "script"
         f.write_text("echo hi")
         assert detect_language(f) == "bash"
 
     def test_shebang_detection(self, tmp_path):
-        from agentspan.agents.skill import detect_language
+        from conductor.ai.agents.skill import detect_language
 
         f = tmp_path / "script"
         f.write_text("#!/usr/bin/env python3\nprint('hi')")
@@ -85,7 +85,7 @@ class TestSkillDiscovery:
     """Test convention-based skill directory discovery."""
 
     def test_simple_skill_loads(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
         assert agent.name == "simple-skill"
@@ -93,19 +93,19 @@ class TestSkillDiscovery:
         assert "# Simple Skill" in agent._framework_config["skillMd"]
 
     def test_simple_skill_has_no_sub_agents(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
         assert agent._framework_config["agentFiles"] == {}
 
     def test_simple_skill_has_no_scripts(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
         assert agent._framework_config["scripts"] == {}
 
     def test_dg_skill_discovers_sub_agents(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "dg-skill", model="openai/gpt-4o")
         agent_files = agent._framework_config["agentFiles"]
@@ -115,13 +115,13 @@ class TestSkillDiscovery:
         assert "You Are Dinesh" in agent_files["dinesh"]
 
     def test_dg_skill_discovers_resource_files(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "dg-skill", model="openai/gpt-4o")
         assert "comic-template.html" in agent._framework_config["resourceFiles"]
 
     def test_script_skill_discovers_scripts(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "script-skill", model="openai/gpt-4o")
         scripts = agent._framework_config["scripts"]
@@ -130,19 +130,19 @@ class TestSkillDiscovery:
         assert scripts["hello"]["filename"] == "hello.py"
 
     def test_missing_skill_md_raises(self, tmp_path):
-        from agentspan.agents.skill import SkillLoadError, skill
+        from conductor.ai.agents.skill import SkillLoadError, skill
 
         with pytest.raises(SkillLoadError, match="SKILL.md not found"):
             skill(tmp_path, model="openai/gpt-4o")
 
     def test_model_stored_in_config(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "simple-skill", model="anthropic/claude-sonnet-4-6")
         assert agent._framework_config["model"] == "anthropic/claude-sonnet-4-6"
 
     def test_agent_models_stored_in_config(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(
             FIXTURES / "dg-skill",
@@ -152,8 +152,8 @@ class TestSkillDiscovery:
         assert agent._framework_config["agentModels"]["gilfoyle"] == "openai/gpt-4o"
 
     def test_skill_returns_agent_type(self):
-        from agentspan.agents import Agent
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
         assert isinstance(agent, Agent)
@@ -163,20 +163,20 @@ class TestSkillDiscovery:
 
 
 class TestPublicAPI:
-    """Test that skill functions are importable from agentspan.agents."""
+    """Test that skill functions are importable from conductor.ai.agents."""
 
     def test_skill_importable(self):
-        from agentspan.agents import skill
+        from conductor.ai.agents import skill
 
         assert callable(skill)
 
     def test_load_skills_importable(self):
-        from agentspan.agents import load_skills
+        from conductor.ai.agents import load_skills
 
         assert callable(load_skills)
 
     def test_skill_load_error_importable(self):
-        from agentspan.agents import SkillLoadError
+        from conductor.ai.agents import SkillLoadError
 
         assert issubclass(SkillLoadError, Exception)
 
@@ -188,15 +188,15 @@ class TestSerialization:
     """Test that skill agents serialize with framework='skill'."""
 
     def test_detect_framework_returns_skill(self):
-        from agentspan.agents.frameworks.serializer import detect_framework
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.frameworks.serializer import detect_framework
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
         assert detect_framework(agent) == "skill"
 
     def test_regular_agent_not_detected_as_skill(self):
-        from agentspan.agents import Agent
-        from agentspan.agents.frameworks.serializer import detect_framework
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.frameworks.serializer import detect_framework
 
         agent = Agent(name="regular", model="openai/gpt-4o")
         assert detect_framework(agent) != "skill"
@@ -209,7 +209,7 @@ class TestWorkerRegistration:
     """Test skill worker registration."""
 
     def test_script_worker_created(self):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         agent = skill(FIXTURES / "script-skill", model="openai/gpt-4o")
         workers = create_skill_workers(agent)
@@ -217,7 +217,7 @@ class TestWorkerRegistration:
         assert "script-skill__hello" in worker_names
 
     def test_read_skill_file_worker_created(self):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         agent = skill(FIXTURES / "dg-skill", model="openai/gpt-4o")
         workers = create_skill_workers(agent)
@@ -225,7 +225,7 @@ class TestWorkerRegistration:
         assert "dg-skill__read_skill_file" in worker_names
 
     def test_read_skill_file_only_allows_known_files(self):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         agent = skill(FIXTURES / "dg-skill", model="openai/gpt-4o")
         workers = create_skill_workers(agent)
@@ -235,7 +235,7 @@ class TestWorkerRegistration:
         assert "{{PANELS}}" in result
 
     def test_read_skill_file_rejects_unknown_files(self):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         agent = skill(FIXTURES / "dg-skill", model="openai/gpt-4o")
         workers = create_skill_workers(agent)
@@ -244,7 +244,7 @@ class TestWorkerRegistration:
         assert "ERROR" in result
 
     def test_script_worker_executes(self):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         agent = skill(FIXTURES / "script-skill", model="openai/gpt-4o")
         workers = create_skill_workers(agent)
@@ -253,7 +253,7 @@ class TestWorkerRegistration:
         assert "Hello, Agentspan!" in result
 
     def test_no_workers_for_instruction_only_skill(self):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
         workers = create_skill_workers(agent)
@@ -270,7 +270,7 @@ class TestLoadSkills:
     """Test batch loading of skills."""
 
     def test_load_skills_finds_all(self):
-        from agentspan.agents.skill import load_skills
+        from conductor.ai.agents.skill import load_skills
 
         skills = load_skills(FIXTURES, model="openai/gpt-4o")
         assert "simple-skill" in skills
@@ -278,15 +278,15 @@ class TestLoadSkills:
         assert "script-skill" in skills
 
     def test_load_skills_returns_agents(self):
-        from agentspan.agents import Agent
-        from agentspan.agents.skill import load_skills
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.skill import load_skills
 
         skills = load_skills(FIXTURES, model="openai/gpt-4o")
         for name, agent in skills.items():
             assert isinstance(agent, Agent)
 
     def test_load_skills_per_skill_model_override(self):
-        from agentspan.agents.skill import load_skills
+        from conductor.ai.agents.skill import load_skills
 
         skills = load_skills(
             FIXTURES,
@@ -301,7 +301,7 @@ class TestCrossSkillResolution:
     """Test cross-skill reference resolution."""
 
     def test_cross_ref_resolved_from_siblings(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "cross-ref-skill", model="openai/gpt-4o")
         cross_refs = agent._framework_config["crossSkillRefs"]
@@ -309,7 +309,7 @@ class TestCrossSkillResolution:
         assert "# Simple Skill" in cross_refs["simple-skill"]["skillMd"]
 
     def test_cross_ref_not_found_is_empty(self, tmp_path):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         # Create a skill referencing a nonexistent skill
         skill_dir = tmp_path / "lonely-skill"
@@ -323,7 +323,7 @@ class TestCrossSkillResolution:
         assert "nonexistent-skill" not in agent._framework_config["crossSkillRefs"]
 
     def test_cross_ref_resolves_nested_refs(self, tmp_path):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         parent = tmp_path / "parent-skill"
         child = tmp_path / "child-skill"
@@ -396,7 +396,7 @@ class TestAutoSplitSections:
     """Test auto-splitting of large SKILL.md into sections."""
 
     def test_large_skill_has_sections(self, tmp_path):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = _make_large_skill_dir(tmp_path)
         agent = skill(skill_dir, model="openai/gpt-4o")
@@ -404,7 +404,7 @@ class TestAutoSplitSections:
         assert len(agent._skill_sections) == 5
 
     def test_section_names_are_slugified(self, tmp_path):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = _make_large_skill_dir(tmp_path)
         agent = skill(skill_dir, model="openai/gpt-4o")
@@ -415,7 +415,7 @@ class TestAutoSplitSections:
         assert "configuration-guide" in agent._skill_sections
 
     def test_sections_contain_content(self, tmp_path):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = _make_large_skill_dir(tmp_path)
         agent = skill(skill_dir, model="openai/gpt-4o")
@@ -424,7 +424,7 @@ class TestAutoSplitSections:
         assert "Rule 1 for Workflow Definitions" in wf
 
     def test_resource_files_include_sections(self, tmp_path):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = _make_large_skill_dir(tmp_path)
         agent = skill(skill_dir, model="openai/gpt-4o")
@@ -435,14 +435,14 @@ class TestAutoSplitSections:
         assert "references/guide.md" in rf
 
     def test_small_skill_has_no_sections(self):
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
         sections = getattr(agent, "_skill_sections", {})
         assert sections == {}
 
     def test_read_worker_returns_section_content(self, tmp_path):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         skill_dir = _make_large_skill_dir(tmp_path)
         agent = skill(skill_dir, model="openai/gpt-4o")
@@ -453,7 +453,7 @@ class TestAutoSplitSections:
         assert "Rule 1 for Workflow Definitions" in result
 
     def test_read_worker_still_reads_real_files(self, tmp_path):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         skill_dir = _make_large_skill_dir(tmp_path)
         agent = skill(skill_dir, model="openai/gpt-4o")
@@ -463,7 +463,7 @@ class TestAutoSplitSections:
         assert "# Guide" in result
 
     def test_read_worker_rejects_unknown_section(self, tmp_path):
-        from agentspan.agents.skill import create_skill_workers, skill
+        from conductor.ai.agents.skill import create_skill_workers, skill
 
         skill_dir = _make_large_skill_dir(tmp_path)
         agent = skill(skill_dir, model="openai/gpt-4o")
@@ -481,7 +481,7 @@ class TestSkillParams:
 
     def test_frontmatter_params_stored_as_defaults(self, tmp_path):
         """Params declared in frontmatter are stored in defaultParams."""
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = tmp_path / "param-skill"
         skill_dir.mkdir()
@@ -499,7 +499,7 @@ class TestSkillParams:
 
     def test_frontmatter_params_bare_values(self, tmp_path):
         """Bare values (not dicts) in params are stored directly."""
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = tmp_path / "bare-skill"
         skill_dir.mkdir()
@@ -515,14 +515,14 @@ class TestSkillParams:
 
     def test_no_frontmatter_params_empty_defaults(self):
         """Skills without params in frontmatter have empty defaultParams."""
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
         assert agent._framework_config["defaultParams"] == {}
 
     def test_runtime_params_override_defaults(self, tmp_path):
         """Runtime params override frontmatter defaults."""
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = tmp_path / "override-skill"
         skill_dir.mkdir()
@@ -535,7 +535,7 @@ class TestSkillParams:
 
     def test_runtime_params_add_new_keys(self, tmp_path):
         """Runtime params can add keys not in frontmatter defaults."""
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = tmp_path / "extra-skill"
         skill_dir.mkdir()
@@ -550,7 +550,7 @@ class TestSkillParams:
 
     def test_merged_params_uses_defaults_when_no_override(self, tmp_path):
         """Merged params include defaults for keys not overridden."""
-        from agentspan.agents.skill import skill
+        from conductor.ai.agents.skill import skill
 
         skill_dir = tmp_path / "merge-skill"
         skill_dir.mkdir()
@@ -567,7 +567,7 @@ class TestFormatSkillParams:
     """Test prompt formatting with skill parameters."""
 
     def test_format_skill_params_produces_prefix(self):
-        from agentspan.agents.skill import format_skill_params
+        from conductor.ai.agents.skill import format_skill_params
 
         result = format_skill_params({"rounds": 5, "style": "verbose"})
         assert "[Skill Parameters]" in result
@@ -575,12 +575,12 @@ class TestFormatSkillParams:
         assert "style: verbose" in result
 
     def test_format_skill_params_empty_returns_empty(self):
-        from agentspan.agents.skill import format_skill_params
+        from conductor.ai.agents.skill import format_skill_params
 
         assert format_skill_params({}) == ""
 
     def test_format_prompt_with_params(self):
-        from agentspan.agents.skill import format_prompt_with_params
+        from conductor.ai.agents.skill import format_prompt_with_params
 
         result = format_prompt_with_params("Review this code", {"rounds": 5})
         assert result.startswith("[Skill Parameters]")
@@ -589,13 +589,13 @@ class TestFormatSkillParams:
         assert result.endswith("Review this code")
 
     def test_format_prompt_with_params_empty_passthrough(self):
-        from agentspan.agents.skill import format_prompt_with_params
+        from conductor.ai.agents.skill import format_prompt_with_params
 
         result = format_prompt_with_params("Review this code", {})
         assert result == "Review this code"
 
     def test_format_prompt_with_multiple_params(self):
-        from agentspan.agents.skill import format_prompt_with_params
+        from conductor.ai.agents.skill import format_prompt_with_params
 
         result = format_prompt_with_params(
             "Review this code", {"rounds": 5, "style": "verbose"}

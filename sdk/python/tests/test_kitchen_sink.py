@@ -15,8 +15,8 @@ import pytest
 # Add examples to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "examples"))
 
-from agentspan.agents import FinishReason, Status, Strategy
-from agentspan.agents.testing import (
+from conductor.ai.agents import FinishReason, Status, Strategy
+from conductor.ai.agents.testing import (
     CorrectnessEval,
     EvalCase,
     MockEvent,
@@ -136,7 +136,7 @@ class TestKitchenSinkStructure:
         assert analytics_agent.output_type is not None
 
     def test_external_tool_is_marked(self):
-        from agentspan.agents.tool import get_tool_def
+        from conductor.ai.agents.tool import get_tool_def
         from kitchen_sink import external_research_aggregator
 
         td = get_tool_def(external_research_aggregator)
@@ -153,18 +153,18 @@ class TestKitchenSinkStructure:
         assert gpt_assistant.name == "openai_research_assistant"
 
     def test_agent_tool_exists(self):
-        from agentspan.agents.tool import get_tool_def
+        from conductor.ai.agents.tool import get_tool_def
         from kitchen_sink import research_subtool
 
         td = get_tool_def(research_subtool)
         assert td.name == "quick_research"
 
     def test_credential_file_used(self):
-        from agentspan.agents.tool import get_tool_def
+        from conductor.ai.agents.tool import get_tool_def
         from kitchen_sink import research_database
 
         td = get_tool_def(research_database)
-        assert td.credentials is not None
+        assert td.secrets is not None
 
 
 class TestKitchenSinkHelpers:

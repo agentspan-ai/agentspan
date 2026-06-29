@@ -1,21 +1,21 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.enums.AgentStatus;
-import ai.agentspan.model.AgentResult;
-import ai.agentspan.termination.MaxMessageTermination;
-import ai.agentspan.termination.TextMentionTermination;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.enums.AgentStatus;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.termination.MaxMessageTermination;
+import org.conductoross.conductor.ai.termination.TextMentionTermination;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 4: Termination — termination condition tests.
@@ -36,7 +36,7 @@ class Suite12TerminationGates extends BaseTest {
     static void setup() {
         // Use BASE_URL (without /api suffix) since AgentConfig + HttpApi
         // already prepend /api to every path.
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -58,19 +58,21 @@ class Suite12TerminationGates extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_max_message_termination() {
         Agent agent = Agent.builder()
-            .name("e2e_java_max_msg_agent")
-            .model(MODEL)
-            .instructions("After each message, respond with a short reply. Never stop on your own.")
-            .maxTurns(25)
-            .termination(MaxMessageTermination.of(3))
-            .build();
+                .name("e2e_java_max_msg_agent")
+                .model(MODEL)
+                .instructions("After each message, respond with a short reply. Never stop on your own.")
+                .maxTurns(25)
+                .termination(MaxMessageTermination.of(3))
+                .build();
 
         AgentResult result = runtime.run(agent, "Start the conversation");
 
-        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
-            "Agent should COMPLETE when MaxMessageTermination is reached. "
-            + "Got: " + result.getStatus()
-            + ". Termination gates complete the loop, not fail it.");
+        assertEquals(
+                AgentStatus.COMPLETED,
+                result.getStatus(),
+                "Agent should COMPLETE when MaxMessageTermination is reached. "
+                        + "Got: " + result.getStatus()
+                        + ". Termination gates complete the loop, not fail it.");
 
         // Fetch the workflow and count DO_WHILE iterations
         String executionId = result.getExecutionId();
@@ -82,9 +84,8 @@ class Suite12TerminationGates extends BaseTest {
 
         // Find DO_WHILE tasks (the loop wrapper)
         List<Map<String, Object>> doWhileTasks = allTasks.stream()
-            .filter(t -> "DO_WHILE".equals(t.get("taskType"))
-                || "DO_WHILE".equals(t.get("type")))
-            .collect(Collectors.toList());
+                .filter(t -> "DO_WHILE".equals(t.get("taskType")) || "DO_WHILE".equals(t.get("type")))
+                .collect(Collectors.toList());
 
         if (!doWhileTasks.isEmpty()) {
             // Each DO_WHILE task has an 'iteration' field
@@ -92,10 +93,11 @@ class Suite12TerminationGates extends BaseTest {
             Object iterationObj = loopTask.get("iteration");
             if (iterationObj instanceof Number) {
                 int iterations = ((Number) iterationObj).intValue();
-                assertTrue(iterations <= 5,
-                    "DO_WHILE loop ran " + iterations + " iterations, expected <= 5. "
-                    + "COUNTERFACTUAL: if MaxMessageTermination doesn't work, "
-                    + "agent runs all 25 turns.");
+                assertTrue(
+                        iterations <= 5,
+                        "DO_WHILE loop ran " + iterations + " iterations, expected <= 5. "
+                                + "COUNTERFACTUAL: if MaxMessageTermination doesn't work, "
+                                + "agent runs all 25 turns.");
             }
         }
         // Even if we can't find the DO_WHILE task, the COMPLETED status is the key assertion
@@ -111,17 +113,19 @@ class Suite12TerminationGates extends BaseTest {
     @Timeout(value = 120, unit = TimeUnit.SECONDS)
     void test_invalid_model_fails() {
         Agent agent = Agent.builder()
-            .name("e2e_java_bad_model")
-            .model("nonexistent/xyz-model-does-not-exist")
-            .instructions("This agent should never execute successfully.")
-            .build();
+                .name("e2e_java_bad_model")
+                .model("nonexistent/xyz-model-does-not-exist")
+                .instructions("This agent should never execute successfully.")
+                .build();
 
         AgentResult result = runtime.run(agent, "Hello.");
 
-        assertNotEquals(AgentStatus.COMPLETED, result.getStatus(),
-            "[invalid model] Expected FAILED or TERMINATED for nonexistent model, "
-            + "got COMPLETED. The server should reject unknown models. "
-            + "COUNTERFACTUAL: if model validation is broken, this returns COMPLETED.");
+        assertNotEquals(
+                AgentStatus.COMPLETED,
+                result.getStatus(),
+                "[invalid model] Expected FAILED or TERMINATED for nonexistent model, "
+                        + "got COMPLETED. The server should reject unknown models. "
+                        + "COUNTERFACTUAL: if model validation is broken, this returns COMPLETED.");
     }
 
     /**
@@ -136,19 +140,21 @@ class Suite12TerminationGates extends BaseTest {
     @SuppressWarnings("unchecked")
     void test_text_mention_termination() {
         Agent agent = Agent.builder()
-            .name("e2e_java_text_term_agent")
-            .model(MODEL)
-            .instructions("Always include the text DONE_E2E in every response.")
-            .maxTurns(25)
-            .termination(TextMentionTermination.of("DONE_E2E"))
-            .build();
+                .name("e2e_java_text_term_agent")
+                .model(MODEL)
+                .instructions("Always include the text DONE_E2E in every response.")
+                .maxTurns(25)
+                .termination(TextMentionTermination.of("DONE_E2E"))
+                .build();
 
         AgentResult result = runtime.run(agent, "Begin");
 
-        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
-            "Agent should COMPLETE when TextMentionTermination is triggered. "
-            + "Got: " + result.getStatus()
-            + ". Termination gates complete the loop, not fail it.");
+        assertEquals(
+                AgentStatus.COMPLETED,
+                result.getStatus(),
+                "Agent should COMPLETE when TextMentionTermination is triggered. "
+                        + "Got: " + result.getStatus()
+                        + ". Termination gates complete the loop, not fail it.");
 
         // Fetch the workflow and check iterations stayed low
         String executionId = result.getExecutionId();
@@ -160,19 +166,19 @@ class Suite12TerminationGates extends BaseTest {
 
         // Find DO_WHILE tasks
         List<Map<String, Object>> doWhileTasks = allTasks.stream()
-            .filter(t -> "DO_WHILE".equals(t.get("taskType"))
-                || "DO_WHILE".equals(t.get("type")))
-            .collect(Collectors.toList());
+                .filter(t -> "DO_WHILE".equals(t.get("taskType")) || "DO_WHILE".equals(t.get("type")))
+                .collect(Collectors.toList());
 
         if (!doWhileTasks.isEmpty()) {
             Map<String, Object> loopTask = doWhileTasks.get(0);
             Object iterationObj = loopTask.get("iteration");
             if (iterationObj instanceof Number) {
                 int iterations = ((Number) iterationObj).intValue();
-                assertTrue(iterations <= 3,
-                    "DO_WHILE loop ran " + iterations + " iterations, expected <= 3. "
-                    + "COUNTERFACTUAL: if TextMentionTermination doesn't fire on "
-                    + "'DONE_E2E', agent runs 25 turns.");
+                assertTrue(
+                        iterations <= 3,
+                        "DO_WHILE loop ran " + iterations + " iterations, expected <= 3. "
+                                + "COUNTERFACTUAL: if TextMentionTermination doesn't fire on "
+                                + "'DONE_E2E', agent runs 25 turns.");
             }
         }
         // Even if we can't find the DO_WHILE task, the COMPLETED status is the key assertion

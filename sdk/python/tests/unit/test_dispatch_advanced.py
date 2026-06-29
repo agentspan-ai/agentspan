@@ -10,7 +10,7 @@ from typing import List, Optional
 
 import pytest
 
-from agentspan.agents.runtime._dispatch import (
+from conductor.ai.agents.runtime._dispatch import (
     _coerce_value,
     _current_context,
     _mcp_servers,
@@ -106,7 +106,7 @@ class TestToolContext:
     """Test ToolContext injection via make_tool_worker."""
 
     def test_context_injected_via_make_tool_worker(self):
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
 
         received_ctx = {}
 
@@ -145,7 +145,7 @@ class TestToolContext:
 
     def test_context_state_from_task_input(self):
         """ToolContext.state should be populated from _agent_state in task input."""
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
 
         def write_tool(key: str, value: str, context: ToolContext = None) -> dict:
             context.state[key] = value
@@ -166,7 +166,7 @@ class TestToolContext:
 
     def test_context_state_empty_when_no_agent_state(self):
         """ToolContext.state should be empty dict when _agent_state is not in task input."""
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
 
         def read_tool(key: str, context: ToolContext = None) -> dict:
             return {"value": context.state.get(key, "NOT_FOUND")}
@@ -179,7 +179,7 @@ class TestToolContext:
 
     def test_state_updates_in_output(self):
         """Tools that modify state should include _state_updates in output."""
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
 
         def multi_write(context: ToolContext = None) -> str:
             context.state["a"] = 1
@@ -313,7 +313,7 @@ class _MockGuardrail:
         self._fixed_output = fixed_output
 
     def check(self, content):
-        from agentspan.agents.guardrail import GuardrailResult
+        from conductor.ai.agents.guardrail import GuardrailResult
 
         return GuardrailResult(
             passed=self._passed,
@@ -420,7 +420,7 @@ class TestNeedsContext:
     """Test _needs_context helper for edge cases."""
 
     def test_exception_returns_false(self):
-        from agentspan.agents.runtime._dispatch import _needs_context
+        from conductor.ai.agents.runtime._dispatch import _needs_context
 
         # Pass something that's not a function
         assert _needs_context(42) is False
@@ -469,7 +469,7 @@ class TestToolSerializationValidation:
         assert result.status.name == "FAILED"
 
     def test_validate_serializable_function(self):
-        from agentspan.agents.runtime._dispatch import (
+        from conductor.ai.agents.runtime._dispatch import (
             ToolSerializationError,
             _validate_serializable,
         )

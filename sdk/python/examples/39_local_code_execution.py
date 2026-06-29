@@ -19,7 +19,7 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
-from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
+from conductor.ai.agents import Agent, AgentRuntime, CodeExecutionConfig
 from settings import settings
 
 
@@ -64,7 +64,7 @@ config_coder = Agent(
 )
 
 # ── Example 4: Docker sandbox (uncomment if Docker is available) ───────
-# from agentspan.agents.code_executor import DockerCodeExecutor
+# from conductor.ai.agents.code_executor import DockerCodeExecutor
 #
 # sandboxed_coder = Agent(
 #     name="sandboxed_coder",

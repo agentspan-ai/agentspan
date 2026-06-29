@@ -186,7 +186,6 @@ vi.mock("utils/constants/route", () => ({
   WORKERS_URL: {
     BASE: "/workers",
   },
-  CREDENTIALS_URL: "/credentials",
 }));
 
 // Mock all page components with factory functions
@@ -212,8 +211,8 @@ vi.mock("enterprise/pages/aiPrompts/AiPromptsManagement", () => ({
 vi.mock("enterprise/pages/Authentication/AuthListing", () => ({
   default: () => ({ type: "AuthListing" }),
 }));
-vi.mock("pages/credentials", () => ({
-  CredentialsPage: () => ({ type: "CredentialsPage" }),
+vi.mock("pages/secrets", () => ({
+  SecretsPage: () => ({ type: "SecretsPage" }),
 }));
 vi.mock("pages/definition/WorkflowDefinition", () => ({
   default: () => ({ type: "WorkflowDefinition" }),

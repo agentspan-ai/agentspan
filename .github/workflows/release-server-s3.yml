@@ -43,7 +43,7 @@ jobs:
         run: ./gradlew bootJar -PbuildUI=true
 
       - name: Prepare release asset
-        run: cp build/libs/agentspan-runtime.jar ../agentspan-server-${{ inputs.version }}.jar
+        run: cp conductor-agentspan-server/build/libs/agentspan-runtime.jar ../agentspan-server-${{ inputs.version }}.jar
 
       - name: Upload to S3 (versioned and latest)
         env:

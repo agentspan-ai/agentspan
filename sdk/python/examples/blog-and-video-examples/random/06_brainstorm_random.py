@@ -11,7 +11,7 @@ Setup:
     python 07_brainstorm_random.py
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
 
 
 # ── Thinkers ─────────────────────────────────────────────────────────

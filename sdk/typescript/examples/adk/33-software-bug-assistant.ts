@@ -24,7 +24,7 @@
  *   - GH_TOKEN in env or .env
  */
 
-import { Agent, AgentRuntime, agentTool, tool, mcpTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, agentTool, tool, mcpTool } from '@conductor-oss/conductor-agent-sdk';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o-mini';
 

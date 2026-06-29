@@ -13,7 +13,7 @@ import {
   AgentRuntime,
   tool as agentspanTool,
   getToolDef,
-} from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 
 // ── Agentspan native tool ────────────────────────────────
 export const nativeSearchTool = agentspanTool(
@@ -48,7 +48,7 @@ const calculatorTool = aiTool({
 // ── Native Agent mixing both tool formats ────────────────
 export const agent = new Agent({
   name: 'mixed_tools_agent',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   instructions: 'You are a helpful assistant. Use the available tools to answer.',
   tools: [nativeSearchTool, calculatorTool], // Both formats coexist
 });

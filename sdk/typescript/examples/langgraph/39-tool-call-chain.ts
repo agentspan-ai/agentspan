@@ -14,7 +14,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ---------------------------------------------------------------------------
 // Tool definitions
@@ -127,7 +127,7 @@ const builder = new StateGraph(MessagesAnnotation)
 const graph = builder.compile({ name: "tool_call_chain_agent" });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
   framework: 'langgraph',
 };

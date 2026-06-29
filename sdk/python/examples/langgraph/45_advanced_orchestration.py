@@ -22,7 +22,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 str_parser = StrOutputParser()

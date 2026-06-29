@@ -9,7 +9,7 @@ default model used by all examples::
     export AGENTSPAN_LLM_MODEL=anthropic/claude-sonnet-4-20250514
     export AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash
 
-If unset, defaults to ``openai/gpt-4o-mini``.
+If unset, defaults to ``anthropic/claude-sonnet-4-6``.
 
 ``AGENTSPAN_SECONDARY_LLM_MODEL`` provides a second model for multi-model examples
 (e.g., cheap triage vs capable specialist). Defaults to ``openai/gpt-4o``.
@@ -21,13 +21,13 @@ from dataclasses import dataclass
 
 @dataclass
 class Settings:
-    llm_model: str = "openai/gpt-4o-mini"
+    llm_model: str = "anthropic/claude-sonnet-4-6"
     secondary_llm_model: str = "openai/gpt-4o"
 
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            llm_model=os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini"),
+            llm_model=os.environ.get("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6"),
             secondary_llm_model=os.environ.get("AGENTSPAN_SECONDARY_LLM_MODEL", "openai/gpt-4o"),
         )
 

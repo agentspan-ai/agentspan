@@ -24,8 +24,8 @@
 //   - AGENTSPAN_SERVER_URL=http://localhost:6767/api in environment
 //   - AGENTSPAN_LLM_MODEL set in environment
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── deep_analyst sub-agent ─────────────────────────────────────
 

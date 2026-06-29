@@ -13,8 +13,8 @@
 //   dotnet run --project sdk/csharp/examples/91_Skills/Example91Skills.csproj \
 //     -- /path/to/skill "Review this repository"
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 var skillPath = args.Length > 0
     ? args[0]

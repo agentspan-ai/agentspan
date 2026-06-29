@@ -4,7 +4,7 @@ import { extractModelString, mapFinishReason } from "../../../src/wrappers/ai.js
 describe("Vercel AI SDK wrapper", () => {
   describe("extractModelString", () => {
     it("returns string model as-is", () => {
-      expect(extractModelString("openai/gpt-4o-mini")).toBe("openai/gpt-4o-mini");
+      expect(extractModelString("anthropic/claude-sonnet-4-6")).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("returns model with existing provider prefix as-is", () => {
@@ -68,20 +68,20 @@ describe("Vercel AI SDK wrapper", () => {
       expect(extractModelString(model)).toBe("google/gemini-pro");
     });
 
-    it("defaults to openai/gpt-4o-mini for null model", () => {
-      expect(extractModelString(null)).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for null model", () => {
+      expect(extractModelString(null)).toBe("anthropic/claude-sonnet-4-6");
     });
 
-    it("defaults to openai/gpt-4o-mini for undefined model", () => {
-      expect(extractModelString(undefined)).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for undefined model", () => {
+      expect(extractModelString(undefined)).toBe("anthropic/claude-sonnet-4-6");
     });
 
-    it("defaults to openai/gpt-4o-mini for empty object", () => {
-      expect(extractModelString({})).toBe("openai/gpt-4o-mini");
+    it("defaults to anthropic/claude-sonnet-4-6 for empty object", () => {
+      expect(extractModelString({})).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("handles number input gracefully", () => {
-      expect(extractModelString(42)).toBe("openai/gpt-4o-mini");
+      expect(extractModelString(42)).toBe("anthropic/claude-sonnet-4-6");
     });
 
     it("infers openai for o1 prefix", () => {

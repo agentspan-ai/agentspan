@@ -28,7 +28,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, mcpTool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, mcpTool } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // Create MCP tool — Conductor discovers tools from mcp-testkit at runtime

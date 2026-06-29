@@ -14,8 +14,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 //   - GH_TOKEN in environment (for GitHub MCP server)
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── In-memory ticket store ────────────────────────────────────
 

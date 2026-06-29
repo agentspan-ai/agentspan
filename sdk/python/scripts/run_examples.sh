@@ -219,7 +219,7 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
                 WF_INFO=$($PYTHON -c "
 import os, json
 try:
-    from agentspan.agents.runtime.config import AgentConfig
+    from conductor.ai.agents.runtime.config import AgentConfig
     cfg = AgentConfig()
     configuration = cfg.to_conductor_configuration()
     from conductor.client.orkes_clients import OrkesClients

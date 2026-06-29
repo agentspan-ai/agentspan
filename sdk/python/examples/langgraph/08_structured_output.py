@@ -18,7 +18,7 @@ from typing import List
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 
 class MovieReview(BaseModel):

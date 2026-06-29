@@ -15,7 +15,7 @@ Requirements:
 
 from pydantic import BaseModel
 
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 

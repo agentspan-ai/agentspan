@@ -1,19 +1,19 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.annotations.Tool;
-import ai.agentspan.enums.AgentStatus;
-import ai.agentspan.internal.ToolRegistry;
-import ai.agentspan.model.AgentResult;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.enums.AgentStatus;
+import org.conductoross.conductor.ai.internal.ToolRegistry;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 2: Tool Calling — agent execution with side-effect validation.
@@ -43,7 +43,7 @@ class Suite2ToolCalling extends BaseTest {
     static void setup() {
         // Use BASE_URL (without /api suffix) since AgentConfig + HttpApi
         // already prepend /api to every path.
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -79,22 +79,24 @@ class Suite2ToolCalling extends BaseTest {
         toolWasCalled.set(false); // reset before each run
 
         Agent agent = Agent.builder()
-            .name("e2e_java_math_agent")
-            .model(MODEL)
-            .instructions("You MUST call the add tool with arguments a=7, b=8. Report the result.")
-            .tools(ToolRegistry.fromInstance(new MathTools()))
-            .maxTurns(3)
-            .build();
+                .name("e2e_java_math_agent")
+                .model(MODEL)
+                .instructions("You MUST call the add tool with arguments a=7, b=8. Report the result.")
+                .tools(ToolRegistry.fromInstance(new MathTools()))
+                .maxTurns(3)
+                .build();
 
         AgentResult result = runtime.run(agent, "What is 7 + 8?");
 
-        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
-            "Agent did not complete. Status: " + result.getStatus()
-            + ". Error: " + result.getError());
+        assertEquals(
+                AgentStatus.COMPLETED,
+                result.getStatus(),
+                "Agent did not complete. Status: " + result.getStatus() + ". Error: " + result.getError());
 
-        assertTrue(toolWasCalled.get(),
-            "The 'add' tool function body was never called. "
-            + "COUNTERFACTUAL: if tool registration or the tool dispatch is broken, "
-            + "the worker is never invoked and this flag stays false.");
+        assertTrue(
+                toolWasCalled.get(),
+                "The 'add' tool function body was never called. "
+                        + "COUNTERFACTUAL: if tool registration or the tool dispatch is broken, "
+                        + "the worker is never invoked and this flag stays false.");
     }
 }

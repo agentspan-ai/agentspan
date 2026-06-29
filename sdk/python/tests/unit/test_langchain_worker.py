@@ -23,7 +23,7 @@ def _make_task(prompt="Hello", session_id="", execution_id="wf-456"):
 
 class TestSerializeLangchain:
     def test_returns_single_worker_info(self):
-        from agentspan.agents.frameworks.langchain import serialize_langchain
+        from conductor.ai.agents.frameworks.langchain import serialize_langchain
         executor = _make_executor()
         executor.name = "my_executor"
 
@@ -33,7 +33,7 @@ class TestSerializeLangchain:
         assert workers[0].name == "my_executor"
 
     def test_raw_config_has_name_and_worker_name(self):
-        from agentspan.agents.frameworks.langchain import serialize_langchain
+        from conductor.ai.agents.frameworks.langchain import serialize_langchain
         executor = _make_executor()
         executor.name = "my_executor"
 
@@ -45,12 +45,12 @@ class TestSerializeLangchain:
 
 class TestMakeLangchainWorker:
     def test_worker_returns_executor_output(self):
-        from agentspan.agents.frameworks.langchain import make_langchain_worker
+        from conductor.ai.agents.frameworks.langchain import make_langchain_worker
 
         executor = _make_executor(output="The answer is 42")
         task = _make_task(prompt="What is the answer?")
 
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
+        with patch("conductor.ai.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
                 executor, "my_executor", "http://localhost:8080", "key", "secret"
             )
@@ -60,12 +60,12 @@ class TestMakeLangchainWorker:
         assert result.output_data["result"] == "The answer is 42"
 
     def test_worker_passes_prompt_as_input(self):
-        from agentspan.agents.frameworks.langchain import make_langchain_worker
+        from conductor.ai.agents.frameworks.langchain import make_langchain_worker
 
         executor = _make_executor()
         task = _make_task(prompt="search for python")
 
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
+        with patch("conductor.ai.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
                 executor, "my_executor", "http://localhost:8080", "key", "secret"
             )
@@ -75,17 +75,17 @@ class TestMakeLangchainWorker:
         assert call_args[0][0]["input"] == "search for python"
         config = call_args[1]["config"]
         assert len(config["callbacks"]) == 1
-        from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
+        from conductor.ai.agents.frameworks.langchain import AgentspanCallbackHandler
         assert isinstance(config["callbacks"][0], AgentspanCallbackHandler)
 
     def test_worker_returns_failed_on_exception(self):
-        from agentspan.agents.frameworks.langchain import make_langchain_worker
+        from conductor.ai.agents.frameworks.langchain import make_langchain_worker
 
         executor = _make_executor()
         executor.invoke.side_effect = RuntimeError("tool error")
         task = _make_task()
 
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
+        with patch("conductor.ai.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
                 executor, "my_executor", "http://localhost:8080", "key", "secret"
             )
@@ -95,7 +95,7 @@ class TestMakeLangchainWorker:
         assert "tool error" in result.reason_for_incompletion
 
     def test_worker_pushes_tool_call_event_via_callback(self):
-        from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
+        from conductor.ai.agents.frameworks.langchain import AgentspanCallbackHandler
         from uuid import uuid4
 
         pushed_events = []
@@ -103,7 +103,7 @@ class TestMakeLangchainWorker:
         def fake_push(exec_id, event, *args):
             pushed_events.append(event)
 
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking", side_effect=fake_push):
+        with patch("conductor.ai.agents.frameworks.langchain._push_event_nonblocking", side_effect=fake_push):
             run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-push-test", "http://localhost:8080", "k", "s")
             handler.on_tool_start({"name": "search"}, "python", run_id=run_id)

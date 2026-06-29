@@ -17,7 +17,7 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableLambda } from '@langchain/core/runnables';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 // ── Parsers ──────────────────────────────────────────────
 
@@ -211,7 +211,7 @@ const agentRunnable = new RunnableLambda({
 
 (agentRunnable as any)._agentspan = {
   name: 'advanced_orchestration',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
   framework: 'langchain',
 };

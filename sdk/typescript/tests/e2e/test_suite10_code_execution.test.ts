@@ -22,8 +22,8 @@ import {
   LocalCodeExecutor,
   DockerCodeExecutor,
   JupyterCodeExecutor,
-} from '@agentspan-ai/sdk';
-import type { CodeExecutionConfig } from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
+import type { CodeExecutionConfig } from '@conductor-oss/conductor-agent-sdk';
 import {
   checkServerHealth,
   MODEL,

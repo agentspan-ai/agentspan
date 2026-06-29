@@ -28,7 +28,7 @@ import {
 import type { GuardrailResult } from "../src/index.js";
 
 // Force consistent model name
-const llmModel = "openai/gpt-4o-mini";
+const llmModel = "anthropic/claude-sonnet-4-6";
 
 const serializer = new AgentConfigSerializer();
 const __dirname = dirname(fileURLToPath(import.meta.url));

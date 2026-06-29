@@ -16,7 +16,7 @@
 
 import { createServer } from 'http';
 import { execSync } from 'child_process';
-import { Agent, AgentRuntime, ServerlessCodeExecutor } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, ServerlessCodeExecutor } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Tiny mock execution server -----------------------------------------------

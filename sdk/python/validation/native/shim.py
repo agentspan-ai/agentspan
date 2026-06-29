@@ -6,8 +6,8 @@ import sys
 
 def _patch_runtime():
     """Monkey-patch AgentRuntime to bypass Conductor and run natively."""
-    from agentspan.agents.frameworks.serializer import detect_framework
-    from agentspan.agents.runtime.runtime import AgentRuntime
+    from conductor.ai.agents.frameworks.serializer import detect_framework
+    from conductor.ai.agents.runtime.runtime import AgentRuntime
     from validation.native.openai_runner import run_openai_native, run_openai_native_async
     from validation.native.langgraph_runner import run_langgraph_native, run_langchain_native
     from validation.native.adk_runner import run_adk_native

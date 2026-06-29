@@ -24,8 +24,8 @@ Requirements:
     - MCP_API_KEY stored via CLI or Agentspan UI
 """
 
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.tool import mcp_tool
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.tool import mcp_tool
 from settings import settings
 
 

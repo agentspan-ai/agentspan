@@ -5,7 +5,7 @@
 
 import pytest
 
-from agentspan.agents.termination import (
+from conductor.ai.agents.termination import (
     MaxMessageTermination,
     StopMessageTermination,
     TerminationResult,

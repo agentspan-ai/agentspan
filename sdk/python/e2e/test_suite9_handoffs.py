@@ -19,7 +19,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     OnTextMention,
     Strategy,
@@ -321,11 +321,11 @@ class TestSuite9Handoffs:
         with pytest.raises(ValueError, match="router"):
             Agent(
                 name="e2e_s9_router_no_arg",
-                model="openai/gpt-4o-mini",
+                model="anthropic/claude-sonnet-4-6",
                 instructions="This should fail.",
                 agents=[
                     Agent(
-                        name="dummy", model="openai/gpt-4o-mini", instructions="X."
+                        name="dummy", model="anthropic/claude-sonnet-4-6", instructions="X."
                     )
                 ],
                 strategy=Strategy.ROUTER,

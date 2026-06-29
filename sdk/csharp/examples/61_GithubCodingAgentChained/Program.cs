@@ -25,8 +25,8 @@
 //   - GITHUB_TOKEN stored via `agentspan credentials set`
 //   - gh CLI installed
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 const string Repo  = "agentspan-ai/codingexamples";
 const string Model = "anthropic/claude-sonnet-4-6";

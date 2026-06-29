@@ -17,8 +17,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 
 using System.Text.Json;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 var agent = new Agent("writer_09b")
 {

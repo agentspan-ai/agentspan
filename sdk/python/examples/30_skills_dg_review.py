@@ -20,7 +20,7 @@ Install /dg:
     # Or: git clone https://github.com/v1r3n/dinesh-gilfoyle ~/.claude/skills/dg
 """
 
-from agentspan.agents import Agent, AgentRuntime, EventType, agent_tool, skill
+from conductor.ai.agents import Agent, AgentRuntime, EventType, agent_tool, skill
 from settings import settings
 
 # ── Load /dg skill as an Agent ─────────────────────────────────────

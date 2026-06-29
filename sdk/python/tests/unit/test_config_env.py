@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 from unittest import mock
 
-from agentspan.agents.runtime.config import AgentConfig, _env, _env_bool, _env_int
+from conductor.ai.agents.runtime.config import AgentConfig, _env, _env_bool, _env_int
 
 
 class TestEnvHelper:
@@ -198,9 +198,9 @@ class TestLogLevelConfig:
             config = AgentConfig.from_env()
             assert config.log_level == "INFO"
 
-    @mock.patch("agentspan.agents.runtime.server._is_server_ready", return_value=True)
+    @mock.patch("conductor.ai.agents.runtime.server._is_server_ready", return_value=True)
     def test_log_level_applied_to_logger(self, mock_ready):
-        """AgentRuntime.__init__ applies log_level to the agentspan logger."""
+        """AgentRuntime.__init__ applies log_level to the conductor.ai logger."""
         import logging
 
         config = AgentConfig(
@@ -208,66 +208,74 @@ class TestLogLevelConfig:
             log_level="WARNING",
         )
         with mock.patch("conductor.client.orkes_clients.OrkesClients"):
-            with mock.patch("agentspan.agents.runtime.worker_manager.WorkerManager"):
-                from agentspan.agents.runtime.runtime import AgentRuntime
+            with mock.patch("conductor.ai.agents.runtime.worker_manager.WorkerManager"):
+                from conductor.ai.agents.runtime.runtime import AgentRuntime
 
                 rt = AgentRuntime(config=config)
 
-        assert logging.getLogger("agentspan").level == logging.WARNING
+        assert logging.getLogger("conductor.ai").level == logging.WARNING
         # Reset to avoid affecting other tests
-        logging.getLogger("agentspan").setLevel(logging.INFO)
+        logging.getLogger("conductor.ai").setLevel(logging.INFO)
 
 
 class TestAgentConfigCredentialFields:
-    """credential_strict_mode and api_key fields."""
+    """secret_strict_mode and api_key fields."""
 
     def test_credential_strict_mode_defaults_false(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
+
         config = AgentConfig()
-        assert config.credential_strict_mode is False
+        assert config.secret_strict_mode is False
 
     def test_credential_strict_mode_can_be_set(self):
-        from agentspan.agents.runtime.config import AgentConfig
-        config = AgentConfig(credential_strict_mode=True)
-        assert config.credential_strict_mode is True
+        from conductor.ai.agents.runtime.config import AgentConfig
+
+        config = AgentConfig(secret_strict_mode=True)
+        assert config.secret_strict_mode is True
 
     def test_credential_strict_mode_from_env_true(self):
         import os
         from unittest import mock
-        from agentspan.agents.runtime.config import AgentConfig
-        with mock.patch.dict(os.environ, {"AGENTSPAN_CREDENTIAL_STRICT_MODE": "true"}):
+        from conductor.ai.agents.runtime.config import AgentConfig
+
+        with mock.patch.dict(os.environ, {"AGENTSPAN_SECRET_STRICT_MODE": "true"}):
             config = AgentConfig.from_env()
-        assert config.credential_strict_mode is True
+        assert config.secret_strict_mode is True
 
     def test_credential_strict_mode_from_env_false(self):
         import os
         from unittest import mock
-        from agentspan.agents.runtime.config import AgentConfig
-        with mock.patch.dict(os.environ, {"AGENTSPAN_CREDENTIAL_STRICT_MODE": "false"}):
+        from conductor.ai.agents.runtime.config import AgentConfig
+
+        with mock.patch.dict(os.environ, {"AGENTSPAN_SECRET_STRICT_MODE": "false"}):
             config = AgentConfig.from_env()
-        assert config.credential_strict_mode is False
+        assert config.secret_strict_mode is False
 
     def test_api_key_field_defaults_none(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
+
         config = AgentConfig()
         # api_key field (new) takes precedence; auth_key kept for backward compat
         assert config.api_key is None
 
     def test_api_key_field_can_be_set(self):
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
+
         config = AgentConfig(api_key="asp_my_key")
         assert config.api_key == "asp_my_key"
 
     def test_api_key_from_env(self):
         import os
         from unittest import mock
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
+
         with mock.patch.dict(os.environ, {"AGENTSPAN_API_KEY": "asp_env_key"}):
             config = AgentConfig.from_env()
         assert config.api_key == "asp_env_key"
 
     def test_auth_key_backward_compat_still_works(self):
         """auth_key must still be accepted for backward compat."""
-        from agentspan.agents.runtime.config import AgentConfig
+        from conductor.ai.agents.runtime.config import AgentConfig
+
         config = AgentConfig(auth_key="old_key")
         assert config.auth_key == "old_key"

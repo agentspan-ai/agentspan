@@ -522,7 +522,7 @@ describe("WorkerManager", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation(async (url: string) => {
-          if (typeof url === "string" && url.includes("/credentials/resolve")) {
+          if (typeof url === "string" && url.includes("/workers/secrets")) {
             return {
               ok: true,
               status: 200,
@@ -643,7 +643,7 @@ describe("WorkerManager", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
-          if (typeof url === "string" && url.includes("/credentials/resolve")) {
+          if (typeof url === "string" && url.includes("/workers/secrets")) {
             const body = JSON.parse(String(init?.body));
             return {
               ok: true,

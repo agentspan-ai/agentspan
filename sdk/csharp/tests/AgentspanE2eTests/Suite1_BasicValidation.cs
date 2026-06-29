@@ -12,9 +12,9 @@
 
 using System.Text.Json.Nodes;
 using Xunit;
-using Agentspan.Examples;
+using Conductor.AI.Examples;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite1_BasicValidation
@@ -32,7 +32,7 @@ public sealed class Suite1_BasicValidation
 
         var agent = new Agent("s1_basic_agent")
         {
-            Model        = "openai/gpt-4o-mini",
+            Model        = "anthropic/claude-sonnet-4-6",
             Instructions = "You are a test assistant.",
             MaxTurns     = 8,
         };
@@ -55,14 +55,14 @@ public sealed class Suite1_BasicValidation
         var ad = E2eHelpers.GetAgentDef(plan);
 
         Assert.Equal("s1_basic_agent",    ad["name"]?.GetValue<string>());
-        Assert.Equal("openai/gpt-4o-mini", ad["model"]?.GetValue<string>());
+        Assert.Equal("anthropic/claude-sonnet-4-6", ad["model"]?.GetValue<string>());
         Assert.Equal("You are a test assistant.", ad["instructions"]?.GetValue<string>());
         Assert.Equal(8, ad["maxTurns"]?.GetValue<int>());
 
         // Counterfactual: different MaxTurns must produce a different value
         var agent2 = new Agent("s1_basic_agent_v2")
         {
-            Model    = "openai/gpt-4o-mini",
+            Model    = "anthropic/claude-sonnet-4-6",
             MaxTurns = 3,
         };
         var plan2 = await runtime.PlanAsync(agent2);
@@ -453,7 +453,7 @@ public sealed class Suite1_BasicValidation
 
     private static System.Text.Json.Nodes.JsonObject SerializeAgentForTest(Agent agent)
     {
-        var t  = typeof(Agent).Assembly.GetType("Agentspan.AgentConfigSerializer", throwOnError: true)!;
+        var t  = typeof(Agent).Assembly.GetType("Conductor.AI.AgentConfigSerializer", throwOnError: true)!;
         var mi = t.GetMethod("SerializeAgent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         return (System.Text.Json.Nodes.JsonObject)mi.Invoke(null, new object[] { agent })!;
     }

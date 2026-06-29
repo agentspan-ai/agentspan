@@ -19,8 +19,8 @@ Usage:
     uv run python examples/claude_agent_sdk/05_build_and_review.py
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
-from agentspan.agents.handoff import OnTextMention
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents.handoff import OnTextMention
 
 PROJECT_DIR = "/tmp/hello-react"
 

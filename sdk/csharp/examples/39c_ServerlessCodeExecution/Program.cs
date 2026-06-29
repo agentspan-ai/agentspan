@@ -25,8 +25,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Tiny mock execution server ────────────────────────────────────────
 // Handles POST /execute by running code in a subprocess.

@@ -11,7 +11,7 @@ Setup:
     python 08_editorial_manual.py
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy, EventType
+from conductor.ai.agents import Agent, AgentRuntime, Strategy, EventType
 
 
 # ── Specialists ──────────────────────────────────────────────────────

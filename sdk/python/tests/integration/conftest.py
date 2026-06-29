@@ -17,8 +17,8 @@ import time
 import pytest
 import requests
 
-from agentspan.agents import AgentRuntime
-from agentspan.agents.runtime.config import AgentConfig
+from conductor.ai.agents import AgentRuntime
+from conductor.ai.agents.runtime.config import AgentConfig
 
 DEFAULT_MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
 _SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")

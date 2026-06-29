@@ -1,0 +1,89 @@
+plugins {
+    id 'java-library'
+    id 'org.springframework.boot'
+    id 'com.vanniktech.maven.publish'
+}
+
+bootJar { enabled = false }
+// Spring Boot plugin adds a "-plain" classifier to the normal jar when bootJar exists;
+// clear it so the published library artifact is conductor-agentspan.jar.
+jar {
+    enabled = true
+    archiveClassifier = ''
+}
+
+dependencies {
+    // ALL Conductor artifacts provided — host (orkes or our server) supplies version at runtime.
+    // NOTE (Phase 0 transitional): impls like EncryptedDbCredentialStoreProvider still live here
+    // and need their infra deps. These move to the server in Phase 1 when SPIs are extracted.
+    compileOnly "org.conductoross:conductor-common:${conductorVersion}"
+    compileOnly "org.conductoross:conductor-core:${conductorVersion}"
+    compileOnly "org.conductoross:conductor-ai:${conductorVersion}"
+    compileOnly "org.conductoross:conductor-http-task:${conductorVersion}"
+    compileOnly 'org.springframework.boot:spring-boot-starter-web'
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
+    compileOnly 'org.springframework.boot:spring-boot-starter-validation'
+    compileOnly 'org.springframework.boot:spring-boot-starter-actuator'
+    compileOnly 'org.springframework.retry:spring-retry'
+
+    // Core logic deps (the JDBC/crypto/sqlite impl-layer deps moved to the
+    // server module in Phase 1 along with the concrete SPI implementations).
+    implementation "com.networknt:json-schema-validator:${jsonSchemaVersion}"
+
+    // Logging facade only. A library must not export a logging binding — the host
+    // (standalone server, or an embedding app such as orkes) provides the slf4j
+    // implementation. springdoc/log4j2 are runtime/app concerns and live in the server.
+    implementation 'org.slf4j:slf4j-api'
+
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // Tests need the full engine on classpath
+    testImplementation "org.conductoross:conductor-core:${conductorVersion}"
+    testImplementation "org.conductoross:conductor-common:${conductorVersion}"
+    testImplementation "org.conductoross:conductor-ai:${conductorVersion}"
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-web'
+    testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+    testImplementation "org.assertj:assertj-core:${assertjVersion}"
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    testImplementation 'org.graalvm.polyglot:polyglot:25.0.2'
+    testImplementation 'org.graalvm.js:js:25.0.2'
+}
+
+mavenPublishing {
+    publishToMavenCentral(true)
+    if (project.findProperty('signingInMemoryKey') != null) {
+        signAllPublications()
+    }
+
+    coordinates('org.conductoross', 'conductor-agentspan', project.version.toString())
+
+    pom {
+        name = 'Conductor AgentSpan'
+        description = 'AgentSpan library for Conductor — agent compilation, services, and SPI contracts'
+        url = 'https://github.com/agentspan-ai/agentspan'
+        licenses {
+            license {
+                name = 'MIT License'
+                url = 'https://opensource.org/licenses/MIT'
+            }
+        }
+        developers {
+            developer {
+                organization = 'Orkes'
+                organizationUrl = 'https://orkes.io'
+                name = 'Orkes Development Team'
+                email = 'developers@orkes.io'
+            }
+        }
+        scm {
+            connection = 'scm:git:git://github.com/agentspan-ai/agentspan.git'
+            developerConnection = 'scm:git:ssh://github.com/agentspan-ai/agentspan.git'
+            url = 'https://github.com/agentspan-ai/agentspan'
+        }
+    }
+}

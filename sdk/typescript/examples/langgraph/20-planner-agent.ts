@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 
@@ -112,21 +112,19 @@ async function review(state: State): Promise<Partial<State>> {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(PlannerState);
-builder.addNode('plan', plan);
-builder.addNode('execute', executeSteps);
-builder.addNode('review_node', review);
-
-builder.addEdge(START, 'plan');
-builder.addEdge('plan', 'execute');
-builder.addEdge('execute', 'review_node');
-builder.addEdge('review_node', END);
-
-const graph = builder.compile({ name: "planner_agent" });
+const graph = new StateGraph(PlannerState)
+  .addNode('plan', plan)
+  .addNode('execute', executeSteps)
+  .addNode('review_node', review)
+  .addEdge(START, 'plan')
+  .addEdge('plan', 'execute')
+  .addEdge('execute', 'review_node')
+  .addEdge('review_node', END)
+  .compile({ name: "planner_agent" });
 
 // Add agentspan metadata for extraction
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

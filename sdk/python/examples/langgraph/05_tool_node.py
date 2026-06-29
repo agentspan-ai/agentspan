@@ -22,7 +22,7 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 
 @tool

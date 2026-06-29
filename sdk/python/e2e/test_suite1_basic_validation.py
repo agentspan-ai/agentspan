@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     Guardrail,
     GuardrailResult,
@@ -28,7 +28,7 @@ from agentspan.agents import (
 
 pytestmark = pytest.mark.e2e
 
-MODEL = "openai/gpt-4o-mini"
+MODEL = "anthropic/claude-sonnet-4-6"
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ def _assert_tool_in_agent_def(
 # ── LLM Judge ──────────────────────────────────────────────────────────
 
 
-JUDGE_MODEL = os.environ.get("AGENTSPAN_JUDGE_MODEL", "claude-sonnet-4-20250514")
+JUDGE_MODEL = os.environ.get("AGENTSPAN_JUDGE_MODEL", "claude-sonnet-4-6")
 
 JUDGE_SYSTEM_PROMPT = """\
 You are a strict validation judge for a workflow compilation system.

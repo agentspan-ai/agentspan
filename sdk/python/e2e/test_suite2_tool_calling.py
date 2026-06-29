@@ -16,8 +16,8 @@ import time
 import pytest
 import requests
 
-from agentspan.agents import Agent, AgentRuntime, tool
-from agentspan.agents.tool import get_tool_def
+from conductor.ai.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents.tool import get_tool_def
 
 pytestmark = [
     pytest.mark.e2e,
@@ -60,6 +60,12 @@ def paid_tool_b(x: str) -> str:
             f"The server should have injected it via credential resolution."
         )
     return f"paid_b:{cred_val[:3]}"
+
+
+# Used by the output-masking test below — deliberately leaks the FULL credential
+# value into its return. The server's SecretMaskingResponseAdvice must redact
+# the value before /api/agent/executions/{id} responds.
+LEAK_CRED = "E2E_MASK_LEAK_KEY"
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
@@ -492,3 +498,9 @@ class TestSuite2ToolCalling:
         finally:
             for owned in reversed(owned_runtimes):
                 owned.shutdown()
+
+
+# Output masking (Audit gap D) is covered deterministically by the server's
+# SecretMaskingIntegrationTest (MockMvc + @MockBean AgentService). An e2e
+# version would need the LLM to reliably call a specific tool whose output
+# contains the leaked value — non-deterministic; violates CLAUDE.md rule 1.

@@ -23,9 +23,9 @@ The live tests require a running Agentspan server and are marked with
 
 import pytest
 
-from agentspan.agents import Agent, Strategy, tool
-from agentspan.agents.result import EventType
-from agentspan.agents.testing import (
+from conductor.ai.agents import Agent, Strategy, tool
+from conductor.ai.agents.result import EventType
+from conductor.ai.agents.testing import (
     MockEvent,
     assert_agent_ran,
     assert_event_sequence,
@@ -655,7 +655,7 @@ class TestRoundRobinStrategy:
 #   - The final response comes from the appropriate specialist
 # ═══════════════════════════════════════════════════════════════════════
 
-from agentspan.agents import OnTextMention
+from conductor.ai.agents import OnTextMention
 
 refund_agent = Agent(
     name="refund_specialist",
@@ -1053,7 +1053,7 @@ class TestGuardrailsInMultiAgent:
 # When used with live results, this catches real orchestration bugs.
 # ═══════════════════════════════════════════════════════════════════════
 
-from agentspan.agents.testing import StrategyViolation, validate_strategy
+from conductor.ai.agents.testing import StrategyViolation, validate_strategy
 
 
 class TestStrategyValidation:
@@ -1295,7 +1295,7 @@ class TestStrategyValidation:
         would also catch the rotation pattern being broken. The constraint
         validator specifically checks allowed_transitions rules.
         """
-        from agentspan.agents.testing.strategy_validators import validate_constrained_transitions
+        from conductor.ai.agents.testing.strategy_validators import validate_constrained_transitions
 
         result = mock_run(
             code_review_flow,
@@ -1323,7 +1323,7 @@ class TestStrategyValidation:
 # a report.
 # ═══════════════════════════════════════════════════════════════════════
 
-from agentspan.agents.testing import CorrectnessEval, EvalCase
+from conductor.ai.agents.testing import CorrectnessEval, EvalCase
 
 
 @pytest.mark.integration
@@ -1336,8 +1336,8 @@ class TestEvalRunnerLive:
 
     Usage (outside pytest, as a standalone eval script):
 
-        from agentspan.agents import AgentRuntime
-        from agentspan.agents.testing import CorrectnessEval, EvalCase
+        from conductor.ai.agents import AgentRuntime
+        from conductor.ai.agents.testing import CorrectnessEval, EvalCase
 
         with AgentRuntime() as runtime:
             eval = CorrectnessEval(runtime)
@@ -1476,7 +1476,7 @@ class TestLiveMultiAgent:
     def runtime(self):
         """Skip if no server available."""
         pytest.skip("Requires running Agentspan server")
-        # from agentspan.agents import AgentRuntime
+        # from conductor.ai.agents import AgentRuntime
         # rt = AgentRuntime()
         # yield rt
         # rt.shutdown()

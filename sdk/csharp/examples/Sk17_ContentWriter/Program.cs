@@ -11,12 +11,12 @@
 //   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 
 using System.ComponentModel;
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.SemanticKernel;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.SemanticKernel;
 using Microsoft.SemanticKernel;
 
-namespace Agentspan.Examples.Sk17;
+namespace Conductor.AI.Examples.Sk17;
 
 public sealed class ContentPlugin
 {

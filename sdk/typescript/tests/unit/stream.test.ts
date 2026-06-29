@@ -75,6 +75,29 @@ describe("AgentStream", () => {
       expect(events[0].args).toEqual({ query: "test" });
     });
 
+    it("forwards pendingTool on a waiting event", async () => {
+      // Mirrors the server's waiting SSE payload: one HUMAN task gates a
+      // batch of tool calls via pendingTool.toolCalls (#226 / PR #270).
+      const sseChunks = [
+        'event:waiting\ndata:{"pendingTool":{"taskRefName":"approve_ref","toolCalls":[{"name":"submit_change","args":{"id":42}}],"tool_name":null,"parameters":null}}\n\n',
+        "event:done\ndata:{}\n\n",
+      ];
+
+      mockFetch(createSSEStream(sseChunks));
+
+      const stream = new AgentStream("http://localhost/sse", {}, "wf-1", vi.fn());
+
+      const events = [];
+      for await (const event of stream) {
+        events.push(event);
+      }
+
+      expect(events[0].type).toBe("waiting");
+      expect(events[0].pendingTool?.toolCalls).toHaveLength(1);
+      expect(events[0].pendingTool?.toolCalls?.[0].name).toBe("submit_change");
+      expect(events[0].pendingTool?.toolCalls?.[0].args).toEqual({ id: 42 });
+    });
+
     it("handles multi-line data fields", async () => {
       const sseChunks = [
         'event:message\ndata:{"content":\ndata:"multi-line"}\n\n',

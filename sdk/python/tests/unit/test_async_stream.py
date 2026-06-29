@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agentspan.agents.result import (
+from conductor.ai.agents.result import (
     AgentEvent,
     AgentHandle,
     AgentResult,

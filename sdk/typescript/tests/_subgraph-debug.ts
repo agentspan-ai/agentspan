@@ -90,7 +90,7 @@ parentBuilder.addEdge("prepare", "analysis");
 parentBuilder.addEdge("analysis", "build_report");
 parentBuilder.addEdge("build_report", END);
 const graph = parentBuilder.compile({ name: "document_pipeline_with_subgraph" });
-(graph as any)._agentspan = { model: "openai/gpt-4o-mini", tools: [], framework: "langgraph" };
+(graph as any)._agentspan = { model: "anthropic/claude-sonnet-4-6", tools: [], framework: "langgraph" };
 
 const [rawConfig, workers] = serializeLangGraph(graph);
 console.log("=== rawConfig ===");

@@ -2,7 +2,7 @@
   "external": false,
   "instructions": "Research and provide a comprehensive answer.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "complex_agent",
   "termination": {
     "conditions": [

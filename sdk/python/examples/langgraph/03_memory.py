@@ -16,7 +16,7 @@ Requirements:
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 

@@ -7,6 +7,7 @@ export interface UseScheduleFormHandlersReturn {
   setScheduleNewState: (key: string, value: string) => void;
   setZoneId: (value: string) => void;
   setCronPausedState: () => void;
+  setRunCatchupScheduleInstances: (value: boolean) => void;
   setWorkflowInputTemplatesState: (value: string) => void;
   setWorkflowTasksToDomainState: (value: string) => void;
   setWorkflowCorrelationIdState: (value: string) => void;
@@ -83,6 +84,16 @@ export function useScheduleFormHandlers(
       paused: !prevState.paused,
     }));
   }, [setScheduleState]);
+
+  const setRunCatchupScheduleInstances = useCallback(
+    (value: boolean) => {
+      setScheduleState((prevState) => ({
+        ...prevState,
+        runCatchupScheduleInstances: value,
+      }));
+    },
+    [setScheduleState],
+  );
 
   const setWorkflowInputTemplatesState = useCallback(
     (value: string) => {
@@ -182,6 +193,7 @@ export function useScheduleFormHandlers(
     setScheduleNewState,
     setZoneId,
     setCronPausedState,
+    setRunCatchupScheduleInstances,
     setWorkflowInputTemplatesState,
     setWorkflowTasksToDomainState,
     setWorkflowCorrelationIdState,
