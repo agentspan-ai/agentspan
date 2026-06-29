@@ -43,7 +43,7 @@ agent = Agent(name="bot", model="google_gemini/gemini-2.0-flash")
 | `OPENAI_API_KEY` | API key from [platform.openai.com](https://platform.openai.com/api-keys) |
 | `OPENAI_ORG_ID` | Organization ID (optional) |
 
-**Models:** `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/gpt-4-turbo`, `openai/o1`, `openai/o1-mini`, `openai/o3-mini`
+**Models:** `openai/gpt-4o`, `anthropic/claude-sonnet-4-6`, `openai/gpt-4-turbo`, `openai/o1`, `openai/o1-mini`, `openai/o3-mini`
 
 **Embeddings:** `openai/text-embedding-3-small`, `openai/text-embedding-3-large`
 

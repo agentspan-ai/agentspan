@@ -34,8 +34,8 @@ Requirements:
 
 import uuid
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
-from agentspan.agents.handoff import OnTextMention
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents.handoff import OnTextMention
 
 REPO = "agentspan/codingexamples"
 WORK_DIR = f"/tmp/codingexamples-{uuid.uuid4().hex[:8]}"

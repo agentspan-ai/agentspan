@@ -29,8 +29,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 
 using System.Text.Json.Nodes;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Local worker tool ─────────────────────────────────────────────────
 // Runs in this process — needs the runtime's worker loop to be active.

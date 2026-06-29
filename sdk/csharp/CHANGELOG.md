@@ -32,7 +32,7 @@ First public release of the Agentspan .NET SDK.
 - **Thinking config** — extended thinking budget for supported models
 - **Shared state** — typed shared state across agents in a workflow
 - **Planner** — agent planning mode
-- **UserProxyAgent** / **GPTAssistantAgent** — compatibility agents
+- **GPTAssistantAgent** — compatibility agents
 - **`DeployAsync` / `ServeAsync` / `RunByNameAsync`** — deploy, serve, and trigger named agents
 
 #### Examples (93 total)

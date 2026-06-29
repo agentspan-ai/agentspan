@@ -5,7 +5,7 @@ The `LlmAgent` and `FunctionTool` formats are natively recognized. Replace the A
 ## Before / After
 
 <table>
-<tr><th>Before (vanilla Google ADK)</th><th>After (agentspan)</th></tr>
+<tr><th>Before (vanilla Google ADK)</th><th>After (Agentspan)</th></tr>
 <tr><td>
 
 ```typescript
@@ -53,7 +53,7 @@ for await (const event of events) {
 import { LlmAgent, FunctionTool }
   from '@google/adk';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 // ^^^ add agentspan import
 
 const getWeather = new FunctionTool({
@@ -94,7 +94,7 @@ await runtime.shutdown();
 
 | What | Change |
 |------|--------|
-| **Imports** | Add `AgentRuntime` from `@agentspan-ai/sdk` |
+| **Imports** | Add `AgentRuntime` from `@conductor-oss/conductor-agent-sdk` |
 | **Agent** | No changes — same `new LlmAgent({ ... })` |
 | **Tools** | No changes — same `new FunctionTool({ ... })` |
 | **Execution** | ADK runner → `runtime.run(agent, prompt)` |

@@ -17,14 +17,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentspan.agents.testing.eval_runner import (
+from conductor.ai.agents.testing.eval_runner import (
     CorrectnessEval,
     EvalCase,
     EvalCaseResult,
     EvalCheckResult,
     EvalSuiteResult,
 )
-from agentspan.agents.result import AgentResult, FinishReason, Status
+from conductor.ai.agents.result import AgentResult, FinishReason, Status
 
 
 # ── Minimal stubs ──────────────────────────────────────────────────────────

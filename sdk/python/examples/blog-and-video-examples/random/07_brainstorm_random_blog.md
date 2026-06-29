@@ -2,7 +2,7 @@
 
 *By Deepti Reddy | May 2026*
 
-*This is Part 6 of an 8-part series covering every multi-agent strategy in AgentSpan. Today: the random strategy — a random agent is selected each turn. No rotation, no decision — pure randomness.*
+*This is Part 6 of an 8-part series covering every multi-agent strategy in Agentspan. Today: the random strategy — a random agent is selected each turn. No rotation, no decision — pure randomness.*
 
 ---
 
@@ -12,12 +12,12 @@ But what if predictability is the problem? In brainstorming, you do not want a f
 
 That is the random strategy. Each turn, a random agent is selected. No pattern. No schedule. The same agent might go twice in a row, or not at all for three turns. The randomness creates variety in perspective that a fixed rotation cannot.
 
-## What is AgentSpan
+## What is Agentspan
 
-AgentSpan is an orchestration layer for building, bringing, and observing AI agents as durable workflows.
+Agentspan is an orchestration layer for building, bringing, and observing AI agents as durable workflows.
 
-- **Build**: define agents with the AgentSpan SDK using Agent, @tool, and 8 multi-agent strategies. Compiles to server-side workflows that survive crashes.
-- **Bring**: already using an agent framework such as LangGraph, OpenAI Agents SDK, or Google ADK? Pass your agents directly to run(). AgentSpan adds durability and orchestration on top.
+- **Build**: define agents with the Agentspan SDK using Agent, @tool, and 8 multi-agent strategies. Compiles to server-side workflows that survive crashes.
+- **Bring**: already using an agent framework such as LangGraph, OpenAI Agents SDK, or Google ADK? Pass your agents directly to run(). Agentspan adds durability and orchestration on top.
 - **Observe**: every execution is inspectable in the dashboard. See agent flows, inputs/outputs, tool calls, and token usage. Debug failures, replay runs.
 
 ## Setup
@@ -25,11 +25,11 @@ AgentSpan is an orchestration layer for building, bringing, and observing AI age
 Two commands:
 
 ```bash
-pip install agentspan
+pip install conductor-agent-sdk
 agentspan server start
 ```
 
-This gives you a local AgentSpan server with a visual dashboard at localhost:6767.
+This gives you a local Agentspan server with a visual dashboard at localhost:6767.
 
 ## What we are building
 
@@ -70,7 +70,7 @@ In **random**, there is no order. Agent A might speak three times. Agent C might
 Three agents with deliberately different thinking styles:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
 
 
 creative = Agent(
@@ -220,7 +220,7 @@ Random generates ideas. Round robin reviews them. The summarizer produces the fi
 ## Try it
 
 ```bash
-pip install agentspan
+pip install conductor-agent-sdk
 agentspan server start
 python 07_brainstorm_random.py
 ```

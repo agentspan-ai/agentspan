@@ -17,7 +17,7 @@ Requirements:
     - conductor skill installed (https://github.com/conductor-oss/conductor-skills)
 """
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentRuntime,
     Strategy,
@@ -287,7 +287,7 @@ def example_orchestrator():
 # Example 5: Swarm — Agents hand off to each other
 # ══════════════════════════════════════════════════════════════════
 
-from agentspan.agents.handoff import OnTextMention
+from conductor.ai.agents.handoff import OnTextMention
 
 architect = Agent(
     name="architect",

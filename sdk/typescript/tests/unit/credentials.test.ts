@@ -6,7 +6,6 @@ import {
   setCredentialContext,
   clearCredentialContext,
   runWithCredentialContext,
-  injectCredentials,
 } from "../../src/credentials.js";
 import {
   CredentialNotFoundError,
@@ -120,7 +119,7 @@ describe("resolveCredentials", () => {
     const result = await resolveCredentials(serverUrl, headers, token, ["GITHUB_TOKEN", "AWS_KEY"]);
 
     expect(result).toEqual(mockResponse);
-    expect(fetch).toHaveBeenCalledWith(`${serverUrl}/credentials/resolve`, {
+    expect(fetch).toHaveBeenCalledWith(`${serverUrl}/workers/secrets`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -294,83 +293,19 @@ describe("getCredential", () => {
   });
 });
 
-// ── injectCredentials ────────────────────────────────────
+// ── runWithCredentialContext ─────────────────────────────
 
-describe("injectCredentials", () => {
+describe("runWithCredentialContext", () => {
   const serverUrl = "https://api.test";
   const headers = { Authorization: "Bearer key" };
-  const token = "exec-tok";
 
   afterEach(() => {
     clearCredentialContext();
-    // Clean up any env vars
-    delete process.env.TEST_CRED_A;
-    delete process.env.TEST_CRED_B;
-  });
-
-  it("sets credentials as env vars in isolated mode (default)", () => {
-    const creds = { TEST_CRED_A: "val-a", TEST_CRED_B: "val-b" };
-    const cleanup = injectCredentials(serverUrl, headers, token, creds);
-
-    expect(process.env.TEST_CRED_A).toBe("val-a");
-    expect(process.env.TEST_CRED_B).toBe("val-b");
-
-    cleanup();
-
-    expect(process.env.TEST_CRED_A).toBeUndefined();
-    expect(process.env.TEST_CRED_B).toBeUndefined();
-  });
-
-  it("restores previous env var values on cleanup", () => {
-    process.env.TEST_CRED_A = "original";
-    const creds = { TEST_CRED_A: "overridden" };
-    const cleanup = injectCredentials(serverUrl, headers, token, creds, true);
-
-    expect(process.env.TEST_CRED_A).toBe("overridden");
-
-    cleanup();
-
-    expect(process.env.TEST_CRED_A).toBe("original");
-    delete process.env.TEST_CRED_A;
-  });
-
-  it("sets credential context in non-isolated mode", () => {
-    const creds = { MY_KEY: "secret" };
-    const cleanup = injectCredentials(serverUrl, headers, token, creds, false);
-
-    // In non-isolated mode, env vars should NOT be set
-    expect(process.env.MY_KEY).toBeUndefined();
-
-    // Credential context should be available (we test indirectly via getCredential)
-    // Clean up
-    cleanup();
-  });
-
-  it("clears credential context on cleanup in non-isolated mode", async () => {
-    const creds = { MY_KEY: "secret" };
-    const cleanup = injectCredentials(serverUrl, headers, token, creds, false);
-
-    // Context should be set — getCredential should not throw "no context"
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ MY_KEY: "resolved" }),
-      }),
-    );
-    const val = await getCredential("MY_KEY");
-    expect(val).toBe("resolved");
-
-    cleanup();
-
-    // After cleanup, context cleared — getCredential should throw
-    await expect(getCredential("MY_KEY")).rejects.toThrow("No credential context available");
-
     vi.restoreAllMocks();
   });
 
   it.each([1, 2, 3])(
-    "runWithCredentialContext isolates concurrent executions (run %i)",
+    "isolates concurrent executions (run %i)",
     async () => {
       // Reproduce the worker race that breaks test_suite2_tool_calling:
       //   1. Worker A enters context, starts handler.
@@ -396,8 +331,6 @@ describe("injectCredentials", () => {
         });
       }
 
-      // 5 overlapping workers — each must resolve with its own token even though
-      // siblings enter/exit their contexts during this one's handler.
       const results = await Promise.all([
         workerHandler("tok-A", 30),
         workerHandler("tok-B", 5),
@@ -413,19 +346,6 @@ describe("injectCredentials", () => {
         "tok-D:MY_KEY",
         "tok-E:MY_KEY",
       ]);
-
-      vi.restoreAllMocks();
     },
   );
-
-  it("isolated mode explicitly set to true works same as default", () => {
-    const creds = { TEST_CRED_A: "val-a" };
-    const cleanup = injectCredentials(serverUrl, headers, token, creds, true);
-
-    expect(process.env.TEST_CRED_A).toBe("val-a");
-
-    cleanup();
-
-    expect(process.env.TEST_CRED_A).toBeUndefined();
-  });
 });

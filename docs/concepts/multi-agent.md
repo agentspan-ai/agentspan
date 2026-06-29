@@ -50,7 +50,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 researcher = Agent(name="researcher", model="openai/gpt-4o",
                    instructions="Research the topic and provide key facts.")
@@ -110,7 +110,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 market = Agent(name="market", model="openai/gpt-4o",
                instructions="Analyze market size, growth, and key players.")
@@ -160,7 +160,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def check_balance(account_id: str) -> dict:
@@ -212,11 +212,11 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 classifier = Agent(
     name="classifier",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="Classify the request as 'billing', 'technical', or 'general'. Reply with just the category.",
 )
 
@@ -287,8 +287,8 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, Strategy
-from agentspan.agents import TextMentionTermination
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import TextMentionTermination
 
 triage = Agent(name="triage", model="openai/gpt-4o",
                instructions="Triage support requests. Say 'BILLING' for billing, 'TECH' for technical.")
@@ -427,7 +427,7 @@ sequenceDiagram
 ```
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, start
+from conductor.ai.agents import Agent, AgentRuntime, start
 
 workflow = Agent(
     name="manual_workflow",
@@ -449,7 +449,7 @@ with AgentRuntime() as runtime:
 Control when multi-agent loops stop:
 
 ```python
-from agentspan.agents import (
+from conductor.ai.agents import (
     MaxMessageTermination,
     TextMentionTermination,
     StopMessageTermination,
@@ -472,7 +472,7 @@ TokenUsageTermination(max_total_tokens=10000)
 Combine multiple conditions:
 
 ```python
-from agentspan.agents import Agent
+from conductor.ai.agents import Agent
 
 agent = Agent(
     name="team",

@@ -15,9 +15,10 @@ export type {
   GuardrailDef,
   AgentEvent,
   AgentStatus,
+  PendingTool,
+  PendingToolCall,
   DeploymentInfo,
   PromptTemplate as PromptTemplateInterface,
-  CredentialFile,
   CodeExecutionConfig,
   CliConfig,
   RunOptions,
@@ -61,6 +62,7 @@ export type {
   PdfToolOptions,
   SearchToolOptions,
   IndexToolOptions,
+  WaitForMessageToolOptions,
 } from "./tool.js";
 export {
   tool,
@@ -78,6 +80,7 @@ export {
   pdfTool,
   searchTool,
   indexTool,
+  waitForMessageTool,
   Tool,
   toolsFrom,
 } from "./tool.js";
@@ -142,6 +145,25 @@ export {
   shutdown,
 } from "./runtime.js";
 
+// ── Control-plane / Workflow clients ────────────────────
+export type { ClientHandle } from "./agent-client.js";
+export { AgentClient, decodeJwtExp } from "./agent-client.js";
+export type { WorkflowExecution, WorkflowTokenUsage } from "./workflow-client.js";
+export { WorkflowClient } from "./workflow-client.js";
+
+// ── Scheduling ──────────────────────────────────────────
+export {
+  Schedule,
+  ScheduleClient,
+  ScheduleError,
+  ScheduleNameConflict,
+  ScheduleNotFound,
+  InvalidCronExpression,
+} from "./schedule.js";
+export type { ScheduleOptions, ScheduleInfo, SchedulerFetcher } from "./schedule.js";
+import * as schedules from "./schedules-api.js";
+export { schedules };
+
 // ── Credentials ─────────────────────────────────────────
 export {
   extractExecutionToken,
@@ -150,7 +172,6 @@ export {
   setCredentialContext,
   runWithCredentialContext,
   clearCredentialContext,
-  injectCredentials,
 } from "./credentials.js";
 
 // ── Guardrails ──────────────────────────────────────────
@@ -177,7 +198,18 @@ export type {
   PlanOptions,
   PlanLike,
 } from "./plans.js";
-export { Plan, Step, Op, Generate, Validation, Action, Ref, Context, coercePlan, serializePlanValue } from "./plans.js";
+export {
+  Plan,
+  Step,
+  Op,
+  Generate,
+  Validation,
+  Action,
+  Ref,
+  Context,
+  coercePlan,
+  serializePlanValue,
+} from "./plans.js";
 
 // ── Termination ─────────────────────────────────────────
 export {
@@ -217,8 +249,8 @@ export type { CliConfigOptions } from "./cli-config.js";
 export { makeCliTool } from "./cli-config.js";
 
 // ── Extended Agent Types ────────────────────────────────
-export type { UserProxyMode, UserProxyAgentOptions, GPTAssistantAgentOptions } from "./ext.js";
-export { UserProxyAgent, GPTAssistantAgent } from "./ext.js";
+export type { GPTAssistantAgentOptions } from "./ext.js";
+export { GPTAssistantAgent } from "./ext.js";
 
 // ── Discovery ───────────────────────────────────────────
 export { discoverAgents } from "./discovery.js";

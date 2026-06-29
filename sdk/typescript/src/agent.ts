@@ -1,4 +1,4 @@
-import type { Strategy, CredentialFile, CodeExecutionConfig, CliConfig, PrefillToolCall } from "./types.js";
+import type { Strategy, CodeExecutionConfig, CliConfig, PrefillToolCall } from "./types.js";
 import { agentTool } from "./tool.js";
 import { ConfigurationError } from "./errors.js";
 import { ClaudeCode } from "./claude-code.js";
@@ -100,6 +100,23 @@ export interface AgentOptions {
   memory?: ConversationMemory;
   maxTurns?: number;
   maxTokens?: number;
+  /**
+   * Reasoning effort for OpenAI reasoning models (e.g. "low", "medium",
+   * "high"). Emitted as `reasoningEffort` on the wire to match Python/Java.
+   */
+  reasoningEffort?: string;
+  /**
+   * Token budget for proactive context-window condensation. When the running
+   * context approaches this budget the server condenses history. Emitted as
+   * `contextWindowBudget` to match Python/Java.
+   */
+  contextWindowBudget?: number;
+  /**
+   * Input/output field names to redact in execution history and the UI.
+   * Maps to Conductor's `WorkflowDef.maskedFields`. NOTE: the server does
+   * not yet apply this (known no-op); emitted for cross-SDK parity.
+   */
+  maskedFields?: string[];
   temperature?: number;
   timeoutSeconds?: number;
   external?: boolean;
@@ -142,7 +159,7 @@ export interface AgentOptions {
   cliCommands?: boolean;
   /** Shorthand: allowed CLI commands (implies cliCommands=true). */
   cliAllowedCommands?: string[];
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
   /** Stateful execution — each run gets a unique domain UUID for worker isolation. */
   stateful?: boolean;
   /** Max LLM turns for the fallback agent in PLAN_EXECUTE strategy. */
@@ -193,6 +210,9 @@ export class Agent {
   readonly memory?: ConversationMemory;
   readonly maxTurns: number;
   readonly maxTokens?: number;
+  readonly reasoningEffort?: string;
+  readonly contextWindowBudget?: number;
+  readonly maskedFields?: string[];
   readonly temperature?: number;
   readonly timeoutSeconds: number;
   readonly external: boolean;
@@ -216,7 +236,7 @@ export class Agent {
   readonly gate?: GateCondition;
   readonly codeExecutionConfig?: CodeExecutionConfig;
   readonly cliConfig?: CliConfig;
-  readonly credentials?: (string | CredentialFile)[];
+  readonly credentials?: string[];
   readonly fallbackMaxTurns?: number;
   readonly planSource?: { tool: string; args?: Record<string, unknown> };
   /**
@@ -259,6 +279,9 @@ export class Agent {
     this.memory = options.memory;
     this.maxTurns = options.maxTurns ?? 25;
     this.maxTokens = options.maxTokens;
+    this.reasoningEffort = options.reasoningEffort;
+    this.contextWindowBudget = options.contextWindowBudget;
+    this.maskedFields = options.maskedFields;
     this.temperature = options.temperature;
     this.timeoutSeconds = options.timeoutSeconds ?? 0;
     this.external = options.external ?? false;

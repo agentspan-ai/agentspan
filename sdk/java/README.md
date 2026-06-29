@@ -1,6 +1,6 @@
 # Agentspan Java SDK
 
-Java SDK for the [Agentspan](https://agentspan.dev) agent orchestration platform. Build, deploy, and run AI agents backed by Conductor workflows.
+Java SDK for [Agentspan](https://agentspan.ai) — a durable runtime for AI agents, built for Conductor. Build, deploy, and run agents that survive crashes, scale across machines, and pause for human approval.
 
 ## Requirements
 
@@ -14,8 +14,8 @@ Maven (`pom.xml`):
 
 ```xml
 <dependency>
-    <groupId>ai.agentspan</groupId>
-    <artifactId>java-sdk</artifactId>
+    <groupId>org.conductoross.conductor</groupId>
+    <artifactId>conductor-agent-sdk</artifactId>
     <version>0.1.0</version>
 </dependency>
 ```
@@ -23,7 +23,7 @@ Maven (`pom.xml`):
 Gradle (`build.gradle`):
 
 ```groovy
-implementation 'ai.agentspan:java-sdk:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
 ```
 
 ### Spring Boot starter
@@ -32,22 +32,22 @@ For Spring Boot apps, add the auto-configuration starter instead:
 
 ```xml
 <dependency>
-    <groupId>ai.agentspan</groupId>
-    <artifactId>java-sdk-spring</artifactId>
+    <groupId>org.conductoross.conductor</groupId>
+    <artifactId>conductor-agent-sdk-spring</artifactId>
     <version>0.1.0</version>
 </dependency>
 ```
 
 ```groovy
-implementation 'ai.agentspan:java-sdk-spring:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk-spring:0.1.0'
 ```
 
 ## Quick Start
 
 ```java
-import ai.agentspan.Agent;
-import ai.agentspan.Agentspan;
-import ai.agentspan.model.AgentResult;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.model.AgentResult;
 
 public class Main {
     public static void main(String[] args) {
@@ -57,12 +57,16 @@ public class Main {
             .instructions("You are a helpful assistant.")
             .build();
 
-        AgentResult result = Agentspan.run(agent, "What is the capital of France?");
-        result.printResult();
-        Agentspan.shutdown();
+        // AgentRuntime is AutoCloseable — try-with-resources shuts down workers cleanly.
+        try (AgentRuntime runtime = new AgentRuntime()) {
+            AgentResult result = runtime.run(agent, "What is the capital of France?");
+            result.printResult();
+        }
     }
 }
 ```
+
+> In Spring, inject the auto-configured `AgentRuntime` bean instead of constructing one.
 
 ## Configuration
 
@@ -75,29 +79,31 @@ export AGENTSPAN_AUTH_SECRET=your-secret
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o
 ```
 
-Or configure programmatically:
+Or configure programmatically. Connection (server URL + auth) is owned by the
+Conductor `ApiClient`; `AgentConfig` carries only worker-runner tuning:
 
 ```java
-import ai.agentspan.AgentConfig;
-import ai.agentspan.Agentspan;
+import io.orkes.conductor.client.ApiClient;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
 
-AgentConfig config = new AgentConfig(
-    "http://localhost:6767/api",
-    "my-key",
-    "my-secret",
-    100,  // poll interval ms
-    5     // worker threads
-);
-Agentspan.configure(config);
+// Build the Conductor client (server URL + optional key/secret auth)…
+ApiClient client = AgentRuntime.client("http://localhost:6767", "my-key", "my-secret");
+// …and pass worker tuning (poll interval ms, worker threads).
+AgentRuntime runtime = new AgentRuntime(client, new AgentConfig(100, 5));
 ```
+
+> Or just `new AgentRuntime()` / `new AgentRuntime(new AgentConfig(100, 5))` to
+> build the client from `AGENTSPAN_SERVER_URL` / `AGENTSPAN_AUTH_KEY` /
+> `AGENTSPAN_AUTH_SECRET`.
 
 ## Tools
 
 Define tools using the `@Tool` annotation:
 
 ```java
-import ai.agentspan.annotations.Tool;
-import ai.agentspan.internal.ToolRegistry;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.internal.ToolRegistry;
 
 public class WeatherTools {
     @Tool(name = "get_weather", description = "Get weather for a city")
@@ -125,7 +131,9 @@ Agent writer = Agent.builder().name("writer").model("openai/gpt-4o")
 
 // Sequential pipeline
 Agent pipeline = researcher.then(writer);
-AgentResult result = Agentspan.run(pipeline, "Write about AI trends");
+try (AgentRuntime runtime = new AgentRuntime()) {
+    AgentResult result = runtime.run(pipeline, "Write about AI trends");
+}
 ```
 
 ## Streaming

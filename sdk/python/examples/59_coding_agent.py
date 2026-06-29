@@ -23,7 +23,7 @@ Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
 
 # ── QA Tester: reviews code and runs tests ───────────────────────────
 

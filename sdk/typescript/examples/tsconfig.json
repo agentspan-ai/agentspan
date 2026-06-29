@@ -4,17 +4,18 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ESNext"],
+    "types": ["node"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "noEmit": true,
     "paths": {
-      "@agentspan-ai/sdk": ["../src/index.ts"],
-      "@agentspan-ai/sdk/langgraph": ["../src/wrappers/langgraph.ts"],
-      "@agentspan-ai/sdk/langchain": ["../src/wrappers/langchain.ts"],
-      "@agentspan-ai/sdk/vercel-ai": ["../src/wrappers/ai.ts"],
-      "@agentspan-ai/sdk/testing": ["../src/testing/index.ts"]
+      "@conductor-oss/conductor-agent-sdk": ["../src/index.ts"],
+      "@conductor-oss/conductor-agent-sdk/langgraph": ["../src/wrappers/langgraph.ts"],
+      "@conductor-oss/conductor-agent-sdk/langchain": ["../src/wrappers/langchain.ts"],
+      "@conductor-oss/conductor-agent-sdk/vercel-ai": ["../src/wrappers/ai.ts"],
+      "@conductor-oss/conductor-agent-sdk/testing": ["../src/testing/index.ts"]
     }
   },
   "include": ["**/*.ts"],

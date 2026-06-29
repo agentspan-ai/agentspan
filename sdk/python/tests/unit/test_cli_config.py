@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentspan.agents.cli_config import CliConfig, TerminalToolError, _make_cli_tool, _validate_cli_command
+from conductor.ai.agents.cli_config import CliConfig, TerminalToolError, _make_cli_tool, _validate_cli_command
 
 
 class TestCliConfig:
@@ -59,6 +59,18 @@ class TestValidateCliCommand:
         with pytest.raises(ValueError, match="gh, git"):
             _validate_cli_command("curl", ["git", "gh"])
 
+    def test_full_command_line_validates_on_executable(self):
+        # LLMs commonly pass the entire command line as `command`; validation
+        # must key off the executable (first token), not the whole string.
+        _validate_cli_command("gh repo list --limit 5", ["gh"])  # no exception
+
+    def test_full_command_line_with_path_executable(self):
+        _validate_cli_command("/usr/bin/gh repo list", ["gh"])  # no exception
+
+    def test_full_command_line_disallowed_executable_raises(self):
+        with pytest.raises(ValueError, match="not allowed"):
+            _validate_cli_command("rm -rf /", ["gh"])
+
 
 class TestMakeCliTool:
     """Test _make_cli_tool factory."""
@@ -88,7 +100,7 @@ class TestMakeCliTool:
 
     def test_shell_allowed_when_enabled(self):
         tool_fn = _make_cli_tool(allowed_commands=[], allow_shell=True)
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="hello\n", stderr=""
             )
@@ -100,7 +112,7 @@ class TestMakeCliTool:
 
     def test_basic_execution(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="output\n", stderr=""
             )
@@ -119,9 +131,41 @@ class TestMakeCliTool:
                 cwd=None,
             )
 
+    def test_full_command_line_in_command_is_tokenized(self):
+        # Reproduces examples/16d_credentials_gh_cli.py: the LLM passes the whole
+        # command line in `command`. It must validate on `gh` and exec the tokens.
+        tool_fn = _make_cli_tool(allowed_commands=["gh"])
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="[]\n", stderr="")
+            result = tool_fn.__wrapped__(
+                command="gh repo list agentspan --limit 5 --json name,updatedAt"
+            )
+            assert result["status"] == "success"
+            mock_run.assert_called_once_with(
+                ["gh", "repo", "list", "agentspan", "--limit", "5", "--json", "name,updatedAt"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=None,
+            )
+
+    def test_command_line_plus_args_list_are_merged(self):
+        # Executable + some args in `command`, remaining args in the list.
+        tool_fn = _make_cli_tool(allowed_commands=["gh"])
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            tool_fn.__wrapped__(command="gh repo list", args=["--limit", "5"])
+            mock_run.assert_called_once_with(
+                ["gh", "repo", "list", "--limit", "5"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=None,
+            )
+
     def test_nonzero_exit_code_returns_error_with_output(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=1, stdout="partial output", stderr="error msg"
             )
@@ -136,7 +180,7 @@ class TestMakeCliTool:
     def test_nonzero_exit_code_preserves_stdout(self):
         """Verify the LLM sees stdout even when the command fails."""
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=128,
                 stdout="remote: Repository not found.\n",
@@ -150,21 +194,21 @@ class TestMakeCliTool:
 
     def test_timeout_raises_terminal_error(self):
         tool_fn = _make_cli_tool(allowed_commands=[], timeout=5)
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(cmd="sleep", timeout=5)
             with pytest.raises(TerminalToolError, match="timed out"):
                 tool_fn.__wrapped__(command="sleep", args=["100"])
 
     def test_command_not_found_raises_terminal_error(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError()
             with pytest.raises(TerminalToolError, match="not found"):
                 tool_fn.__wrapped__(command="nonexistent")
 
     def test_cwd_override(self):
         tool_fn = _make_cli_tool(allowed_commands=[], working_dir="/default")
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="", stderr=""
             )
@@ -187,9 +231,9 @@ class TestMakeCliTool:
         assert "120s" in tool_fn._tool_def.description
 
     def test_context_key_saves_stdout_on_success(self):
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="/tmp/abc123\n", stderr=""
             )
@@ -199,9 +243,9 @@ class TestMakeCliTool:
             assert ctx.state["working_dir"] == "/tmp/abc123"
 
     def test_context_key_not_saved_on_failure(self):
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=1, stdout="partial output", stderr="error"
             )
@@ -212,9 +256,9 @@ class TestMakeCliTool:
 
     def test_context_key_with_internal_key_name(self):
         """context_key='_agent_state' should work without corrupting internals."""
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="val\n", stderr="")
             ctx = ToolContext(execution_id="test", agent_name="test", state={})
             result = tool_fn.__wrapped__(command="echo", args=["val"], context_key="_agent_state", context=ctx)
@@ -223,9 +267,9 @@ class TestMakeCliTool:
 
     def test_context_key_falls_back_to_stderr(self):
         """When stdout is empty, context_key should fall back to stderr."""
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0, stdout="", stderr="Cloning into '/tmp/repo'...\n"
             )
@@ -236,9 +280,9 @@ class TestMakeCliTool:
 
     def test_context_key_empty_string_is_noop(self):
         """Empty context_key should not write anything."""
-        from agentspan.agents.tool import ToolContext
+        from conductor.ai.agents.tool import ToolContext
         tool_fn = _make_cli_tool(allowed_commands=[])
-        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+        with patch("conductor.ai.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="val\n", stderr="")
             ctx = ToolContext(execution_id="test", agent_name="test", state={})
             tool_fn.__wrapped__(command="echo", context_key="", context=ctx)
@@ -249,28 +293,28 @@ class TestAgentCliIntegration:
     """Test Agent integration with CLI tools."""
 
     def test_cli_commands_true_attaches_tool(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="ops", model="openai/gpt-4o", cli_commands=True)
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
         assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_cli_commands_false_no_tool(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="ops", model="openai/gpt-4o", cli_commands=False)
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
         assert not any(n.endswith("_run_command") for n in tool_names)
 
     def test_default_has_no_cli_tool(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="ops", model="openai/gpt-4o")
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
         assert not any(n.endswith("_run_command") for n in tool_names)
 
     def test_cli_allowed_commands_propagated(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(
             name="ops",
@@ -282,7 +326,7 @@ class TestAgentCliIntegration:
         assert agent.cli_config.allowed_commands == ["git", "gh"]
 
     def test_cli_config_full_control(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         cfg = CliConfig(
             allowed_commands=["docker"],
@@ -295,7 +339,7 @@ class TestAgentCliIntegration:
         assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_coexists_with_code_execution(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(
             name="ops",
@@ -308,8 +352,8 @@ class TestAgentCliIntegration:
         assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_coexists_with_manual_tools(self):
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.tool import tool
 
         @tool
         def search(query: str) -> str:
@@ -327,7 +371,7 @@ class TestAgentCliIntegration:
         assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_agent_decorator_support(self):
-        from agentspan.agents.agent import Agent, _resolve_agent, agent
+        from conductor.ai.agents.agent import Agent, _resolve_agent, agent
 
         @agent(model="openai/gpt-4o", cli_commands=True, cli_allowed_commands=["git"])
         def my_agent():
@@ -342,7 +386,7 @@ class TestAgentCliIntegration:
 
     def test_cli_commands_fallback_to_allowed_commands(self):
         """When cli_commands=True with no cli_allowed_commands, falls back to allowed_commands."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(
             name="ops",
@@ -354,7 +398,7 @@ class TestAgentCliIntegration:
 
     def test_cli_allowed_commands_takes_precedence(self):
         """cli_allowed_commands takes precedence over allowed_commands."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(
             name="ops",
@@ -366,7 +410,7 @@ class TestAgentCliIntegration:
         assert agent.cli_config.allowed_commands == ["git"]
 
     def test_disabled_cli_config_no_tool(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         cfg = CliConfig(enabled=False, allowed_commands=["git"])
         agent = Agent(name="ops", model="openai/gpt-4o", cli_config=cfg)

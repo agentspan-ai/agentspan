@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 os.environ["AGENTSPAN_LLM_MODEL"] = "openai/gpt-4o-mini"
 os.environ["AGENTSPAN_SECONDARY_LLM_MODEL"] = "openai/gpt-4o"
 
-from agentspan.agents.config_serializer import AgentConfigSerializer
+from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
 serializer = AgentConfigSerializer()
 
@@ -42,7 +42,7 @@ def dump(name: str, agent) -> None:
 
 # ── 01_basic_agent ───────────────────────────────────────────────────
 def dump_01():
-    from agentspan.agents import Agent
+    from conductor.ai.agents import Agent
     from settings import settings
 
     agent = Agent(name="greeter", model=settings.llm_model)
@@ -51,7 +51,7 @@ def dump_01():
 
 # ── 02_tools ─────────────────────────────────────────────────────────
 def dump_02():
-    from agentspan.agents import Agent, tool
+    from conductor.ai.agents import Agent, tool
     from settings import settings
 
     @tool
@@ -82,7 +82,7 @@ def dump_02():
 def dump_03():
     from pydantic import BaseModel
 
-    from agentspan.agents import Agent, tool
+    from conductor.ai.agents import Agent, tool
     from settings import settings
 
     class WeatherReport(BaseModel):
@@ -108,7 +108,7 @@ def dump_03():
 
 # ── 05_handoffs ──────────────────────────────────────────────────────
 def dump_05():
-    from agentspan.agents import Agent, Strategy, tool
+    from conductor.ai.agents import Agent, Strategy, tool
     from settings import settings
 
     @tool
@@ -157,7 +157,7 @@ def dump_05():
 
 # ── 06_sequential_pipeline ───────────────────────────────────────────
 def dump_06():
-    from agentspan.agents import Agent
+    from conductor.ai.agents import Agent
     from settings import settings
 
     researcher = Agent(
@@ -190,7 +190,7 @@ def dump_06():
 
 # ── 07_parallel_agents ───────────────────────────────────────────────
 def dump_07():
-    from agentspan.agents import Agent, Strategy
+    from conductor.ai.agents import Agent, Strategy
     from settings import settings
 
     market_analyst = Agent(
@@ -228,7 +228,7 @@ def dump_07():
 
 # ── 08_router_agent ──────────────────────────────────────────────────
 def dump_08():
-    from agentspan.agents import Agent, Strategy
+    from conductor.ai.agents import Agent, Strategy
     from settings import settings
 
     planner = Agent(
@@ -265,7 +265,7 @@ def dump_08():
 def dump_10():
     import re
 
-    from agentspan.agents import Agent, Guardrail, GuardrailResult, OnFail, Position, guardrail, tool
+    from conductor.ai.agents import Agent, Guardrail, GuardrailResult, OnFail, Position, guardrail, tool
     from settings import settings
 
     @tool
@@ -308,7 +308,7 @@ def dump_10():
 
 # ── 13_hierarchical_agents ───────────────────────────────────────────
 def dump_13():
-    from agentspan.agents import Agent, Strategy, OnTextMention
+    from conductor.ai.agents import Agent, Strategy, OnTextMention
     from settings import settings
 
     backend_dev = Agent(
@@ -385,8 +385,8 @@ def dump_13():
 
 # ── 17_swarm_orchestration ───────────────────────────────────────────
 def dump_17():
-    from agentspan.agents import Agent, Strategy
-    from agentspan.agents.handoff import OnTextMention
+    from conductor.ai.agents import Agent, Strategy
+    from conductor.ai.agents.handoff import OnTextMention
     from settings import settings
 
     refund_agent = Agent(
@@ -429,7 +429,7 @@ def dump_17():
 
 # ── 19_composable_termination ────────────────────────────────────────
 def dump_19():
-    from agentspan.agents import (
+    from conductor.ai.agents import (
         Agent,
         MaxMessageTermination,
         StopMessageTermination,
@@ -494,7 +494,7 @@ def dump_19():
 
 # ── 21_regex_guardrails ──────────────────────────────────────────────
 def dump_21():
-    from agentspan.agents import Agent, OnFail, Position, RegexGuardrail, tool
+    from conductor.ai.agents import Agent, OnFail, Position, RegexGuardrail, tool
     from settings import settings
 
     no_emails = RegexGuardrail(
@@ -534,7 +534,7 @@ def dump_21():
 
 # ── 22_llm_guardrails ───────────────────────────────────────────────
 def dump_22():
-    from agentspan.agents import Agent, LLMGuardrail, OnFail, Position
+    from conductor.ai.agents import Agent, LLMGuardrail, OnFail, Position
     from settings import settings
 
     safety_guard = LLMGuardrail(
@@ -567,7 +567,7 @@ def dump_22():
 
 # ── 45_agent_tool ────────────────────────────────────────────────────
 def dump_45():
-    from agentspan.agents import Agent, agent_tool, tool
+    from conductor.ai.agents import Agent, agent_tool, tool
     from settings import settings
 
     @tool
@@ -603,7 +603,7 @@ def dump_45():
 
 # ── 47_callbacks ─────────────────────────────────────────────────────
 def dump_47():
-    from agentspan.agents import Agent, tool
+    from conductor.ai.agents import Agent, tool
     from settings import settings
 
     def log_before_model(messages=None, **kwargs):
@@ -630,7 +630,7 @@ def dump_47():
 
 # ── 52_nested_strategies ─────────────────────────────────────────────
 def dump_52():
-    from agentspan.agents import Agent
+    from conductor.ai.agents import Agent
     from settings import settings
 
     market_analyst = Agent(

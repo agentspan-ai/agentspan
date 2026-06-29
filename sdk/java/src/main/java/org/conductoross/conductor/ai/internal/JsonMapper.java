@@ -1,0 +1,64 @@
+// Copyright (c) 2025 Agentspan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
+package org.conductoross.conductor.ai.internal;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
+/**
+ * Singleton ObjectMapper factory with consistent configuration.
+ */
+public class JsonMapper {
+    private static final ObjectMapper INSTANCE;
+
+    static {
+        INSTANCE = new ObjectMapper();
+        INSTANCE.registerModule(new JavaTimeModule());
+        INSTANCE.registerModule(new Jdk8Module());
+        INSTANCE.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        INSTANCE.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        INSTANCE.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+    }
+
+    private JsonMapper() {}
+
+    /** Get the shared ObjectMapper instance. */
+    public static ObjectMapper get() {
+        return INSTANCE;
+    }
+
+    /**
+     * Serialize an object to a JSON string.
+     *
+     * @param obj the object to serialize
+     * @return JSON string
+     */
+    public static String toJson(Object obj) {
+        try {
+            return INSTANCE.writeValueAsString(obj);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize to JSON", e);
+        }
+    }
+
+    /**
+     * Deserialize a JSON string to the given type.
+     *
+     * @param json the JSON string
+     * @param cls  the target class
+     * @param <T>  the target type
+     * @return the deserialized object
+     */
+    public static <T> T fromJson(String json, Class<T> cls) {
+        try {
+            return INSTANCE.readValue(json, cls);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to deserialize JSON", e);
+        }
+    }
+}

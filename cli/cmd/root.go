@@ -58,7 +58,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "Runtime server URL (default: http://localhost:6767)")
+	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "Runtime server URL; once passed it is saved as the default for subsequent commands (initial default: http://localhost:6767)")
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(tuiCmd)
 }

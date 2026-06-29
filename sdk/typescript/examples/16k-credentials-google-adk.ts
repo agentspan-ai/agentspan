@@ -23,7 +23,7 @@
  *   - GITHUB_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime, tool, getCredential } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool, getCredential } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // Mirrors a Google ADK FunctionTool that checks for a credential
@@ -44,7 +44,6 @@ const checkGithubAuth = tool(
     name: 'check_github_auth',
     description: 'Check if GitHub authentication is available.',
     inputSchema: { type: 'object', properties: {} },
-    isolated: false,
     credentials: ['GITHUB_TOKEN'],
   },
 );

@@ -150,8 +150,6 @@ export const API_REFERENCE_URL = {
   BASE: "/docs",
 };
 
-export const CREDENTIALS_URL = "/credentials";
-
 export const EXPERIMENTS_URL = {
   BASE: "/experiments",
   EVAL_RUNS: "/experiments/eval-runs",

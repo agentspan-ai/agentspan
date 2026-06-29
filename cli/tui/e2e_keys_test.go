@@ -666,23 +666,7 @@ func TestE2EServerRRefresh(t *testing.T) {
 func TestE2ECredentialsRendered(t *testing.T) {
 	m := enavTo(t, ebaseApp(t), ViewCredentials)
 	out := eout(m)
-	ehas(t, "credentials", out, "Credentials")
-	ehas(t, "bindings", out, "Bindings")
-}
-
-func TestE2ECredentialsTabSwitch(t *testing.T) {
-	m := enavTo(t, ebaseApp(t), ViewCredentials)
-	if m.credentials.Tab() != views.CredTabCreds {
-		t.Errorf("initial tab=%d, want CredTabCreds", m.credentials.Tab())
-	}
-	m = esend(m, espec(tea.KeyTab))
-	if m.credentials.Tab() != views.CredTabBindings {
-		t.Errorf("tab: tab=%d, want CredTabBindings", m.credentials.Tab())
-	}
-	m = esend(m, espec(tea.KeyTab))
-	if m.credentials.Tab() != views.CredTabCreds {
-		t.Errorf("tab again: tab=%d, want CredTabCreds", m.credentials.Tab())
-	}
+	ehas(t, "secrets", out, "Secrets")
 }
 
 func TestE2ECredentialsButtonBar(t *testing.T) {
@@ -854,7 +838,7 @@ func TestE2EHelpFromAllViews(t *testing.T) {
 	}{
 		{ViewDashboard, "dashboard"}, {ViewAgents, "agents"},
 		{ViewExecutions, "executions"}, {ViewServer, "server"},
-		{ViewCredentials, "credentials"}, {ViewDoctor, "doctor"},
+		{ViewCredentials, "secrets"}, {ViewDoctor, "doctor"},
 		{ViewSkills, "skills"},
 	}
 	for _, v := range all {

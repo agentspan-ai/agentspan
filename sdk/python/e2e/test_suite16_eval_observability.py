@@ -19,9 +19,9 @@ import uuid
 import pytest
 import requests
 
-from agentspan.agents import Agent
-from agentspan.agents.testing import CorrectnessEval, EvalCase
-from agentspan.agents.testing.eval_runner import EvalCheckResult, EvalCaseResult, EvalSuiteResult
+from conductor.ai.agents import Agent
+from conductor.ai.agents.testing import CorrectnessEval, EvalCase
+from conductor.ai.agents.testing.eval_runner import EvalCheckResult, EvalCaseResult, EvalSuiteResult
 
 pytestmark = pytest.mark.e2e
 
@@ -231,8 +231,8 @@ class TestDatasetPushAndRetrieve:
     DATASET_NAME = f"e2e-test-dataset-{uuid.uuid4().hex[:8]}"
 
     def test_push_dataset(self, runtime):
-        from agentspan.agents.testing import EvalCase
-        from agentspan.agents import Agent
+        from conductor.ai.agents.testing import EvalCase
+        from conductor.ai.agents import Agent
 
         agent = Agent(name="dummy", instructions="dummy")
         runtime.push_dataset(
@@ -265,8 +265,8 @@ class TestDatasetPushAndRetrieve:
         assert resp.status_code == 404
 
     def test_dataset_upsert_updates_cases(self, runtime):
-        from agentspan.agents import Agent
-        from agentspan.agents.testing import EvalCase
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.testing import EvalCase
 
         agent = Agent(name="dummy", instructions="dummy")
         # Push again with 3 cases — should replace the 2 from test_push_dataset

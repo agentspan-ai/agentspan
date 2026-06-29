@@ -11,8 +11,8 @@ from unittest.mock import patch
 
 import pytest
 
-from agentspan.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
-from agentspan.agents.runtime.credentials.types import (
+from conductor.ai.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
+from conductor.ai.agents.runtime.credentials.types import (
     CredentialNotFoundError,
     CredentialServiceError,
 )

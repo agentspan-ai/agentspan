@@ -11,8 +11,8 @@ Setup:
     python 05_support_swarm.py
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy, tool
-from agentspan.agents.handoff import OnTextMention
+from conductor.ai.agents import Agent, AgentRuntime, Strategy, tool
+from conductor.ai.agents.handoff import OnTextMention
 
 
 # ── Tools ────────────────────────────────────────────────────────────

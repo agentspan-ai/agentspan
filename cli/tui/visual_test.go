@@ -452,7 +452,7 @@ func TestAllViewsNoOverflow(t *testing.T) {
 		{ViewAgents, "agents"},
 		{ViewExecutions, "executions"},
 		{ViewServer, "server"},
-		{ViewCredentials, "credentials"},
+		{ViewCredentials, "secrets"},
 		{ViewDoctor, "doctor"},
 		{ViewConfigure, "configure"},
 		{ViewSkills, "skills"},

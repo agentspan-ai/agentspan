@@ -5,7 +5,7 @@ import { TerminalToolError } from "./errors.js";
 import {
   extractExecutionToken,
   resolveCredentials,
-  injectCredentials,
+  injectSecretsForInvocation,
   runWithCredentialContext,
 } from "./credentials.js";
 
@@ -237,14 +237,22 @@ export class WorkerManager {
   readonly serverUrl: string;
   readonly headers: Record<string, string>;
   readonly pollIntervalMs: number;
+  /** Optional async provider for auth headers (e.g. minted Orkes JWT). */
+  private readonly headersProvider?: () => Promise<Record<string, string>>;
 
   private pendingWorkers: PendingWorker[] = [];
   private taskManager: TaskManager | null = null;
 
-  constructor(serverUrl: string, headers: Record<string, string>, pollIntervalMs: number = 100) {
+  constructor(
+    serverUrl: string,
+    headers: Record<string, string>,
+    pollIntervalMs: number = 100,
+    headersProvider?: () => Promise<Record<string, string>>,
+  ) {
     this.serverUrl = serverUrl;
     this.headers = headers;
     this.pollIntervalMs = pollIntervalMs;
+    this.headersProvider = headersProvider;
   }
 
   /**
@@ -274,11 +282,16 @@ export class WorkerManager {
     const baseUrl = this.serverUrl.replace(/\/api\/?$/, "");
     process.env.CONDUCTOR_SERVER_URL = baseUrl;
 
-    const authHeaders = this.headers;
+    // Resolve auth headers per-request: the provider (when present) mints/
+    // caches an Orkes JWT (`X-Authorization`) and refreshes it near expiry.
+    // Falls back to the static headers passed at construction.
+    const resolveHeaders = async (): Promise<Record<string, string>> =>
+      this.headersProvider ? await this.headersProvider() : this.headers;
 
     const client = await createConductorClient(
       { serverUrl: baseUrl, disableHttp2: true },
-      (url: string | URL | Request, init?: RequestInit) => {
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const authHeaders = await resolveHeaders();
         // Conductor SDK passes Request objects — inject auth headers.
         if (url instanceof Request) {
           const h = new Headers(url.headers);
@@ -345,7 +358,11 @@ export class WorkerManager {
         // Credential setup
         const execToken = extractExecutionToken(inputData);
 
-        let cleanupCreds: (() => void) | null = null;
+        // Resolve credentials up-front (no env mutation yet). Injection happens
+        // inside runHandler() via injectSecretsForInvocation so the mutate-
+        // invoke-restore sequence is atomic under a process-wide lock.
+        // See docs/design/secret-injection-contract.md.
+        let resolvedCredentials: Record<string, string> = {};
         if (pw.credentials?.length) {
           if (!execToken) {
             throw new NonRetryableException(
@@ -354,13 +371,12 @@ export class WorkerManager {
             );
           }
           try {
-            const resolved = await resolveCredentials(
+            resolvedCredentials = await resolveCredentials(
               serverUrl,
               headers,
               execToken,
               pw.credentials,
             );
-            cleanupCreds = injectCredentials(serverUrl, headers, execToken, resolved);
           } catch (err) {
             throw new NonRetryableException(
               `Credential resolution failed for ${pw.taskName}: ${err instanceof Error ? err.message : String(err)}`,
@@ -372,7 +388,10 @@ export class WorkerManager {
           Omit<TaskResult, "workflowInstanceId" | "taskId">
         > => {
           try {
-            let result = await pw.handler(cleaned);
+            let result = await injectSecretsForInvocation(
+              resolvedCredentials,
+              () => pw.handler(cleaned),
+            );
 
             // State mutation capture
             if (toolContext) {
@@ -394,8 +413,6 @@ export class WorkerManager {
               throw new NonRetryableException(error.message);
             }
             throw error;
-          } finally {
-            cleanupCreds?.();
           }
         };
 

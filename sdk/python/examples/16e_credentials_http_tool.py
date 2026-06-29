@@ -20,8 +20,8 @@ Requirements:
     - GITHUB_TOKEN stored via `agentspan credentials set`
 """
 
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.tool import http_tool
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.tool import http_tool
 from settings import settings
 
 

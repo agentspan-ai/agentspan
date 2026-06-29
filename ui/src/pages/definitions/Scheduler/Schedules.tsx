@@ -309,6 +309,10 @@ export default function ScheduleDefinitions() {
     "all",
   );
 
+  // Filter schedules by agent (workflow name) via ?workflowName= query param.
+  // Enables an "agent's schedules" view that the agent-detail page can deep-link to.
+  const [agentFilterParam] = useQueryState<string>("workflowName", "");
+
   // Build search params for pagination
   const searchParams: SchedulerSearchParams = useMemo(() => {
     const params: SchedulerSearchParams = {
@@ -324,6 +328,10 @@ export default function ScheduleDefinitions() {
       params.name = searchTerm;
     }
 
+    if (agentFilterParam) {
+      params.workflowName = agentFilterParam;
+    }
+
     // Map active filter to paused parameter
     if (activeFilterParam === "yes") {
       params.paused = false; // Active schedules (not paused)
@@ -333,7 +341,7 @@ export default function ScheduleDefinitions() {
     // If "all", don't set paused parameter
 
     return params;
-  }, [page, rowsPerPage, sort, searchTerm, activeFilterParam]);
+  }, [page, rowsPerPage, sort, searchTerm, activeFilterParam, agentFilterParam]);
 
   const {
     data: paginatedData,

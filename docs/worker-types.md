@@ -57,7 +57,7 @@ when multiple agents share the same Conductor namespace.
 
 Credentials are always resolved from the server. There is no environment variable fallback.
 
-- **Execution token present** → `POST /api/credentials/resolve` → injected into `process.env`/`os.environ`
+- **Execution token present** → `POST /api/workers/secrets` → injected into `process.env`/`os.environ`
 - **No execution token** → `FAILED_WITH_TERMINAL_ERROR` (non-retryable)
 - **Credentials not found on server** → `FAILED_WITH_TERMINAL_ERROR` (non-retryable)
 - **Cleanup** → credentials removed from environment after tool execution

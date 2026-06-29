@@ -84,8 +84,9 @@ import subprocess
 import sys
 import tempfile
 
-from agentspan.agents import Agent, AgentRuntime, Strategy, tool
 from settings import settings
+
+from conductor.ai.agents import Agent, AgentRuntime, Strategy, tool
 
 # ── Demo repo setup ───────────────────────────────────────────────────────────
 
@@ -236,6 +237,7 @@ def write_coder_plan(content: str) -> str:
 # via ``tools=`` so Agentspan registers their Conductor task definitions.
 # The compiled plan calls them by name as SIMPLE tasks.
 
+
 @tool
 def edit_file(path: str, old_string: str, new_string: str) -> str:
     """Apply an exact string replacement to a file in the demo repo.
@@ -384,7 +386,7 @@ coder_planner = Agent(
 coder = Agent(
     name="coder",
     model=settings.llm_model,
-    agents=[coder_planner],  # no fallback — plan must succeed
+    planner=coder_planner,  # named slot; no fallback — plan must succeed
     strategy=Strategy.PLAN_EXECUTE,
     tools=[edit_file, write_file, run_command],
 )
@@ -392,16 +394,21 @@ coder = Agent(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
-    task = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else (
-        "Add a greet(name) function to src/math_utils.py that returns "
-        "'Hello, <name>!' and add a test for it in tests/test_math.py"
+    task = (
+        " ".join(sys.argv[1:])
+        if len(sys.argv) > 1
+        else (
+            "Add a greet(name) function to src/math_utils.py that returns "
+            "'Hello, <name>!' and add a test for it in tests/test_math.py"
+        )
     )
 
     repo = _ensure_demo_repo()
     print(f"Task   : {task}")
     print(f"Repo   : {repo}")
-    print(f"Strategy: PLAN_EXECUTE (single planner, no fallback)")
+    print("Strategy: PLAN_EXECUTE (single planner, no fallback)")
     print()
 
     with AgentRuntime() as rt:

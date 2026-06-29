@@ -1,1 +1,1 @@
-ai.agentspan.spring.AgentspanAutoConfiguration
+org.conductoross.conductor.ai.spring.AgentAutoConfiguration

@@ -21,8 +21,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 
 using System.Text.RegularExpressions;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Fix guardrail: redact phone numbers ───────────────────────────────
 

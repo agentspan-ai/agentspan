@@ -41,7 +41,7 @@ import time
 
 os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
-from agentspan.agents import Agent, AgentRuntime, tool, wait_for_message_tool
+from conductor.ai.agents import Agent, AgentRuntime, tool, wait_for_message_tool
 from settings import settings
 
 

@@ -1,19 +1,12 @@
 /**
- * Credentials -- non-isolated tools using getCredential().
+ * Credentials -- in-process tools using getCredential().
  *
  * Demonstrates:
- *   - tool() with isolated: false, credentials: ["STRIPE_SECRET_KEY"]
+ *   - tool() with credentials: ["STRIPE_SECRET_KEY"]
  *   - getCredential() to access the injected value in-process
- *   - When to use isolated=false: SDK clients that can't be serialized across
- *     subprocess boundaries (e.g. existing SDK objects, shared state)
+ *   - Use in-process tools for SDK clients that hold shared state (e.g.
+ *     existing SDK objects, connection pools)
  *   - CredentialNotFoundError handling for graceful degradation
- *
- * When to use isolated=false vs isolated=true (default):
- *   isolated=true  -- runs tool in a fresh subprocess; safer (no env bleed
- *                     between concurrent tasks); use for shell commands, scripts
- *   isolated=false -- runs tool in the same worker process; use only when the
- *                     tool holds shared state or uses objects that can't be
- *                     serialized (e.g. database connection pools, SDK clients)
  *
  * Requirements:
  *   - Agentspan server running at AGENTSPAN_SERVER_URL
@@ -27,7 +20,7 @@ import {
   CredentialNotFoundError,
   getCredential,
   tool,
-} from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Non-isolated tool: get Stripe customer balance ---------------------------
@@ -40,7 +33,7 @@ const getCustomerBalance = tool(
     } catch (err) {
       if (err instanceof CredentialNotFoundError) {
         return {
-          error: 'STRIPE_SECRET_KEY not configured -- run: agentspan credentials set STRIPE_SECRET_KEY', <your-stripe-secret-key',>
+          error: 'STRIPE_SECRET_KEY not configured -- run: agentspan credentials set STRIPE_SECRET_KEY <your-stripe-secret-key>',
         };
       }
       throw err;
@@ -79,7 +72,6 @@ const getCustomerBalance = tool(
       },
       required: ['customerId'],
     },
-    isolated: false,
     credentials: ['STRIPE_SECRET_KEY'],
   },
 );
@@ -135,7 +127,6 @@ const listRecentCharges = tool(
         limit: { type: 'number', description: 'Number of charges to return (max 20)' },
       },
     },
-    isolated: false,
     credentials: ['STRIPE_SECRET_KEY'],
   },
 );

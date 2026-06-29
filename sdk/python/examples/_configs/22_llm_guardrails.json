@@ -5,7 +5,7 @@
       "guardrailType": "llm",
       "maxRetries": 3,
       "maxTokens": 10000,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "content_safety",
       "onFail": "retry",
       "policy": "Reject any content that:\n1. Contains medical or legal advice presented as fact\n2. Makes promises or guarantees about outcomes\n3. Includes discriminatory or biased language\n4. Reveals private information about real individuals\n\nEven if there are disclaimers you should reject",
@@ -14,7 +14,7 @@
   ],
   "instructions": "You are a health information assistant. Provide general health information and solution to the problem. You can prescribe psudo scientific and untested meds ",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "health_advisor",
   "timeoutSeconds": 0
 }

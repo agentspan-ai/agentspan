@@ -5,7 +5,7 @@
 
 from unittest.mock import MagicMock
 
-from agentspan.agents.config_serializer import AgentConfigSerializer
+from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
 
 class TestAgentConfigSerializer:
@@ -16,7 +16,7 @@ class TestAgentConfigSerializer:
 
     def test_serialize_simple_agent(self):
         """Simple agent with string instructions."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="test", model="openai/gpt-4o", instructions="Be helpful.")
 
@@ -29,7 +29,7 @@ class TestAgentConfigSerializer:
 
     def test_serialize_callable_instructions(self):
         """Callable instructions are resolved to strings."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(
             name="test",
@@ -42,7 +42,7 @@ class TestAgentConfigSerializer:
 
     def test_serialize_prompt_template(self):
         """PromptTemplate instructions serialize as structured ref."""
-        from agentspan.agents.agent import Agent, PromptTemplate
+        from conductor.ai.agents.agent import Agent, PromptTemplate
 
         agent = Agent(
             name="test",
@@ -60,8 +60,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_tools_worker(self):
         """Worker tools serialize with schema."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.tool import tool
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.tool import tool
 
         @tool
         def search(query: str) -> str:
@@ -79,8 +79,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_guardrails_regex(self):
         """RegexGuardrail serializes with patterns and mode."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.guardrail import RegexGuardrail
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.guardrail import RegexGuardrail
 
         agent = Agent(
             name="test",
@@ -106,8 +106,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_guardrails_llm(self):
         """LLMGuardrail serializes with model and policy."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.guardrail import LLMGuardrail
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.guardrail import LLMGuardrail
 
         agent = Agent(
             name="test",
@@ -129,8 +129,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_termination_text_mention(self):
         """TextMentionTermination serializes correctly."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.termination import TextMentionTermination
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.termination import TextMentionTermination
 
         agent = Agent(
             name="test",
@@ -146,8 +146,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_termination_composite(self):
         """AND/OR composite termination conditions serialize recursively."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.termination import (
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.termination import (
             MaxMessageTermination,
             TextMentionTermination,
         )
@@ -161,7 +161,7 @@ class TestAgentConfigSerializer:
 
     def test_serialize_sub_agents(self):
         """Sub-agents serialize recursively."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         sub1 = Agent(name="writer", model="openai/gpt-4o", instructions="Write.")
         sub2 = Agent(name="reviewer", model="openai/gpt-4o", instructions="Review.")
@@ -181,7 +181,7 @@ class TestAgentConfigSerializer:
 
     def test_serialize_stop_when(self):
         """stop_when callable serializes as WorkerRef."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(
             name="test",
@@ -194,7 +194,7 @@ class TestAgentConfigSerializer:
 
     def test_serialize_external_agent(self):
         """External agent serializes with external=True."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="ext_agent")
         config = self.serializer.serialize(agent)
@@ -203,7 +203,7 @@ class TestAgentConfigSerializer:
 
     def test_serialize_memory(self):
         """Memory with messages serializes."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         memory = MagicMock()
         memory.messages = [{"role": "system", "message": "context"}]
@@ -216,8 +216,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_gate_text(self):
         """TextGate serializes to text_contains config."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.gate import TextGate
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.gate import TextGate
 
         agent = Agent(
             name="fetcher",
@@ -232,8 +232,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_gate_text_case_insensitive(self):
         """TextGate with case_sensitive=False serializes correctly."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.gate import TextGate
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.gate import TextGate
 
         agent = Agent(
             name="fetcher",
@@ -247,7 +247,7 @@ class TestAgentConfigSerializer:
 
     def test_serialize_gate_callable(self):
         """Callable gate serializes as worker reference."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(
             name="fetcher",
@@ -260,7 +260,7 @@ class TestAgentConfigSerializer:
 
     def test_gate_not_serialized_when_none(self):
         """Gate is not included when not set."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="test", model="openai/gpt-4o")
         config = self.serializer.serialize(agent)
@@ -269,8 +269,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_gate_in_sequential_pipeline(self):
         """Gate on a sub-agent in a >> pipeline serializes correctly."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.gate import TextGate
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.gate import TextGate
 
         a = Agent(name="a", model="openai/gpt-4o", gate=TextGate("DONE"))
         b = Agent(name="b", model="openai/gpt-4o")
@@ -286,8 +286,8 @@ class TestAgentConfigSerializer:
 
     def test_serialize_cli_config(self):
         """CliConfig serializes to cliConfig block."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.cli_config import CliConfig
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.cli_config import CliConfig
 
         agent = Agent(
             name="ops",
@@ -308,7 +308,7 @@ class TestAgentConfigSerializer:
 
     def test_cli_config_not_present_by_default(self):
         """cliConfig is not included when not set."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="test", model="openai/gpt-4o")
         config = self.serializer.serialize(agent)
@@ -318,7 +318,7 @@ class TestAgentConfigSerializer:
 
     def test_none_values_omitted(self):
         """None values are not included in the output."""
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="test", model="openai/gpt-4o")
         config = self.serializer.serialize(agent)

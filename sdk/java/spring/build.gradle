@@ -3,7 +3,7 @@ plugins {
     id 'com.vanniktech.maven.publish' version '0.34.0'
 }
 
-group = 'ai.agentspan'
+group = 'org.conductoross.conductor'
 
 java {
     toolchain {
@@ -17,10 +17,16 @@ repositories {
 
 ext {
     springBootVersion = '3.3.5'
+    conductorClientVersion = '5.0.1'
 }
 
 dependencies {
+    // Agentspan SDK (brings in conductor-client transitively)
     api project(':')
+
+    // Conductor Spring auto-configuration — wires ApiClient from conductor.* properties
+    // so callers don't need to hand-roll the client bean themselves.
+    api "org.conductoross:conductor-client-spring:${conductorClientVersion}"
 
     compileOnly "org.springframework.boot:spring-boot-autoconfigure:${springBootVersion}"
     compileOnly "org.springframework.boot:spring-boot:${springBootVersion}"
@@ -51,7 +57,7 @@ mavenPublishing {
         signAllPublications()
     }
 
-    coordinates('ai.agentspan', 'java-sdk-spring', project.version.toString())
+    coordinates('org.conductoross.conductor', 'conductor-agent-sdk-spring', project.version.toString())
 
     pom {
         name = 'Agentspan Java SDK Spring Boot Starter'

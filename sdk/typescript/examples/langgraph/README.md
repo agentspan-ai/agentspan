@@ -5,7 +5,7 @@ Keep your existing LangGraph code. Add agentspan metadata and run with `runtime.
 ## createReactAgent
 
 <table>
-<tr><th>Before (vanilla LangGraph)</th><th>After (agentspan)</th></tr>
+<tr><th>Before (vanilla LangGraph)</th><th>After (Agentspan)</th></tr>
 <tr><td>
 
 ```typescript
@@ -59,7 +59,7 @@ import { ChatOpenAI }
 import { DynamicStructuredTool }
   from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 // ^^^ add agentspan import
 
 const llm = new ChatOpenAI({
@@ -84,7 +84,7 @@ const graph = createReactAgent({
 
 // Add agentspan metadata
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [calculate],
   framework: 'langgraph',
 };
@@ -106,7 +106,7 @@ await runtime.shutdown();
 Same pattern — build the graph normally, attach metadata, run with `runtime.run()`.
 
 <table>
-<tr><th>Before (vanilla LangGraph)</th><th>After (agentspan)</th></tr>
+<tr><th>Before (vanilla LangGraph)</th><th>After (Agentspan)</th></tr>
 <tr><td>
 
 ```typescript
@@ -143,7 +143,7 @@ console.log(result.output);
 import { StateGraph, Annotation,
   START, END }
   from '@langchain/langgraph';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 // ^^^ add agentspan import
 
 const State = Annotation.Root({
@@ -161,7 +161,7 @@ const graph = new StateGraph(State)
 
 // Add agentspan metadata
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools: [],
   framework: 'langgraph',
 };
@@ -181,7 +181,7 @@ await runtime.shutdown();
 
 | What | Change |
 |------|--------|
-| **Imports** | Add `AgentRuntime` from `@agentspan-ai/sdk` |
+| **Imports** | Add `AgentRuntime` from `@conductor-oss/conductor-agent-sdk` |
 | **Graph** | No changes to construction |
 | **Metadata** | Add `(graph as any)._agentspan = { model, tools, framework: 'langgraph' }` |
 | **Execution** | `graph.invoke({ messages })` → `runtime.run(graph, prompt)` |

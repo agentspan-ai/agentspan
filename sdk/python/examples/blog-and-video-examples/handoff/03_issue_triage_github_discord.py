@@ -42,7 +42,7 @@ Setup:
 
 import os
 import requests
-from agentspan.agents import Agent, AgentRuntime, Strategy, tool
+from conductor.ai.agents import Agent, AgentRuntime, Strategy, tool
 
 
 # ── Config ───────────────────────────────────────────────────────

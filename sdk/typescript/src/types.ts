@@ -99,7 +99,8 @@ export type ToolType =
   | "generate_video"
   | "generate_pdf"
   | "rag_search"
-  | "rag_index";
+  | "rag_index"
+  | "pull_workflow_messages";
 
 /**
  * Supported framework identifiers for auto-detection.
@@ -155,6 +156,12 @@ export interface AgentEvent {
   executionId?: string;
   guardrailName?: string;
   timestamp?: number;
+  /**
+   * Tools awaiting human approval. Present on `waiting` events (and carried
+   * straight through from the SSE payload). Mirrors {@link AgentStatus.pendingTool}
+   * so the gate can be read off the event without a `getStatus()` round-trip.
+   */
+  pendingTool?: PendingTool;
 }
 
 /**
@@ -170,7 +177,32 @@ export interface AgentStatus {
   reason?: string;
   currentTask?: string;
   messages: unknown[];
-  pendingTool?: { name: string; args: Record<string, unknown> };
+  pendingTool?: PendingTool;
+}
+
+/**
+ * A single tool call awaiting human approval. The {@link PendingTool} on a
+ * `waiting` event carries an array of these — one HUMAN task gates the
+ * whole batch with a single `{approved, reason}` verdict, so iterate
+ * `toolCalls` to see every tool covered by the gate.
+ */
+export interface PendingToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * Payload on a `waiting` SSE event. The legacy singular `tool_name` /
+ * `parameters` keys are always null (the underlying gate is per-batch,
+ * not per-tool) — read `toolCalls` for the real list.
+ */
+export interface PendingTool {
+  taskRefName: string;
+  toolCalls?: PendingToolCall[];
+  tool_name?: string | null;
+  parameters?: Record<string, unknown> | null;
+  response_schema?: unknown;
+  response_ui_schema?: unknown;
 }
 
 /**
@@ -190,15 +222,6 @@ export interface PromptTemplate {
   name: string;
   variables?: Record<string, string>;
   version?: number;
-}
-
-/**
- * Credential file reference for tool/agent credential injection.
- */
-export interface CredentialFile {
-  envVar: string;
-  relativePath?: string;
-  content?: string;
 }
 
 /**
@@ -236,8 +259,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   /**
    * LLM model hint for framework agents where automatic detection fails.
-   * Accepts a model string ('openai/gpt-4o-mini') or an LLM object (e.g. ChatOpenAI instance).
-   * Required for LangGraph agents that don't use the @agentspan-ai/sdk/langgraph wrapper.
+   * Accepts a model string ('anthropic/claude-sonnet-4-6') or an LLM object (e.g. ChatOpenAI instance).
+   * Required for LangGraph agents that don't use the @conductor-oss/conductor-agent-sdk/langgraph wrapper.
    */
   model?: unknown;
   /**
@@ -269,8 +292,7 @@ export interface ToolDef {
   approvalRequired?: boolean;
   timeoutSeconds?: number;
   external?: boolean;
-  isolated?: boolean;
-  credentials?: (string | CredentialFile)[];
+  credentials?: string[];
   guardrails?: unknown[];
   config?: Record<string, unknown>;
   /** Stateful tool — worker registers under execution's domain for isolation. */

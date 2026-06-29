@@ -152,11 +152,7 @@ async function mockApis(page: Page) {
     return route.fulfill({ json: EXECUTION_FIXTURE });
   });
 
-  await page.route("**/api/credentials", async (route) => {
-    return route.fulfill({ json: [] });
-  });
-
-  await page.route("**/api/credentials/bindings", async (route) => {
+  await page.route("**/api/secrets", async (route) => {
     return route.fulfill({ json: [] });
   });
 
@@ -172,7 +168,7 @@ async function mockApis(page: Page) {
     const url = route.request().url();
     if (
       url.includes("/api/agent/executions/exec-align-123/full") ||
-      url.includes("/api/credentials") ||
+      url.includes("/api/secrets") ||
       url.includes("/api/metadata/taskdefs") ||
       url.includes("/api/event")
     ) {

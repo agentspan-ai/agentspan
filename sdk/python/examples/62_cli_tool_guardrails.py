@@ -28,21 +28,22 @@ Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
 """
 
-from agentspan.agents import Agent, AgentRuntime, CliConfig, OnFail, RegexGuardrail
 from settings import settings
+
+from conductor.ai.agents import Agent, AgentRuntime, CliConfig, OnFail, RegexGuardrail
 
 # ── Guardrails ────────────────────────────────────────────────────────
 
 block_destructive = RegexGuardrail(
     patterns=[
-        r"rm\s+-rf\s+/",       # rm -rf /
-        r"mkfs\.",              # mkfs.ext4, mkfs.xfs, ...
-        r"\bdd\s+if=",         # dd if=/dev/zero ...
+        r"rm\s+-rf\s+/",  # rm -rf /
+        r"mkfs\.",  # mkfs.ext4, mkfs.xfs, ...
+        r"\bdd\s+if=",  # dd if=/dev/zero ...
     ],
     mode="block",
     name="block_destructive",
     message="Destructive system commands are not allowed.",
-    on_fail=OnFail.RAISE,      # hard stop — no retry
+    on_fail=OnFail.RAISE,  # hard stop — no retry
 )
 
 review_sudo = RegexGuardrail(
@@ -53,7 +54,7 @@ review_sudo = RegexGuardrail(
         "Commands requiring sudo are not permitted. "
         "Rewrite the command without elevated privileges."
     ),
-    on_fail=OnFail.RETRY,      # LLM gets another chance
+    on_fail=OnFail.RETRY,  # LLM gets another chance
     max_retries=2,
 )
 
@@ -71,8 +72,8 @@ ops_agent = Agent(
     cli_config=CliConfig(
         allowed_commands=["ls", "cat", "df", "du", "git", "ps", "uname", "wc"],
         timeout=15,
-        guardrails=[block_destructive, review_sudo],
     ),
+    guardrails=[block_destructive, review_sudo],
 )
 
 # ── Run ───────────────────────────────────────────────────────────────
@@ -87,7 +88,6 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"\nPrompt: {prompt}\n")
 
-
     with AgentRuntime() as runtime:
         result = runtime.run(ops_agent, prompt)
         result.print_result()
@@ -100,4 +100,3 @@ if __name__ == "__main__":
         #
         # 2. In a separate long-lived worker process:
         # runtime.serve(ops_agent)
-

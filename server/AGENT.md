@@ -91,7 +91,7 @@ Every feature that involves HTTP endpoints or SSE streaming **must also** includ
 
 ### Writing Tests
 
-- **Do NOT use mocks (Mockito) for internal services.** Tests that mock `CredentialStoreProvider`, `CredentialBindingService`, `UserRepository`, `ExecutionTokenService`, or any other internal service hide bugs at layer boundaries — the exact place bugs live. Use `@SpringBootTest` with the test profile's real SQLite DB instead.
+- **Do NOT use mocks (Mockito) for internal services.** Tests that mock `CredentialStoreProvider`, `SecretTagsService`, `UserRepository`, `ExecutionTokenService`, or any other internal service hide bugs at layer boundaries — the exact place bugs live. Use `@SpringBootTest` with the test profile's real SQLite DB instead.
 - **Mocks are only acceptable for external framework objects** that cannot be instantiated in tests (e.g., Conductor's `WorkflowExecutor`, servlet `HttpServletRequest`). If you can use the real implementation, use it.
 - **Unit tests** (no Spring context) are for pure logic only: compilers, parsers, model serialization. Place in the appropriate package under `src/test/java/dev/agentspan/runtime/`.
 - **Integration tests:** Use `@SpringBootTest(classes = AgentRuntime.class, webEnvironment = RANDOM_PORT)` with `@ActiveProfiles("test")`. Test config at `src/test/resources/application-test.properties`.

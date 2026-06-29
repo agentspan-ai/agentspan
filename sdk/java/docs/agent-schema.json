@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentspan.ai/schemas/agent-config.schema.json",
+  "title": "Conductor Agent AgentConfig",
+  "description": "Canonical wire contract for the agent configuration that SDKs serialize and POST to the server (under the `agentConfig` key of the start/compile request). Mirrors the server-side `AgentConfig` model. Convention: camelCase keys, `@JsonInclude(NON_NULL)` — absent means unset. Recursive: `agents`, `planner`, `fallback`, `router` nest a full AgentConfig.",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]*$",
+      "description": "Agent name. Required."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description. Set by the platform/UI, not the SDKs."
+    },
+    "model": {
+      "type": ["string", "null"],
+      "description": "\"provider/model\" identifier. Omitted/null for external agents."
+    },
+    "external": {
+      "type": "boolean",
+      "description": "True when the agent has no model and is driven externally."
+    },
+    "baseUrl": {
+      "type": "string",
+      "description": "Per-agent LLM provider endpoint override."
+    },
+    "instructions": {
+      "description": "System prompt: a plain string, or a structured prompt-template reference.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "null" },
+        { "$ref": "#/$defs/promptTemplate" }
+      ]
+    },
+    "introduction": {
+      "type": "string",
+      "description": "Self-introduction prepended in multi-agent discussions."
+    },
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool" }
+    },
+    "agents": {
+      "type": "array",
+      "items": { "$ref": "#" },
+      "description": "Sub-agents (recursive). Requires a strategy."
+    },
+    "strategy": {
+      "type": ["string", "null"],
+      "enum": ["handoff", "sequential", "parallel", "router", "round_robin", "random", "swarm", "manual", "plan_execute", null],
+      "description": "Multi-agent orchestration strategy. Null/absent for a single agent."
+    },
+    "router": {
+      "description": "ROUTER strategy router: a nested agent or a worker-task reference.",
+      "oneOf": [
+        { "$ref": "#" },
+        { "$ref": "#/$defs/workerRef" }
+      ]
+    },
+    "guardrails": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/guardrail" }
+    },
+    "maxTurns": { "type": "integer", "description": "Max agent turns. SDK default 25; server default 100." },
+    "maxTokens": { "type": "integer", "description": "LLM completion token cap." },
+    "temperature": { "type": "number", "description": "Sampling temperature." },
+    "timeoutSeconds": { "type": "integer", "description": "Run timeout. 0 → server default." },
+    "reasoningEffort": {
+      "type": "string",
+      "enum": ["minimal", "low", "medium", "high"],
+      "description": "OpenAI reasoning models only. Ignored by other models."
+    },
+    "contextWindowBudget": { "type": "integer", "description": "Token threshold for proactive context condensation." },
+    "thinkingConfig": { "$ref": "#/$defs/thinkingConfig" },
+    "memory": { "$ref": "#/$defs/memory" },
+    "termination": { "$ref": "#/$defs/termination" },
+    "outputType": { "$ref": "#/$defs/outputType" },
+    "handoffs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/handoff" }
+    },
+    "allowedTransitions": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string" } },
+      "description": "SWARM: agentName → list of agents it may transfer to."
+    },
+    "callbacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/callback" }
+    },
+    "gate": { "$ref": "#/$defs/gate" },
+    "stopWhen": { "$ref": "#/$defs/workerRef" },
+    "enablePlanning": { "type": "boolean", "description": "Prepends a plan-first preamble to the system prompt." },
+    "planner": { "$ref": "#", "description": "PLAN_EXECUTE planner slot (nested agent)." },
+    "fallback": { "$ref": "#", "description": "PLAN_EXECUTE fallback slot (nested agent)." },
+    "fallbackMaxTurns": { "type": "integer" },
+    "plannerContext": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/plannerContextEntry" }
+    },
+    "planSource": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Static plan JSON for PLAN_EXECUTE. (Python emits here; the Java SDK sends the static plan via the request wrapper's `static_plan` instead.)"
+    },
+    "synthesize": { "type": "boolean", "description": "Emitted only when false (default true)." },
+    "stateful": { "type": "boolean", "description": "Emitted only when true; triggers per-execution domain isolation." },
+    "sessionId": {
+      "type": "string",
+      "description": "Session id. The Java SDK echoes it here and in the request wrapper; the server reads it from the wrapper."
+    },
+    "includeContents": {
+      "type": "string",
+      "description": "\"none\" = fresh context; absent = inherit parent context."
+    },
+    "requiredTools": { "type": "array", "items": { "type": "string" } },
+    "prefillTools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/prefillTool" }
+    },
+    "credentials": { "type": "array", "items": { "type": "string" } },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Arbitrary key-values stored with the workflow definition."
+    },
+    "localCodeExecution": {
+      "type": "boolean",
+      "description": "Java builder flag; serialized into `codeExecution`. Not a distinct wire field on its own."
+    },
+    "codeExecution": { "$ref": "#/$defs/codeExecution" },
+    "cliConfig": { "$ref": "#/$defs/cliConfig" },
+    "maskedFields": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "promptTemplate": {
+      "type": "object",
+      "required": ["type", "name"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "type": "string", "const": "prompt_template" },
+        "name": { "type": "string" },
+        "variables": { "type": ["object", "null"], "additionalProperties": true },
+        "version": { "type": ["integer", "null"] }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Tool definition. `config` is a freeform map carrying type-specific settings (url, serverUrl, credentials, …), so unknown keys are permitted.",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "inputSchema": { "type": "object", "additionalProperties": true },
+        "outputSchema": { "type": "object", "additionalProperties": true },
+        "toolType": { "type": "string", "description": "worker | http | mcp | api | agent_tool | …" },
+        "approvalRequired": { "type": "boolean" },
+        "stateful": { "type": "boolean" },
+        "timeoutSeconds": { "type": "integer" },
+        "maxCalls": { "type": "integer" },
+        "config": { "type": "object", "additionalProperties": true },
+        "guardrails": { "type": "array", "items": { "$ref": "#/$defs/guardrail" } }
+      }
+    },
+    "guardrail": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Guardrail config. Type-specific keys (patterns, mode, model, policy, …) are spread in, so unknown keys are permitted.",
+      "properties": {
+        "name": { "type": "string" },
+        "guardrailType": { "type": "string", "description": "regex | llm | custom | external | …" },
+        "position": { "type": "string", "enum": ["input", "output"] },
+        "onFail": { "type": "string", "enum": ["retry", "raise", "fix", "human"] },
+        "maxRetries": { "type": "integer" },
+        "taskName": { "type": "string" },
+        "patterns": { "type": "array", "items": { "type": "string" } },
+        "mode": { "type": "string" },
+        "message": { "type": "string" },
+        "model": { "type": "string" },
+        "policy": { "type": "string" },
+        "maxTokens": { "type": "integer" }
+      }
+    },
+    "termination": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["text_mention", "stop_message", "max_message", "token_usage", "and", "or"] },
+        "text": { "type": "string" },
+        "caseSensitive": { "type": "boolean" },
+        "stopMessage": { "type": "string" },
+        "maxMessages": { "type": "integer" },
+        "maxTotalTokens": { "type": "integer" },
+        "maxPromptTokens": { "type": "integer" },
+        "maxCompletionTokens": { "type": "integer" },
+        "conditions": { "type": "array", "items": { "$ref": "#/$defs/termination" } }
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target"],
+      "properties": {
+        "type": { "type": "string", "enum": ["on_text_mention", "on_tool_result", "on_condition"] },
+        "target": { "type": "string" },
+        "toolName": { "type": "string" },
+        "resultContains": { "type": "string" },
+        "text": { "type": "string" },
+        "taskName": { "type": "string" }
+      }
+    },
+    "callback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "taskName"],
+      "properties": {
+        "position": { "type": "string", "enum": ["before_agent", "after_agent", "before_model", "after_model", "before_tool", "after_tool"] },
+        "taskName": { "type": "string" }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "messages": { "type": "array", "items": { "$ref": "#/$defs/message" } },
+        "maxMessages": { "type": "integer" }
+      }
+    },
+    "message": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "assistant", "system"] },
+        "message": { "type": "string" }
+      }
+    },
+    "codeExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "allowedLanguages": { "type": "array", "items": { "type": "string" } },
+        "allowedCommands": { "type": "array", "items": { "type": "string" } },
+        "timeout": { "type": "integer" }
+      }
+    },
+    "cliConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "allowedCommands": { "type": "array", "items": { "type": "string" } },
+        "timeout": { "type": "integer" },
+        "allowShell": { "type": "boolean" },
+        "workingDir": { "type": "string" }
+      }
+    },
+    "thinkingConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "budgetTokens": { "type": "integer" }
+      }
+    },
+    "prefillTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["toolName"],
+      "properties": {
+        "toolName": { "type": "string" },
+        "arguments": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "plannerContextEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "url": { "type": "string" },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "required": { "type": "boolean" },
+        "maxBytes": { "type": "integer" }
+      }
+    },
+    "outputType": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": { "type": "object", "additionalProperties": true },
+        "className": { "type": "string" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Sequential-pipeline gate: a text matcher, or a worker-task reference.",
+      "properties": {
+        "type": { "type": "string", "enum": ["text_contains"] },
+        "text": { "type": "string" },
+        "caseSensitive": { "type": "boolean" },
+        "taskName": { "type": "string" }
+      }
+    },
+    "workerRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "taskName": { "type": "string" }
+      }
+    }
+  }
+}

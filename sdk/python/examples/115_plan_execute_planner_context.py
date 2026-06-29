@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import os
 
-from agentspan.agents import Agent, AgentRuntime, Context, Strategy, tool
+from conductor.ai.agents import Agent, AgentRuntime, Context, Strategy, tool
 
 # ── Onboarding tools (deterministic, no external calls) ────────────────
 
@@ -114,7 +114,7 @@ def schedule_kickoff_call(customer_id: str, account_id: str) -> dict:
 
 
 def main() -> None:
-    model = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
+    model = os.environ.get("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6")
 
     planner = Agent(
         name="onboarding_planner",

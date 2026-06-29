@@ -3,12 +3,15 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentspan"
+name = "conductor-agent-sdk"
 version = "0.1.0"
-description = "Agentspan SDK — durable, scalable, observable AI agents"
+description = "Conductor Agent SDK — durable, scalable, observable AI agents"
 readme = "README.md"
 license = {text = "MIT License"}
-requires-python = ">=3.10"
+# Upper bound: native deps (grpc via conductor-python, pydantic-core) often lack
+# wheels for the newest Python until well after release, so installs on e.g. 3.14
+# fall back to source builds and fail. Bump the ceiling once those wheels exist.
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "conductor-python>=1.3.11",
     "httpx>=0.24",
@@ -21,7 +24,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -31,7 +33,7 @@ classifiers = [
 ]
 
 [project.scripts]
-agentspan = "agentspan.cli:main"
+agentspan = "conductor.ai.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -39,6 +41,7 @@ dev = [
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.0",
+    "pytest-rerunfailures>=14.0",
     "ruff>=0.4",
     "mypy>=1.10",
 ]
@@ -63,7 +66,7 @@ validation = [
 ]
 
 [project.entry-points."pytest11"]
-agentspan-testing = "agentspan.agents.testing.pytest_plugin"
+agentspan-testing = "conductor.ai.agents.testing.pytest_plugin"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -84,7 +87,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["agentspan.agents"]
+source = ["conductor.ai.agents"]
 
 [tool.coverage.report]
 show_missing = true

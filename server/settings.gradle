@@ -1,1 +1,3 @@
-rootProject.name = 'agentspan-runtime'
+rootProject.name = 'agentspan'
+include 'conductor-agentspan'
+include 'conductor-agentspan-server'

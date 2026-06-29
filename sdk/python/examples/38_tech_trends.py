@@ -42,7 +42,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from agentspan.agents import Agent, AgentRuntime, pdf_tool, tool
+from conductor.ai.agents import Agent, AgentRuntime, pdf_tool, tool
 from settings import settings
 
 # ── Researcher tools (HackerNews + Wikipedia) ────────────────────────────────

@@ -20,9 +20,9 @@ Requirements:
 """
 
 import os
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
-MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
+MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6")
 
 # ── Phase 1: Data Analysis ────────────────────────────────────────
 

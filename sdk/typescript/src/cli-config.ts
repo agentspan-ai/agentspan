@@ -57,20 +57,66 @@ export interface CliConfigOptions {
   allowShell?: boolean;
 }
 
+// ── Tokenization ──────────────────────────────────────────
+
+/**
+ * Tokenize a command line into argv, honoring single and double quotes.
+ *
+ * LLMs frequently pass the whole command line as `command`
+ * (e.g. `gh repo list --limit 5`) rather than splitting executable/args.
+ * Falls back to plain whitespace splitting if quotes are unbalanced.
+ */
+function tokenize(command: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let hasCurrent = false;
+  let quote: '"' | "'" | null = null;
+
+  for (const ch of command) {
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        current += ch;
+      }
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      hasCurrent = true;
+    } else if (/\s/.test(ch)) {
+      if (hasCurrent) {
+        tokens.push(current);
+        current = "";
+        hasCurrent = false;
+      }
+    } else {
+      current += ch;
+      hasCurrent = true;
+    }
+  }
+
+  if (quote) {
+    // Unbalanced quotes — fall back to naive whitespace split.
+    return command.split(/\s+/).filter(Boolean);
+  }
+  if (hasCurrent) tokens.push(current);
+  return tokens;
+}
+
 // ── Validation ────────────────────────────────────────────
 
 /**
- * Validate a command against the whitelist.
- * Strips path prefix (/usr/bin/git -> git) before checking.
- * Empty whitelist permits all commands.
+ * Validate the *executable* of a command against the whitelist.
+ *
+ * Keys off the executable token, so both a bare command (`git`) and a full
+ * command line (`git status -s`) validate the same way. Strips path prefix
+ * (/usr/bin/git -> git) before checking. Empty whitelist permits all commands.
  */
-function validateCliCommand(command: string, allowedCommands: string[]): void {
+function validateCliCommand(executable: string, allowedCommands: string[]): void {
   if (!allowedCommands || allowedCommands.length === 0) {
     return; // no restrictions
   }
-  // Strip path prefix
-  const parts = command.split(/\s+/);
-  const base = parts[parts.length - 1];
+  // Strip path prefix (handles both / and \ separators).
+  const base = executable.split(/[\\/]/).pop() ?? executable;
   if (!allowedCommands.includes(base)) {
     throw new Error(
       `Command '${base}' is not allowed. ` +
@@ -152,8 +198,22 @@ export function makeCliTool(config: CliConfigOptions, agentName: string): ToolDe
         };
       }
 
-      // Validate against whitelist
-      validateCliCommand(command, allowedCommands);
+      // Models frequently pass the entire command line as `command`
+      // (e.g. "gh repo list --limit 5") rather than splitting executable/args.
+      // Tokenize so both styles work: validation keys off the executable and
+      // execution gets a proper argv.
+      const tokens = tokenize(command);
+      if (tokens.length === 0) {
+        return {
+          status: "error",
+          stdout: "",
+          stderr: "No command provided.",
+        };
+      }
+      const executable = tokens[0];
+
+      // Validate against whitelist (on the executable)
+      validateCliCommand(executable, allowedCommands);
 
       // Shell gate
       const useShell = args.shell === true;
@@ -167,12 +227,15 @@ export function makeCliTool(config: CliConfigOptions, agentName: string): ToolDe
         cmdArgs = [String(cmdArgs)];
       }
 
+      // Merge any args embedded in the command line with the explicit args list.
+      const argv = [...tokens.slice(1), ...cmdArgs.map(String)];
+
       // Resolve working directory
       const effectiveCwd = (args.cwd as string) || workingDir || undefined;
 
       // Use spawnSync to capture both stdout and stderr on success
       // (execSync only returns stdout, losing stderr from commands like gh clone)
-      const result = spawnSync(command, cmdArgs.map(String), {
+      const result = spawnSync(executable, argv, {
         timeout: timeout * 1000,
         encoding: "utf-8",
         cwd: effectiveCwd,
@@ -186,7 +249,7 @@ export function makeCliTool(config: CliConfigOptions, agentName: string): ToolDe
           throw new TerminalToolError(`Command timed out after ${timeout}s`);
         }
         if (err.message?.includes("ENOENT")) {
-          throw new TerminalToolError(`Command not found: ${command}`);
+          throw new TerminalToolError(`Command not found: ${executable}`);
         }
         throw new TerminalToolError(err.message ?? String(err));
       }

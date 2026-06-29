@@ -18,7 +18,7 @@ Requirements:
     - GH_TOKEN stored via `agentspan credentials set`
 """
 
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 from settings import settings
 
 agent = Agent(

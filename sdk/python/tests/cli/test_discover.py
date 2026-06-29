@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for agentspan.cli.discover — the CLI entry point for agent discovery."""
+"""Tests for conductor.ai.cli.discover — the CLI entry point for agent discovery."""
 
 import json
 import sys
@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agentspan.cli.discover import main
+from conductor.ai.cli.discover import main
 
 
 def _make_agent(name):
@@ -22,8 +22,8 @@ def _make_agent(name):
 class TestDiscoverMain:
     """Tests for the discover CLI main() function."""
 
-    @patch("agentspan.cli.discover.detect_framework")
-    @patch("agentspan.agents.runtime.discovery.discover_agents")
+    @patch("conductor.ai.cli.discover.detect_framework")
+    @patch("conductor.ai.agents.runtime.discovery.discover_agents")
     def test_normal_discovery_two_agents(self, mock_discover, mock_detect):
         """Two agents discovered, correct JSON output."""
         agents = [_make_agent("agent_a"), _make_agent("agent_b")]
@@ -42,8 +42,8 @@ class TestDiscoverMain:
         ]
         mock_discover.assert_called_once_with(["myapp"])
 
-    @patch("agentspan.cli.discover.detect_framework")
-    @patch("agentspan.agents.runtime.discovery.discover_agents")
+    @patch("conductor.ai.cli.discover.detect_framework")
+    @patch("conductor.ai.agents.runtime.discovery.discover_agents")
     def test_none_framework_normalized_to_native(self, mock_discover, mock_detect):
         """detect_framework returning None is normalized to 'native'."""
         mock_discover.return_value = [_make_agent("bot")]
@@ -57,8 +57,8 @@ class TestDiscoverMain:
         result = json.loads(captured.getvalue())
         assert result == [{"name": "bot", "framework": "native"}]
 
-    @patch("agentspan.cli.discover.detect_framework")
-    @patch("agentspan.agents.runtime.discovery.discover_agents")
+    @patch("conductor.ai.cli.discover.detect_framework")
+    @patch("conductor.ai.agents.runtime.discovery.discover_agents")
     def test_framework_agent_shows_framework_string(self, mock_discover, mock_detect):
         """Framework agents show their framework string (e.g., 'langgraph')."""
         mock_discover.return_value = [_make_agent("lg_agent")]
@@ -72,7 +72,7 @@ class TestDiscoverMain:
         result = json.loads(captured.getvalue())
         assert result == [{"name": "lg_agent", "framework": "langgraph"}]
 
-    @patch("agentspan.agents.runtime.discovery.discover_agents")
+    @patch("conductor.ai.agents.runtime.discovery.discover_agents")
     def test_discovery_error_exits_with_code_1(self, mock_discover):
         """Discovery failure prints to stderr and exits with code 1."""
         mock_discover.side_effect = ImportError("no module named 'bad_pkg'")

@@ -10,7 +10,7 @@ Before (runs directly against OpenAI):
     from agents import Runner
 
 After (runs on Agentspan — durable, observable, scalable):
-    from agentspan import Runner
+    from conductor.ai import Runner
 
 The rest of the code — Agent definition, @function_tool decorators,
 Runner.run_sync() call, result.final_output — is unchanged.
@@ -19,13 +19,13 @@ Two usage patterns are shown:
 
 Pattern A — keep openai-agents for Agent/function_tool, swap only Runner::
 
-    from agentspan import Runner           # ← change this one line
+    from conductor.ai import Runner           # ← change this one line
     from agents import Agent, function_tool  # ← unchanged
 
 Pattern B — use Agentspan for everything (no openai-agents dependency)::
 
-    from agentspan import Runner, function_tool
-    from agentspan.agents import Agent
+    from conductor.ai import Runner, function_tool
+    from conductor.ai.agents import Agent
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
@@ -47,8 +47,8 @@ import argparse
 
 def run_pattern_b() -> None:
     """Run using Agentspan's own Agent and function_tool (same result)."""
-    from agentspan import Runner, function_tool
-    from agentspan.agents import Agent
+    from conductor.ai import Runner, function_tool
+    from conductor.ai.agents import Agent
     from settings import settings
 
     @function_tool
@@ -107,7 +107,7 @@ def run_pattern_a() -> None:
 
     # ── The ONE line you change ────────────────────────────────────────────
     # from agents import Runner     # ← original openai-agents import
-    from agentspan import Runner    # ← drop-in Agentspan replacement
+    from conductor.ai import Runner    # ← drop-in Agentspan replacement
 
     @function_tool
     def get_weather(city: str) -> str:

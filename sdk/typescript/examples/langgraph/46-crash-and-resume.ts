@@ -44,7 +44,7 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
 
@@ -129,7 +129,7 @@ const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
 const graph = createReactAgent({ llm, tools, name: 'sales_analyst' });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   tools,
   framework: 'langgraph',
 };

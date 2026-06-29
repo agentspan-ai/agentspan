@@ -1,19 +1,7 @@
 // Copyright (c) 2025 Agentspan
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-
-import ai.agentspan.Agent;
-import ai.agentspan.AgentRuntime;
-import ai.agentspan.annotations.Tool;
-import ai.agentspan.enums.AgentStatus;
-import ai.agentspan.enums.OnFail;
-import ai.agentspan.enums.Position;
-import ai.agentspan.internal.ToolRegistry;
-import ai.agentspan.model.AgentResult;
-import ai.agentspan.model.GuardrailDef;
-import ai.agentspan.model.GuardrailResult;
-import ai.agentspan.model.ToolDef;
-import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
 import java.util.Map;
@@ -21,7 +9,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.conductoross.conductor.ai.Agent;
+import org.conductoross.conductor.ai.AgentConfig;
+import org.conductoross.conductor.ai.AgentRuntime;
+import org.conductoross.conductor.ai.annotations.Tool;
+import org.conductoross.conductor.ai.enums.AgentStatus;
+import org.conductoross.conductor.ai.enums.OnFail;
+import org.conductoross.conductor.ai.enums.Position;
+import org.conductoross.conductor.ai.internal.ToolRegistry;
+import org.conductoross.conductor.ai.model.AgentResult;
+import org.conductoross.conductor.ai.model.CompileResponse;
+import org.conductoross.conductor.ai.model.GuardrailDef;
+import org.conductoross.conductor.ai.model.GuardrailResult;
+import org.conductoross.conductor.ai.model.ToolDef;
+import org.junit.jupiter.api.*;
 
 /**
  * Suite 5: Extended Guardrails — additional guardrail coverage not in Suite 3.
@@ -51,7 +52,7 @@ class Suite8bGuardrailsExtended extends BaseTest {
 
     @BeforeAll
     static void setup() {
-        runtime = new AgentRuntime(new ai.agentspan.AgentConfig(BASE_URL, null, null, 100, 1));
+        runtime = new AgentRuntime(new AgentConfig(100, 1));
     }
 
     @AfterAll
@@ -78,9 +79,8 @@ class Suite8bGuardrailsExtended extends BaseTest {
         for (Map<String, Object> g : guardrails) {
             if (name.equals(g.get("name"))) return g;
         }
-        List<String> names = guardrails.stream()
-            .map(g -> (String) g.get("name"))
-            .collect(Collectors.toList());
+        List<String> names =
+                guardrails.stream().map(g -> (String) g.get("name")).collect(Collectors.toList());
         fail("Guardrail '" + name + "' not found in list. Available: " + names);
         return null; // unreachable
     }
@@ -101,114 +101,121 @@ class Suite8bGuardrailsExtended extends BaseTest {
     void test_plan_reflects_all_guardrails() {
         // Agent-level regex INPUT guardrail
         GuardrailDef regexInputGuard = GuardrailDef.builder()
-            .name("e2e_regex_input_guard")
-            .position(Position.INPUT)
-            .onFail(OnFail.RAISE)
-            .guardrailType("regex")
-            .config(Map.of("patterns", List.of("BADWORD")))
-            .build();
+                .name("e2e_regex_input_guard")
+                .position(Position.INPUT)
+                .onFail(OnFail.RAISE)
+                .guardrailType("regex")
+                .config(Map.of("patterns", List.of("BADWORD")))
+                .build();
 
         // Agent-level regex OUTPUT guardrail (multiple patterns)
         GuardrailDef regexOutputGuard = GuardrailDef.builder()
-            .name("e2e_regex_output_guard")
-            .position(Position.OUTPUT)
-            .onFail(OnFail.RETRY)
-            .guardrailType("regex")
-            .config(Map.of("patterns", List.of("password", "secret")))
-            .build();
+                .name("e2e_regex_output_guard")
+                .position(Position.OUTPUT)
+                .onFail(OnFail.RETRY)
+                .guardrailType("regex")
+                .config(Map.of("patterns", List.of("password", "secret")))
+                .build();
 
         // Tool-level custom guardrail
         GuardrailDef toolGuardrail = GuardrailDef.builder()
-            .name("e2e_tool_guard")
-            .position(Position.INPUT)
-            .onFail(OnFail.RAISE)
-            .guardrailType("custom")
-            .build();
+                .name("e2e_tool_guard")
+                .position(Position.INPUT)
+                .onFail(OnFail.RAISE)
+                .guardrailType("custom")
+                .build();
 
         ToolDef guardedTool = ToolDef.builder()
-            .name("e2e_guarded_tool_plan")
-            .description("A tool with a tool-level guardrail")
-            .inputSchema(Map.of("type", "object",
-                "properties", Map.of("input", Map.of("type", "string"))))
-            .toolType("worker")
-            .guardrails(List.of(toolGuardrail))
-            .build();
+                .name("e2e_guarded_tool_plan")
+                .description("A tool with a tool-level guardrail")
+                .inputSchema(Map.of("type", "object", "properties", Map.of("input", Map.of("type", "string"))))
+                .toolType("worker")
+                .guardrails(List.of(toolGuardrail))
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_all_guardrails_agent")
-            .model(MODEL)
-            .instructions("You are a test agent.")
-            .guardrails(List.of(regexInputGuard, regexOutputGuard))
-            .tools(List.of(guardedTool))
-            .build();
+                .name("e2e_java_all_guardrails_agent")
+                .model(MODEL)
+                .instructions("You are a test agent.")
+                .guardrails(List.of(regexInputGuard, regexOutputGuard))
+                .tools(List.of(guardedTool))
+                .build();
 
-        Map<String, Object> plan = runtime.plan(agent);
+        CompileResponse plan = runtime.plan(agent);
         Map<String, Object> agentDef = getAgentDef(plan);
 
         // ── Assert agent-level guardrails ──────────────────────────────
-        List<Map<String, Object>> agentGuardrails =
-            (List<Map<String, Object>>) agentDef.get("guardrails");
-        assertNotNull(agentGuardrails,
-            "agentDef has no 'guardrails' key — agent-level guardrails not serialized");
-        assertEquals(2, agentGuardrails.size(),
-            "Expected 2 agent-level guardrails, got " + agentGuardrails.size()
-            + ". Guardrails found: " + agentGuardrails.stream()
-                .map(g -> (String) g.get("name")).collect(Collectors.toList()));
+        List<Map<String, Object>> agentGuardrails = (List<Map<String, Object>>) agentDef.get("guardrails");
+        assertNotNull(agentGuardrails, "agentDef has no 'guardrails' key — agent-level guardrails not serialized");
+        assertEquals(
+                2,
+                agentGuardrails.size(),
+                "Expected 2 agent-level guardrails, got " + agentGuardrails.size()
+                        + ". Guardrails found: "
+                        + agentGuardrails.stream()
+                                .map(g -> (String) g.get("name"))
+                                .collect(Collectors.toList()));
 
         // Validate regex INPUT guardrail
         Map<String, Object> inputGuard = findGuardrailByName(agentGuardrails, "e2e_regex_input_guard");
-        assertEquals("regex", inputGuard.get("guardrailType"),
-            "e2e_regex_input_guard guardrailType should be 'regex', got: "
-            + inputGuard.get("guardrailType"));
-        assertEquals("input", inputGuard.get("position"),
-            "e2e_regex_input_guard position should be 'input', got: "
-            + inputGuard.get("position"));
-        assertEquals("raise", inputGuard.get("onFail"),
-            "e2e_regex_input_guard onFail should be 'raise', got: "
-            + inputGuard.get("onFail"));
+        assertEquals(
+                "regex",
+                inputGuard.get("guardrailType"),
+                "e2e_regex_input_guard guardrailType should be 'regex', got: " + inputGuard.get("guardrailType"));
+        assertEquals(
+                "input",
+                inputGuard.get("position"),
+                "e2e_regex_input_guard position should be 'input', got: " + inputGuard.get("position"));
+        assertEquals(
+                "raise",
+                inputGuard.get("onFail"),
+                "e2e_regex_input_guard onFail should be 'raise', got: " + inputGuard.get("onFail"));
         List<String> inputPatterns = (List<String>) inputGuard.get("patterns");
-        assertNotNull(inputPatterns,
-            "e2e_regex_input_guard has no 'patterns' key — config not merged into guardrail map");
-        assertTrue(inputPatterns.contains("BADWORD"),
-            "Expected 'BADWORD' in e2e_regex_input_guard patterns, got: " + inputPatterns);
+        assertNotNull(
+                inputPatterns, "e2e_regex_input_guard has no 'patterns' key — config not merged into guardrail map");
+        assertTrue(
+                inputPatterns.contains("BADWORD"),
+                "Expected 'BADWORD' in e2e_regex_input_guard patterns, got: " + inputPatterns);
 
         // Validate regex OUTPUT guardrail
         Map<String, Object> outputGuard = findGuardrailByName(agentGuardrails, "e2e_regex_output_guard");
-        assertEquals("regex", outputGuard.get("guardrailType"),
-            "e2e_regex_output_guard guardrailType should be 'regex', got: "
-            + outputGuard.get("guardrailType"));
-        assertEquals("output", outputGuard.get("position"),
-            "e2e_regex_output_guard position should be 'output', got: "
-            + outputGuard.get("position"));
-        assertEquals("retry", outputGuard.get("onFail"),
-            "e2e_regex_output_guard onFail should be 'retry', got: "
-            + outputGuard.get("onFail"));
+        assertEquals(
+                "regex",
+                outputGuard.get("guardrailType"),
+                "e2e_regex_output_guard guardrailType should be 'regex', got: " + outputGuard.get("guardrailType"));
+        assertEquals(
+                "output",
+                outputGuard.get("position"),
+                "e2e_regex_output_guard position should be 'output', got: " + outputGuard.get("position"));
+        assertEquals(
+                "retry",
+                outputGuard.get("onFail"),
+                "e2e_regex_output_guard onFail should be 'retry', got: " + outputGuard.get("onFail"));
 
         // ── Assert tool-level guardrail ────────────────────────────────
         List<Map<String, Object>> tools = (List<Map<String, Object>>) agentDef.get("tools");
         assertNotNull(tools, "agentDef has no 'tools' key");
 
         Map<String, Object> foundTool = tools.stream()
-            .filter(t -> "e2e_guarded_tool_plan".equals(t.get("name")))
-            .findFirst()
-            .orElse(null);
-        assertNotNull(foundTool,
-            "Tool 'e2e_guarded_tool_plan' not found in agentDef.tools");
+                .filter(t -> "e2e_guarded_tool_plan".equals(t.get("name")))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(foundTool, "Tool 'e2e_guarded_tool_plan' not found in agentDef.tools");
 
-        List<Map<String, Object>> toolGuardrails =
-            (List<Map<String, Object>>) foundTool.get("guardrails");
-        assertNotNull(toolGuardrails,
-            "Tool 'e2e_guarded_tool_plan' has no 'guardrails' key — tool-level guardrail not serialized");
-        assertFalse(toolGuardrails.isEmpty(),
-            "Tool 'e2e_guarded_tool_plan'.guardrails list is empty");
+        List<Map<String, Object>> toolGuardrails = (List<Map<String, Object>>) foundTool.get("guardrails");
+        assertNotNull(
+                toolGuardrails,
+                "Tool 'e2e_guarded_tool_plan' has no 'guardrails' key — tool-level guardrail not serialized");
+        assertFalse(toolGuardrails.isEmpty(), "Tool 'e2e_guarded_tool_plan'.guardrails list is empty");
 
         Map<String, Object> tg = findGuardrailByName(toolGuardrails, "e2e_tool_guard");
-        assertEquals("input", tg.get("position"),
-            "e2e_tool_guard position should be 'input', got: " + tg.get("position"));
-        assertEquals("raise", tg.get("onFail"),
-            "e2e_tool_guard onFail should be 'raise', got: " + tg.get("onFail"));
-        assertEquals("custom", tg.get("guardrailType"),
-            "e2e_tool_guard guardrailType should be 'custom', got: " + tg.get("guardrailType"));
+        assertEquals(
+                "input", tg.get("position"), "e2e_tool_guard position should be 'input', got: " + tg.get("position"));
+        assertEquals("raise", tg.get("onFail"), "e2e_tool_guard onFail should be 'raise', got: " + tg.get("onFail"));
+        assertEquals(
+                "custom",
+                tg.get("guardrailType"),
+                "e2e_tool_guard guardrailType should be 'custom', got: " + tg.get("guardrailType"));
     }
 
     /**
@@ -237,41 +244,44 @@ class Suite8bGuardrailsExtended extends BaseTest {
         toolBodyExecuted.set(false);
 
         GuardrailDef alwaysPassGuard = GuardrailDef.builder()
-            .name("e2e_always_pass_guard")
-            .position(Position.OUTPUT)
-            .onFail(OnFail.RAISE)
-            .func(content -> GuardrailResult.pass())
-            .guardrailType("custom")
-            .build();
+                .name("e2e_always_pass_guard")
+                .position(Position.OUTPUT)
+                .onFail(OnFail.RAISE)
+                .func(content -> GuardrailResult.pass())
+                .guardrailType("custom")
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_passing_guard_agent")
-            .model(MODEL)
-            .instructions("You MUST call the e2e_tracked_tool tool with argument input='hello'. "
-                + "Call it exactly once and then respond with the result.")
-            .tools(ToolRegistry.fromInstance(new TrackedTools()))
-            .guardrails(List.of(alwaysPassGuard))
-            .maxTurns(3)
-            .build();
+                .name("e2e_java_passing_guard_agent")
+                .model(MODEL)
+                .instructions("You MUST call the e2e_tracked_tool tool with argument input='hello'. "
+                        + "Call it exactly once and then respond with the result.")
+                .tools(ToolRegistry.fromInstance(new TrackedTools()))
+                .guardrails(List.of(alwaysPassGuard))
+                .maxTurns(3)
+                .build();
 
         AgentResult result = runtime.run(agent, "Call the tool with input hello.");
 
         // The tool should have executed
-        assertTrue(toolBodyExecuted.get(),
-            "The 'e2e_tracked_tool' function body was never called. "
-            + "COUNTERFACTUAL B: if tool registration or dispatch is broken, "
-            + "the tool is never invoked and this flag stays false.");
+        assertTrue(
+                toolBodyExecuted.get(),
+                "The 'e2e_tracked_tool' function body was never called. "
+                        + "COUNTERFACTUAL B: if tool registration or dispatch is broken, "
+                        + "the tool is never invoked and this flag stays false.");
 
         // The passing guardrail should NOT block completion
-        assertEquals(AgentStatus.COMPLETED, result.getStatus(),
-            "Expected COMPLETED when guardrail always passes. "
-            + "Got status: " + result.getStatus()
-            + ". COUNTERFACTUAL A: if the guardrail incorrectly blocks, status != COMPLETED.");
+        assertEquals(
+                AgentStatus.COMPLETED,
+                result.getStatus(),
+                "Expected COMPLETED when guardrail always passes. "
+                        + "Got status: " + result.getStatus()
+                        + ". COUNTERFACTUAL A: if the guardrail incorrectly blocks, status != COMPLETED.");
     }
 
     /** Side-effect flag for test_passing_guardrail_does_not_block_tool_execution. */
     private static final java.util.concurrent.atomic.AtomicBoolean toolBodyExecuted =
-        new java.util.concurrent.atomic.AtomicBoolean(false);
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     static class TrackedTools {
         @Tool(name = "e2e_tracked_tool", description = "Echoes the input; sets a side-effect flag")
@@ -308,40 +318,41 @@ class Suite8bGuardrailsExtended extends BaseTest {
         sqlToolBodyRan.set(false);
 
         GuardrailDef markerGuard = GuardrailDef.builder()
-            .name("e2e_marker_output_guard")
-            .position(Position.OUTPUT)
-            .onFail(OnFail.RAISE)
-            .func(content -> content.contains("BLOCKED_MARKER")
-                ? GuardrailResult.fail("blocked: marker detected in output")
-                : GuardrailResult.pass())
-            .guardrailType("custom")
-            .build();
+                .name("e2e_marker_output_guard")
+                .position(Position.OUTPUT)
+                .onFail(OnFail.RAISE)
+                .func(content -> content.contains("BLOCKED_MARKER")
+                        ? GuardrailResult.fail("blocked: marker detected in output")
+                        : GuardrailResult.pass())
+                .guardrailType("custom")
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_marker_guard_agent")
-            .model(MODEL)
-            .instructions("You MUST call the e2e_marker_tool tool with input='test'. "
-                + "Then repeat the tool result verbatim in your response.")
-            .tools(ToolRegistry.fromInstance(new MarkerTools()))
-            .guardrails(List.of(markerGuard))
-            .requiredTools("e2e_marker_tool")
-            .maxTurns(5)
-            .build();
+                .name("e2e_java_marker_guard_agent")
+                .model(MODEL)
+                .instructions("You MUST call the e2e_marker_tool tool with input='test'. "
+                        + "Then repeat the tool result verbatim in your response.")
+                .tools(ToolRegistry.fromInstance(new MarkerTools()))
+                .guardrails(List.of(markerGuard))
+                .requiredTools("e2e_marker_tool")
+                .maxTurns(5)
+                .build();
 
         AgentResult result = runtime.run(agent, "Call e2e_marker_tool with input='test' and repeat the result.");
 
         // The tool body MUST have executed (requiredTools guarantees it)
-        assertTrue(sqlToolBodyRan.get(),
-            "The 'e2e_marker_tool' body was never called. "
-            + "COUNTERFACTUAL B: if tool registration or dispatch is broken, the tool is never "
-            + "invoked and this flag stays false.");
+        assertTrue(
+                sqlToolBodyRan.get(),
+                "The 'e2e_marker_tool' body was never called. "
+                        + "COUNTERFACTUAL B: if tool registration or dispatch is broken, the tool is never "
+                        + "invoked and this flag stays false.");
 
         // The guardrail must have detected "BLOCKED_MARKER" and blocked the agent
         assertTrue(
-            result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
-            "Expected agent to FAIL or TERMINATE when OUTPUT guardrail detects BLOCKED_MARKER. "
-            + "Got status: " + result.getStatus()
-            + ". COUNTERFACTUAL A: if output guardrail doesn't detect the marker, agent completes normally.");
+                result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
+                "Expected agent to FAIL or TERMINATE when OUTPUT guardrail detects BLOCKED_MARKER. "
+                        + "Got status: " + result.getStatus()
+                        + ". COUNTERFACTUAL A: if output guardrail doesn't detect the marker, agent completes normally.");
     }
 
     /** Side-effect flag for test_tool_output_detected_by_guardrail. */
@@ -371,29 +382,28 @@ class Suite8bGuardrailsExtended extends BaseTest {
     @Timeout(value = 300, unit = TimeUnit.SECONDS)
     void test_max_retries_escalation() {
         GuardrailDef alwaysRetryGuard = GuardrailDef.builder()
-            .name("e2e_suite5_retry_guard")
-            .position(Position.OUTPUT)
-            .onFail(OnFail.RETRY)
-            .maxRetries(1)
-            .func(content -> GuardrailResult.fail("always fails — retry escalation test"))
-            .guardrailType("custom")
-            .build();
+                .name("e2e_suite5_retry_guard")
+                .position(Position.OUTPUT)
+                .onFail(OnFail.RETRY)
+                .maxRetries(1)
+                .func(content -> GuardrailResult.fail("always fails — retry escalation test"))
+                .guardrailType("custom")
+                .build();
 
         Agent agent = Agent.builder()
-            .name("e2e_java_suite5_retry_agent")
-            .model(MODEL)
-            .instructions("Say hello.")
-            .guardrails(List.of(alwaysRetryGuard))
-            .maxTurns(3)
-            .build();
+                .name("e2e_java_suite5_retry_agent")
+                .model(MODEL)
+                .instructions("Say hello.")
+                .guardrails(List.of(alwaysRetryGuard))
+                .maxTurns(3)
+                .build();
 
         AgentResult result = runtime.run(agent, "Say anything.");
 
         assertTrue(
-            result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
-            "Expected agent to FAIL or TERMINATE after guardrail maxRetries=1 escalation. "
-            + "Got status: " + result.getStatus()
-            + ". COUNTERFACTUAL: if maxRetries escalation is broken, agent completes or loops forever."
-        );
+                result.getStatus() == AgentStatus.FAILED || result.getStatus() == AgentStatus.TERMINATED,
+                "Expected agent to FAIL or TERMINATE after guardrail maxRetries=1 escalation. "
+                        + "Got status: " + result.getStatus()
+                        + ". COUNTERFACTUAL: if maxRetries escalation is broken, agent completes or loops forever.");
     }
 }

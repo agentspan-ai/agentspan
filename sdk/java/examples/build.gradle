@@ -3,7 +3,7 @@ plugins {
     id 'application'
 }
 
-group = 'ai.agentspan'
+group = 'org.conductoross.conductor'
 version = '0.1.0'
 
 java {
@@ -42,9 +42,9 @@ dependencies {
 compileJava.options.compilerArgs << '-parameters'
 
 // Allow running individual examples via:
-//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.openai.Example01BasicAgent
-//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.adk.Example00HelloWorld
-//   ./gradlew :examples:run -PmainClass=ai.agentspan.examples.langchain.Example09MathCalculator
+//   ./gradlew :examples:run -PmainClass=org.conductoross.conductor.ai.examples.openai.Example01BasicAgent
+//   ./gradlew :examples:run -PmainClass=org.conductoross.conductor.ai.examples.adk.Example00HelloWorld
+//   ./gradlew :examples:run -PmainClass=org.conductoross.conductor.ai.examples.langchain.Example09MathCalculator
 application {
-    mainClass = project.findProperty('mainClass') ?: 'ai.agentspan.examples.Example01BasicAgent'
+    mainClass = project.findProperty('mainClass') ?: 'org.conductoross.conductor.ai.examples.Example01BasicAgent'
 }

@@ -29,7 +29,7 @@ import signal
 import time
 from pathlib import Path
 
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_client_reconnect.execution_id")
