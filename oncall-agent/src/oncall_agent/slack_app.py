@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 import requests
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from .agent import build_agent
 from .alert import Alert, parse_alert

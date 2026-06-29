@@ -15,7 +15,7 @@ from .config import Config
 
 
 def triage_once(execution_id: str) -> str:
-    from agentspan.agents import AgentRuntime
+    from conductor.ai.agents import AgentRuntime
 
     from .agent import build_agent
     from .runtime_compat import use_thread_workers_if_needed
