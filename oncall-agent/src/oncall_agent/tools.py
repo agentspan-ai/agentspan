@@ -10,7 +10,7 @@ cache are module-level singletons built lazily from the environment.
 """
 from __future__ import annotations
 
-from agentspan.agents import tool
+from conductor.ai.agents import tool
 
 from .conductor_client import ConductorDispatcher
 from .config import Config

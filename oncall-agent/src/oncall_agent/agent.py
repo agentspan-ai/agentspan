@@ -1,7 +1,7 @@
 """The on-call triage agent definition."""
 from __future__ import annotations
 
-from agentspan.agents import Agent
+from conductor.ai.agents import Agent
 
 from .tools import ALL_TOOLS
 
