@@ -18,10 +18,16 @@ from dataclasses import dataclass
 
 _EXEC_RE = re.compile(r"/execution/([0-9a-fA-F][0-9a-fA-F\-]{7,})")
 _SEV_RE = re.compile(r"\[(CRITICAL|MAJOR|MINOR|WARNING)\]", re.IGNORECASE)
-# "for the Vizient's prod viz-stage cluster"
+# The worker emits Slack markdown — bold `*`, code `` ` ``, italic `_org_` — around the
+# org and cluster (e.g. "for the _Vizient's_ prod *`viz-stage`* cluster"). `*`/`` ` `` are
+# stripped before matching; the `_?` here absorbs the italic underscores that wrap the org,
+# and the cluster is captured without underscores so the trailing italic marker is excluded.
 _CLUSTER_RE = re.compile(
-    r"for the\s+(?P<org>.+?)'s\s+\S+\s+(?P<cluster>\S+)\s+cluster", re.IGNORECASE
+    r"for the\s+_?(?P<org>.+?)'s_?\s+\S+\s+_?(?P<cluster>[^\s_]+)_?\s+cluster",
+    re.IGNORECASE,
 )
+# Slack decoration that never appears inside an org/cluster name — drop it before matching.
+_DECORATION = str.maketrans("", "", "*`")
 
 
 @dataclass
@@ -41,8 +47,11 @@ def parse_alert(text: str | None) -> Alert | None:
     m = _EXEC_RE.search(text)
     if not m:
         return None
-    sev = _SEV_RE.search(text)
-    cm = _CLUSTER_RE.search(text)
+    # Strip bold/code markers so the severity + cluster matchers see plain text; keep the
+    # raw text intact on the Alert for logging.
+    clean = text.translate(_DECORATION)
+    sev = _SEV_RE.search(clean)
+    cm = _CLUSTER_RE.search(clean)
     return Alert(
         execution_id=m.group(1),
         severity=sev.group(1).upper() if sev else None,
