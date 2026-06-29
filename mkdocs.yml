@@ -9,8 +9,27 @@ docs_dir: docs
 site_dir: site
 strict: true
 
+extra_css:
+  - css/custom.css
+
 theme:
   name: material
+  font:
+    text: false
+    code: false
+  palette:
+    - scheme: default
+      primary: custom
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
     - navigation.instant
     - navigation.sections
