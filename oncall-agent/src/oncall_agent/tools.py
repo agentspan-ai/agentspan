@@ -149,6 +149,18 @@ def pull_pod_logs(execution_id: str, pod_name: str, grep: str = "", lines: int =
 
 
 @tool(timeout_seconds=_T)
+def get_ingress_info(execution_id: str) -> dict:
+    """Ingress controller hostname + external address (LB) for the cluster. Read-only.
+
+    Use for DNS / domain-resolution / domain-reachability alerts: if the ingress has
+    no external address, the load balancer isn't provisioned (a concrete cause to
+    cite). If it DOES have an address, the failure is external (DNS record, cert, or
+    network path) and not visible from inside the cluster — say so and escalate to infra.
+    """
+    return _disp().dispatch("GET_INGRESS_INFO", "get_ingress_info", _context(execution_id))
+
+
+@tool(timeout_seconds=_T)
 def run_sql_select(execution_id: str, query: str) -> dict:
     """Run a READ-ONLY SQL SELECT against the cluster's Conductor DB to inspect
     workflow/task/queue state. Only SELECT/WITH/EXPLAIN/SHOW are permitted; any
@@ -179,5 +191,6 @@ ALL_TOOLS = [
     get_pod_events,
     get_top_output,
     pull_pod_logs,
+    get_ingress_info,
     run_sql_select,
 ]
