@@ -3,14 +3,41 @@ title: Plan-Execute Strategy
 description: PLAN_EXECUTE compiles LLM-generated (or static) plans into deterministic Conductor sub-workflows — the planner reasons, the executor runs.
 ---
 
-# Plan-Execute Strategy
+# Plan-Execute
 
-`Strategy.PLAN_EXECUTE` (also called PAE; the server-side compiler is PAC, "PLAN_AND_COMPILE") splits a task into two phases:
+**The LLM decides *what* to do. Conductor handles *how* — no tokens on orchestration, retries, or branching.**
 
-1. **Plan** — a planner agent emits a JSON DAG of operations.
-2. **Execute** — the server compiles that JSON into a Conductor sub-workflow and runs it deterministically.
+Most agent frameworks route every decision through the LLM — retry logic, branch selection, parallelism. Tokens for every control flow operation. Nondeterminism throughout.
 
-The LLM is only invoked where it adds value (planning, per-op content generation). Orchestration, retries, parallelism, and validation are pure Conductor primitives — no token cost, no nondeterminism.
+Plan-Execute draws a hard line.
+
+![Plan-Execute deterministic boundary](../assets/plan-execute-boundary.svg)
+
+One planner call produces a JSON task graph. The Agentspan server compiles it into a deterministic Conductor sub-workflow. **After that single LLM call, the execution is pure Conductor** — crash-safe, replay-safe, and free of LLM randomness.
+
+!!! tip "The core insight"
+    Two identical plans produce two identical workflow definitions and two identical executions. Retries, parallelism (FORK_JOIN), branching (SWITCH), and validation are Conductor primitives — not LLM turns. The LLM is only invoked where it genuinely adds value: planning the shape of work, and generating per-step content.
+
+The two phases in detail:
+
+1. **Plan** — the planner agent emits a JSON DAG of operations once.
+2. **Execute** — the server compiles that JSON into an immutable Conductor sub-workflow and runs it deterministically.
+
+(The strategy is called `PLAN_EXECUTE` in the SDK. The server-side compiler is PAC, "PLAN_AND_COMPILE".)
+
+---
+
+## Why this wins against a plain LLM loop
+
+| | LLM-loop agent | Plan-Execute |
+|---|---|---|
+| Retries | LLM re-reasons | Conductor retry, no token cost |
+| Parallelism | Ask LLM to fan out | FORK_JOIN — deterministic, exact |
+| Branching | LLM decides each turn | SWITCH on JS expression |
+| Crash recovery | Restart from scratch | Resume at last completed step |
+| Replay two runs | Different each time | Identical — plan is a value |
+| Validation | LLM self-checks | Deterministic validator + SWITCH gate |
+| Testing | Non-deterministic | Pass a static plan — no LLM at all |
 
 ## The deterministic boundary
 

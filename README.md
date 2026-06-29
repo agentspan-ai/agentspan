@@ -60,7 +60,7 @@ irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps
 
 ## Install SDKs
 
-Build on Agentspan with the Conductor agent SDK, available for Python, TypeScript/JavaScript, and C#/.NET:
+Build on Agentspan with the Conductor Agent SDK, available for Python, TypeScript/JavaScript, and C#/.NET:
 
 ```bash
 # Python

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 315" fill="none">
+
+  <!-- ── Card 1: Long-running ─────────────────────────────────────── -->
+  <rect x="10" y="10" width="238" height="210" rx="12" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1.5"/>
+  <!-- icon background -->
+  <circle cx="129" cy="62" r="28" fill="#EEF2FF"/>
+  <!-- clock icon -->
+  <circle cx="129" cy="62" r="16" stroke="#4F46E5" stroke-width="2"/>
+  <line x1="129" y1="62" x2="129" y2="50" stroke="#4F46E5" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="129" y1="62" x2="139" y2="67" stroke="#4F46E5" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="129" cy="62" r="2.5" fill="#4F46E5"/>
+  <!-- text -->
+  <text x="129" y="114" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="700" fill="#1E1B4B">Long-running agents</text>
+  <text x="129" y="136" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#6B7280">Survive crashes, restarts,</text>
+  <text x="129" y="152" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#6B7280">and deploys.</text>
+  <text x="129" y="182" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" fill="#4F46E5">crash recovery · HITL · history</text>
+
+  <!-- ── Card 2: Plan-Execute ─────────────────────────────────────── -->
+  <rect x="271" y="10" width="238" height="210" rx="12" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1.5"/>
+  <!-- icon background -->
+  <circle cx="390" cy="62" r="28" fill="#EEF2FF"/>
+  <!-- DAG icon: one root → two leaves -->
+  <circle cx="390" cy="49" r="6" fill="#4F46E5"/>
+  <circle cx="374" cy="75" r="6" fill="#4F46E5"/>
+  <circle cx="406" cy="75" r="6" fill="#4F46E5"/>
+  <line x1="387" y1="54" x2="377" y2="70" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="393" y1="54" x2="403" y2="70" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- arrowheads -->
+  <polygon points="377,70 374,62 381,65" fill="#4F46E5"/>
+  <polygon points="403,70 409,65 406,62" fill="#4F46E5"/>
+  <!-- text -->
+  <text x="390" y="114" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="700" fill="#1E1B4B">Dynamic plan-execute</text>
+  <text x="390" y="136" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#6B7280">LLM plans; Conductor executes.</text>
+  <text x="390" y="152" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#6B7280">No LLM in the hot path.</text>
+  <text x="390" y="182" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" fill="#4F46E5">adaptive plans · replay-safe</text>
+
+  <!-- ── Card 3: Event-driven ─────────────────────────────────────── -->
+  <rect x="532" y="10" width="238" height="210" rx="12" fill="#F9FAFB" stroke="#E5E7EB" stroke-width="1.5"/>
+  <!-- icon background -->
+  <circle cx="651" cy="62" r="28" fill="#EEF2FF"/>
+  <!-- lightning bolt icon -->
+  <path d="M656 44 L644 66 L652 66 L647 80 L663 58 L655 58 Z" fill="#4F46E5"/>
+  <!-- text -->
+  <text x="651" y="114" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="700" fill="#1E1B4B">Event-driven agents</text>
+  <text x="651" y="136" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#6B7280">Triggered by time or events.</text>
+  <text x="651" y="152" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#6B7280">Every execution recorded.</text>
+  <text x="651" y="182" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" fill="#4F46E5">cron · Kafka · webhooks</text>
+
+  <!-- ── Connector lines ──────────────────────────────────────────── -->
+  <line x1="129" y1="220" x2="129" y2="252" stroke="#D1D5DB" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <line x1="390" y1="220" x2="390" y2="252" stroke="#D1D5DB" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <line x1="651" y1="220" x2="651" y2="252" stroke="#D1D5DB" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+  <!-- ── Agentspan Runtime base bar ─────────────────────────────── -->
+  <rect x="10" y="254" width="760" height="50" rx="10" fill="#4F46E5"/>
+  <!-- staggered bars motif (from logo) -->
+  <rect x="24"  y="268" width="22" height="6" rx="3" fill="white" opacity="0.45"/>
+  <rect x="30"  y="279" width="30" height="6" rx="3" fill="white" opacity="0.28"/>
+  <rect x="26"  y="290" width="16" height="6" rx="3" fill="white" opacity="0.16"/>
+  <!-- label -->
+  <text x="390" y="285" text-anchor="middle" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="700" fill="white" letter-spacing="0.3">Agentspan Runtime</text>
+</svg>
