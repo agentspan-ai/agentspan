@@ -1,4 +1,4 @@
-ame: Publish docs via GitHub Pages
+name: Publish docs via GitHub Pages
 
 permissions:
   contents: write
