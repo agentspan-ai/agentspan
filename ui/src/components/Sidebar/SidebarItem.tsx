@@ -18,7 +18,7 @@ import React, {
   useMemo,
 } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { Link, matchPath, useLocation } from "react-router";
+import { Link, matchPath, useLocation, useNavigate } from "react-router";
 import { colors } from "theme/tokens/variables";
 import { HOT_KEYS_SIDEBAR } from "utils/constants/common";
 import HotKeysButton from "./HotKeysButton";
@@ -52,6 +52,7 @@ export const SidebarItem = ({
   itemRef,
 }: SidebarItemProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const theme = useTheme();
 
   const hasChildren = item.items && item.items.length > 0;
@@ -109,7 +110,7 @@ export const SidebarItem = ({
       if (item.handler) {
         item.handler();
       } else if (item.linkTo && !hasChildren) {
-        window.location.href = item.linkTo;
+        navigate(item.linkTo);
       }
     },
     {

@@ -143,7 +143,7 @@ export default function ErrorPage() {
         const refreshed = await silentlyRefreshToken(oidcConfig);
 
         if (refreshed) {
-          window.location.replace("/");
+          window.location.replace("/ui/");
           return;
         }
       }

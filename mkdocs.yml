@@ -14,6 +14,8 @@ extra_css:
 
 theme:
   name: material
+  logo: assets/logo-light.svg
+  favicon: assets/logo-light.svg
   font:
     text: false
     code: false
@@ -36,6 +38,7 @@ theme:
     - navigation.top
     - content.code.copy
     - content.action.edit
+    - content.tabs.link
 
 markdown_extensions:
   - admonition
@@ -45,6 +48,8 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
@@ -72,6 +77,7 @@ nav:
       - Skills: concepts/skills.md
       - Multi-Agent Strategies: concepts/multi-agent.md
       - Plan-Execute (PAC/PAE): concepts/plan-execute.md
+      - Adaptive Loops: concepts/adaptive-loops.md
       - Guardrails: concepts/guardrails.md
       - Memory: concepts/memory.md
       - Streaming: concepts/streaming.md

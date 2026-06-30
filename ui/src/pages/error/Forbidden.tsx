@@ -33,7 +33,7 @@ export default function Forbidden({ parsedMessage }: ForbiddenProps) {
     });
 
     if (invalidClientId) {
-      window.location.replace("/");
+      window.location.replace("/ui/");
     }
   }, 1000);
 

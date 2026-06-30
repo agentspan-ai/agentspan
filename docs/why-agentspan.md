@@ -7,7 +7,7 @@ description: Why agents fail in production, and how Agentspan's server-side exec
 
 **Agentspan is a durable runtime for AI agents, built for Conductor. Your code runs in your process. Execution state lives on the server — so crashes, restarts, and deployments don't lose work.**
 
-![Agentspan three pillars: long-running agents, dynamic plan-execute, event-driven agents](assets/three-pillars.svg)
+![Agentspan four pillars: long-running agents, dynamic plan-execute, event-driven agents, adaptive loops](assets/four-pillars.svg)
 
 ---
 
@@ -82,6 +82,16 @@ Your process can crash, restart, or be replaced. The agent keeps running.
 **Scheduled agents.** Attach one or more crons to any agent at deploy time. The server fires the agent on cadence, tracks every execution, and lets you pause, resume, or trigger ad-hoc — without touching application code. See [Scheduling](scheduling.md).
 
 **Conductor event handlers.** Agentspan runs on Conductor, which has native integrations for Kafka, SQS, AMQP, webhooks, and database events. Any event source that can trigger a Conductor workflow can trigger an agent — with a full durable execution record for every event.
+
+### Adaptive loops
+
+**Durable iterations.** Any framework can write a `while` loop. In Agentspan, each iteration is a Conductor workflow execution — crash mid-loop and the current iteration resumes when a worker reconnects. The loop itself survives process failures.
+
+**Single execution ID across all iterations.** Using DO_WHILE inside a Conductor workflow, every iteration appears as a suffixed task (`planner_llm__1`, `planner_llm__2`, ...) under one workflow ID. The entire loop is observable, queryable, and replayable as a unit in the UI.
+
+**Deterministic inner × adaptive outer.** Combine Plan-Execute (deterministic per-iteration execution) with an outer loop that adapts based on verified results. The LLM decides *what* to try next; Conductor handles *how* each attempt runs — with full parallelism, retry, and validation built in.
+
+See [Adaptive Loops](concepts/adaptive-loops.md).
 
 ### Framework compatibility
 
