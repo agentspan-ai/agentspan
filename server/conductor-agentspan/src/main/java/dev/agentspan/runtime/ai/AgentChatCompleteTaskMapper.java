@@ -17,11 +17,11 @@ import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.Set;
 
-import org.conductoross.conductor.ai.models.ChatCompletion;
-import org.conductoross.conductor.ai.models.ChatMessage;
-import org.conductoross.conductor.ai.models.LLMResponse;
-import org.conductoross.conductor.ai.models.Media;
-import org.conductoross.conductor.ai.models.ToolCall;
+import org.conductoross.conductor.ai.model.ChatCompletion;
+import org.conductoross.conductor.ai.model.ChatMessage;
+import org.conductoross.conductor.ai.model.LLMResponse;
+import org.conductoross.conductor.ai.model.Media;
+import org.conductoross.conductor.ai.model.ToolCall;
 import org.conductoross.conductor.ai.tasks.mapper.AIModelTaskMapper;
 import org.conductoross.conductor.common.utils.StringTemplate;
 import org.conductoross.conductor.config.AIIntegrationEnabledCondition;
