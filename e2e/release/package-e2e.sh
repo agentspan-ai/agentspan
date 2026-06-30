@@ -17,7 +17,7 @@ set -euo pipefail
 #   ./e2e/release/package-e2e.sh --version 0.4.0 --sdk python --sdk typescript
 #   ./e2e/release/package-e2e.sh --version 0.4.0 --out /tmp/dist
 #
-# Output: <out>/agentspan-e2e-<sdk>-<version>.tar.gz   (default out: e2e/release/dist)
+# Output: <out>/agentspan-sdk-e2e-<sdk>-<version>.tar.gz   (default out: e2e/release/dist)
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT_DIR="$REPO_ROOT/e2e/release/dist"
@@ -62,7 +62,7 @@ substitute_version() {
 }
 
 make_tarball() {
-  local name="$1"  # e.g. agentspan-e2e-python-0.4.0
+  local name="$1"  # e.g. agentspan-sdk-e2e-python-0.4.0
   substitute_version "$OUT_DIR/$name"
   tar -czf "$OUT_DIR/$name.tar.gz" -C "$OUT_DIR" "$name"
   rm -rf "$OUT_DIR/$name"
@@ -72,7 +72,7 @@ make_tarball() {
 # ── Python ─────────────────────────────────────────────────────────────────
 
 pack_python() {
-  local name="agentspan-e2e-python-$VERSION"
+  local name="agentspan-sdk-e2e-python-$VERSION"
   local stage="$OUT_DIR/$name"
   echo "Packaging Python e2e ($name)..."
   rm -rf "$stage"; mkdir -p "$stage/e2e"
@@ -157,7 +157,7 @@ EOF
 # ── TypeScript ───────────────────────────────────────────────────────────
 
 pack_typescript() {
-  local name="agentspan-e2e-typescript-$VERSION"
+  local name="agentspan-sdk-e2e-typescript-$VERSION"
   local stage="$OUT_DIR/$name"
   echo "Packaging TypeScript e2e ($name)..."
   rm -rf "$stage"; mkdir -p "$stage/tests/e2e"
@@ -166,7 +166,7 @@ pack_typescript() {
 
   cat > "$stage/package.json" <<'EOF'
 {
-  "name": "agentspan-e2e-typescript",
+  "name": "agentspan-sdk-e2e-typescript",
   "version": "@VERSION@",
   "private": true,
   "type": "module",
@@ -291,7 +291,7 @@ EOF
 # ── Java ───────────────────────────────────────────────────────────────────
 
 pack_java() {
-  local name="agentspan-e2e-java-$VERSION"
+  local name="agentspan-sdk-e2e-java-$VERSION"
   local stage="$OUT_DIR/$name"
   echo "Packaging Java e2e ($name)..."
   rm -rf "$stage"; mkdir -p "$stage/src/test/java"
@@ -351,7 +351,7 @@ test {
 EOF
 
   cat > "$stage/settings.gradle" <<'EOF'
-rootProject.name = 'agentspan-e2e-java'
+rootProject.name = 'agentspan-sdk-e2e-java'
 EOF
 
   cat > "$stage/run.sh" <<'EOF'
@@ -407,7 +407,7 @@ EOF
 # ── C# ─────────────────────────────────────────────────────────────────────
 
 pack_csharp() {
-  local name="agentspan-e2e-csharp-$VERSION"
+  local name="agentspan-sdk-e2e-csharp-$VERSION"
   local stage="$OUT_DIR/$name"
   echo "Packaging C# e2e ($name)..."
   rm -rf "$stage"; mkdir -p "$stage/AgentspanE2eTests"

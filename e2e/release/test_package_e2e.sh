@@ -26,8 +26,8 @@ pass() { echo "  ok: $*"; }
 # extracted bundle root so SDK-specific checks can keep going.
 common_checks() {
   local sdk="$1" manifest="$2" pin="$3" source="$4" src_glob="$5"
-  local tar="$WORK/dist/agentspan-e2e-$sdk-$VERSION.tar.gz"
-  local dir="agentspan-e2e-$sdk-$VERSION"
+  local tar="$WORK/dist/agentspan-sdk-e2e-$sdk-$VERSION.tar.gz"
+  local dir="agentspan-sdk-e2e-$sdk-$VERSION"
 
   [[ -f "$tar" ]] || fail "$sdk: tarball not produced ($tar)"
   rm -rf "$WORK/x-$sdk"; mkdir -p "$WORK/x-$sdk"

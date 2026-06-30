@@ -11,10 +11,10 @@ the test sources + support files + a generated manifest, never the SDK source:
 
 | SDK        | Bundle                               | Pins                                                       |
 |------------|--------------------------------------|------------------------------------------------------------|
-| Python     | `agentspan-e2e-python-<v>.tar.gz`     | PyPI `conductor-agent-sdk==<v>`                            |
-| TypeScript | `agentspan-e2e-typescript-<v>.tar.gz` | npm `@conductor-oss/conductor-agent-sdk@<v>`              |
-| Java       | `agentspan-e2e-java-<v>.tar.gz`       | Maven `org.conductoross.conductor:conductor-agent-sdk:<v>` |
-| C#         | `agentspan-e2e-csharp-<v>.tar.gz`     | NuGet `conductor-agent-sdk` `<v>`                          |
+| Python     | `agentspan-sdk-e2e-python-<v>.tar.gz`     | PyPI `conductor-agent-sdk==<v>`                            |
+| TypeScript | `agentspan-sdk-e2e-typescript-<v>.tar.gz` | npm `@conductor-oss/conductor-agent-sdk@<v>`              |
+| Java       | `agentspan-sdk-e2e-java-<v>.tar.gz`       | Maven `org.conductoross.conductor:conductor-agent-sdk:<v>` |
+| C#         | `agentspan-sdk-e2e-csharp-<v>.tar.gz`     | NuGet `conductor-agent-sdk` `<v>`                          |
 
 ## How it ships
 
@@ -36,8 +36,8 @@ unified version every other release workflow (server, CLI, each SDK) publishes.
 ```bash
 V=0.4.0; SDK=java
 curl -fsSL -o e2e.tar.gz \
-  "https://github.com/agentspan-ai/agentspan/releases/download/v$V/agentspan-e2e-$SDK-$V.tar.gz"
-tar xzf e2e.tar.gz && cd "agentspan-e2e-$SDK-$V"
+  "https://github.com/agentspan-ai/agentspan/releases/download/v$V/agentspan-sdk-e2e-$SDK-$V.tar.gz"
+tar xzf e2e.tar.gz && cd "agentspan-sdk-e2e-$SDK-$V"
 # Point at a running v$V server + mcp-testkit, then:
 AGENTSPAN_SERVER_URL=http://localhost:6767/api ./run.sh
 ```

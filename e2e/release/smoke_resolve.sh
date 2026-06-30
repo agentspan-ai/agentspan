@@ -26,7 +26,7 @@ bad()  { echo "FAIL $1: $2" >&2; RC=1; }
 
 bundle() {  # build one bundle at $VERSION, echo its extracted root
   local sdk="$1"
-  local dir="agentspan-e2e-$sdk-$VERSION"
+  local dir="agentspan-sdk-e2e-$sdk-$VERSION"
   "$HERE/package-e2e.sh" --version "$VERSION" --sdk "$sdk" --out "$WORK/dist" >/dev/null
   mkdir -p "$WORK/x-$sdk"
   tar -xzf "$WORK/dist/$dir.tar.gz" -C "$WORK/x-$sdk"
