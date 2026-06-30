@@ -12,10 +12,10 @@ set -euo pipefail
 # vendor the SDK source — the bundle's version is the contract.
 #
 # Usage:
-#   ./e2e/release/package-e2e.sh --version 0.4.0
-#   ./e2e/release/package-e2e.sh --version 0.4.0 --sdk java
-#   ./e2e/release/package-e2e.sh --version 0.4.0 --sdk python --sdk typescript
-#   ./e2e/release/package-e2e.sh --version 0.4.0 --out /tmp/dist
+#   ./e2e/release/package-sdk-e2e.sh --version 0.4.0
+#   ./e2e/release/package-sdk-e2e.sh --version 0.4.0 --sdk java
+#   ./e2e/release/package-sdk-e2e.sh --version 0.4.0 --sdk python --sdk typescript
+#   ./e2e/release/package-sdk-e2e.sh --version 0.4.0 --out /tmp/dist
 #
 # Output: <out>/agentspan-sdk-e2e-<sdk>-<version>.tar.gz   (default out: e2e/release/dist)
 

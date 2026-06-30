@@ -19,16 +19,16 @@ the test sources + support files + a generated manifest, never the SDK source:
 ## How it ships
 
 `.github/workflows/release-sdk-e2e-tests.yml` runs on `release: created` (and
-manual dispatch), calls `package-e2e.sh`, validates the output, then attaches
+manual dispatch), calls `package-sdk-e2e.sh`, validates the output, then attaches
 the tarballs + `.sha256` checksums to the `vX.Y.Z` release as assets — the same
 unified version every other release workflow (server, CLI, each SDK) publishes.
 
 ## Build locally
 
 ```bash
-./e2e/release/package-e2e.sh --version 0.4.0            # all SDKs → e2e/release/dist/
-./e2e/release/package-e2e.sh --version 0.4.0 --sdk java # one SDK
-./e2e/release/test_package_e2e.sh                       # validate bundle structure + pins
+./e2e/release/package-sdk-e2e.sh --version 0.4.0            # all SDKs → e2e/release/dist/
+./e2e/release/package-sdk-e2e.sh --version 0.4.0 --sdk java # one SDK
+./e2e/release/test_package_sdk_e2e.sh                       # validate bundle structure + pins
 ```
 
 ## Consuming a bundle (downstream)
@@ -49,7 +49,7 @@ start those services — the consumer provides a live, matching-version server.
 ## Adding/maintaining a suite
 
 The standalone manifests (`requirements.txt`, `package.json`, `build.gradle`,
-`*.csproj`), runners, and READMEs are generated inline in `package-e2e.sh` with
+`*.csproj`), runners, and READMEs are generated inline in `package-sdk-e2e.sh` with
 an `@VERSION@` placeholder substituted at package time. Test sources are copied
 verbatim from `sdk/<lang>/.../e2e`. When a suite gains a new third-party test
-dependency, update the corresponding generated manifest in `package-e2e.sh`.
+dependency, update the corresponding generated manifest in `package-sdk-e2e.sh`.

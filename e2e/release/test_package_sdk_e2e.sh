@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ── Validator for package-e2e.sh ─────────────────────────────────────────
+# ── Validator for package-sdk-e2e.sh ─────────────────────────────────────────
 # Builds the bundles at a throwaway version and asserts, per bundle:
 #   - tarball exists, extracts to the expected dir
 #   - carries an executable, syntactically-valid run.sh + README + manifest
@@ -9,7 +9,7 @@ set -euo pipefail
 #   - the SDK is pinned at the version, with no @VERSION@ placeholder left
 #   - generated manifests are well-formed (JSON / XML) and wired correctly
 # All checks are static + deterministic (no network, no live server).
-# Run: ./e2e/release/test_package_e2e.sh
+# Run: ./e2e/release/test_package_sdk_e2e.sh
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
@@ -20,7 +20,7 @@ trap 'rm -rf "$WORK"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "  ok: $*"; }
 
-"$HERE/package-e2e.sh" --version "$VERSION" --out "$WORK/dist" >/dev/null
+"$HERE/package-sdk-e2e.sh" --version "$VERSION" --out "$WORK/dist" >/dev/null
 
 # Extract a bundle and run the checks shared by every SDK. Echoes the
 # extracted bundle root so SDK-specific checks can keep going.

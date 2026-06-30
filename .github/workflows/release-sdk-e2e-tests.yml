@@ -38,11 +38,11 @@ jobs:
 
       - name: Package e2e bundles (all SDKs)
         run: |
-          ./e2e/release/package-e2e.sh --version "${{ steps.version.outputs.version }}"
+          ./e2e/release/package-sdk-e2e.sh --version "${{ steps.version.outputs.version }}"
 
       - name: Validate bundles
         run: |
-          ./e2e/release/test_package_e2e.sh
+          ./e2e/release/test_package_sdk_e2e.sh
 
       - name: Generate SHA256 checksums
         working-directory: e2e/release/dist
