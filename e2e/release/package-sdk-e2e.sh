@@ -57,7 +57,9 @@ mkdir -p "$OUT_DIR"
 # touches the manifests/runners/READMEs we author below.
 substitute_version() {
   local dir="$1"
-  find "$dir" -type f -print0 | xargs -0 sed -i.bak "s/@VERSION@/$VERSION/g"
+  # Exclude *.jar: the only binary we stage is the Gradle wrapper jar, which
+  # never contains @VERSION@ and would be corrupted by sed.
+  find "$dir" -type f ! -name '*.jar' -print0 | xargs -0 sed -i.bak "s/@VERSION@/$VERSION/g"
   find "$dir" -name '*.bak' -delete
 }
 
@@ -317,6 +319,7 @@ repositories { mavenCentral() }
 
 ext {
     junitVersion           = '5.11.0'
+    junitPlatformVersion   = '1.11.0'   // launcher must match the Jupiter 5.x platform
     langchain4jVersion     = '1.0.0'
     googleAdkVersion       = '1.3.0'
     langgraph4jVersion     = '1.6.0-beta5'
@@ -336,6 +339,10 @@ dependencies {
     testImplementation "org.bsc.langgraph4j:langgraph4j-core:${langgraph4jVersion}"
     testImplementation "org.bsc.langgraph4j:langgraph4j-agent-executor:${langgraph4jVersion}"
     testRuntimeOnly 'org.slf4j:slf4j-simple:2.0.13'
+    // Gradle 9 no longer puts the JUnit Platform launcher on the test runtime
+    // classpath automatically (Gradle 8 did). Declare it so the bundle runs on
+    // both Gradle 8 and 9.
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:${junitPlatformVersion}"
 }
 
 compileTestJava.options.compilerArgs << '-parameters'
@@ -354,6 +361,16 @@ EOF
 rootProject.name = 'agentspan-sdk-e2e-java'
 EOF
 
+  # Bundle a pinned Gradle wrapper (reused from sdk/java, currently 8.10) so the
+  # suite is self-contained and runs identically regardless of the host's
+  # Gradle — no system `gradle` required.
+  cp "$REPO_ROOT/sdk/java/gradlew"     "$stage/gradlew"
+  cp "$REPO_ROOT/sdk/java/gradlew.bat" "$stage/gradlew.bat"
+  mkdir -p "$stage/gradle/wrapper"
+  cp "$REPO_ROOT/sdk/java/gradle/wrapper/gradle-wrapper.jar"        "$stage/gradle/wrapper/"
+  cp "$REPO_ROOT/sdk/java/gradle/wrapper/gradle-wrapper.properties" "$stage/gradle/wrapper/"
+  chmod +x "$stage/gradlew"
+
   cat > "$stage/run.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -365,10 +382,11 @@ set -euo pipefail
 # Optional:
 #   - AGENTSPAN_LLM_MODEL (default openai/gpt-4o-mini) + provider API keys
 #
-# Requires a local `gradle` (>= 8) and JDK 21. Usage: ./run.sh [extra gradle args]
+# Requires only JDK 21 — the bundled Gradle wrapper (./gradlew) pins the Gradle
+# version, so no system `gradle` is needed. Usage: ./run.sh [extra gradle args]
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
-gradle test \
+./gradlew test \
   -DAGENTSPAN_SERVER_URL="${AGENTSPAN_SERVER_URL:-http://localhost:6767/api}" \
   -DAGENTSPAN_LLM_MODEL="${AGENTSPAN_LLM_MODEL:-openai/gpt-4o-mini}" "$@"
 echo "Report: $HERE/build/reports/tests/test/index.html"
@@ -386,7 +404,7 @@ from Maven Central — no SDK source is vendored.
 
 | Requirement      | Env var                | Default                      |
 |------------------|------------------------|------------------------------|
-| JDK 21 + Gradle 8| —                      | —                            |
+| JDK 21 (Gradle wrapper bundled) | —       | —                            |
 | agentspan server | `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api`  |
 | mcp-testkit      | `MCP_TESTKIT_URL`      | `http://localhost:3001`      |
 | LLM model        | `AGENTSPAN_LLM_MODEL`  | `openai/gpt-4o-mini`         |

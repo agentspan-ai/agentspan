@@ -91,7 +91,19 @@ root=$(common_checks java "build.gradle" \
 # Must NOT exclude the e2e-tagged tests (the in-repo build does by default).
 ! grep -q "excludeTags" "$root/build.gradle" \
   || fail "java: build.gradle excludes e2e-tagged tests"
-pass "java: bundle valid, runs e2e tags, pins SDK:$VERSION"
+# Self-contained: a pinned Gradle wrapper must be bundled and uncorrupted, so
+# the suite needs no system `gradle`.
+[[ -x "$root/gradlew" ]] || fail "java: missing executable gradlew wrapper"
+[[ -f "$root/gradle/wrapper/gradle-wrapper.properties" ]] \
+  || fail "java: missing gradle-wrapper.properties"
+grep -q "distributionUrl=.*gradle-[0-9].*\.zip" "$root/gradle/wrapper/gradle-wrapper.properties" \
+  || fail "java: wrapper does not pin a Gradle distribution"
+# The wrapper jar is binary; substitute_version must not have corrupted it.
+unzip -t "$root/gradle/wrapper/gradle-wrapper.jar" >/dev/null 2>&1 \
+  || fail "java: gradle-wrapper.jar is corrupt (not a valid zip)"
+grep -q "./gradlew" "$root/run.sh" \
+  || fail "java: run.sh does not use the bundled ./gradlew"
+pass "java: bundle valid, runs e2e tags, self-contained wrapper, pins SDK:$VERSION"
 
 # ── C# ─────────────────────────────────────────────────────────────────────
 root=$(common_checks csharp "AgentspanE2eTests/AgentspanE2eTests.csproj" \
