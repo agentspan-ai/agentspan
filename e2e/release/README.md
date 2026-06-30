@@ -18,7 +18,7 @@ the test sources + support files + a generated manifest, never the SDK source:
 
 ## How it ships
 
-`.github/workflows/release-e2e-tests.yml` runs on `release: created` (and
+`.github/workflows/release-sdk-e2e-tests.yml` runs on `release: created` (and
 manual dispatch), calls `package-e2e.sh`, validates the output, then attaches
 the tarballs + `.sha256` checksums to the `vX.Y.Z` release as assets — the same
 unified version every other release workflow (server, CLI, each SDK) publishes.
