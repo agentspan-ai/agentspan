@@ -340,6 +340,18 @@ body {
 .md-footer-nav__direction { color: var(--c-text-muted) !important; }
 .md-copyright { color: var(--c-text-dim) !important; }
 
+/* ---------- Edit page button ---------- */
+.md-content__button {
+  width: 1.4rem !important;
+  height: 1.4rem !important;
+  padding: 0 !important;
+  margin: 0.4rem 0 0 0.4rem !important;
+}
+.md-content__button svg {
+  width: 1.4rem !important;
+  height: 1.4rem !important;
+}
+
 /* ---------- Clipboard button ---------- */
 .md-clipboard {
   color: var(--c-text-dim) !important;
