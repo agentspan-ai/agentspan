@@ -23,29 +23,30 @@ from __future__ import annotations
 from conductor.ai.agents.result import AgentResult
 
 
-def assert_output_satisfies(
+def judge_output(
     result: AgentResult,
     criterion: str,
     *,
     model: str = "anthropic/claude-sonnet-4-6",
-    threshold: float = 0.7,
-) -> None:
-    """Assert that the agent output semantically satisfies a criterion.
+) -> tuple[float, str]:
+    """Run the LLM judge and return its ``(score, reason)`` verdict.
 
-    Uses an LLM judge to evaluate the output against the criterion.  The judge
-    returns a score from 0 to 1; the assertion passes if the score meets the
-    *threshold*.
+    Unlike :func:`assert_output_satisfies`, this never raises on a low score —
+    it returns the raw judgment so callers can record the score/reasoning
+    (e.g. into an eval check) and decide pass/fail themselves.
 
     Args:
         result: The agent execution result.
         criterion: A natural-language description of what the output should
             satisfy.
         model: The LLM to use as judge (in ``"provider/model"`` format).
-        threshold: Minimum score (0-1) for the assertion to pass.
+
+    Returns:
+        A ``(score, reason)`` tuple where ``score`` is 0-1.
 
     Raises:
         ImportError: If ``litellm`` is not installed.
-        AssertionError: If the output does not satisfy the criterion.
+        AssertionError: If the judge returns an unparseable response.
     """
     try:
         import litellm
@@ -88,7 +89,37 @@ def assert_output_satisfies(
     except (json.JSONDecodeError, ValueError, TypeError):
         raise AssertionError(f"LLM judge returned unparseable response: {raw}")
 
+    return score, reason
+
+
+def assert_output_satisfies(
+    result: AgentResult,
+    criterion: str,
+    *,
+    model: str = "anthropic/claude-sonnet-4-6",
+    threshold: float = 0.7,
+) -> None:
+    """Assert that the agent output semantically satisfies a criterion.
+
+    Uses an LLM judge to evaluate the output against the criterion.  The judge
+    returns a score from 0 to 1; the assertion passes if the score meets the
+    *threshold*.
+
+    Args:
+        result: The agent execution result.
+        criterion: A natural-language description of what the output should
+            satisfy.
+        model: The LLM to use as judge (in ``"provider/model"`` format).
+        threshold: Minimum score (0-1) for the assertion to pass.
+
+    Raises:
+        ImportError: If ``litellm`` is not installed.
+        AssertionError: If the output does not satisfy the criterion.
+    """
+    score, reason = judge_output(result, criterion, model=model)
+
     if score < threshold:
+        output = str(result.output) if result.output is not None else ""
         preview = output[:200] + ("..." if len(output) > 200 else "")
         raise AssertionError(
             f"Output does not satisfy criterion (score={score:.2f}, "

@@ -12,13 +12,15 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     created_by   TEXT,
     name         TEXT,                      -- user-defined run name (e.g. "eval_handoff_v2")
     strategy     TEXT,                      -- orchestration strategy
-    ran_by       TEXT                       -- script filename or "UI"
+    ran_by       TEXT,                      -- script filename or "UI"
+    dataset      TEXT                       -- name of the stored dataset these cases came from
 );
 
 -- migrations: add columns for existing installs (errors silently ignored via continueOnError)
 ALTER TABLE eval_runs ADD COLUMN name TEXT;
 ALTER TABLE eval_runs ADD COLUMN strategy TEXT;
 ALTER TABLE eval_runs ADD COLUMN ran_by TEXT;
+ALTER TABLE eval_runs ADD COLUMN dataset TEXT;
 
 CREATE TABLE IF NOT EXISTS eval_cases (
     id          TEXT PRIMARY KEY,           -- UUID

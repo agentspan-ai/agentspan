@@ -379,3 +379,97 @@ class TestAgentNamePreserved:
         assert result.cases[0].agent_name == "my-agent", (
             f"agent_name was corrupted to {result.cases[0].agent_name!r}"
         )
+
+
+# ── Semantic criteria (LLM-judge) auto-wiring ───────────────────────────────
+
+
+class TestSemanticCriteria:
+    """semantic_criteria auto-runs as a check carrying score + reasoning.
+
+    The LLM judge is patched — no real model calls are made (CLAUDE.md rule #1).
+    """
+
+    def _semantic_check(self, case_result: EvalCaseResult) -> Optional[EvalCheckResult]:
+        return next((c for c in case_result.checks if c.check == "semantic"), None)
+
+    def test_semantic_pass_records_score_and_reasoning(self):
+        runtime = StubRuntime()
+        ev = CorrectnessEval(runtime)
+
+        with patch(
+            "conductor.ai.agents.testing.semantic.judge_output",
+            return_value=(0.92, "Output addresses the criterion well"),
+        ):
+            result = ev.run([
+                EvalCase(
+                    name="c1",
+                    agent=StubAgent(),
+                    prompt="Hi",
+                    semantic_criteria="Response is helpful",
+                    validate_orchestration=False,
+                )
+            ])
+
+        check = self._semantic_check(result.cases[0])
+        assert check is not None, "semantic check should be present when criterion is set"
+        assert check.passed is True
+        assert check.score == 0.92
+        assert check.reasoning == "Output addresses the criterion well"
+        assert result.cases[0].passed is True
+
+    def test_semantic_below_threshold_fails_case(self):
+        runtime = StubRuntime()
+        ev = CorrectnessEval(runtime)
+
+        with patch(
+            "conductor.ai.agents.testing.semantic.judge_output",
+            return_value=(0.30, "Output misses the point"),
+        ):
+            result = ev.run([
+                EvalCase(
+                    name="c1",
+                    agent=StubAgent(),
+                    prompt="Hi",
+                    semantic_criteria="Response is helpful",
+                    validate_orchestration=False,
+                )
+            ])
+
+        check = self._semantic_check(result.cases[0])
+        assert check is not None
+        assert check.passed is False
+        assert check.score == 0.30
+        assert result.cases[0].passed is False, "low semantic score must fail the case"
+
+    def test_semantic_skipped_when_judge_unavailable(self):
+        """If litellm isn't installed, the criterion is skipped, not failed."""
+        runtime = StubRuntime()
+        ev = CorrectnessEval(runtime)
+
+        with patch(
+            "conductor.ai.agents.testing.semantic.judge_output",
+            side_effect=ImportError("litellm not installed"),
+        ):
+            result = ev.run([
+                EvalCase(
+                    name="c1",
+                    agent=StubAgent(),
+                    prompt="Hi",
+                    semantic_criteria="Response is helpful",
+                    validate_orchestration=False,
+                )
+            ])
+
+        assert self._semantic_check(result.cases[0]) is None, "should skip, not add a check"
+        assert result.cases[0].passed is True, "missing judge must not fail the case"
+
+    def test_no_semantic_check_when_criterion_absent(self):
+        runtime = StubRuntime()
+        ev = CorrectnessEval(runtime)
+
+        result = ev.run([
+            EvalCase(name="c1", agent=StubAgent(), prompt="Hi", validate_orchestration=False)
+        ])
+
+        assert self._semantic_check(result.cases[0]) is None

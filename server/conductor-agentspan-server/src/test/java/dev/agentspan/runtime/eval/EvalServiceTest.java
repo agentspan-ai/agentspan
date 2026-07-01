@@ -68,6 +68,23 @@ class EvalServiceTest {
     }
 
     @Test
+    void saveEvalRun_persistsDatasetLink() {
+        EvalRunDto dto = EvalRunDto.builder()
+                .id(id("run-ds"))
+                .agentName("pizza-support-bot")
+                .timestamp("2025-01-01T00:00:00Z")
+                .totalCases(5)
+                .passedCases(5)
+                .dataset("pizza-support")
+                .build();
+
+        evalService.saveEvalRun(dto);
+
+        EvalRunDto retrieved = evalService.getEvalRun(id("run-ds"));
+        assertThat(retrieved.getDataset()).isEqualTo("pizza-support");
+    }
+
+    @Test
     void getEvalRun_returnsNotFound_forMissingId() {
         assertThatThrownBy(() -> evalService.getEvalRun("does-not-exist"))
                 .isInstanceOf(NoSuchElementException.class)

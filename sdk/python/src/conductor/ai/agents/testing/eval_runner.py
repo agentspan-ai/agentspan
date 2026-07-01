@@ -182,6 +182,7 @@ class EvalSuiteResult:
     name: Optional[str] = None
     strategy: Optional[str] = None
     ran_by: Optional[str] = None
+    dataset: Optional[str] = None
 
     @property
     def all_passed(self) -> bool:
@@ -241,6 +242,8 @@ class EvalSuiteResult:
             d["strategy"] = self.strategy
         if self.ran_by is not None:
             d["ranBy"] = self.ran_by
+        if self.dataset is not None:
+            d["dataset"] = self.dataset
         return d
 
 
@@ -267,6 +270,7 @@ class CorrectnessEval:
         name: Optional[str] = None,
         strategy: Optional[str] = None,
         ran_by: Optional[str] = None,
+        dataset: Optional[str] = None,
     ) -> EvalSuiteResult:
         """Run all eval cases and return aggregated results.
 
@@ -274,6 +278,11 @@ class CorrectnessEval:
             cases: List of :class:`EvalCase` definitions.
             tags: If provided, only run cases with at least one matching tag.
             suite_tags: Optional tags to attach to the eval suite result.
+            name: Optional human-readable name for this run.
+            strategy: Optional orchestration strategy label.
+            ran_by: Optional script/runner identifier.
+            dataset: Optional name of the stored dataset these cases came from,
+                so the run links back to that dataset in the UI.
 
         Returns:
             An :class:`EvalSuiteResult` with per-case and aggregated results.
@@ -300,6 +309,7 @@ class CorrectnessEval:
             name=name,
             strategy=strategy,
             ran_by=ran_by,
+            dataset=dataset,
         )
 
         for case in cases:
@@ -438,6 +448,12 @@ class CorrectnessEval:
         for i, custom_fn in enumerate(case.custom_assertions):
             checks.append(self._check(f"custom_{i}", lambda fn=custom_fn: fn(agent_result)))
 
+        # Semantic (LLM-judge) check — only when a criterion is provided.
+        if case.semantic_criteria:
+            semantic_check = self._semantic_check(case.semantic_criteria, agent_result)
+            if semantic_check is not None:
+                checks.append(semantic_check)
+
         passed = all(c.passed for c in checks)
         output = getattr(agent_result, "output", None)
         if output is None:
@@ -461,6 +477,42 @@ class CorrectnessEval:
             return EvalCheckResult(check=name, passed=True)
         except (AssertionError, Exception) as exc:
             return EvalCheckResult(check=name, passed=False, message=str(exc))
+
+    @staticmethod
+    def _semantic_check(
+        criterion: str, result: AgentResult, *, threshold: float = 0.7
+    ) -> Optional[EvalCheckResult]:
+        """Grade the output against a semantic criterion via an LLM judge.
+
+        Returns an :class:`EvalCheckResult` carrying the judge's ``score`` and
+        ``reasoning``. Returns ``None`` (skips the check) when the optional
+        judge dependency ``litellm`` isn't installed — so a criterion never
+        fails a case just because the judge is unavailable.
+        """
+        try:
+            from conductor.ai.agents.testing.semantic import judge_output
+
+            score, reason = judge_output(result, criterion)
+        except ImportError:
+            logger.warning(
+                "semantic_criteria set but litellm is not installed; skipping "
+                "semantic check. Install with: pip install agentspan[testing]"
+            )
+            return None
+        except Exception as exc:  # judge/network/parse failure — surface as a failed check
+            return EvalCheckResult(
+                check="semantic", passed=False, message=f"Semantic judge error: {exc}"
+            )
+
+        passed = score >= threshold
+        message = "" if passed else f"semantic score {score:.2f} < threshold {threshold:.2f}"
+        return EvalCheckResult(
+            check="semantic",
+            passed=passed,
+            message=message,
+            score=score,
+            reasoning=reason,
+        )
 
 
 def _assert_no_handoff(result: AgentResult, agent_name: str) -> None:

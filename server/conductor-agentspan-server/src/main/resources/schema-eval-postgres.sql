@@ -11,13 +11,15 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     created_by   TEXT,
     name         TEXT,
     strategy     TEXT,
-    ran_by       TEXT
+    ran_by       TEXT,
+    dataset      TEXT
 );
 
 -- migrations for existing installs
 ALTER TABLE eval_runs ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE eval_runs ADD COLUMN IF NOT EXISTS strategy TEXT;
 ALTER TABLE eval_runs ADD COLUMN IF NOT EXISTS ran_by TEXT;
+ALTER TABLE eval_runs ADD COLUMN IF NOT EXISTS dataset TEXT;
 
 CREATE TABLE IF NOT EXISTS eval_cases (
     id          TEXT PRIMARY KEY,

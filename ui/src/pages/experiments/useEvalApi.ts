@@ -35,6 +35,7 @@ export interface EvalRun {
   name?: string;
   strategy?: string;
   ranBy?: string;
+  dataset?: string;
   cases?: EvalCase[];
 }
 

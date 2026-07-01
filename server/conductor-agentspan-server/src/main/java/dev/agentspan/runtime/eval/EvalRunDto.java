@@ -29,6 +29,8 @@ public class EvalRunDto {
     private String name;
     private String strategy;
     private String ranBy;
+    /** Name of the stored dataset these cases came from, if any. */
+    private String dataset;
     /** Present only in detail responses. */
     private List<EvalCaseDto> cases;
 }

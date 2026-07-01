@@ -25,6 +25,9 @@ import dev.agentspan.runtime.context.RequestContextHolder;
 public class EvalService {
 
     private static final Logger log = LoggerFactory.getLogger(EvalService.class);
+    // Anonymous OSS principal (see AuthFilter.ANONYMOUS_USER_ID). Stored as null so the
+    // UI shows the friendly "Ran by: <script>" instead of an opaque all-zeros UUID.
+    private static final String ANONYMOUS_USER_ID = "00000000-0000-0000-0000-000000000000";
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
     private static final TypeReference<List<DatasetDto.DatasetCaseDto>> CASE_LIST = new TypeReference<>() {};
 
@@ -43,8 +46,10 @@ public class EvalService {
         String runId = dto.getId() != null ? dto.getId() : UUID.randomUUID().toString();
         String timestamp =
                 dto.getTimestamp() != null ? dto.getTimestamp() : Instant.now().toString();
-        String createdBy =
-                RequestContextHolder.get().map(RequestContext::getUserId).orElse(null);
+        String createdBy = RequestContextHolder.get()
+                .map(RequestContext::getUserId)
+                .filter(uid -> !ANONYMOUS_USER_ID.equals(uid))
+                .orElse(null);
 
         // agent_name is nullable — multi-agent evals may not have a single canonical agent
         String agentName = dto.getAgentName() != null ? dto.getAgentName() : "";
@@ -53,8 +58,8 @@ public class EvalService {
 
         jdbc.update(
                 "INSERT OR REPLACE INTO eval_runs"
-                        + " (id, agent_name, timestamp, total_cases, passed_cases, tags, created_by, name, strategy, ran_by)"
-                        + " VALUES (:id, :agentName, :timestamp, :totalCases, :passedCases, :tags, :createdBy, :name, :strategy, :ranBy)",
+                        + " (id, agent_name, timestamp, total_cases, passed_cases, tags, created_by, name, strategy, ran_by, dataset)"
+                        + " VALUES (:id, :agentName, :timestamp, :totalCases, :passedCases, :tags, :createdBy, :name, :strategy, :ranBy, :dataset)",
                 new MapSqlParameterSource()
                         .addValue("id", runId)
                         .addValue("agentName", agentName)
@@ -65,7 +70,8 @@ public class EvalService {
                         .addValue("createdBy", createdBy)
                         .addValue("name", dto.getName())
                         .addValue("strategy", dto.getStrategy())
-                        .addValue("ranBy", dto.getRanBy()));
+                        .addValue("ranBy", dto.getRanBy())
+                        .addValue("dataset", dto.getDataset()));
 
         if (dto.getCases() != null) {
             for (EvalCaseDto caseDto : dto.getCases()) {
@@ -130,7 +136,7 @@ public class EvalService {
                 .orElse(0L);
 
         List<EvalRunDto> results = jdbc.query(
-                "SELECT id, agent_name, timestamp, total_cases, passed_cases, tags, created_by, name, strategy, ran_by"
+                "SELECT id, agent_name, timestamp, total_cases, passed_cases, tags, created_by, name, strategy, ran_by, dataset"
                         + " FROM eval_runs ORDER BY timestamp DESC LIMIT :size OFFSET :start",
                 new MapSqlParameterSource().addValue("size", size).addValue("start", start),
                 (rs, rowNum) -> EvalRunDto.builder()
@@ -144,6 +150,7 @@ public class EvalService {
                         .name(rs.getString("name"))
                         .strategy(rs.getString("strategy"))
                         .ranBy(rs.getString("ran_by"))
+                        .dataset(rs.getString("dataset"))
                         .build());
 
         Map<String, Object> response = new LinkedHashMap<>();
@@ -154,7 +161,7 @@ public class EvalService {
 
     public EvalRunDto getEvalRun(String id) {
         List<EvalRunDto> runs = jdbc.query(
-                "SELECT id, agent_name, timestamp, total_cases, passed_cases, tags, created_by, name, strategy, ran_by"
+                "SELECT id, agent_name, timestamp, total_cases, passed_cases, tags, created_by, name, strategy, ran_by, dataset"
                         + " FROM eval_runs WHERE id = :id",
                 new MapSqlParameterSource("id", id),
                 (rs, rowNum) -> EvalRunDto.builder()
@@ -168,6 +175,7 @@ public class EvalService {
                         .name(rs.getString("name"))
                         .strategy(rs.getString("strategy"))
                         .ranBy(rs.getString("ran_by"))
+                        .dataset(rs.getString("dataset"))
                         .build());
 
         if (runs.isEmpty()) {

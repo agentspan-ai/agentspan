@@ -314,8 +314,23 @@ export default function EvalRunDetail() {
               </Box>
 
               {/* Row 2 — optional fields */}
-              {(strategyValid || run.ranBy || run.createdBy || run.timestamp) && (
+              {(strategyValid || run.dataset || run.ranBy || run.createdBy || run.timestamp) && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+                  {run.dataset && (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                      <Typography variant="body2" color="text.secondary">Dataset:</Typography>
+                      <Typography
+                        variant="body2"
+                        fontWeight={600}
+                        sx={{ color: "primary.main", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}
+                        onClick={() =>
+                          navigate(`${EXPERIMENTS_URL.DATASETS}/${encodeURIComponent(run.dataset!)}`)
+                        }
+                      >
+                        {run.dataset}
+                      </Typography>
+                    </Box>
+                  )}
                   {strategyValid && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                       <Typography variant="body2" color="text.secondary">Strategy valid:</Typography>
