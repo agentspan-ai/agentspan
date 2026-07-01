@@ -237,14 +237,22 @@ export class WorkerManager {
   readonly serverUrl: string;
   readonly headers: Record<string, string>;
   readonly pollIntervalMs: number;
+  /** Optional async provider for auth headers (e.g. minted Orkes JWT). */
+  private readonly headersProvider?: () => Promise<Record<string, string>>;
 
   private pendingWorkers: PendingWorker[] = [];
   private taskManager: TaskManager | null = null;
 
-  constructor(serverUrl: string, headers: Record<string, string>, pollIntervalMs: number = 100) {
+  constructor(
+    serverUrl: string,
+    headers: Record<string, string>,
+    pollIntervalMs: number = 100,
+    headersProvider?: () => Promise<Record<string, string>>,
+  ) {
     this.serverUrl = serverUrl;
     this.headers = headers;
     this.pollIntervalMs = pollIntervalMs;
+    this.headersProvider = headersProvider;
   }
 
   /**
@@ -274,11 +282,16 @@ export class WorkerManager {
     const baseUrl = this.serverUrl.replace(/\/api\/?$/, "");
     process.env.CONDUCTOR_SERVER_URL = baseUrl;
 
-    const authHeaders = this.headers;
+    // Resolve auth headers per-request: the provider (when present) mints/
+    // caches an Orkes JWT (`X-Authorization`) and refreshes it near expiry.
+    // Falls back to the static headers passed at construction.
+    const resolveHeaders = async (): Promise<Record<string, string>> =>
+      this.headersProvider ? await this.headersProvider() : this.headers;
 
     const client = await createConductorClient(
       { serverUrl: baseUrl, disableHttp2: true },
-      (url: string | URL | Request, init?: RequestInit) => {
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const authHeaders = await resolveHeaders();
         // Conductor SDK passes Request objects — inject auth headers.
         if (url instanceof Request) {
           const h = new Headers(url.headers);

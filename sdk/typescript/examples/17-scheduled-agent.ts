@@ -24,7 +24,7 @@
  *   npx ts-node examples/17-scheduled-agent.ts
  */
 
-import { Agent, AgentRuntime, Schedule, schedules } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, Schedule, schedules } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Agent definition --------------------------------------------------------
@@ -41,7 +41,8 @@ const digestAgent = new Agent({
 // -- Main --------------------------------------------------------------------
 
 async function main() {
-  await using const runtime = new AgentRuntime();
+  const runtime = new AgentRuntime();
+  try {
 
   // 1. Deploy with two named schedules.
   await runtime.deploy(digestAgent, {
@@ -69,7 +70,7 @@ async function main() {
   console.log(`\nSchedules (${infos.length}):`);
   for (const s of infos) {
     const status = s.paused ? 'PAUSED' : 'active';
-    console.log(`  ${s.name}  ${s.cron}  [${status}]  next: ${s.nextRunTime ?? '—'}`);
+    console.log(`  ${s.name}  ${s.cron}  [${status}]  next: ${s.nextRun ?? '—'}`);
   }
 
   if (infos.length < 2) {
@@ -102,6 +103,9 @@ async function main() {
   // 7. Cleanup: redeploy with no schedules to purge both.
   await runtime.deploy(digestAgent, { schedules: [] });
   console.log(`\n✓ Purged all schedules for '${digestAgent.name}'`);
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch((err) => {

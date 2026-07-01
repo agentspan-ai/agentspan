@@ -155,8 +155,10 @@ public class AgentController {
             @RequestParam(required = false) String freeText,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String agentName,
-            @RequestParam(required = false) String sessionId) {
-        return agentService.searchAgentExecutions(start, size, sort, freeText, status, agentName, sessionId);
+            @RequestParam(required = false) String sessionId,
+            @RequestParam(defaultValue = "false") boolean includeEvalRuns) {
+        return agentService.searchAgentExecutions(
+                start, size, sort, freeText, status, agentName, sessionId, includeEvalRuns);
     }
 
     @GetMapping("/{name}")
@@ -368,8 +370,9 @@ public class AgentController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "startTime:DESC") String sort,
             @RequestParam(required = false) String freeText,
-            @RequestParam(required = false) String query) {
-        return agentService.searchExecutionsRaw(start, size, sort, freeText, query);
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "false") boolean includeEvalRuns) {
+        return agentService.searchExecutionsRaw(start, size, sort, freeText, query, includeEvalRuns);
     }
 
     // ── Bulk operations ─────────────────────────────────────────────

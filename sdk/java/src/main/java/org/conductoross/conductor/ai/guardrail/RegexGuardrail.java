@@ -51,7 +51,7 @@ public class RegexGuardrail {
         private List<String> patterns;
         private String mode = "block";
         private Position position = Position.OUTPUT;
-        private OnFail onFail = OnFail.RETRY;
+        private OnFail onFail = OnFail.RAISE;
         private int maxRetries = 3;
         private String message;
 

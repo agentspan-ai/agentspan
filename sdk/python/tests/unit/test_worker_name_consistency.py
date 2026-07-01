@@ -14,8 +14,8 @@ class TestSwarmTransferWorkerNames:
 
     def test_transfer_names_use_source_not_parent(self):
         """coder_transfer_to_qa_tester, NOT coding_qa_transfer_to_qa_tester."""
-        from agentspan.agents import Agent, Strategy
-        from agentspan.agents.handoff import OnTextMention
+        from conductor.ai.agents import Agent, Strategy
+        from conductor.ai.agents.handoff import OnTextMention
 
         coder = Agent(name="coder", model="openai/gpt-4o")
         qa = Agent(name="qa_tester", model="openai/gpt-4o")
@@ -30,7 +30,7 @@ class TestSwarmTransferWorkerNames:
             ],
         )
 
-        from agentspan.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
 
         runtime = AgentRuntime.__new__(AgentRuntime)
         names = runtime._collect_worker_names(swarm)
@@ -58,7 +58,7 @@ class TestCliToolNamePrefixing:
     """CLI and code execution tools must be prefixed with agent name."""
 
     def test_run_command_prefixed_per_agent(self):
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         a = Agent(name="fetcher", model="openai/gpt-4o", cli_commands=True, cli_allowed_commands=["gh", "git"])
         b = Agent(name="pusher", model="openai/gpt-4o", cli_commands=True, cli_allowed_commands=["gh"])
@@ -72,7 +72,7 @@ class TestCliToolNamePrefixing:
         assert a_tools != b_tools
 
     def test_execute_code_prefixed_per_agent(self):
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         a = Agent(name="coder", model="openai/gpt-4o", local_code_execution=True)
         b = Agent(name="tester", model="openai/gpt-4o", local_code_execution=True)
@@ -86,7 +86,7 @@ class TestCliToolNamePrefixing:
 
     def test_sub_agents_get_own_prefixed_tools(self):
         """Sub-agents in a pipeline each get their own prefixed CLI tool."""
-        from agentspan.agents import Agent
+        from conductor.ai.agents import Agent
 
         fetcher = Agent(
             name="git_fetch",
@@ -119,9 +119,9 @@ class TestSystemWorkerNamePrefixing:
     """All system worker names must be prefixed with agent name."""
 
     def test_all_system_workers_prefixed(self):
-        from agentspan.agents import Agent
-        from agentspan.agents.runtime.runtime import AgentRuntime
-        from agentspan.agents.handoff import OnTextMention
+        from conductor.ai.agents import Agent
+        from conductor.ai.agents.runtime.runtime import AgentRuntime
+        from conductor.ai.agents.handoff import OnTextMention
 
         agent = Agent(
             name="my_agent",

@@ -7,7 +7,7 @@ import logging
 import uuid
 from typing import Any, Generator
 
-from agentspan.agents.result import (
+from conductor.ai.agents.result import (
     AgentEvent,
     AgentResult,
     FinishReason,

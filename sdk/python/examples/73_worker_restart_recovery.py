@@ -28,7 +28,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_worker_restart.execution_id")

@@ -14,8 +14,8 @@
 //   - AGENTSPAN_SERVER_URL=http://localhost:6767/api in environment
 //   - AGENTSPAN_LLM_MODEL set in environment (optional)
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Tool definitions on a simple class ─────────────────────────────
 

@@ -81,6 +81,8 @@ export interface AdvancedSearchProps {
   openEndDatePicker: boolean;
   setEndOpenDatePicker: (val: boolean) => void;
   recentSearches: { start: string; end: string };
+  includeEvalRuns: boolean;
+  onToggleEvalRuns?: () => void;
 }
 
 export default function AdvancedSearch({
@@ -114,6 +116,8 @@ export default function AdvancedSearch({
   openEndDatePicker,
   setEndOpenDatePicker,
   recentSearches,
+  includeEvalRuns,
+  onToggleEvalRuns,
 }: AdvancedSearchProps) {
   const disposeRef = useRef<null | (() => void)>(null);
   const [queryText, setQueryText] = useQueryState("query", "");
@@ -208,6 +212,7 @@ export default function AdvancedSearch({
       sort,
       query: queryFT.query,
       freeText: queryFT.freeText,
+      includeEvalRuns,
     },
     {},
     {
@@ -583,6 +588,8 @@ export default function AdvancedSearch({
         filterOn={filterOn}
         handleReset={handleReset}
         setRowsPerPage={handleRowsPerPage}
+        includeEvalRuns={includeEvalRuns}
+        onToggleEvalRuns={onToggleEvalRuns}
       />
     </>
   );

@@ -25,9 +25,9 @@ from unittest.mock import patch
 
 import pytest
 
-from agentspan.agents import Agent, Strategy
-from agentspan.agents.handoff import OnTextMention
-from agentspan.agents.runtime.runtime import AgentRuntime
+from conductor.ai.agents import Agent, Strategy
+from conductor.ai.agents.handoff import OnTextMention
+from conductor.ai.agents.runtime.runtime import AgentRuntime
 
 
 def _collect_names(agent: Agent) -> set:

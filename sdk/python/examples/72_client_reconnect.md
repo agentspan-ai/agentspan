@@ -20,7 +20,7 @@ cd sdk/python/examples
 python3 -m venv .venv-pypi
 source .venv-pypi/bin/activate
 pip install --upgrade pip
-pip install agentspan
+pip install conductor-agent-sdk
 ```
 
 Set the server URL and model:

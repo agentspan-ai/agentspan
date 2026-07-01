@@ -5,13 +5,13 @@
 
 import pytest
 
-from agentspan.agents.runtime.credentials.accessor import (
+from conductor.ai.agents.runtime.credentials.accessor import (
     _credential_context,
     get_secret,
     set_credential_context,
     clear_credential_context,
 )
-from agentspan.agents.runtime.credentials.types import CredentialNotFoundError
+from conductor.ai.agents.runtime.credentials.types import CredentialNotFoundError
 
 
 class TestGetCredential:

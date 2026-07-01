@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -29,6 +30,12 @@ import dev.agentspan.runtime.spi.SecretOutputMasker;
  * <p>Activates for endpoints that include an {@code executionId} in their URL —
  * specifically, {@code /api/agent/executions/{id}}, its {@code /full},
  * {@code /tasks}, {@code /status} sub-paths, and {@code /api/agent/execution/{id}}.</p>
+ *
+ * <p><b>Host-owned endpoints.</b> {@code /api/workflow/{id}} is the raw Conductor
+ * workflow read, owned by the host — not AgentSpan. Masking it is <b>opt-in</b> via
+ * {@code agentspan.credentials.mask-workflow-reads=true} (default {@code false}), so
+ * merely embedding this library never mutates a host's workflow responses. AgentSpan's
+ * own {@code /api/agent/*} reads are always masked.</p>
  *
  * <p>How it works:</p>
  * <ol>
@@ -68,9 +75,19 @@ public class CredentialMaskingResponseAdvice implements ResponseBodyAdvice<Objec
     private final SecretOutputMasker masker;
     private final ObjectMapper mapper;
 
-    public CredentialMaskingResponseAdvice(SecretOutputMasker masker, ObjectMapper mapper) {
+    /**
+     * Whether to mask the host-owned {@code /api/workflow/{id}} endpoint. Off by default so the
+     * library never mutates an embedding host's raw Conductor responses unless it opts in.
+     */
+    private final boolean maskWorkflowReads;
+
+    public CredentialMaskingResponseAdvice(
+            SecretOutputMasker masker,
+            ObjectMapper mapper,
+            @Value("${agentspan.credentials.mask-workflow-reads:false}") boolean maskWorkflowReads) {
         this.masker = masker;
         this.mapper = mapper;
+        this.maskWorkflowReads = maskWorkflowReads;
     }
 
     @Override
@@ -101,6 +118,9 @@ public class CredentialMaskingResponseAdvice implements ResponseBodyAdvice<Objec
         // group 2: /agent/{id}/status
         // group 3: /workflow/{id}
         String executionId = m.group(1) != null ? m.group(1) : m.group(2) != null ? m.group(2) : m.group(3);
+        // group 3 = /api/workflow/{id}, a host-owned endpoint. Skip unless explicitly opted in,
+        // so embedding the library never mutates the host's raw Conductor workflow responses.
+        if (m.group(3) != null && !maskWorkflowReads) return body;
         // exclude reserved sub-paths that happen to match the regex
         if (executionId.equals("prune") || executionId.equals("search")) return body;
 

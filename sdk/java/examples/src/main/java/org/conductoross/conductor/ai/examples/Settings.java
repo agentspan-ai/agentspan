@@ -24,7 +24,7 @@ public class Settings {
         ENV.getOrDefault("AGENTSPAN_LLM_MODEL", "openai/gpt-4o");
 
     public static final String SECONDARY_LLM_MODEL =
-        ENV.getOrDefault("AGENT_SECONDARY_LLM_MODEL", "openai/gpt-4o-mini");
+        ENV.getOrDefault("AGENT_SECONDARY_LLM_MODEL", "anthropic/claude-sonnet-4-6");
 
     public static final String AUTH_KEY =
         ENV.get("AGENTSPAN_AUTH_KEY");

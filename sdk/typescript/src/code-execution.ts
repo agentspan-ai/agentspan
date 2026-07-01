@@ -410,26 +410,106 @@ export class DockerCodeExecutor extends CodeExecutor {
 // ── JupyterCodeExecutor ─────────────────────────────────
 
 /**
- * Execute code via a Jupyter kernel.
- * Stub implementation — requires jupyter runtime.
+ * Execute code in a Jupyter kernel.
+ *
+ * Ports the Python `JupyterCodeExecutor` config surface (`kernelName`,
+ * `timeout`, `startupCode`). Node has no native `jupyter_client`, so this
+ * drives the `jupyter run` CLI: it writes a transient notebook containing
+ * the optional startup code plus the cell, executes it with the configured
+ * kernel, and captures stdout/stderr.
+ *
+ * Like the Python executor, this NEVER throws — a missing Jupyter runtime,
+ * a non-zero kernel exit, or a timeout all return a structured
+ * {@link ExecutionResult} with `success === false`.
  */
 export class JupyterCodeExecutor extends CodeExecutor {
   readonly kernelName: string;
   readonly timeout: number;
+  readonly startupCode?: string;
 
-  constructor(options?: { kernelName?: string; timeout?: number }) {
+  constructor(options?: { kernelName?: string; timeout?: number; startupCode?: string }) {
     super();
     this.kernelName = options?.kernelName ?? "python3";
     this.timeout = options?.timeout ?? 30;
+    this.startupCode = options?.startupCode;
   }
 
-  execute(_code: string, _language?: string): ExecutionResult {
-    return createExecutionResult({
-      output: "",
-      error: "JupyterCodeExecutor requires a running Jupyter runtime. Not yet implemented.",
-      exitCode: 1,
-      timedOut: false,
+  execute(code: string, _language?: string): ExecutionResult {
+    // Prepend startup code as a separate logical block, mirroring Python's
+    // kernel-startup behaviour (state persists within a single notebook run).
+    const cellSource = this.startupCode ? `${this.startupCode}\n${code}` : code;
+
+    // `jupyter run` reads a notebook from stdin (.ipynb JSON) and streams the
+    // executed cell outputs to stdout. We build a one-cell notebook inline.
+    const notebook = JSON.stringify({
+      cells: [
+        {
+          cell_type: "code",
+          metadata: {},
+          source: cellSource,
+          outputs: [],
+          execution_count: null,
+        },
+      ],
+      metadata: {
+        kernelspec: { name: this.kernelName, display_name: this.kernelName },
+      },
+      nbformat: 4,
+      nbformat_minor: 5,
     });
+
+    // `jupyter run -` consumes the notebook on stdin and prints cell stdout.
+    const command = `jupyter run --kernel ${JSON.stringify(this.kernelName)} -`;
+
+    try {
+      const output = execSync(command, {
+        input: notebook,
+        timeout: this.timeout * 1000,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+
+      return createExecutionResult({
+        output: output.trim(),
+        error: "",
+        exitCode: 0,
+        timedOut: false,
+      });
+    } catch (err: unknown) {
+      const execErr = err as {
+        status?: number | null;
+        code?: string;
+        killed?: boolean;
+        stdout?: string;
+        stderr?: string;
+        signal?: string;
+      };
+
+      const timedOut = execErr.killed === true || execErr.signal === "SIGTERM";
+
+      // Surface a helpful hint when the CLI itself is missing (exit 127 /
+      // ENOENT) so callers know the runtime is unavailable rather than the
+      // code being wrong. Still a structured result — never a throw.
+      const missingRuntime =
+        execErr.status === 127 || execErr.code === "ENOENT";
+      const stderr =
+        typeof execErr.stderr === "string" && execErr.stderr.length > 0
+          ? execErr.stderr.trim()
+          : String(err);
+      const error = missingRuntime
+        ? `JupyterCodeExecutor requires a running Jupyter runtime ` +
+          `(install with: pip install jupyter jupyter_client ipykernel). ${stderr}`
+        : timedOut
+          ? `Execution timed out after ${this.timeout}s`
+          : stderr;
+
+      return createExecutionResult({
+        output: typeof execErr.stdout === "string" ? execErr.stdout.trim() : "",
+        error,
+        exitCode: execErr.status ?? (timedOut ? -1 : 1),
+        timedOut,
+      });
+    }
   }
 }
 

@@ -11,7 +11,7 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { AgentRuntime } from '@agentspan-ai/sdk';
+import { AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 
 const llm = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0.3 });
 
@@ -121,20 +121,18 @@ function continueOrJudge(state: State): string {
 // ---------------------------------------------------------------------------
 // Build the graph
 // ---------------------------------------------------------------------------
-const builder = new StateGraph(DebateState);
-builder.addNode('pro', agentPro);
-builder.addNode('con', agentCon);
-builder.addNode('judge', judge);
-
-builder.addEdge(START, 'pro');
-builder.addConditionalEdges('con', continueOrJudge, { judge: 'judge', con: 'pro' });
-builder.addEdge('pro', 'con');
-builder.addEdge('judge', END);
-
-const graph = builder.compile({ name: "debate_agents" });
+const graph = new StateGraph(DebateState)
+  .addNode('pro', agentPro)
+  .addNode('con', agentCon)
+  .addNode('judge', judge)
+  .addEdge(START, 'pro')
+  .addConditionalEdges('con', continueOrJudge, { judge: 'judge', con: 'pro' })
+  .addEdge('pro', 'con')
+  .addEdge('judge', END)
+  .compile({ name: "debate_agents" });
 
 (graph as any)._agentspan = {
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   framework: 'langgraph',
 };
 

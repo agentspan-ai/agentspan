@@ -1,5 +1,19 @@
 import type { GuardrailDef, GuardrailResult, Position, OnFail } from "./types.js";
 
+/**
+ * Reject the one illegal (onFail, position) combination, mirroring the
+ * Python SDK's `ValueError`: `onFail="human"` only makes sense for output
+ * guardrails — input guardrails are client-side and cannot pause a workflow.
+ */
+function assertValidOnFailPosition(onFail: OnFail, position: Position): void {
+  if (onFail === "human" && position === "input") {
+    throw new Error(
+      "onFail='human' is only valid for position='output' " +
+        "(input guardrails are client-side and cannot pause a workflow)",
+    );
+  }
+}
+
 // ── guardrail() function ─────────────────────────────────
 
 export interface GuardrailOptions {
@@ -21,6 +35,7 @@ export function guardrail(
 ): GuardrailDef {
   const position = options.position ?? "output";
   const onFail = options.onFail ?? "raise";
+  assertValidOnFailPosition(onFail, position);
 
   const def: GuardrailDef = {
     name: options.name,
@@ -51,10 +66,13 @@ export interface ExternalGuardrailOptions {
  * The task is dispatched to a remote worker.
  */
 guardrail.external = function externalGuardrail(options: ExternalGuardrailOptions): GuardrailDef {
+  const position = options.position ?? "output";
+  const onFail = options.onFail ?? "raise";
+  assertValidOnFailPosition(onFail, position);
   return {
     name: options.name,
-    position: options.position ?? "output",
-    onFail: options.onFail ?? "raise",
+    position,
+    onFail,
     guardrailType: "external",
     taskName: options.name,
     func: null,
@@ -95,6 +113,7 @@ export class RegexGuardrail {
     this.mode = options.mode;
     this.position = options.position ?? "output";
     this.onFail = options.onFail ?? "raise";
+    assertValidOnFailPosition(this.onFail, this.position);
     this.maxRetries = options.maxRetries ?? 3;
     if (options.message !== undefined) {
       this.message = options.message;
@@ -154,6 +173,7 @@ export class LLMGuardrail {
     this.policy = options.policy;
     this.position = options.position ?? "output";
     this.onFail = options.onFail ?? "raise";
+    assertValidOnFailPosition(this.onFail, this.position);
     this.maxRetries = options.maxRetries ?? 3;
     if (options.maxTokens !== undefined) {
       this.maxTokens = options.maxTokens;
@@ -241,6 +261,7 @@ export function guardrailsFrom(instance: object): GuardrailDef[] {
     const name = metadata.name ?? methodName;
     const position = metadata.position ?? "output";
     const onFail = metadata.onFail ?? "raise";
+    assertValidOnFailPosition(onFail, position);
 
     const def: GuardrailDef = {
       name,

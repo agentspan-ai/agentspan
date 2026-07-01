@@ -26,8 +26,8 @@ import requests
 from conductor.client.configuration.configuration import Configuration
 from conductor.client.orkes_clients import OrkesClients
 
-from agentspan.agents.schedule import Schedule
-from agentspan.agents.schedule.client import ScheduleClient
+from conductor.ai.agents.schedule import Schedule
+from conductor.ai.agents.schedule.client import ScheduleClient
 
 CONDUCTOR_API = "http://localhost:6767/api"
 

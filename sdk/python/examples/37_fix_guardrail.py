@@ -25,7 +25,7 @@ Requirements:
 
 import re
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentRuntime,
     Guardrail,

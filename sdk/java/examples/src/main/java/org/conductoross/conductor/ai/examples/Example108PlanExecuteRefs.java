@@ -46,7 +46,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class Example108PlanExecuteRefs {
 
     private static final String MODEL =
-        System.getenv().getOrDefault("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini");
+        System.getenv().getOrDefault("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6");
     private static final String BASE_URL =
         System.getenv().getOrDefault("AGENTSPAN_SERVER_URL", "http://localhost:6767/api")
             .replace("/api", "");

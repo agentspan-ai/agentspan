@@ -19,10 +19,10 @@ Requirements:
     - gh CLI installed
 """
 
-from agentspan.agents import Agent, AgentRuntime, Strategy
-from agentspan.agents.cli_config import CliConfig
-from agentspan.agents.gate import TextGate
-from agentspan.agents.handoff import OnTextMention
+from conductor.ai.agents import Agent, AgentRuntime, Strategy
+from conductor.ai.agents.cli_config import CliConfig
+from conductor.ai.agents.gate import TextGate
+from conductor.ai.agents.handoff import OnTextMention
 
 REPO = "agentspan-ai/codingexamples"
 MODEL = "anthropic/claude-sonnet-4-6"

@@ -31,7 +31,7 @@ os.environ.setdefault("GOOGLE_API_KEY", "fake")
 captured = [None]
 
 # Import the real serializer
-from agentspan.agents.frameworks.serializer import serialize_agent
+from conductor.ai.agents.frameworks.serializer import serialize_agent
 
 class MockResult:
     def __init__(self):
@@ -73,9 +73,9 @@ class MockRuntime:
                 pass
 
 # Patch all import paths for AgentRuntime
-with patch("agentspan.agents.runtime.runtime.AgentRuntime", MockRuntime), \
-     patch("agentspan.agents.run._get_default_runtime", lambda: MockRuntime()), \
-     patch("agentspan.agents.AgentRuntime", MockRuntime):
+with patch("conductor.ai.agents.runtime.runtime.AgentRuntime", MockRuntime), \
+     patch("conductor.ai.agents.run._get_default_runtime", lambda: MockRuntime()), \
+     patch("conductor.ai.agents.AgentRuntime", MockRuntime):
 
     # Use __main__ as module name so `if __name__ == "__main__":` guard passes
     spec = importlib.util.spec_from_file_location("__main__", example_path)

@@ -22,12 +22,12 @@ Agentspan has one primitive — `Agent` — and multiple strategies for composin
 
 ```java
 Agent researcher = Agent.builder()
-    .name("researcher").model("openai/gpt-4o-mini")
+    .name("researcher").model("anthropic/claude-sonnet-4-6")
     .instructions("Research the topic and return key facts.")
     .build();
 
 Agent writer = Agent.builder()
-    .name("writer").model("openai/gpt-4o-mini")
+    .name("writer").model("anthropic/claude-sonnet-4-6")
     .instructions("Write a 200-word article from the research notes.")
     .build();
 
@@ -37,7 +37,7 @@ Agent pipeline = researcher.then(writer);
 // Equivalent explicit form
 Agent pipeline = Agent.builder()
     .name("research_pipeline")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .agents(researcher, writer)
     .strategy(Strategy.SEQUENTIAL)
     .build();
@@ -52,16 +52,16 @@ AgentResult result = runtime.run(pipeline, "Write about the history of jazz");
 Sub-agents run concurrently. A synthesizer (the parent's LLM) combines their outputs.
 
 ```java
-Agent french   = Agent.builder().name("french_translator").model("openai/gpt-4o-mini")
+Agent french   = Agent.builder().name("french_translator").model("anthropic/claude-sonnet-4-6")
     .instructions("Translate to French.").build();
-Agent spanish  = Agent.builder().name("spanish_translator").model("openai/gpt-4o-mini")
+Agent spanish  = Agent.builder().name("spanish_translator").model("anthropic/claude-sonnet-4-6")
     .instructions("Translate to Spanish.").build();
-Agent german   = Agent.builder().name("german_translator").model("openai/gpt-4o-mini")
+Agent german   = Agent.builder().name("german_translator").model("anthropic/claude-sonnet-4-6")
     .instructions("Translate to German.").build();
 
 Agent translator = Agent.builder()
     .name("multi_translator")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .agents(french, spanish, german)
     .strategy(Strategy.PARALLEL)
     .synthesize(true)                      // merge sub-agent outputs
@@ -76,16 +76,16 @@ Sub-agents are tools the parent's LLM can call. The LLM decides dynamically whic
 
 ```java
 Agent mathAgent = Agent.builder()
-    .name("math_agent").model("openai/gpt-4o-mini")
+    .name("math_agent").model("anthropic/claude-sonnet-4-6")
     .instructions("Solve math problems.").build();
 
 Agent textAgent = Agent.builder()
-    .name("text_agent").model("openai/gpt-4o-mini")
+    .name("text_agent").model("anthropic/claude-sonnet-4-6")
     .instructions("Summarise or rewrite text.").build();
 
 Agent dispatcher = Agent.builder()
     .name("dispatcher")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Route requests to the appropriate specialist.")
     .agents(mathAgent, textAgent)
     .strategy(Strategy.HANDOFF)            // default strategy
@@ -101,13 +101,13 @@ A dedicated router agent reads the input and selects which sub-agent runs. The r
 ```java
 Agent router = Agent.builder()
     .name("intent_router")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Reply with exactly one word: 'math', 'code', or 'text'.")
     .build();
 
 Agent parent = Agent.builder()
     .name("smart_dispatcher")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .router(router)
     .agents(mathAgent, codeAgent, textAgent)
     .strategy(Strategy.ROUTER)
@@ -126,7 +126,7 @@ import org.conductoross.conductor.ai.handoff.OnToolResult;
 
 Agent support = Agent.builder()
     .name("support_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Handle general support. Transfer billing issues to billing_agent.")
     .handoffs(
         OnTextMention.of("billing", "billing_agent"),
@@ -136,12 +136,12 @@ Agent support = Agent.builder()
     .build();
 
 Agent billing = Agent.builder()
-    .name("billing_agent").model("openai/gpt-4o-mini")
+    .name("billing_agent").model("anthropic/claude-sonnet-4-6")
     .instructions("Handle billing questions.").build();
 
 Agent team = Agent.builder()
     .name("support_team")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .agents(support, billing)
     .strategy(Strategy.SWARM)
     .build();
@@ -188,7 +188,7 @@ Plan plan = Plan.builder()
 
 Agent planExecuteAgent = Agent.builder()
     .name("research_pac")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .strategy(Strategy.PLAN_EXECUTE)
     .build();
 

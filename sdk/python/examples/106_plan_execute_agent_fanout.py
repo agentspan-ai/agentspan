@@ -49,9 +49,9 @@ from __future__ import annotations
 
 from settings import settings
 
-from agentspan.agents import Agent, AgentRuntime, plan_execute, tool
-from agentspan.agents.plans import Op, Plan, Step
-from agentspan.agents.tool import agent_tool
+from conductor.ai.agents import Agent, AgentRuntime, plan_execute, tool
+from conductor.ai.agents.plans import Op, Plan, Step
+from conductor.ai.agents.tool import agent_tool
 
 # ── Deterministic worker (no LLM) — used as the sequential synthesizer ─
 

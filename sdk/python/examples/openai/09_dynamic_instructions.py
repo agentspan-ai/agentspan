@@ -19,7 +19,7 @@ from datetime import datetime
 
 from agents import Agent, function_tool
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

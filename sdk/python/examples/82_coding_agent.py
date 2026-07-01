@@ -33,7 +33,7 @@ from pathlib import Path
 
 os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
-from agentspan.agents import Agent, AgentRuntime, EventType, tool, wait_for_message_tool
+from conductor.ai.agents import Agent, AgentRuntime, EventType, tool, wait_for_message_tool
 from settings import settings
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ description: Agentspan CLI commands for server, credentials, agents, skills, sta
 
 # CLI Reference
 
-**Python developers:** `pip install agentspan` gives you the SDK and the CLI. The pip package registers the `agentspan` command as a console script; on first invocation it downloads the Go binary from S3 and caches it.
+**Python developers:** `pip install conductor-agent-sdk` gives you the SDK and the CLI. The pip package registers the `agentspan` command as a console script; on first invocation it downloads the Go binary from S3 and caches it.
 
 **CLI only (no Python SDK):** `npm install -g @agentspan-ai/agentspan` — downloads the Go binary eagerly at install time. Useful if you don't have Python or want the binary pre-fetched.
 
@@ -157,7 +157,7 @@ export AGENTSPAN_AUTH_SECRET=your-secret
 Or configure in Python code:
 
 ```python
-from agentspan.agents import configure
+from conductor.ai.agents import configure
 
 configure(
     server_url="https://your-server.example.com",

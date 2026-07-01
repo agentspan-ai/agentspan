@@ -28,8 +28,8 @@ from langchain_core.tools import tool as lc_tool  # noqa: E402
 from langchain_openai import ChatOpenAI  # noqa: E402
 from langgraph.graph import END, START, StateGraph  # noqa: E402
 
-from agentspan.agents.frameworks.langgraph import serialize_langgraph  # noqa: E402
-from agentspan.agents.frameworks.serializer import detect_framework  # noqa: E402
+from conductor.ai.agents.frameworks.langgraph import serialize_langgraph  # noqa: E402
+from conductor.ai.agents.frameworks.serializer import detect_framework  # noqa: E402
 
 pytestmark = [pytest.mark.e2e]
 

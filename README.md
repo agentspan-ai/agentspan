@@ -1,16 +1,16 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/agentspan-logo-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/agentspan-logo-light.png">
-    <img src="assets/agentspan-logo-light.png" alt="Agentspan" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/agentspan-logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/agentspan-logo-light.png">
+    <img src="docs/assets/agentspan-logo-light.png" alt="Agentspan" width="360">
   </picture>
 </p>
 
 <h3 align="center">AI agents that don't die when your process does.</h3>
 
 <p align="center">
-  <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/v/agentspan?color=blue" alt="PyPI"></a>
-  <a href="https://pypi.org/project/agentspan/"><img src="https://img.shields.io/pypi/dm/agentspan?color=blue" alt="Downloads"></a>
+  <a href="https://pypi.org/project/conductor-agent-sdk/"><img src="https://img.shields.io/pypi/v/conductor-agent-sdk?color=blue" alt="PyPI"></a>
+  <a href="https://pypi.org/project/conductor-agent-sdk/"><img src="https://img.shields.io/pypi/dm/conductor-agent-sdk?color=blue" alt="Downloads"></a>
   <a href="https://github.com/agentspan-ai/agentspan/stargazers"><img src="https://img.shields.io/github/stars/agentspan-ai/agentspan?style=social" alt="Stars"></a>
   <a href="https://github.com/agentspan-ai/agentspan/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://discord.com/invite/ajcA66JcKq"><img src="https://img.shields.io/discord/1488604882259939528?label=Discord&logo=discord&color=5865F2" alt="Discord"></a>
@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <video src="assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
+  <video src="docs/assets/agentspan-readme-demo.mp4" controls muted playsinline width="100%"></video>
 </p>
 
 ---
@@ -38,7 +38,15 @@
 https://github.com/user-attachments/assets/dd4b720d-d11c-42e8-93a6-875c5a740fd8
 
 
-**Agentspan** is a distributed, durable runtime for AI agents that survive crashes, scale across machines, and pause for human approval for days — not minutes.
+**Agentspan** is a durable runtime for AI agents, built for Conductor. Three pillars:
+
+**Long-running agents** — Write an agent; it runs as long as it needs to. Minutes, hours, or until a human approves the next step. No timeout by default. If your worker process crashes, the server resumes from the last completed step when a new worker connects.
+
+**Dynamic agents (Plan-Execute)** — The LLM decides what to do at runtime; Conductor locks it in and executes it deterministically. The planner emits a JSON plan once; the server compiles it into an immutable Conductor sub-workflow — no LLM randomness in orchestration, retries, or parallelism. Dynamic agents can call existing Conductor workflows as steps, bridging AI with your existing automation.
+→ `Strategy.PLAN_EXECUTE` · works across Python, TypeScript, Java, C#
+
+**Event-driven agents** — Trigger agents from cron schedules, Kafka topics, SQS queues, AMQP messages, webhooks, and database events. Agentspan runs on Conductor, so every event source Conductor supports is available to agents. Each trigger is a durable execution with full history.
+→ `deploy(agent, schedules=[Schedule(cron="0 0 9 * * MON-FRI")])` · Conductor event handlers
 
 ## Quickstart (60 seconds)
 
@@ -51,15 +59,18 @@ irm https://raw.githubusercontent.com/agentspan-ai/agentspan/main/cli/install.ps
 ```
 
 ## Install SDKs
+
+Build on Agentspan with the Conductor agent SDK, available for Python, TypeScript/JavaScript, and C#/.NET:
+
 ```bash
 # Python
-pip install agentspan
+pip install conductor-agent-sdk
 
 # TypeScript / JavaScript
-npm install @agentspan-ai/sdk
+npm install @conductor-oss/conductor-agent-sdk
 
 # C# / .NET
-dotnet add package Agentspan
+dotnet add package conductor-agent-sdk
 ```
 
 ```bash
@@ -69,7 +80,7 @@ agentspan server start         # runs on localhost:6767 with UI
 
 ```python
 # hello.py — run with: python hello.py
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -129,7 +140,7 @@ agentspan doctor
 
 ## Why Agentspan?
 
-Agentspan is the execution layer, not the replacement. Use native Agentspan agents, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
+Agentspan is the execution layer, not the replacement. Use native Agentspan, or bring LangGraph, the OpenAI Agents SDK, or Google ADK — pass your existing agent to `runtime.run()` and it gains crash recovery, human-in-the-loop pauses, and full execution history. Your definitions stay unchanged.
 
 | | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
 |---|---|---|---|---|---|
@@ -170,7 +181,7 @@ Agentspan is the execution layer, not the replacement. Use native Agentspan agen
 ### Agent with Tools
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> dict:
@@ -198,7 +209,7 @@ with AgentRuntime() as runtime:
 
 ```python
 from pydantic import BaseModel
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 class WeatherReport(BaseModel):
     city: str
@@ -234,7 +245,7 @@ Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan crede
 **Step 2: Declare which credentials a tool needs**
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool, get_credential
+from conductor.ai.agents import Agent, AgentRuntime, tool, get_credential
 
 # Default: tool runs in isolated subprocess with credentials as env vars
 @tool(credentials=["GITHUB_TOKEN"])
@@ -270,7 +281,7 @@ with AgentRuntime() as runtime:
 **Credentials work with every tool type:**
 
 ```python
-from agentspan.agents import http_tool, mcp_tool
+from conductor.ai.agents import http_tool, mcp_tool
 
 # HTTP tools: server substitutes ${NAME} in headers at runtime
 api = http_tool(
@@ -289,7 +300,7 @@ No credentials leave the server unencrypted. Workers resolve them via scoped exe
 ### Multi-Agent Handoffs
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def check_balance(account_id: str) -> dict:
@@ -316,7 +327,7 @@ with AgentRuntime() as runtime:
 ### Pipeline Composition
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 researcher = Agent(name="researcher", model="openai/gpt-4o",
                    instructions="Research the topic and provide key facts.")
@@ -335,7 +346,7 @@ with AgentRuntime() as runtime:
 ### Parallel Agents
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 market = Agent(name="market", model="openai/gpt-4o",
                instructions="Analyze market size, growth, key players.")
@@ -353,7 +364,7 @@ with AgentRuntime() as runtime:
 ### Human-in-the-Loop (Durable)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool(approval_required=True)
 def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
@@ -374,7 +385,7 @@ if status.is_waiting:
 ### Guardrails
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, Guardrail, GuardrailResult, OnFail, guardrail
+from conductor.ai.agents import Agent, AgentRuntime, Guardrail, GuardrailResult, OnFail, guardrail
 
 @guardrail
 def word_limit(content: str) -> GuardrailResult:
@@ -396,7 +407,7 @@ with AgentRuntime() as runtime:
 ### Streaming
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
+from conductor.ai.agents import Agent, AgentRuntime
 
 agent = Agent(name="writer", model="openai/gpt-4o")
 
@@ -413,7 +424,7 @@ with AgentRuntime() as runtime:
 ### Server-Side Tools (No Workers Needed)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, api_tool, http_tool, mcp_tool
+from conductor.ai.agents import Agent, AgentRuntime, api_tool, http_tool, mcp_tool
 
 # Point to any OpenAPI/Swagger spec — all endpoints auto-discovered
 stripe = api_tool(
@@ -448,8 +459,8 @@ Three ways to connect APIs — all server-side, no workers needed:
 ### Code Execution
 
 ```python
-from agentspan.agents import Agent, AgentRuntime
-from agentspan.agents.code_executor import DockerCodeExecutor
+from conductor.ai.agents import Agent, AgentRuntime
+from conductor.ai.agents.code_executor import DockerCodeExecutor
 
 executor = DockerCodeExecutor(image="python:3.12-slim", timeout=30)
 agent = Agent(
@@ -466,7 +477,7 @@ with AgentRuntime() as runtime:
 ### Shared State (Tool Context)
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool, ToolContext
+from conductor.ai.agents import Agent, AgentRuntime, tool, ToolContext
 
 @tool
 def add_item(item: str, context: ToolContext) -> str:
@@ -499,7 +510,7 @@ Hook into agent, model, and tool lifecycle events with `CallbackHandler` classes
 
 ```python
 import time
-from agentspan.agents import Agent, AgentRuntime, CallbackHandler
+from conductor.ai.agents import Agent, AgentRuntime, CallbackHandler
 
 class TimingHandler(CallbackHandler):
     def on_agent_start(self, **kwargs):
@@ -515,7 +526,7 @@ class LoggingHandler(CallbackHandler):
 
 agent = Agent(
     name="my_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     instructions="You are a helpful assistant.",
     callbacks=[TimingHandler(), LoggingHandler()],
 )

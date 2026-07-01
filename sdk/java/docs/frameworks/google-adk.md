@@ -1,11 +1,11 @@
 # Google ADK
 
-Use Google's Agent Development Kit (ADK) agents directly with Agentspan. The `AdkBridge` converts a native `LlmAgent` (or any `BaseAgent`) into an Agentspan `Agent`, serialising its tools, instructions, and sub-agent graph into the format the server's `GoogleADKNormalizer` understands.
+Use Google's Agent Development Kit (ADK) agents directly with Agentspan. The `AdkBridge` converts a native `LlmAgent` (or any `BaseAgent`) into an `Agent`, serialising its tools, instructions, and sub-agent graph into the format the server's `GoogleADKNormalizer` understands.
 
 ## Dependency
 
 ```groovy
-implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
 compileOnly 'com.google.adk:google-adk:1.3.0'
 ```
 
@@ -35,7 +35,7 @@ LlmAgent adkAgent = LlmAgent.builder()
     .tools(FunctionTool.create(WeatherService.class, "getWeather"))
     .build();
 
-// Convert to Agentspan Agent
+// Convert to an Agent
 Agent agent = AdkBridge.toAgentspan(adkAgent);
 
 // Run via AgentRuntime
@@ -47,7 +47,7 @@ try (AgentRuntime runtime = new AgentRuntime()) {
 
 ## agentBuilder — attach extra Agentspan features
 
-If you want to mix ADK agent structure with Agentspan-only features (guardrails, credentials, callbacks), use `agentBuilder()` which returns an `Agent.Builder` you can continue configuring:
+If you want to mix ADK agent structure with Agentspan–only features (guardrails, credentials, callbacks), use `agentBuilder()` which returns an `Agent.Builder` you can continue configuring:
 
 ```java
 import org.conductoross.conductor.ai.guardrail.RegexGuardrail;

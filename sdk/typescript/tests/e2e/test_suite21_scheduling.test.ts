@@ -14,7 +14,7 @@ import {
   ScheduleClient,
   ScheduleNameConflict,
   ScheduleNotFound,
-} from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 
 const SERVER_URL = process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:6767/api';
 

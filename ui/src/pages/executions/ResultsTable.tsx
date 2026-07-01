@@ -2,6 +2,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { DataTable, NavLink, Paper, Text } from "components";
 import {
   Box,
+  Chip,
   FormControlLabel,
   LinearProgress,
   Switch,
@@ -9,6 +10,7 @@ import {
   TableBody,
   TableCell,
   TableRow,
+  Typography,
 } from "@mui/material";
 import BulkActionModule from "./BulkActionModule";
 import executionsStyles from "./executionsStyles";
@@ -18,6 +20,19 @@ import { SnackbarMessage } from "components/SnackbarMessage";
 import { ColumnCustomType, LegacyColumn } from "components/DataTable/types";
 import NoDataComponent from "components/NoDataComponent";
 import { colors } from "theme/tokens/variables";
+import { EXPERIMENTS_URL } from "utils/constants/route";
+
+const isEvalRow = (row: any): boolean => {
+  if (typeof row.input !== "string") return false;
+  // Handle both JSON format ({"session_id":"eval:..."}) and
+  // Map.toString() format ({session_id=eval:...}) from Conductor WorkflowSummary
+  return (
+    row.input.includes('"session_id":"eval:') ||
+    row.input.includes("session_id=eval:") ||
+    row.input.includes('"_eval_run":true') ||
+    row.input.includes("_eval_run=true")
+  );
+};
 
 const LinearIndeterminate = () => {
   return (
@@ -28,6 +43,19 @@ const LinearIndeterminate = () => {
 };
 
 const executionFields: LegacyColumn[] = [
+  {
+    id: "type",
+    name: "workflowId",
+    label: "Type",
+    grow: 0.6,
+    sortable: false,
+    renderer: (_val: any, row: any) =>
+      isEvalRow(row) ? (
+        <Chip label="Eval" size="small" variant="outlined" />
+      ) : (
+        <Chip label="Production" size="small" variant="outlined" />
+      ),
+  },
   {
     id: "startTime",
     name: "startTime",
@@ -219,6 +247,8 @@ export interface ResultsTableProps {
   handleClearError?: () => void;
   filterOn: boolean;
   handleReset: () => void;
+  includeEvalRuns?: boolean;
+  onToggleEvalRuns?: () => void;
 }
 
 export default function ResultsTable({
@@ -236,6 +266,8 @@ export default function ResultsTable({
   handleClearError,
   filterOn,
   handleReset,
+  includeEvalRuns = false,
+  onToggleEvalRuns,
 }: ResultsTableProps) {
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const [toggleCleared, setToggleCleared] = useState(false);
@@ -324,17 +356,30 @@ export default function ResultsTable({
         </Text>
       )}
       {resultObj?.results && (
-        <FormControlLabel
-          control={
-            <Switch
-              checked={hideSubWorkflows}
-              onChange={(e) => setHideSubWorkflows(e.target.checked)}
-              size="small"
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2, ml: 1, mb: 1 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={hideSubWorkflows}
+                onChange={(e) => setHideSubWorkflows(e.target.checked)}
+                size="small"
+              />
+            }
+            label="Hide sub-agent executions"
+          />
+          {onToggleEvalRuns !== undefined && (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={includeEvalRuns}
+                  onChange={onToggleEvalRuns}
+                  size="small"
+                />
+              }
+              label="Show eval runs"
             />
-          }
-          label="Hide sub-agent executions"
-          sx={{ ml: 1, mb: 1 }}
-        />
+          )}
+        </Box>
       )}
       <DataTable
         expandableRows={!hideSubWorkflows}
@@ -396,6 +441,7 @@ export default function ResultsTable({
         data={filteredResults}
         columns={executionFields}
         defaultShowColumns={[
+          "type",
           "startTime",
           "workflowType",
           "workflowId",
@@ -435,6 +481,10 @@ export default function ResultsTable({
             when: (row: any) => row._isSubAgent,
             style: { backgroundColor: "#f9f9f9", opacity: 0.8 },
           },
+          {
+            when: (row: any) => includeEvalRuns && isEvalRow(row),
+            style: { backgroundColor: "#f9f9f9", opacity: 0.8 },
+          },
         ]}
         customStyles={{
           header: {
@@ -471,6 +521,29 @@ export default function ResultsTable({
           )
         }
       />
+      {resultObj?.results && (() => {
+        const all: any[] = resultObj.results;
+        const evalCount = all.filter(isEvalRow).length;
+        const prodCount = all.length - evalCount;
+        if (includeEvalRuns && evalCount > 0) {
+          return (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, px: 1 }}>
+              {prodCount} production · {evalCount} eval (greyed)
+            </Typography>
+          );
+        }
+        if (!includeEvalRuns) {
+          return (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, px: 1 }}>
+              {all.length} production runs · eval runs hidden —{" "}
+              <a href={EXPERIMENTS_URL.EVAL_RUNS} style={{ color: "inherit", fontWeight: 600 }}>
+                view in Experiments
+              </a>
+            </Typography>
+          );
+        }
+        return null;
+      })()}
     </Paper>
   );
 }

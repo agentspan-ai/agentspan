@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from agentspan.agents._internal.token_utils import (
+from conductor.ai.agents._internal.token_utils import (
     _TOKEN_CACHE,
     agent_api_auth_headers,
     decode_jwt_exp,

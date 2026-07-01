@@ -23,7 +23,7 @@ import {
   StopMessage,
   MaxMessage,
   TokenUsageCondition,
-} from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Example 1: Simple text mention ----------------------------------------

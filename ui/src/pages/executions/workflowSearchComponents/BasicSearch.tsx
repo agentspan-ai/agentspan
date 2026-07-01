@@ -76,6 +76,8 @@ export interface BasicSearchProps {
   openEndDatePicker: boolean;
   setEndOpenDatePicker: (val: boolean) => void;
   recentSearches: { start: string; end: string };
+  includeEvalRuns: boolean;
+  onToggleEvalRuns?: () => void;
 }
 
 export default function BasicSearch({
@@ -109,6 +111,8 @@ export default function BasicSearch({
   openEndDatePicker,
   setEndOpenDatePicker,
   recentSearches,
+  includeEvalRuns,
+  onToggleEvalRuns,
 }: BasicSearchProps) {
   const [page, setPage] = useQueryState("page", 1);
   const [workflowType, setWorkflowType] = useQueryState<string[]>(
@@ -278,6 +282,7 @@ export default function BasicSearch({
       sort,
       query: queryFT.query,
       freeText: queryFT.freeText,
+      includeEvalRuns,
     },
     {},
     {
@@ -694,6 +699,8 @@ export default function BasicSearch({
         filterOn={filterOn}
         handleReset={handleReset}
         setRowsPerPage={handleRowsPerPage}
+        includeEvalRuns={includeEvalRuns}
+        onToggleEvalRuns={onToggleEvalRuns}
       />
     </>
   );

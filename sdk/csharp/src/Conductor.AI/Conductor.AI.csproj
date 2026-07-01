@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Conductor.AI</RootNamespace>
+    <AssemblyName>Conductor.AI</AssemblyName>
+
+    <!-- NuGet package metadata -->
+    <PackageId>conductor-agent-sdk</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Conductor Agent .NET SDK — durable, scalable, observable AI agents</Description>
+    <Authors>Agentspan</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/agentspan-ai/agentspan</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/agentspan-ai/agentspan</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>agents;ai;llm;orchestration;agentspan;multi-agent</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Include XML doc comments for IntelliSense -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress warnings for missing XML docs on public members we haven't documented yet -->
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Allow the e2e/test assembly to exercise internal types (e.g. AgentAuthHandler). -->
+    <InternalsVisibleTo Include="AgentspanE2eTests" />
+    <InternalsVisibleTo Include="Conductor.AI.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- System.Text.Json and System.Threading.Channels are in-box on .NET 10 -->
+    <!-- conductor-csharp brings Newtonsoft.Json + Microsoft.Extensions.Logging.Abstractions transitively -->
+    <PackageReference Include="conductor-csharp" Version="1.1.4" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

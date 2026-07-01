@@ -50,7 +50,7 @@ import os
 import sys
 import tempfile
 
-from agentspan.agents import AgentRuntime, plan_execute, tool
+from conductor.ai.agents import AgentRuntime, plan_execute, tool
 from settings import settings
 
 # ── Configuration ────────────────────────────────────────────────

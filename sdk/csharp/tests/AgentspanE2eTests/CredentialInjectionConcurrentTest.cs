@@ -15,7 +15,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Agentspan;
+using Conductor.AI;
 using Xunit;
 
 namespace AgentspanE2eTests;

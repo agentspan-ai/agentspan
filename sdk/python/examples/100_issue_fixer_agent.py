@@ -35,10 +35,10 @@ import sys
 import tempfile
 import uuid
 
-from agentspan.agents import Agent, AgentRuntime, Strategy, skill, agent_tool
-from agentspan.agents.cli_config import CliConfig
-from agentspan.agents.handoff import OnTextMention
-from agentspan.agents.termination import TextMentionTermination
+from conductor.ai.agents import Agent, AgentRuntime, Strategy, skill, agent_tool
+from conductor.ai.agents.cli_config import CliConfig
+from conductor.ai.agents.handoff import OnTextMention
+from conductor.ai.agents.termination import TextMentionTermination
 
 from _issue_fixer_tools import (
     set_working_dir, get_working_dir,
