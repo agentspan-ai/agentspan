@@ -23,14 +23,14 @@ import org.conductoross.conductor.ai.skill.Skill;
  * <pre>{@code
  * Agent researcher = Agent.builder()
  *     .name("researcher")
- *     .model("openai/gpt-4o-mini")
+ *     .model("anthropic/claude-sonnet-4-6")
  *     .tools(searchTools)
  *     .instructions("Research topics and provide summaries.")
  *     .build();
  *
  * Agent manager = Agent.builder()
  *     .name("manager")
- *     .model("openai/gpt-4o-mini")
+ *     .model("anthropic/claude-sonnet-4-6")
  *     .tools(List.of(AgentTool.from(researcher), calculateTool))
  *     .instructions("Delegate research tasks and synthesize results.")
  *     .build();

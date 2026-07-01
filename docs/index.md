@@ -5,9 +5,9 @@ description: Agentspan documentation for building production AI agents.
 
 # Documentation
 
-**Agentspan is a durable runtime for AI agents. Your code runs in your process. Execution state lives on the server.**
+**Agentspan is a durable runtime for AI agents, built for Conductor. Your code runs in your process. Execution state lives on the server.**
 
-Agentspan is a durable runtime for AI agents. Execution state lives server-side, so crashes, restarts, and deployments do not lose work. Write agents natively or wrap an existing LangGraph, OpenAI Agents SDK, or Google ADK agent in one line.
+Write agents that run for minutes or hours with no timeout limit. Use Plan-Execute to let an LLM plan dynamically at runtime while Conductor executes the compiled, immutable plan deterministically — with no LLM randomness in orchestration or retries. Trigger agents from cron schedules, Kafka, SQS, webhooks, and any event source Conductor supports. Write agents natively or wrap LangGraph, OpenAI Agents SDK, or Google ADK in one line.
 
 ## Getting Started
 
@@ -20,6 +20,7 @@ Agentspan is a durable runtime for AI agents. Execution state lives server-side,
 - [Tools](concepts/tools.md) - `@tool`, `http_tool()`, `api_tool()`, `mcp_tool()`, credentials, and approval-required tools.
 - [Skills](concepts/skills.md) - Load, register, run, and test agentskills.io skill folders.
 - [Multi-Agent Strategies](concepts/multi-agent.md) - Sequential, parallel, handoff, router, and nested agent coordination.
+- [Plan-Execute (PAC/PAE)](concepts/plan-execute.md) - LLM plans, Conductor executes. The deterministic superpower of Agentspan + Conductor.
 - [Guardrails](concepts/guardrails.md) - Input and output safety, retry, block, and fix behavior.
 - [Memory](concepts/memory.md) - Conversation history and semantic search across sessions.
 - [Streaming](concepts/streaming.md) - Runtime events, async execution, and HITL with streams.

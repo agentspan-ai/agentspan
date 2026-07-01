@@ -5,7 +5,7 @@ Use the Agentspan Java SDK with OpenAI Agents SDK-style tool definitions. The `O
 ## Dependency
 
 ```groovy
-implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
 ```
 
 The bridge uses the LangChain4j `@Tool` annotation as a practical equivalent of the Python OpenAI Agents SDK `@function_tool` decorator — add it if you need the annotation:
@@ -38,7 +38,7 @@ public class ShoppingTools {
 
 Agent agent = OpenAIAgent.builder()
     .name("shopping_assistant")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Help users find and purchase products.")
     .tools(new ShoppingTools())
     .build();
@@ -56,13 +56,13 @@ OpenAI Agents SDK-style handoffs let the LLM transfer control to a specialist ag
 ```java
 Agent billingAgent = Agent.builder()
     .name("billing_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Handle billing and payment questions.")
     .build();
 
 Agent supportAgent = OpenAIAgent.builder()
     .name("support_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Handle general support. Transfer billing issues to the billing agent.")
     .handoffs(billingAgent)                      // adds billing_agent as a handoff target
     .build();
@@ -73,7 +73,7 @@ Agent supportAgent = OpenAIAgent.builder()
 ```java
 Agent agent = OpenAIAgent.builder()
     .name("classifier")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Classify the sentiment of the input.")
     .outputType("SentimentResult")               // server-side structured output type name
     .build();

@@ -8,11 +8,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import org.conductoross.conductor.ai.enums.Strategy;
 import org.conductoross.conductor.ai.execution.CliConfig;
 import org.conductoross.conductor.ai.handoff.Handoff;
+import org.conductoross.conductor.ai.internal.AgentRegistry;
 import org.conductoross.conductor.ai.model.ConversationMemory;
 import org.conductoross.conductor.ai.model.GuardrailDef;
 import org.conductoross.conductor.ai.model.PrefillToolCall;
@@ -43,7 +45,11 @@ public class Agent {
 
     private final String name;
     private final String model;
-    private final String instructions;
+    /** System prompt, held as a supplier so dynamic instructions are re-evaluated
+     *  each time the config is serialized (every run submission) — matching the
+     *  Python SDK, where callable instructions resolve at serialization time. */
+    private final Supplier<String> instructions;
+
     private final List<ToolDef> tools;
     private final List<Agent> agents;
     private final Strategy strategy;
@@ -230,7 +236,7 @@ public class Agent {
     }
 
     public String getInstructions() {
-        return instructions;
+        return instructions == null ? null : instructions.get();
     }
 
     public List<ToolDef> getTools() {
@@ -429,6 +435,35 @@ public class Agent {
         return new Builder();
     }
 
+    /**
+     * Resolve all {@link org.conductoross.conductor.ai.annotations.AgentDef @AgentDef}-annotated
+     * methods on an object into Agent instances.
+     *
+     * <p>{@link org.conductoross.conductor.ai.annotations.Tool @Tool} and
+     * {@link org.conductoross.conductor.ai.annotations.GuardrailDef @GuardrailDef} methods
+     * on the same object are attached to each agent (all by default; filter with the
+     * annotation's {@code tools}/{@code guardrails} attributes).
+     *
+     * @param instance the object whose annotated methods define agents
+     * @return the resolved agents
+     */
+    public static List<Agent> fromInstance(Object instance) {
+        return AgentRegistry.fromInstance(instance);
+    }
+
+    /**
+     * Resolve a single {@link org.conductoross.conductor.ai.annotations.AgentDef @AgentDef}-annotated
+     * method by agent name (the annotation {@code name}, or the method name if unset).
+     *
+     * @param instance the object whose annotated methods define agents
+     * @param name     the agent name to resolve
+     * @return the resolved agent
+     * @throws IllegalArgumentException if no agent with that name is defined on the object
+     */
+    public static Agent fromInstance(Object instance, String name) {
+        return AgentRegistry.fromInstance(instance, name);
+    }
+
     @Override
     public String toString() {
         if (isExternal()) {
@@ -449,7 +484,7 @@ public class Agent {
     public static class Builder {
         private String name;
         private String model;
-        private String instructions;
+        private Supplier<String> instructions;
         private List<ToolDef> tools;
         private List<Agent> agents;
         private Strategy strategy = Strategy.HANDOFF;
@@ -513,6 +548,18 @@ public class Agent {
 
         /** Set the system prompt / instructions for the agent. */
         public Builder instructions(String instructions) {
+            this.instructions = instructions == null ? null : () -> instructions;
+            return this;
+        }
+
+        /**
+         * Set dynamic instructions. The supplier is re-evaluated every time the
+         * agent config is serialized — i.e. on each run submission — so the prompt
+         * can reflect current state (date, feature flags, fetched context).
+         * Matches the Python SDK, where callable instructions resolve at
+         * serialization time.
+         */
+        public Builder instructions(Supplier<String> instructions) {
             this.instructions = instructions;
             return this;
         }

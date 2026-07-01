@@ -11,7 +11,7 @@ Each agent in the pipeline runs in order, with outputs flowing to the next.
 
 from google.adk.agents import Agent, SequentialAgent
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

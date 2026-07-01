@@ -20,9 +20,9 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
-from agentspan.agents import Agent, AgentRuntime, is_tracing_enabled, tool
+from conductor.ai.agents import Agent, AgentRuntime, is_tracing_enabled, tool
 from settings import settings
-from agentspan.agents.tracing import trace_agent_run, trace_tool_call
+from conductor.ai.agents.tracing import trace_agent_run, trace_tool_call
 
 # ── Check if OTel is available ───────────────────────────────────────
 

@@ -55,7 +55,7 @@ public class Guardrail {
         private final Function<String, GuardrailResult> func;
         private final boolean isExternal;
         private Position position = Position.OUTPUT;
-        private OnFail onFail = OnFail.RETRY;
+        private OnFail onFail = OnFail.RAISE;
         private int maxRetries = 3;
 
         private Builder(String name, Function<String, GuardrailResult> func, boolean isExternal) {
@@ -81,6 +81,12 @@ public class Guardrail {
         }
 
         public GuardrailDef build() {
+            // on_fail=HUMAN is only valid for output guardrails — input guardrails
+            // are client-side and cannot pause a workflow (parity with Python's ValueError).
+            if (onFail == OnFail.HUMAN && position == Position.INPUT) {
+                throw new IllegalArgumentException("onFail=HUMAN is only valid for position=OUTPUT "
+                        + "(input guardrails are client-side and cannot pause a workflow)");
+            }
             String guardrailType = isExternal ? "external" : "custom";
             return GuardrailDef.builder()
                     .name(name)

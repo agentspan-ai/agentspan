@@ -17,14 +17,14 @@ class TestCodeExecutors:
     """Test code executor classes."""
 
     def test_local_executor_creation(self):
-        from agentspan.agents.code_executor import LocalCodeExecutor
+        from conductor.ai.agents.code_executor import LocalCodeExecutor
 
         executor = LocalCodeExecutor(language="python", timeout=10)
         assert executor.language == "python"
         assert executor.timeout == 10
 
     def test_local_executor_as_tool(self):
-        from agentspan.agents.code_executor import LocalCodeExecutor
+        from conductor.ai.agents.code_executor import LocalCodeExecutor
 
         executor = LocalCodeExecutor()
         tool_fn = executor.as_tool()
@@ -32,14 +32,14 @@ class TestCodeExecutors:
         assert tool_fn._tool_def.name == "execute_code"
 
     def test_local_executor_as_tool_custom_name(self):
-        from agentspan.agents.code_executor import LocalCodeExecutor
+        from conductor.ai.agents.code_executor import LocalCodeExecutor
 
         executor = LocalCodeExecutor()
         tool_fn = executor.as_tool(name="run_python")
         assert tool_fn._tool_def.name == "run_python"
 
     def test_docker_executor_creation(self):
-        from agentspan.agents.code_executor import DockerCodeExecutor
+        from conductor.ai.agents.code_executor import DockerCodeExecutor
 
         executor = DockerCodeExecutor(
             image="python:3.12-slim",
@@ -53,21 +53,21 @@ class TestCodeExecutors:
         assert executor.memory_limit == "256m"
 
     def test_docker_executor_repr(self):
-        from agentspan.agents.code_executor import DockerCodeExecutor
+        from conductor.ai.agents.code_executor import DockerCodeExecutor
 
         executor = DockerCodeExecutor(image="node:18-slim", language="node")
         r = repr(executor)
         assert "node:18-slim" in r
 
     def test_jupyter_executor_creation(self):
-        from agentspan.agents.code_executor import JupyterCodeExecutor
+        from conductor.ai.agents.code_executor import JupyterCodeExecutor
 
         executor = JupyterCodeExecutor(kernel_name="python3", timeout=30)
         assert executor.kernel_name == "python3"
         assert executor.timeout == 30
 
     def test_serverless_executor_creation(self):
-        from agentspan.agents.code_executor import ServerlessCodeExecutor
+        from conductor.ai.agents.code_executor import ServerlessCodeExecutor
 
         executor = ServerlessCodeExecutor(
             endpoint="https://api.example.com/execute",
@@ -77,7 +77,7 @@ class TestCodeExecutors:
         assert executor.api_key == "sk-test"
 
     def test_execution_result_defaults(self):
-        from agentspan.agents.code_executor import ExecutionResult
+        from conductor.ai.agents.code_executor import ExecutionResult
 
         result = ExecutionResult()
         assert result.output == ""
@@ -87,20 +87,20 @@ class TestCodeExecutors:
         assert result.success is True
 
     def test_execution_result_failure(self):
-        from agentspan.agents.code_executor import ExecutionResult
+        from conductor.ai.agents.code_executor import ExecutionResult
 
         result = ExecutionResult(error="SyntaxError", exit_code=1)
         assert result.success is False
 
     def test_execution_result_timeout(self):
-        from agentspan.agents.code_executor import ExecutionResult
+        from conductor.ai.agents.code_executor import ExecutionResult
 
         result = ExecutionResult(timed_out=True, exit_code=-1)
         assert result.success is False
         assert result.timed_out is True
 
     def test_local_executor_unsupported_language(self):
-        from agentspan.agents.code_executor import LocalCodeExecutor
+        from conductor.ai.agents.code_executor import LocalCodeExecutor
 
         executor = LocalCodeExecutor(language="cobol")
         result = executor.execute("print('hello')")
@@ -115,21 +115,21 @@ class TestHandoffConditions:
     """Test handoff condition classes."""
 
     def test_on_tool_result_triggers(self):
-        from agentspan.agents.handoff import OnToolResult
+        from conductor.ai.agents.handoff import OnToolResult
 
         cond = OnToolResult(tool_name="escalate", target="supervisor")
         ctx = {"tool_name": "escalate", "result": "", "tool_result": "done"}
         assert cond.should_handoff(ctx) is True
 
     def test_on_tool_result_no_match(self):
-        from agentspan.agents.handoff import OnToolResult
+        from conductor.ai.agents.handoff import OnToolResult
 
         cond = OnToolResult(tool_name="escalate", target="supervisor")
         ctx = {"tool_name": "search", "result": ""}
         assert cond.should_handoff(ctx) is False
 
     def test_on_tool_result_with_result_contains(self):
-        from agentspan.agents.handoff import OnToolResult
+        from conductor.ai.agents.handoff import OnToolResult
 
         cond = OnToolResult(
             tool_name="check_status",
@@ -143,28 +143,28 @@ class TestHandoffConditions:
         assert cond.should_handoff(ctx) is False
 
     def test_on_text_mention_triggers(self):
-        from agentspan.agents.handoff import OnTextMention
+        from conductor.ai.agents.handoff import OnTextMention
 
         cond = OnTextMention(text="transfer to billing", target="billing")
         ctx = {"result": "I'll transfer to billing for you.", "tool_name": ""}
         assert cond.should_handoff(ctx) is True
 
     def test_on_text_mention_case_insensitive(self):
-        from agentspan.agents.handoff import OnTextMention
+        from conductor.ai.agents.handoff import OnTextMention
 
         cond = OnTextMention(text="ESCALATE", target="manager")
         ctx = {"result": "Let me escalate this issue.", "tool_name": ""}
         assert cond.should_handoff(ctx) is True
 
     def test_on_text_mention_no_match(self):
-        from agentspan.agents.handoff import OnTextMention
+        from conductor.ai.agents.handoff import OnTextMention
 
         cond = OnTextMention(text="transfer", target="other")
         ctx = {"result": "Hello, how can I help?", "tool_name": ""}
         assert cond.should_handoff(ctx) is False
 
     def test_on_condition_triggers(self):
-        from agentspan.agents.handoff import OnCondition
+        from conductor.ai.agents.handoff import OnCondition
 
         cond = OnCondition(
             condition=lambda ctx: len(ctx.get("messages", "")) > 100,
@@ -174,7 +174,7 @@ class TestHandoffConditions:
         assert cond.should_handoff(ctx) is True
 
     def test_on_condition_no_trigger(self):
-        from agentspan.agents.handoff import OnCondition
+        from conductor.ai.agents.handoff import OnCondition
 
         cond = OnCondition(
             condition=lambda ctx: False,
@@ -184,7 +184,7 @@ class TestHandoffConditions:
         assert cond.should_handoff(ctx) is False
 
     def test_on_condition_handles_exception(self):
-        from agentspan.agents.handoff import OnCondition
+        from conductor.ai.agents.handoff import OnCondition
 
         cond = OnCondition(
             condition=lambda ctx: 1 / 0,  # ZeroDivisionError
@@ -201,7 +201,7 @@ class TestSemanticMemory:
     """Test SemanticMemory and InMemoryStore."""
 
     def test_add_and_search(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         mem.add("Python is a programming language")
@@ -213,7 +213,7 @@ class TestSemanticMemory:
         assert any("Python" in r for r in results)
 
     def test_add_returns_id(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         entry_id = mem.add("Test memory")
@@ -221,7 +221,7 @@ class TestSemanticMemory:
         assert len(entry_id) > 0
 
     def test_delete(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         entry_id = mem.add("To be deleted")
@@ -229,7 +229,7 @@ class TestSemanticMemory:
         assert mem.delete("nonexistent") is False
 
     def test_clear(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         mem.add("Memory 1")
@@ -238,7 +238,7 @@ class TestSemanticMemory:
         assert len(mem.list_all()) == 0
 
     def test_list_all(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         mem.add("Memory A")
@@ -247,7 +247,7 @@ class TestSemanticMemory:
         assert len(entries) == 2
 
     def test_get_context(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         mem.add("User likes Python programming")
@@ -256,14 +256,14 @@ class TestSemanticMemory:
         assert "context from memory" in ctx.lower()
 
     def test_get_context_empty(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         ctx = mem.get_context("anything")
         assert ctx == ""
 
     def test_max_results(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory(max_results=2)
         for i in range(10):
@@ -272,7 +272,7 @@ class TestSemanticMemory:
         assert len(results) <= 2
 
     def test_with_metadata(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         mem.add("Important fact", metadata={"type": "fact", "importance": "high"})
@@ -280,7 +280,7 @@ class TestSemanticMemory:
         assert entries[0].metadata["type"] == "fact"
 
     def test_repr(self):
-        from agentspan.agents.semantic_memory import SemanticMemory
+        from conductor.ai.agents.semantic_memory import SemanticMemory
 
         mem = SemanticMemory()
         mem.add("test")
@@ -295,38 +295,38 @@ class TestTracing:
     """Test tracing module (works even without opentelemetry installed)."""
 
     def test_is_tracing_enabled_returns_bool(self):
-        from agentspan.agents.tracing import is_tracing_enabled
+        from conductor.ai.agents.tracing import is_tracing_enabled
 
         result = is_tracing_enabled()
         assert isinstance(result, bool)
 
     def test_trace_agent_run_no_otel(self):
-        from agentspan.agents.tracing import trace_agent_run
+        from conductor.ai.agents.tracing import trace_agent_run
 
         with trace_agent_run("test", "hello", model="openai/gpt-4o") as span:
             # Should work even without OTel — span may be None
             pass
 
     def test_trace_compile_no_otel(self):
-        from agentspan.agents.tracing import trace_compile
+        from conductor.ai.agents.tracing import trace_compile
 
         with trace_compile("test", strategy="handoff") as span:
             pass
 
     def test_trace_tool_call_no_otel(self):
-        from agentspan.agents.tracing import trace_tool_call
+        from conductor.ai.agents.tracing import trace_tool_call
 
         with trace_tool_call("test", "my_tool", args={"x": 1}) as span:
             pass
 
     def test_trace_handoff_no_otel(self):
-        from agentspan.agents.tracing import trace_handoff
+        from conductor.ai.agents.tracing import trace_handoff
 
         with trace_handoff("agent_a", "agent_b") as span:
             pass
 
     def test_record_token_usage_none_span(self):
-        from agentspan.agents.tracing import record_token_usage
+        from conductor.ai.agents.tracing import record_token_usage
 
         # Should not raise
         record_token_usage(None, prompt_tokens=100, completion_tokens=50)
@@ -339,7 +339,7 @@ class TestGPTAssistantAgent:
     """Test GPTAssistantAgent construction (no API calls)."""
 
     def test_creation_with_id(self):
-        from agentspan.agents.ext import GPTAssistantAgent
+        from conductor.ai.agents.ext import GPTAssistantAgent
 
         agent = GPTAssistantAgent(
             name="coder",
@@ -350,7 +350,7 @@ class TestGPTAssistantAgent:
         assert agent.metadata["_agent_type"] == "gpt_assistant"
 
     def test_creation_without_id(self):
-        from agentspan.agents.ext import GPTAssistantAgent
+        from conductor.ai.agents.ext import GPTAssistantAgent
 
         agent = GPTAssistantAgent(
             name="analyst",
@@ -361,27 +361,27 @@ class TestGPTAssistantAgent:
         assert agent.model == "openai/gpt-4o"
 
     def test_has_tool(self):
-        from agentspan.agents.ext import GPTAssistantAgent
+        from conductor.ai.agents.ext import GPTAssistantAgent
 
         agent = GPTAssistantAgent(name="test")
         assert len(agent.tools) == 1
         assert agent.tools[0]._tool_def.name == "test_assistant_call"
 
     def test_max_turns_is_one(self):
-        from agentspan.agents.ext import GPTAssistantAgent
+        from conductor.ai.agents.ext import GPTAssistantAgent
 
         agent = GPTAssistantAgent(name="test")
         assert agent.max_turns == 1
 
     def test_is_agent_subclass(self):
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.ext import GPTAssistantAgent
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.ext import GPTAssistantAgent
 
         agent = GPTAssistantAgent(name="test")
         assert isinstance(agent, Agent)
 
     def test_repr(self):
-        from agentspan.agents.ext import GPTAssistantAgent
+        from conductor.ai.agents.ext import GPTAssistantAgent
 
         agent = GPTAssistantAgent(name="test", assistant_id="asst_xyz")
         r = repr(agent)
@@ -396,7 +396,7 @@ class TestAgentNewParams:
     """Test new Agent parameters."""
 
     def test_swarm_strategy_accepted(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         sub = Agent(name="sub", model="openai/gpt-4o")
         agent = Agent(
@@ -408,7 +408,7 @@ class TestAgentNewParams:
         assert agent.strategy == "swarm"
 
     def test_manual_strategy_accepted(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         sub = Agent(name="sub", model="openai/gpt-4o")
         agent = Agent(
@@ -420,8 +420,8 @@ class TestAgentNewParams:
         assert agent.strategy == "manual"
 
     def test_handoffs_param(self):
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.handoff import OnTextMention
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.handoff import OnTextMention
 
         sub = Agent(name="sub", model="openai/gpt-4o")
         handoffs = [OnTextMention(text="transfer", target="sub")]
@@ -435,7 +435,7 @@ class TestAgentNewParams:
         assert len(agent.handoffs) == 1
 
     def test_introduction_param(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(
             name="expert",
@@ -445,7 +445,7 @@ class TestAgentNewParams:
         assert agent.introduction == "I am an expert in Python programming."
 
     def test_introduction_default_none(self):
-        from agentspan.agents.agent import Agent
+        from conductor.ai.agents.agent import Agent
 
         agent = Agent(name="test", model="openai/gpt-4o")
         assert agent.introduction is None

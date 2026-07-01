@@ -11,7 +11,7 @@ All sub-agents run in parallel and their results are aggregated.
 
 from google.adk.agents import Agent, ParallelAgent
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 from settings import settings
 

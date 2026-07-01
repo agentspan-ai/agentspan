@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import os
 
-from agentspan.agents import AgentRuntime, Op, Plan, Ref, Step, plan_execute, tool
+from conductor.ai.agents import AgentRuntime, Op, Plan, Ref, Step, plan_execute, tool
 
 
 @tool
@@ -81,7 +81,7 @@ def main() -> None:
         name="ref_demo",
         tools=[produce, enrich, report],
         planner_instructions="(planner unused; static plan supplied)",
-        model=os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini"),
+        model=os.environ.get("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6"),
     )
 
     plan = Plan(

@@ -3,9 +3,12 @@
 
 package org.conductoross.conductor.ai.model;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -24,6 +27,7 @@ public class AgentEvent {
     private final String executionId;
     private final String guardrailName;
     private final String target;
+    private final Map<String, Object> pendingTool;
 
     public AgentEvent(
             EventType type,
@@ -35,6 +39,20 @@ public class AgentEvent {
             String executionId,
             String guardrailName,
             String target) {
+        this(type, content, toolName, args, result, output, executionId, guardrailName, target, null);
+    }
+
+    public AgentEvent(
+            EventType type,
+            String content,
+            String toolName,
+            Map<String, Object> args,
+            Object result,
+            Object output,
+            String executionId,
+            String guardrailName,
+            String target,
+            Map<String, Object> pendingTool) {
         this.type = type;
         this.content = content;
         this.toolName = toolName;
@@ -44,6 +62,7 @@ public class AgentEvent {
         this.executionId = executionId;
         this.guardrailName = guardrailName;
         this.target = target;
+        this.pendingTool = pendingTool;
     }
 
     public EventType getType() {
@@ -80,6 +99,45 @@ public class AgentEvent {
 
     public String getTarget() {
         return target;
+    }
+
+    /**
+     * Raw {@code pendingTool} block from a {@code waiting} SSE event, or
+     * {@code null} for any other event type. Contains at minimum
+     * {@code taskRefName}; for approval-gated batches it also contains
+     * {@code toolCalls} — the array of tools the LLM proposed this turn.
+     *
+     * <p>Most consumers want {@link #getPendingToolCalls()} instead.
+     */
+    public Map<String, Object> getPendingTool() {
+        return pendingTool;
+    }
+
+    /**
+     * Typed view of {@code pendingTool.toolCalls}. Returns an empty list
+     * (never {@code null}) when no calls are pending — including for non-
+     * {@code waiting} events.
+     *
+     * <p>One HUMAN task gates the whole batch with one {@code {approved,
+     * reason}} verdict. Iterate to see every tool covered by the gate.
+     */
+    @SuppressWarnings("unchecked")
+    public List<PendingToolCall> getPendingToolCalls() {
+        if (pendingTool == null) return Collections.emptyList();
+        Object raw = pendingTool.get("toolCalls");
+        if (!(raw instanceof List<?>)) return Collections.emptyList();
+        List<?> list = (List<?>) raw;
+        List<PendingToolCall> calls = new ArrayList<>(list.size());
+        for (Object entry : list) {
+            if (!(entry instanceof Map<?, ?>)) continue;
+            Map<String, Object> map = (Map<String, Object>) entry;
+            Object name = map.get("name");
+            Object args = map.get("args");
+            calls.add(new PendingToolCall(
+                    name != null ? name.toString() : null,
+                    args instanceof Map<?, ?> ? (Map<String, Object>) args : null));
+        }
+        return calls;
     }
 
     /**
@@ -121,6 +179,10 @@ public class AgentEvent {
             }
         }
 
+        Object rawPendingTool = data.get("pendingTool");
+        Map<String, Object> pendingTool =
+                rawPendingTool instanceof Map<?, ?> ? (Map<String, Object>) rawPendingTool : null;
+
         return new AgentEvent(
                 type,
                 (String) data.get("content"),
@@ -130,7 +192,8 @@ public class AgentEvent {
                 data.get("output"),
                 (String) data.getOrDefault("executionId", ""),
                 (String) data.get("guardrailName"),
-                (String) data.get("target"));
+                (String) data.get("target"),
+                pendingTool);
     }
 
     @Override

@@ -45,7 +45,7 @@ Agent reviewAgent = Skill.skill(Paths.get("skills/code-review"), "openai/gpt-4o"
 Agent reviewAgent = Skill.skill(
     Paths.get("skills/code-review"),
     "openai/gpt-4o",
-    Map.of("search-agent", "openai/gpt-4o-mini")  // cheaper model for search
+    Map.of("search-agent", "anthropic/claude-sonnet-4-6")  // cheaper model for search
 );
 
 // Load all skills from a directory

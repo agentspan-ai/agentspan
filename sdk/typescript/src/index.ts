@@ -15,6 +15,8 @@ export type {
   GuardrailDef,
   AgentEvent,
   AgentStatus,
+  PendingTool,
+  PendingToolCall,
   DeploymentInfo,
   PromptTemplate as PromptTemplateInterface,
   CodeExecutionConfig,
@@ -60,6 +62,7 @@ export type {
   PdfToolOptions,
   SearchToolOptions,
   IndexToolOptions,
+  WaitForMessageToolOptions,
 } from "./tool.js";
 export {
   tool,
@@ -77,6 +80,7 @@ export {
   pdfTool,
   searchTool,
   indexTool,
+  waitForMessageTool,
   Tool,
   toolsFrom,
 } from "./tool.js";
@@ -141,6 +145,12 @@ export {
   shutdown,
 } from "./runtime.js";
 
+// ── Control-plane / Workflow clients ────────────────────
+export type { ClientHandle } from "./agent-client.js";
+export { AgentClient, decodeJwtExp } from "./agent-client.js";
+export type { WorkflowExecution, WorkflowTokenUsage } from "./workflow-client.js";
+export { WorkflowClient } from "./workflow-client.js";
+
 // ── Scheduling ──────────────────────────────────────────
 export {
   Schedule,
@@ -188,7 +198,18 @@ export type {
   PlanOptions,
   PlanLike,
 } from "./plans.js";
-export { Plan, Step, Op, Generate, Validation, Action, Ref, Context, coercePlan, serializePlanValue } from "./plans.js";
+export {
+  Plan,
+  Step,
+  Op,
+  Generate,
+  Validation,
+  Action,
+  Ref,
+  Context,
+  coercePlan,
+  serializePlanValue,
+} from "./plans.js";
 
 // ── Termination ─────────────────────────────────────────
 export {

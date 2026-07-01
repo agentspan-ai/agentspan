@@ -42,7 +42,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.widgets import TextArea
 
-from agentspan.agents import Agent, AgentRuntime, EventType, tool, wait_for_message_tool
+from conductor.ai.agents import Agent, AgentRuntime, EventType, tool, wait_for_message_tool
 from settings import settings
 
 # ---------------------------------------------------------------------------

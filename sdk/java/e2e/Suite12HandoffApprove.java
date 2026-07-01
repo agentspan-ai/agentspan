@@ -17,6 +17,7 @@ import org.conductoross.conductor.ai.internal.ToolRegistry;
 import org.conductoross.conductor.ai.model.AgentEvent;
 import org.conductoross.conductor.ai.model.AgentResult;
 import org.conductoross.conductor.ai.model.AgentStream;
+import org.conductoross.conductor.ai.model.PendingToolCall;
 import org.conductoross.conductor.ai.model.ToolDef;
 import org.junit.jupiter.api.*;
 
@@ -82,6 +83,54 @@ class Suite12HandoffApprove extends BaseTest {
                 .strategy(Strategy.HANDOFF)
                 .maxTurns(1)
                 .build();
+    }
+
+    /**
+     * Regression test for issue #226: the {@code WAITING} SSE event must
+     * carry the pending tool name(s) and arguments so SDK consumers can
+     * decide whether to approve or reject. Before the fix, the server
+     * read the singular {@code tool_name} / {@code parameters} keys (which
+     * the compiler never writes) and shipped {@code null} for both — making
+     * approve/reject decisions blind. Assertion is deterministic: the
+     * approval-required tool in this suite is {@code submit_change}, so
+     * exactly that name must surface on the first WAITING event.
+     */
+    @Test
+    @Order(0)
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    void test_waiting_event_surfaces_pending_tool_calls() {
+        Agent support = buildHandoffAgent("e2e_java_handoff_pending_tool");
+
+        try (AgentStream stream = runtime.stream(
+                support, "Please submit this configuration change: enable feature flag java_e2e_pending_tool.")) {
+
+            AgentEvent firstWaiting = null;
+            int approvals = 0;
+            for (AgentEvent event : stream) {
+                if (event.getType() == EventType.WAITING) {
+                    if (firstWaiting == null) firstWaiting = event;
+                    stream.approve(event);
+                    approvals++;
+                    assertTrue(approvals <= 5, "too many approval prompts; handoff did not settle");
+                }
+            }
+
+            assertNotNull(firstWaiting, "expected a WAITING event from the sub-agent's approval-required tool");
+
+            List<PendingToolCall> calls = firstWaiting.getPendingToolCalls();
+            assertFalse(
+                    calls.isEmpty(),
+                    "WAITING event must surface the pending tool(s); got an empty list. "
+                            + "Before issue #226 fix the server shipped pendingTool.tool_name=null "
+                            + "and toolCalls was unset, leaving SDK consumers blind.");
+            assertEquals(
+                    "submit_change",
+                    calls.get(0).getName(),
+                    "first pending tool must be submit_change (the only approval-required tool in this fixture)");
+            assertNotNull(
+                    calls.get(0).getArgs(),
+                    "pending tool args must be present so consumers can decide whether to approve");
+        }
     }
 
     /**

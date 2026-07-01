@@ -13,8 +13,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 
 using System.Diagnostics;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── Local code executor tool ─────────────────────────────────────────
 

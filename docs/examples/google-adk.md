@@ -146,7 +146,7 @@ Three things change from the plain ADK version: `LlmAgent` → `Agent`, model st
 
 ```python
 from google.adk.agents import Agent, SequentialAgent
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 # ── Tools (unchanged — no FunctionTool wrapper needed) ───────────────────────
 
@@ -259,7 +259,7 @@ topic → [research_pipeline] → [researcher] → [analyst] → [writer] → fi
 
 ```python
 import asyncio
-from agentspan.agents import run_async
+from conductor.ai.agents import run_async
 
 async def run_research(topic: str) -> str:
     result = await run_async(pipeline, topic)
@@ -273,7 +273,7 @@ asyncio.run(run_research("The current state of durable execution for AI agents")
 Use `start` to submit a job and return immediately. Useful when research runs are slow and you don't want to block.
 
 ```python
-from agentspan.agents import start
+from conductor.ai.agents import start
 
 # Launch and return immediately — pipeline runs in the background on the server
 handle = start(pipeline, topic)
@@ -293,7 +293,7 @@ print(result.output)
 `start` works in a loop — each call submits immediately without waiting for the previous one to finish.
 
 ```python
-from agentspan.agents import start
+from conductor.ai.agents import start
 
 topics = [
     "Durable execution frameworks for AI agents",
@@ -312,7 +312,7 @@ for r in results:
 ### Stream sub-agent progress
 
 ```python
-from agentspan.agents import stream
+from conductor.ai.agents import stream
 
 for event in stream(pipeline, topic):
     if event.type == "handoff":
@@ -330,7 +330,7 @@ for event in stream(pipeline, topic):
 Use `mock_run` to test the pipeline without a live server or real API calls. Supply the expected sequence of sub-agent handoffs and tool calls; `mock_run` drives the pipeline through them and returns an `AgentResult` you can assert against.
 
 ```python
-from agentspan.agents.testing import mock_run, MockEvent, expect
+from conductor.ai.agents.testing import mock_run, MockEvent, expect
 
 result = mock_run(
     pipeline,

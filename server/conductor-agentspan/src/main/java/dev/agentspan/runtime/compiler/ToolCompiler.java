@@ -8,6 +8,7 @@ package dev.agentspan.runtime.compiler;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -142,6 +143,17 @@ public class ToolCompiler {
             spec.put("name", tool.getName());
             spec.put("type", conductorType);
             spec.put("description", tool.getDescription());
+            // Every AgentSpan spec is complete as compiled (name + description
+            // + inputSchema inline). The marker tells spec consumers — notably
+            // orkes-conductor's OrkesLLM — to hand it to the LLM as-is and
+            // never resolve/replace it by name against integration stores.
+            // Kept top-level for a future first-class ToolSpec field, and
+            // duplicated into configParams at the end of this loop — that
+            // copy is the one that survives today: conductor-ai's ToolSpec
+            // has no selfDescribing field, so this top-level key is dropped
+            // at deserialization, while configParams (Map<String,Object>)
+            // rides through intact.
+            spec.put("selfDescribing", true);
 
             if (tool.getInputSchema() != null) {
                 spec.put("inputSchema", tool.getInputSchema());
@@ -176,6 +188,18 @@ public class ToolCompiler {
                 }
                 spec.put("configParams", configParams);
             }
+
+            // Merge (never clobber — the MCP/API blocks above populate it
+            // first) the selfDescribing marker into configParams; see the
+            // top-level marker comment for why this copy is the one that
+            // survives deserialization.
+            @SuppressWarnings("unchecked")
+            Map<String, Object> markerParams = (Map<String, Object>) spec.get("configParams");
+            if (markerParams == null) {
+                markerParams = new LinkedHashMap<>();
+                spec.put("configParams", markerParams);
+            }
+            markerParams.put("selfDescribing", true);
 
             specs.add(spec);
         }
@@ -292,7 +316,7 @@ public class ToolCompiler {
         Map<String, Object> wmqConfig = new LinkedHashMap<>();
 
         if (tools != null) {
-            Set<String> serverSideTypes = Set.of(
+            Set<String> serverSideTypes = new HashSet<>(Set.of(
                     "http",
                     "mcp",
                     "agent_tool",
@@ -304,7 +328,7 @@ public class ToolCompiler {
                     "rag_index",
                     "rag_search",
                     "human",
-                    "pull_workflow_messages");
+                    "pull_workflow_messages"));
 
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";

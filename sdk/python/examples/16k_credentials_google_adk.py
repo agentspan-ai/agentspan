@@ -19,7 +19,7 @@ Requirements:
 
 import os
 
-from agentspan.agents import AgentRuntime
+from conductor.ai.agents import AgentRuntime
 
 
 def create_adk_agent():

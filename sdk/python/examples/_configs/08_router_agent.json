@@ -4,7 +4,7 @@
       "external": false,
       "instructions": "You create implementation plans. Break down tasks into clear numbered steps.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "planner",
       "timeoutSeconds": 0
     },
@@ -12,7 +12,7 @@
       "external": false,
       "instructions": "You write code. Output clean, well-documented Python code.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "coder",
       "timeoutSeconds": 0
     },
@@ -20,7 +20,7 @@
       "external": false,
       "instructions": "You review code. Check for bugs, style issues, and suggest improvements.",
       "maxTurns": 25,
-      "model": "openai/gpt-4o-mini",
+      "model": "anthropic/claude-sonnet-4-6",
       "name": "reviewer",
       "timeoutSeconds": 0
     }
@@ -28,13 +28,13 @@
   "external": false,
   "instructions": "You are the tech lead. Route requests to the right team member: planner for design/architecture, coder for implementation, reviewer for code review.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "dev_team",
   "router": {
     "external": false,
     "instructions": "You create implementation plans. Break down tasks into clear numbered steps.",
     "maxTurns": 25,
-    "model": "openai/gpt-4o-mini",
+    "model": "anthropic/claude-sonnet-4-6",
     "name": "planner",
     "timeoutSeconds": 0
   },

@@ -3,13 +3,13 @@
 
 """Unit tests for credential exception hierarchy."""
 
-from agentspan.agents.runtime.credentials.types import (
+from conductor.ai.agents.runtime.credentials.types import (
     CredentialAuthError,
     CredentialNotFoundError,
     CredentialRateLimitError,
     CredentialServiceError,
 )
-from agentspan.agents.exceptions import AgentspanError
+from conductor.ai.agents.exceptions import AgentspanError
 
 
 class TestCredentialExceptions:

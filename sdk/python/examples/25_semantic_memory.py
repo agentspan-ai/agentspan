@@ -15,9 +15,9 @@ Requirements:
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 from settings import settings
-from agentspan.agents.semantic_memory import SemanticMemory
+from conductor.ai.agents.semantic_memory import SemanticMemory
 
 # ── Build up a knowledge base ────────────────────────────────────────
 

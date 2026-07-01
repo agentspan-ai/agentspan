@@ -51,9 +51,7 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
             writeDetail(metadataPath, detail);
             if (makeLatest) {
                 Files.writeString(
-                        latestPath(detail.getOwnerId(), detail.getName()),
-                        detail.getVersion(),
-                        StandardCharsets.UTF_8);
+                        latestPath(detail.getOwnerId(), detail.getName()), detail.getVersion(), StandardCharsets.UTF_8);
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to write skill metadata: " + e.getMessage(), e);
@@ -113,7 +111,8 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
             for (Path skillDir : skillDirs.filter(Files::isDirectory).toList()) {
                 if (allVersions) {
                     try (var versions = Files.list(skillDir)) {
-                        for (Path versionPath : versions.filter(Files::isDirectory).toList()) {
+                        for (Path versionPath :
+                                versions.filter(Files::isDirectory).toList()) {
                             Path metadata = versionPath.resolve("metadata.json");
                             if (Files.exists(metadata)) {
                                 details.add(readDetail(metadata));
@@ -123,7 +122,8 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
                 } else {
                     Path latest = skillDir.resolve("latest");
                     if (Files.exists(latest)) {
-                        String version = Files.readString(latest, StandardCharsets.UTF_8).trim();
+                        String version =
+                                Files.readString(latest, StandardCharsets.UTF_8).trim();
                         Path metadata = skillDir.resolve(encoded(version)).resolve("metadata.json");
                         if (Files.exists(metadata)) {
                             details.add(readDetail(metadata));
@@ -149,7 +149,8 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
             }
             Path latest = latestPath(ownerId, name);
             if (Files.exists(latest)
-                    && version.equals(Files.readString(latest, StandardCharsets.UTF_8).trim())) {
+                    && version.equals(
+                            Files.readString(latest, StandardCharsets.UTF_8).trim())) {
                 updateLatestAfterDelete(ownerId, name);
             }
         } catch (IOException e) {

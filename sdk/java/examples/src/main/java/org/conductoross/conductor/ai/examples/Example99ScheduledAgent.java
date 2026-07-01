@@ -28,7 +28,7 @@ import java.util.Map;
 public class Example99ScheduledAgent {
 
     public static void main(String[] args) throws Exception {
-        String model = System.getenv().getOrDefault("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini");
+        String model = System.getenv().getOrDefault("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6");
 
         Agent agent = Agent.builder()
                 .name("eng_digest_99")

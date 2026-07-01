@@ -19,7 +19,7 @@ from typing import List
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     AgentEvent,
     AgentStream,
@@ -33,7 +33,7 @@ from agentspan.agents import (
 
 pytestmark = [pytest.mark.integration, pytest.mark.sse]
 
-DEFAULT_MODEL = "openai/gpt-4o-mini"
+DEFAULT_MODEL = "anthropic/claude-sonnet-4-6"
 
 
 def _model() -> str:

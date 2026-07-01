@@ -84,6 +84,30 @@ subprojects {
         options.addStringOption('Xdoclint:none', '-quiet')
         failOnError = false
     }
+
+    // Second publish target: GitHub Packages (Maven registry at
+    // https://maven.pkg.github.com/<owner>/<repo>). Maven Central itself is
+    // configured per-module via the vanniktech `mavenPublishing` block and the
+    // `publishAndReleaseToMavenCentral` task; this adds GitHub Packages as an
+    // additional standard maven-publish repository. CI publishes to it with
+    // `publishAllPublicationsToGitHubPackagesRepository`. Credentials are read
+    // from the GITHUB_ACTOR / GITHUB_TOKEN env vars set by the release workflow;
+    // they are only required when the publish task actually runs, so local
+    // `./gradlew tasks` and Maven Central publishing are unaffected.
+    plugins.withId('maven-publish') {
+        publishing {
+            repositories {
+                maven {
+                    name = 'GitHubPackages'
+                    url = uri("https://maven.pkg.github.com/${System.getenv('GITHUB_REPOSITORY') ?: 'agentspan-ai/agentspan'}")
+                    credentials {
+                        username = System.getenv('GITHUB_ACTOR')
+                        password = System.getenv('GITHUB_TOKEN')
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ── Code formatting ──────────────────────────────────────────────

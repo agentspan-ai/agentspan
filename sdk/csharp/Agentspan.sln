@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan", "src\Agentspan\Agentspan.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Conductor.AI", "src\Conductor.AI\Conductor.AI.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Example01BasicAgent", "examples\01_BasicAgent\Example01BasicAgent.csproj", "{B2C3D4E5-F6A7-8901-BCDE-F12345678901}"
 EndProject
@@ -59,7 +59,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentspanE2eTests", "tests\AgentspanE2eTests\AgentspanE2eTests.csproj", "{46E0088C-08B7-40A8-AA90-1F7CA3BE9137}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.SemanticKernel", "src\Agentspan.SemanticKernel\Agentspan.SemanticKernel.csproj", "{61510520-D1AB-4D98-ABBD-36CF5D7E9FA3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Conductor.AI.SemanticKernel", "src\Conductor.AI.SemanticKernel\Conductor.AI.SemanticKernel.csproj", "{61510520-D1AB-4D98-ABBD-36CF5D7E9FA3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.SemanticKernel.Tests", "tests\Agentspan.SemanticKernel.Tests\Agentspan.SemanticKernel.Tests.csproj", "{04536BBF-B15D-4107-A004-57F19A0870F9}"
 EndProject
@@ -143,9 +143,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Sk20_SentimentAnalysis", "S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExampleSk20SentimentAnalysis", "examples\Sk20_SentimentAnalysis\ExampleSk20SentimentAnalysis.csproj", "{74A9A73C-5035-48F8-8073-8849B24DF811}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.OpenAI", "src\Agentspan.OpenAI\Agentspan.OpenAI.csproj", "{1F58BCB9-FD01-496A-B208-B4D00B249D58}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Conductor.AI.OpenAI", "src\Conductor.AI.OpenAI\Conductor.AI.OpenAI.csproj", "{1F58BCB9-FD01-496A-B208-B4D00B249D58}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.GoogleADK", "src\Agentspan.GoogleADK\Agentspan.GoogleADK.csproj", "{F237CE8B-BB29-4DD3-A71C-11DAA3006853}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Conductor.AI.GoogleADK", "src\Conductor.AI.GoogleADK\Conductor.AI.GoogleADK.csproj", "{F237CE8B-BB29-4DD3-A71C-11DAA3006853}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agentspan.OpenAI.Tests", "tests\Agentspan.OpenAI.Tests\Agentspan.OpenAI.Tests.csproj", "{13295CC9-94E5-4A14-86D3-183EB32310B0}"
 EndProject
@@ -336,6 +336,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExampleAdk35RagAgent", "examples\Adk35_RagAgent\ExampleAdk35RagAgent.csproj", "{65A89A5B-3547-4911-B26E-7ABF17A76151}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Example91Skills", "examples\91_Skills\Example91Skills.csproj", "{A7F45214-4DA6-40F4-8B62-7C7946F92055}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Conductor.AI.Tests", "tests\Conductor.AI.Tests\Conductor.AI.Tests.csproj", "{B31E057D-6160-44DE-8B70-3E5541055DA5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -1427,6 +1429,18 @@ Global
 		{A7F45214-4DA6-40F4-8B62-7C7946F92055}.Release|x64.Build.0 = Release|Any CPU
 		{A7F45214-4DA6-40F4-8B62-7C7946F92055}.Release|x86.ActiveCfg = Release|Any CPU
 		{A7F45214-4DA6-40F4-8B62-7C7946F92055}.Release|x86.Build.0 = Release|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Debug|x64.Build.0 = Debug|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Debug|x86.Build.0 = Debug|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Release|x64.ActiveCfg = Release|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Release|x64.Build.0 = Release|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Release|x86.ActiveCfg = Release|Any CPU
+		{B31E057D-6160-44DE-8B70-3E5541055DA5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1588,5 +1602,6 @@ Global
 		{DFC5CE93-DB57-5C7A-9864-C47E1C66BB61} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
 		{65A89A5B-3547-4911-B26E-7ABF17A76151} = {DFC5CE93-DB57-5C7A-9864-C47E1C66BB61}
 		{A7F45214-4DA6-40F4-8B62-7C7946F92055} = {B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}
+		{B31E057D-6160-44DE-8B70-3E5541055DA5} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentspan.ai/schemas/agent-config.schema.json",
-  "title": "Agentspan AgentConfig",
+  "title": "Conductor Agent AgentConfig",
   "description": "Canonical wire contract for the agent configuration that SDKs serialize and POST to the server (under the `agentConfig` key of the start/compile request). Mirrors the server-side `AgentConfig` model. Convention: camelCase keys, `@JsonInclude(NON_NULL)` — absent means unset. Recursive: `agents`, `planner`, `fallback`, `router` nest a full AgentConfig.",
   "type": "object",
   "required": ["name"],
@@ -157,7 +157,7 @@
         "description": { "type": "string" },
         "inputSchema": { "type": "object", "additionalProperties": true },
         "outputSchema": { "type": "object", "additionalProperties": true },
-        "toolType": { "type": "string", "description": "worker | http | mcp | agent_tool | …" },
+        "toolType": { "type": "string", "description": "worker | http | mcp | api | agent_tool | …" },
         "approvalRequired": { "type": "boolean" },
         "stateful": { "type": "boolean" },
         "timeoutSeconds": { "type": "integer" },

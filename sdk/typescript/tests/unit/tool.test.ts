@@ -16,6 +16,7 @@ import {
   pdfTool,
   searchTool,
   indexTool,
+  waitForMessageTool,
   Tool,
   toolsFrom,
 } from "../../src/tool.js";
@@ -512,6 +513,32 @@ describe("indexTool", () => {
     expect(t.inputSchema).toHaveProperty("properties.docId");
     expect(t.inputSchema).toHaveProperty("properties.metadata");
     expect((t.inputSchema as any).required).toEqual(["text", "docId"]);
+  });
+});
+
+describe("waitForMessageTool", () => {
+  it("creates a blocking, single-message wait tool by default", () => {
+    const t = waitForMessageTool({
+      name: "wait_for_message",
+      description: "Wait until a message is sent to this agent.",
+    });
+    expect(t.name).toBe("wait_for_message");
+    expect(t.toolType).toBe("pull_workflow_messages");
+    expect(t.func).toBeNull();
+    expect(t.inputSchema).toEqual({ type: "object", properties: {} });
+    // Default config: batchSize=1, blocking omitted (true is implied by absence)
+    expect(t.config).toEqual({ batchSize: 1 });
+    expect(t.config).not.toHaveProperty("blocking");
+  });
+
+  it("emits blocking=false only in non-blocking mode and respects batchSize", () => {
+    const t = waitForMessageTool({
+      name: "poll_messages",
+      description: "Poll for messages.",
+      batchSize: 5,
+      blocking: false,
+    });
+    expect(t.config).toEqual({ batchSize: 5, blocking: false });
   });
 });
 

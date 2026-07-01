@@ -13,8 +13,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 //   - OPENAI_API_KEY set in environment (for the guardrail LLM call)
 
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 // ── LLM-based safety guardrail ───────────────────────────────────────
 

@@ -1765,4 +1765,30 @@ class AgentCompilerTest {
                 .as("LLM_CHAT_COMPLETE task name must be lowercase TaskDef alias")
                 .isEqualTo("llm_chat_complete");
     }
+
+    @Test
+    void testCompileNeverInjectsUndeclaredTools() {
+        // Inverse of the deleted auto-expose merger tests: an agent's compiled
+        // workflow references exactly its declared tools. Server capabilities
+        // like OCG are opted into from the SDK, never appended at compile time.
+        ToolConfig tool = ToolConfig.builder()
+                .name("search")
+                .description("Search the web")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
+        AgentConfig config = AgentConfig.builder()
+                .name("plain_agent")
+                .model("openai/gpt-4o")
+                .instructions("You are helpful.")
+                .tools(List.of(tool))
+                .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        assertThat(config.getTools())
+                .as("compile must not mutate the declared tool list")
+                .hasSize(1);
+        assertThat(wf.toString()).doesNotContain("ocg_agent").doesNotContain("_ocg_agent");
+    }
 }

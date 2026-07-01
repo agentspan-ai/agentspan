@@ -12,7 +12,7 @@
  *   - AGENTSPAN_SECONDARY_LLM_MODEL=openai/gpt-4o as environment variable
  */
 
-import { Agent, AgentRuntime, scatterGather, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, scatterGather, tool } from '@conductor-oss/conductor-agent-sdk';
 import { secondaryLlmModel } from './settings';
 
 // -- Worker tool: simulates a knowledge base lookup --------------------------

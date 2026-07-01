@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
@@ -89,7 +90,10 @@ public class AgentCompiler {
     }
 
     /**
-     * Main entry point: compile an AgentConfig into a WorkflowDef.
+     * Public entry point: compile an {@link AgentConfig} into a
+     * {@link WorkflowDef}. An agent's compiled tool list is exactly its
+     * declared tool list — capabilities are opted into explicitly from
+     * the SDK, never injected here.
      */
     public WorkflowDef compile(AgentConfig config) {
         WorkflowDef wf;
@@ -181,6 +185,16 @@ public class AgentCompiler {
         }
 
         // ── Post-processing: runs for ALL compilation paths ──────────────
+
+        // Apply masked fields to the (user-visible) top-level workflow so that
+        // Conductor redacts them in execution history / UI. This runs for every
+        // compile shape (simple, tools/DoWhile, hybrid, multi-agent, router,
+        // graph, passthrough) because all paths converge here on ``wf``.
+        // Recursively-compiled sub-agents flow back through this same method, so
+        // each sub-agent workflow carries its own config's masked fields too.
+        if (config.getMaskedFields() != null && !config.getMaskedFields().isEmpty()) {
+            wf.setMaskedFields(config.getMaskedFields());
+        }
 
         // Stamp agent capability tags and agentDef into workflow metadata.
         // Done here (not only in AgentService) so sub-workflows compiled recursively
@@ -1021,7 +1035,6 @@ public class AgentCompiler {
             task.getSubWorkflowParam().setName(sub.getName());
             task.setInputParameters(inputs);
         } else {
-            // Compile inline
             WorkflowDef subWf = compile(sub);
             task.setType("SUB_WORKFLOW");
             task.setName(sub.getName());
@@ -1337,6 +1350,22 @@ public class AgentCompiler {
         inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
 
         llm.setInputParameters(inputs);
+
+        // Retry the LLM call on TRANSIENT provider failures (e.g. OpenAI
+        // "503 upstream connect error / disconnect/reset before headers", or a
+        // brief gateway blip). The LLM_CHAT_COMPLETE task fails as FAILED
+        // (retryable — not FAILED_WITH_TERMINAL_ERROR), so an inline TaskDef
+        // retry policy makes Conductor re-issue the call with exponential
+        // backoff before the failure bubbles up and aborts the agent's turn
+        // (which would otherwise kill a whole retrieval/reasoning round).
+        TaskDef llmRetryDef = new TaskDef();
+        llmRetryDef.setName("LLM_CHAT_COMPLETE");
+        llmRetryDef.setRetryCount(3);
+        llmRetryDef.setRetryLogic(TaskDef.RetryLogic.EXPONENTIAL_BACKOFF);
+        llmRetryDef.setRetryDelaySeconds(2);
+        llmRetryDef.setBackoffScaleFactor(2);
+        llm.setTaskDefinition(llmRetryDef);
+
         return llm;
     }
 
@@ -1823,7 +1852,7 @@ public class AgentCompiler {
         List<WorkflowTask> defaultTasks = new ArrayList<>();
 
         if (subAgent != null) {
-            // Compile the subgraph into a WorkflowDef
+            // Compile the subgraph into a WorkflowDef.
             WorkflowDef subWf = compile(subAgent);
             String subRef = allocRef(usedRefs, "_sg_sub_" + nodeName);
 

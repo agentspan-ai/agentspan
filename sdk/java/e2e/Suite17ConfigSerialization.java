@@ -347,7 +347,7 @@ class Suite17ConfigSerialization extends BaseTest {
     void test_llm_guardrail_serialized() {
         GuardrailDef guard = LLMGuardrail.builder()
                 .name("e2e_java_llm_guard")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .policy("Reject any harmful content.")
                 .position(Position.OUTPUT)
                 .onFail(OnFail.RETRY)
@@ -372,9 +372,9 @@ class Suite17ConfigSerialization extends BaseTest {
 
         // model and policy are inlined at the top level of the guardrail map (not nested under config)
         assertEquals(
-                "openai/gpt-4o-mini",
+                "anthropic/claude-sonnet-4-6",
                 g.get("model"),
-                "guardrail.model should be 'openai/gpt-4o-mini' but got: " + g.get("model")
+                "guardrail.model should be 'anthropic/claude-sonnet-4-6' but got: " + g.get("model")
                         + ". COUNTERFACTUAL: LLMGuardrail model must serialize at top level of guardrail map.");
         assertEquals(
                 "Reject any harmful content.", g.get("policy"), "guardrail.policy mismatch. Got: " + g.get("policy"));

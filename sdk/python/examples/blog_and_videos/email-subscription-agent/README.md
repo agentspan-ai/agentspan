@@ -31,7 +31,7 @@ By default it runs on sample inbox data so you can try it immediately with no se
 **1. Install Agentspan**
 
 ```bash
-pip install agentspan
+pip install conductor-agent-sdk
 ```
 
 **2. Set your API key**

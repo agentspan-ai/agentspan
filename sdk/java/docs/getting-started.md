@@ -4,7 +4,7 @@
 
 - Java 21+
 - Gradle 7+ or Maven 3.6+
-- A running Agentspan server — see [self-hosting](../self-hosting.md) or start one locally:
+- A running Agentspan server — see the [Agentspan repo](https://github.com/agentspan-ai/agentspan) or start one locally:
 
 ```bash
 docker run -p 6767:6767 agentspan/server:latest
@@ -16,7 +16,7 @@ docker run -p 6767:6767 agentspan/server:latest
 
     ```groovy
     dependencies {
-        implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+        implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
     }
     ```
 
@@ -25,7 +25,7 @@ docker run -p 6767:6767 agentspan/server:latest
     ```xml
     <dependency>
         <groupId>org.conductoross.conductor</groupId>
-        <artifactId>conductor-ai-sdk</artifactId>
+        <artifactId>conductor-agent-sdk</artifactId>
         <version>0.1.0</version>
     </dependency>
     ```
@@ -35,10 +35,11 @@ docker run -p 6767:6767 agentspan/server:latest
 The SDK reads connection settings from environment variables by default:
 
 ```bash
-export AGENTSPAN_SERVER_URL=http://localhost:6767   # default
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
+export OPENAI_API_KEY=<YOUR-KEY>
+export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 export AGENTSPAN_AUTH_KEY=your-key                 # optional
 export AGENTSPAN_AUTH_SECRET=your-secret           # optional
-export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini      # default model
 ```
 
 Or construct an `ApiClient` explicitly:
@@ -65,7 +66,7 @@ import org.conductoross.conductor.ai.model.AgentResult;
 
 Agent agent = Agent.builder()
     .name("hello_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("You are a concise assistant. Answer in one sentence.")
     .build();
 
@@ -95,7 +96,7 @@ public class WeatherTools {
 
 Agent agent = Agent.builder()
     .name("weather_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Answer weather questions using the get_weather tool.")
     .tools(ToolRegistry.fromInstance(new WeatherTools()))
     .build();
@@ -116,12 +117,13 @@ Use `stream()` to get events as they happen:
 ```java
 import org.conductoross.conductor.ai.model.AgentStream;
 import org.conductoross.conductor.ai.model.AgentEvent;
+import org.conductoross.conductor.ai.enums.EventType;
 
 try (AgentRuntime runtime = new AgentRuntime();
      AgentStream stream = runtime.stream(agent, "Tell me a story")) {
 
     for (AgentEvent event : stream) {
-        if (event.getType().isMessage()) {
+        if (event.getType() == EventType.MESSAGE) {
             System.out.print(event.getContent());
         }
     }
