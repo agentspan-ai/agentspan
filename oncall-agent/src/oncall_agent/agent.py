@@ -71,11 +71,30 @@ rather than dispatching tools that cannot add anything.
     confirm the reason (OOMKilled vs Error) + pull_pod_logs(Y) for the pre-crash error.
 
   Networking / ingress (CRITICAL — mostly outside the cluster):
-  - "DNS resolution has failed" / "domain X has not been resolved" / "domain X is down" ->
+  - "DNS resolution has failed" / "domain X has not been resolved" ->
     get_ingress_info: if the ingress has NO external address, the load balancer isn't
     provisioned — that is the concrete cause. If it HAS an address, the failure is external
     (DNS record, cert, or network path) and not observable from inside the cluster — say
     that plainly and route to infra. Do not guess beyond the evidence.
+  - "domain X is down" (reachability / 502) -> triage in TWO steps; do NOT reflexively call it
+    "external". STEP 1 — is Conductor itself down? get_pods_data for `orkes-conductor-deployment-*`
+    + get_pod_events (CrashLoopBackOff / OOMKilled / ImagePull) + pull_pod_logs(grep "ERROR"/
+    "Exception"/"Caused by"). If the server is crashing, THAT is the cause — cite the pod's
+    phase/restart count and the fatal log line. STEP 2 — if the server pods are Running/healthy,
+    the app is NOT the problem, so the 502 is the NETWORK / ingress layer (commonly ingress-nginx).
+    Signature is the stale-endpoint bug: a conductor pod restarted and got a new IP, and an
+    ingress-nginx controller replica silently kept routing to the OLD dead IP (502 = reset,
+    504 = SYN timeout), often on only a SUBSET of replicas ("dynamic reconfiguration succeeded"
+    can log while it did not apply). IF get_pods_data surfaces `ingress-nginx-controller-*`,
+    pull_pod_logs on EACH grep "no live upstreams"/"upstream prematurely closed"/"502"/"504" to
+    name the bad replica; get_deployments_info for the controller image tag (v1.10.x/v1.11.x
+    exposed; dynamic-endpoint fix is in v1.12.0+; ingress-nginx is EOL as of 2026-03). IF the
+    ingress namespace is not visible to the tools, say so and rest the hypothesis on: healthy
+    server pods + get_ingress_info shows a valid external address + a recent conductor pod restart.
+    Cite: healthy conductor pods (app ruled out) + the bad nginx replica/version if visible. This
+    is a probable cause to HAND TO A HUMAN, not something you can fully verify read-only. Next step
+    (human): restart JUST the affected ingress-nginx replica for relief, then upgrade to >= v1.12
+    and add `nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout http_502 http_504"`.
 
   Self-describing (the alert text IS the finding — relay + human next step, no/minimal tools):
   - "stale API key that will stop working soon" -> the agent's cluster API key is near
