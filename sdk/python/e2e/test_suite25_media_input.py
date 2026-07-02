@@ -76,9 +76,16 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 #   FORWARDS media (image reaches the model):
 #     openai       OpenAIResponsesChatModel — builds input_image content parts
 #     azureopenai  reuses OpenAIResponsesChatModel
-#     mistral      Spring AI stock MistralAiChatModel   ) media handled by the
-#     ollama       Spring AI stock OllamaChatModel       ) framework, not by a
-#     bedrock      Spring AI stock BedrockProxyChatModel ) conductor-ai converter
+#     mistral      Spring AI stock MistralAiChatModel     ) media mapped to the
+#     ollama       Spring AI stock OllamaChatModel        ) provider request by
+#     bedrock      Spring AI stock BedrockProxyChatModel  ) the framework, not a
+#                  .mapMediaToContentBlock -> ImageBlock  ) conductor-ai converter
+#
+#   (For bedrock, a URL is fetched by spring-ai's MediaFetcher — SSRF-guarded:
+#   blocks loopback/link-local, 40 MB cap. conductor-ai usually pre-downloads
+#   media to bytes first, so bytes reach mapMediaToContentBlock directly. Note:
+#   MediaFetcher exists only in newer spring-ai; the versions resolved here
+#   (1.0.2/1.1.2) map bytes/URL without it.)
 #
 #   DROPS media (custom converter emits text only — image never sent):
 #     anthropic    AnthropicChatModel.convertMessage  -> Message.user(getText())
