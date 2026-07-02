@@ -181,16 +181,6 @@ agent = Agent(name="bot", model="google_gemini/gemini-2.0-flash")
 
 ---
 
-### DeepSeek
-
-| Variable | Description |
-|---|---|
-| `DEEPSEEK_API_KEY` | API key from DeepSeek |
-
-**Models:** `deepseek/deepseek-chat`
-
----
-
 ### Ollama (local)
 
 No API key required. Ollama must be running and reachable.
@@ -224,5 +214,4 @@ Install Ollama: [ollama.com/download](https://ollama.com/download)
 | Perplexity | `PERPLEXITY_API_KEY` | `perplexity/` |
 | Hugging Face | `HUGGINGFACE_API_KEY` | `hugging_face/` |
 | Stability AI | `STABILITY_API_KEY` | `stabilityai/` |
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/` |
 | Ollama | `OLLAMA_BASE_URL` | `ollama/` |
