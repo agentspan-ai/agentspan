@@ -143,6 +143,8 @@ agentspan server start
 
 **Models:** `hugging_face/meta-llama/Llama-3-70b-chat-hf`, `hugging_face/mistralai/Mistral-7B-Instruct-v0.2`
 
+**Vision (image input):** vision-capable models (e.g. `hugging_face/meta-llama/Llama-3.2-11B-Vision-Instruct`) accept image input via Hugging Face's OpenAI-compatible router (`https://router.huggingface.co/v1`); support is model-dependent. See [conductor-oss/conductor#1245](https://github.com/conductor-oss/conductor/pull/1245).
+
 ---
 
 ### Stability AI
