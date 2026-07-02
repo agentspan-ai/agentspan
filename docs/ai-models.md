@@ -123,6 +123,8 @@ agentspan server start
 
 **Models:** `cohere/command-r-plus`, `cohere/command-r`, `cohere/command`
 
+**Vision (image input):** vision-capable Cohere models accept image input (e.g. `cohere/command-a-vision-07-2025`); support is model-dependent. See [conductor-oss/conductor#1246](https://github.com/conductor-oss/conductor/pull/1246).
+
 **Embeddings:** `cohere/embed-english-v3.0`, `cohere/embed-multilingual-v3.0`
 
 ---
