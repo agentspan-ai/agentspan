@@ -81,11 +81,12 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 #     bedrock      Spring AI BedrockProxyChatModel  -> mapMediaToContentBlock/ImageBlock
 #
 #   (mistral/ollama/bedrock media handling lives in the Spring AI framework, not
-#   a conductor-ai converter. For bedrock a URL is fetched by spring-ai's
-#   MediaFetcher — SSRF-guarded: blocks loopback/link-local, 40 MB cap — though
-#   conductor-ai usually pre-downloads media to bytes first. MediaFetcher exists
-#   only in newer spring-ai; the versions resolved here (1.0.2/1.1.2) map
-#   bytes/URL without it.)
+#   a conductor-ai converter — see Spring AI multimodality:
+#   https://docs.spring.io/spring-ai/reference/api/multimodality.html
+#   For bedrock a URL is fetched by spring-ai's MediaFetcher — SSRF-guarded:
+#   blocks loopback/link-local, 40 MB cap — though conductor-ai usually
+#   pre-downloads media to bytes first. MediaFetcher exists only in newer
+#   spring-ai; the versions resolved here (1.0.2/1.1.2) map bytes/URL without it.)
 #
 #   DROPS media (custom converter emits text only — image never sent):
 #     anthropic    AnthropicChatModel.convertMessage  -> Message.user(getText())
@@ -95,7 +96,9 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 #     cohere       CohereChatModel        -> new ChatMessage(role, getText())
 #     huggingface  HuggingFaceChatModel   -> m.getText()
 #     grok         OpenAICompatChatModel  -> MessageItem.user(getText())
+#                  [fixed in conductor-oss#1243, pending release]
 #     perplexity   reuses OpenAICompatChatModel
+#                  [same fix; conductor-oss#1243]
 #
 # Cases below exercise OpenAI (runnable with a single API key here) plus
 # Anthropic, tracked as a skip until conductor-oss#1238 ships. Every other
