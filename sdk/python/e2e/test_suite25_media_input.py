@@ -94,11 +94,20 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 #     gemini       GeminiChatModel.convertMessage     -> Part.text(getText())
 #                  [same bug; fixed in conductor-oss#1241, pending release]
 #     cohere       CohereChatModel        -> new ChatMessage(role, getText())
-#     huggingface  HuggingFaceChatModel   -> m.getText()
+#     huggingface  HuggingFaceChatModel   -> api.generate({inputs}); legacy
+#                  text-generation, no messages/roles/media (see note)
 #     grok         OpenAICompatChatModel  -> MessageItem.user(getText())
 #                  [fixed in conductor-oss#1243, pending release]
 #     perplexity   reuses OpenAICompatChatModel
 #                  [same fix; conductor-oss#1243]
+#
+#   (huggingface DOES support multimodal, but only via its OpenAI-compatible
+#   router endpoint https://router.huggingface.co/v1/responses (input_text/
+#   input_image). conductor-ai currently uses the legacy text-generation API
+#   ({inputs} -> generated_text), so it carries neither messages nor media;
+#   adding vision means migrating to the router endpoint, not a converter tweak.
+#   The legacy https://api-inference.huggingface.co/models/{model} path is
+#   limited and model-dependent.)
 #
 # Cases below exercise OpenAI (runnable with a single API key here) plus
 # Anthropic, tracked as a skip until conductor-oss#1238 ships. Every other
