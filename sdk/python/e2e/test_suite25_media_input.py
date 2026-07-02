@@ -73,19 +73,19 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 # only ``getText()``? Determined by reading each provider's chat model in
 # conductor-ai (org.conductoross.conductor.ai.providers.*):
 #
-#   FORWARDS media (image reaches the model):
-#     openai       OpenAIResponsesChatModel — builds input_image content parts
-#     azureopenai  reuses OpenAIResponsesChatModel -> input_image content parts
-#     mistral      Spring AI stock MistralAiChatModel     ) media mapped to the
-#     ollama       Spring AI stock OllamaChatModel        ) provider request by
-#     bedrock      Spring AI stock BedrockProxyChatModel  ) the framework, not a
-#                  .mapMediaToContentBlock -> ImageBlock  ) conductor-ai converter
+#   FORWARDS media (image reaches the model) — mapped by the provider ChatModel:
+#     openai       OpenAIResponsesChatModel        -> input_image content parts
+#     azureopenai  reuses OpenAIResponsesChatModel  -> input_image content parts
+#     mistral      Spring AI MistralAiChatModel     -> image_url MediaContent
+#     ollama       Spring AI OllamaChatModel        -> images (base64)
+#     bedrock      Spring AI BedrockProxyChatModel  -> mapMediaToContentBlock/ImageBlock
 #
-#   (For bedrock, a URL is fetched by spring-ai's MediaFetcher — SSRF-guarded:
-#   blocks loopback/link-local, 40 MB cap. conductor-ai usually pre-downloads
-#   media to bytes first, so bytes reach mapMediaToContentBlock directly. Note:
-#   MediaFetcher exists only in newer spring-ai; the versions resolved here
-#   (1.0.2/1.1.2) map bytes/URL without it.)
+#   (mistral/ollama/bedrock media handling lives in the Spring AI framework, not
+#   a conductor-ai converter. For bedrock a URL is fetched by spring-ai's
+#   MediaFetcher — SSRF-guarded: blocks loopback/link-local, 40 MB cap — though
+#   conductor-ai usually pre-downloads media to bytes first. MediaFetcher exists
+#   only in newer spring-ai; the versions resolved here (1.0.2/1.1.2) map
+#   bytes/URL without it.)
 #
 #   DROPS media (custom converter emits text only — image never sent):
 #     anthropic    AnthropicChatModel.convertMessage  -> Message.user(getText())
