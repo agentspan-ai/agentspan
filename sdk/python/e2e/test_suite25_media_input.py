@@ -21,12 +21,12 @@ host as the test — the standard local / bundle e2e setup. Set
 ``AGENTSPAN_MEDIA_DIR`` to override the directory for deployments that
 configure a custom allowed media dir.
 
-Parametrized across every vision-capable provider the server supports (OpenAI,
-Anthropic, Gemini), each gated on its API key. Only OpenAI attaches media to
-the provider request today, so the Anthropic and Gemini positive cases are
-``skip``ped with documented reasons (see the provider matrix below) until the
-server forwards media for them. The counterfactual (no media) runs for all
-three.
+Parametrized across providers, each gated on its API key. Which providers
+actually forward image input server-side is documented in the provider matrix
+below (determined by reading each provider's conductor-ai ChatModel). OpenAI
+forwards media and runs; the Anthropic and Gemini converters currently drop it,
+so their positive cases are ``skip``ped with documented reasons. The
+counterfactual (no media) runs for all parametrized providers.
 
 No mocks. Real server, real vision model.
 """
@@ -68,18 +68,33 @@ READ_PROMPT = (
 INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 
 # ── Provider matrix ─────────────────────────────────────────────────────────
-# (API-key env var, model id) for every vision-capable provider the server
-# supports — i.e. whose conductor-ai chat model can carry image media. Each
-# case is gated on its provider key and skips when the key is absent.
+# Whether a provider supports image *input* is decided by its conductor-ai
+# ChatModel: does the message converter forward ``UserMessage.getMedia()``, or
+# only ``getText()``? Determined by reading each provider's chat model in
+# conductor-ai (org.conductoross.conductor.ai.providers.*):
 #
-# Media-input support today (server-side ``convertMessage`` attaches media?):
-#   - OpenAI  → yes. Works.
-#   - Anthropic → fixed in conductor-oss#1238 (pending release). Skipped until
-#                 the server ships it.
-#   - Gemini  → NO: GeminiChatModel.convertMessage drops UserMessage.getMedia()
-#               (same bug #1238 fixes for Anthropic). Skipped until fixed.
-# The other providers (azure/bedrock/cohere/grok/mistral/ollama/perplexity/
-# huggingface) don't wire image input, so they're out of scope here.
+#   FORWARDS media (image reaches the model):
+#     openai       OpenAIResponsesChatModel — builds input_image content parts
+#     azureopenai  reuses OpenAIResponsesChatModel
+#     mistral      Spring AI stock MistralAiChatModel   ) media handled by the
+#     ollama       Spring AI stock OllamaChatModel       ) framework, not by a
+#     bedrock      Spring AI stock BedrockProxyChatModel ) conductor-ai converter
+#
+#   DROPS media (custom converter emits text only — image never sent):
+#     anthropic    AnthropicChatModel.convertMessage  -> Message.user(getText())
+#                  [fixed in conductor-oss#1238, pending release]
+#     gemini       GeminiChatModel.convertMessage     -> Part.text(getText())
+#                  [same bug; fix pending]
+#     cohere       CohereChatModel        -> new ChatMessage(role, getText())
+#     huggingface  HuggingFaceChatModel   -> m.getText()
+#     grok         OpenAICompatChatModel  -> MessageItem.user(getText())
+#     perplexity   reuses OpenAICompatChatModel
+#
+# Cases below exercise OpenAI (the one media-forwarding provider runnable with a
+# single API key here) plus the two broken vision providers we track as skips
+# (anthropic, gemini). The other media-forwarding providers (azure/mistral/
+# ollama/bedrock) need provider-specific credentials or a running server, so
+# they're documented above but not parametrized.
 _ANTHROPIC_SKIP_REASON = (
     "Server does not attach media to the Anthropic provider request — the model "
     "receives no image (OpenAI works). Fixed in conductor-oss#1238; re-enable "
