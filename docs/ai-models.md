@@ -46,6 +46,8 @@ agentspan server start
 
 **Models:** `anthropic/claude-opus-4-20250514`, `anthropic/claude-sonnet-4-20250514`, `anthropic/claude-3-5-sonnet-20241022`, `anthropic/claude-3-haiku-20240307`
 
+**Vision (image input):** Claude models accept image input (e.g. `anthropic/claude-3-5-sonnet-20241022`); support is model-dependent. See [conductor-oss/conductor#1238](https://github.com/conductor-oss/conductor/pull/1238).
+
 ---
 
 ### Google Gemini
@@ -56,6 +58,8 @@ agentspan server start
 | `GOOGLE_CLOUD_PROJECT` | **Required.** GCP project ID |
 
 **Models:** `google_gemini/gemini-2.0-flash`, `google_gemini/gemini-1.5-pro`, `google_gemini/gemini-1.5-flash`
+
+**Vision (image input):** Gemini models accept image input (e.g. `google_gemini/gemini-1.5-pro`); support is model-dependent. See [conductor-oss/conductor#1241](https://github.com/conductor-oss/conductor/pull/1241).
 
 **Embeddings:** `google_gemini/text-embedding-004`
 
@@ -123,6 +127,8 @@ agentspan server start
 
 **Models:** `grok/grok-3`, `grok/grok-3-mini`
 
+**Vision (image input):** vision-capable Grok models accept image input; support is model-dependent. See [conductor-oss/conductor#1243](https://github.com/conductor-oss/conductor/pull/1243).
+
 ---
 
 ### Perplexity AI
@@ -132,6 +138,8 @@ agentspan server start
 | `PERPLEXITY_API_KEY` | API key from [perplexity.ai](https://www.perplexity.ai/) |
 
 **Models:** `perplexity/sonar-pro`, `perplexity/sonar`
+
+**Vision (image input):** vision-capable Perplexity models accept image input; support is model-dependent. See [conductor-oss/conductor#1243](https://github.com/conductor-oss/conductor/pull/1243).
 
 ---
 
