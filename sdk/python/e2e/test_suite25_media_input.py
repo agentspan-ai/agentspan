@@ -103,11 +103,16 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 #
 #   (huggingface DOES support multimodal, but only via its OpenAI-compatible
 #   router endpoint https://router.huggingface.co/v1/responses (input_text/
-#   input_image). conductor-ai currently uses the legacy text-generation API
-#   ({inputs} -> generated_text), so it carries neither messages nor media;
-#   adding vision means migrating to the router endpoint, not a converter tweak.
-#   The legacy https://api-inference.huggingface.co/models/{model} path is
-#   limited and model-dependent.)
+#   input_image). The legacy provider used the text-generation API
+#   ({inputs} -> generated_text) and carried neither messages nor media;
+#   conductor-oss#1245 migrates it to the router (reusing OpenAIResponsesChatModel),
+#   which is a provider migration, not a converter tweak. Image support is
+#   model-dependent.)
+#
+#   Out of scope — image-GENERATION-only providers (e.g. stabilityai): no chat
+#   model at all (getChatModel throws UnsupportedOperationException), so there is
+#   no media-input path. They produce images (cf. Suite 7), they don't receive
+#   them.
 #
 # Cases below exercise OpenAI (runnable with a single API key here) plus
 # Anthropic, tracked as a skip until conductor-oss#1238 ships. Every other
