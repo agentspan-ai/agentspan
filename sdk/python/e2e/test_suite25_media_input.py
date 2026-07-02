@@ -24,9 +24,9 @@ configure a custom allowed media dir.
 Parametrized across providers, each gated on its API key. Which providers
 actually forward image input server-side is documented in the provider matrix
 below (determined by reading each provider's conductor-ai ChatModel). OpenAI
-forwards media and runs; the Anthropic and Gemini converters currently drop it,
-so their positive cases are ``skip``ped with documented reasons. The
-counterfactual (no media) runs for all parametrized providers.
+forwards media and runs; Anthropic's converter currently drops it, so its
+positive case is ``skip``ped with a documented reason. The counterfactual (no
+media) runs for all parametrized providers.
 
 No mocks. Real server, real vision model.
 """
@@ -91,34 +91,29 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 #     anthropic    AnthropicChatModel.convertMessage  -> Message.user(getText())
 #                  [fixed in conductor-oss#1238, pending release]
 #     gemini       GeminiChatModel.convertMessage     -> Part.text(getText())
-#                  [same bug; fix pending]
+#                  [same bug; fixed in conductor-oss#1241, pending release]
 #     cohere       CohereChatModel        -> new ChatMessage(role, getText())
 #     huggingface  HuggingFaceChatModel   -> m.getText()
 #     grok         OpenAICompatChatModel  -> MessageItem.user(getText())
 #     perplexity   reuses OpenAICompatChatModel
 #
-# Cases below exercise OpenAI (the one media-forwarding provider runnable with a
-# single API key here) plus the two broken vision providers we track as skips
-# (anthropic, gemini). The other media-forwarding providers (azure/mistral/
-# ollama/bedrock) need provider-specific credentials or a running server, so
-# they're documented above but not parametrized.
+# Cases below exercise OpenAI (runnable with a single API key here) plus
+# Anthropic, tracked as a skip until conductor-oss#1238 ships. Every other
+# provider is documented above but not parametrized — none can be exercised
+# here: azure/mistral/ollama/bedrock need provider-specific credentials or a
+# running server, and gemini (fix: conductor-oss#1241) has no API key available.
 _ANTHROPIC_SKIP_REASON = (
     "Server does not attach media to the Anthropic provider request — the model "
     "receives no image (OpenAI works). Fixed in conductor-oss#1238; re-enable "
     "once the server ships it."
 )
-_GEMINI_SKIP_REASON = (
-    "Server does not attach media to the Gemini provider request — "
-    "GeminiChatModel.convertMessage drops UserMessage.getMedia() (same bug as "
-    "Anthropic). Re-enable once the server forwards media for Gemini."
-)
 # Kept for back-compat with anything referencing the original name.
 SUITE25_ANTHROPIC_SKIP_REASON = _ANTHROPIC_SKIP_REASON
 _ANTHROPIC_MEDIA_SKIP = pytest.mark.skip(reason=_ANTHROPIC_SKIP_REASON)
-_GEMINI_MEDIA_SKIP = pytest.mark.skip(reason=_GEMINI_SKIP_REASON)
 
-# Positive test: only OpenAI reaches the model with the image today; the broken
-# providers are skipped (see reasons above).
+# Positive test: only OpenAI reaches the model with the image today; Anthropic
+# is skipped (see reason above). Gemini is out — same server bug (fix:
+# conductor-oss#1241) but no GOOGLE_AI_API_KEY available to exercise it.
 POSITIVE_CASES = [
     pytest.param("OPENAI_API_KEY", "openai/gpt-4o-mini", id="openai"),
     pytest.param(
@@ -127,12 +122,6 @@ POSITIVE_CASES = [
         id="anthropic",
         marks=_ANTHROPIC_MEDIA_SKIP,
     ),
-    pytest.param(
-        "GOOGLE_AI_API_KEY",
-        "google_gemini/gemini-2.5-flash",
-        id="gemini",
-        marks=_GEMINI_MEDIA_SKIP,
-    ),
 ]
 
 # Counterfactual: with NO media every provider should COMPLETE and simply not
@@ -140,7 +129,6 @@ POSITIVE_CASES = [
 COUNTERFACTUAL_CASES = [
     pytest.param("OPENAI_API_KEY", "openai/gpt-4o-mini", id="openai"),
     pytest.param("ANTHROPIC_API_KEY", "anthropic/claude-sonnet-4-5", id="anthropic"),
-    pytest.param("GOOGLE_AI_API_KEY", "google_gemini/gemini-2.5-flash", id="gemini"),
 ]
 
 
