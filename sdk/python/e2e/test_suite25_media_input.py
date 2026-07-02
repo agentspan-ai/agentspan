@@ -75,7 +75,7 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 #
 #   FORWARDS media (image reaches the model):
 #     openai       OpenAIResponsesChatModel — builds input_image content parts
-#     azureopenai  reuses OpenAIResponsesChatModel
+#     azureopenai  reuses OpenAIResponsesChatModel -> input_image content parts
 #     mistral      Spring AI stock MistralAiChatModel     ) media mapped to the
 #     ollama       Spring AI stock OllamaChatModel        ) provider request by
 #     bedrock      Spring AI stock BedrockProxyChatModel  ) the framework, not a
