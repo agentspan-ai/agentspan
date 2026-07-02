@@ -57,9 +57,12 @@ mkdir -p "$OUT_DIR"
 # touches the manifests/runners/READMEs we author below.
 substitute_version() {
   local dir="$1"
-  # Exclude *.jar: the only binary we stage is the Gradle wrapper jar, which
-  # never contains @VERSION@ and would be corrupted by sed.
-  find "$dir" -type f ! -name '*.jar' -print0 | xargs -0 sed -i.bak "s/@VERSION@/$VERSION/g"
+  # Skip binaries: sed would corrupt them and they never contain @VERSION@.
+  # The Gradle wrapper jar (Java bundle) and test image assets (e.g. Suite 25's
+  # PNG) are the staged binaries.
+  find "$dir" -type f ! -name '*.jar' ! -name '*.png' ! -name '*.jpg' \
+      ! -name '*.jpeg' ! -name '*.gif' ! -name '*.webp' -print0 \
+      | xargs -0 sed -i.bak "s/@VERSION@/$VERSION/g"
   find "$dir" -name '*.bak' -delete
 }
 
@@ -80,6 +83,12 @@ pack_python() {
   rm -rf "$stage"; mkdir -p "$stage/e2e"
 
   cp "$REPO_ROOT"/sdk/python/e2e/*.py "$stage/e2e/"
+  # Test assets read at runtime (e.g. Suite 25's media-input image). Copied
+  # verbatim so file-backed fixtures resolve inside the bundle. No-op when the
+  # dir is absent.
+  if [[ -d "$REPO_ROOT/sdk/python/e2e/assets" ]]; then
+    cp -R "$REPO_ROOT/sdk/python/e2e/assets" "$stage/e2e/"
+  fi
 
   cat > "$stage/requirements.txt" <<'EOF'
 # Pins the published SDK to the agentspan release this bundle was cut from.
