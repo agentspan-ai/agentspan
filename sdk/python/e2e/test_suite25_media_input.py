@@ -94,6 +94,9 @@ INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 #     gemini       GeminiChatModel.convertMessage     -> Part.text(getText())
 #                  [same bug; fixed in conductor-oss#1241, pending release]
 #     cohere       CohereChatModel        -> new ChatMessage(role, getText())
+#                  [vision-capable (e.g. command-a-vision); the request DTO's
+#                  content was a bare String. Fixed in conductor-oss#1246,
+#                  pending release]
 #     huggingface  HuggingFaceChatModel   -> api.generate({inputs}); legacy
 #                  text-generation, no messages/roles/media (see note)
 #     grok         OpenAICompatChatModel  -> MessageItem.user(getText())
