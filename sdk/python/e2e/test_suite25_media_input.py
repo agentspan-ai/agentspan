@@ -21,11 +21,12 @@ host as the test — the standard local / bundle e2e setup. Set
 ``AGENTSPAN_MEDIA_DIR`` to override the directory for deployments that
 configure a custom allowed media dir.
 
-Parametrized across providers. The Anthropic positive case is ``skip``ped: in
-current server builds media is forwarded to OpenAI but NOT attached to the
-Anthropic provider request (the model receives no image), so the token is never
-read. Remove the skip once the server forwards media for Anthropic (see
-SUITE25_ANTHROPIC_SKIP_REASON).
+Parametrized across every vision-capable provider the server supports (OpenAI,
+Anthropic, Gemini), each gated on its API key. Only OpenAI attaches media to
+the provider request today, so the Anthropic and Gemini positive cases are
+``skip``ped with documented reasons (see the provider matrix below) until the
+server forwards media for them. The counterfactual (no media) runs for all
+three.
 
 No mocks. Real server, real vision model.
 """
@@ -67,20 +68,35 @@ READ_PROMPT = (
 INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 
 # ── Provider matrix ─────────────────────────────────────────────────────────
-# (API-key env var, model id). Each case is gated on its key.
+# (API-key env var, model id) for every vision-capable provider the server
+# supports — i.e. whose conductor-ai chat model can carry image media. Each
+# case is gated on its provider key and skips when the key is absent.
 #
-# Anthropic media-input is broken server-side: media is forwarded to OpenAI but
-# NOT attached to the Anthropic provider request, so the model receives no image
-# and never reads the token. The positive case is skipped until that is fixed;
-# the counterfactual (no media at all) still runs and passes for Anthropic.
-SUITE25_ANTHROPIC_SKIP_REASON = (
+# Media-input support today (server-side ``convertMessage`` attaches media?):
+#   - OpenAI  → yes. Works.
+#   - Anthropic → fixed in conductor-oss#1238 (pending release). Skipped until
+#                 the server ships it.
+#   - Gemini  → NO: GeminiChatModel.convertMessage drops UserMessage.getMedia()
+#               (same bug #1238 fixes for Anthropic). Skipped until fixed.
+# The other providers (azure/bedrock/cohere/grok/mistral/ollama/perplexity/
+# huggingface) don't wire image input, so they're out of scope here.
+_ANTHROPIC_SKIP_REASON = (
     "Server does not attach media to the Anthropic provider request — the model "
-    "receives no image (OpenAI works). Re-enable when the server forwards media "
-    "for Anthropic."
+    "receives no image (OpenAI works). Fixed in conductor-oss#1238; re-enable "
+    "once the server ships it."
 )
-_ANTHROPIC_MEDIA_SKIP = pytest.mark.skip(reason=SUITE25_ANTHROPIC_SKIP_REASON)
+_GEMINI_SKIP_REASON = (
+    "Server does not attach media to the Gemini provider request — "
+    "GeminiChatModel.convertMessage drops UserMessage.getMedia() (same bug as "
+    "Anthropic). Re-enable once the server forwards media for Gemini."
+)
+# Kept for back-compat with anything referencing the original name.
+SUITE25_ANTHROPIC_SKIP_REASON = _ANTHROPIC_SKIP_REASON
+_ANTHROPIC_MEDIA_SKIP = pytest.mark.skip(reason=_ANTHROPIC_SKIP_REASON)
+_GEMINI_MEDIA_SKIP = pytest.mark.skip(reason=_GEMINI_SKIP_REASON)
 
-# Positive test: Anthropic is skipped (no image reaches the model — see above).
+# Positive test: only OpenAI reaches the model with the image today; the broken
+# providers are skipped (see reasons above).
 POSITIVE_CASES = [
     pytest.param("OPENAI_API_KEY", "openai/gpt-4o-mini", id="openai"),
     pytest.param(
@@ -89,13 +105,20 @@ POSITIVE_CASES = [
         id="anthropic",
         marks=_ANTHROPIC_MEDIA_SKIP,
     ),
+    pytest.param(
+        "GOOGLE_AI_API_KEY",
+        "google_gemini/gemini-2.5-flash",
+        id="gemini",
+        marks=_GEMINI_MEDIA_SKIP,
+    ),
 ]
 
-# Counterfactual: both providers should COMPLETE and simply not emit the token
-# (no media is sent at all), so neither is expected to fail.
+# Counterfactual: with NO media every provider should COMPLETE and simply not
+# emit the token, so none are skipped here (each still gates on its key).
 COUNTERFACTUAL_CASES = [
     pytest.param("OPENAI_API_KEY", "openai/gpt-4o-mini", id="openai"),
     pytest.param("ANTHROPIC_API_KEY", "anthropic/claude-sonnet-4-5", id="anthropic"),
+    pytest.param("GOOGLE_AI_API_KEY", "google_gemini/gemini-2.5-flash", id="gemini"),
 ]
 
 
