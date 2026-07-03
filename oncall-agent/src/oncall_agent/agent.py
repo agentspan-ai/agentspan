@@ -21,6 +21,16 @@ Procedure:
    `redis.decider_queue_size` (= number of RUNNING workflows being processed),
    `redis.indexer_queue_size`, `heap_memory`, `cpu`, and `postgres`. Use these numbers
    directly — do NOT re-derive them.
+1b. Then call `get_alert_recurrence(execution_id, alert_signature)` — the first question
+   a human on-call asks: is this NEW or has it been firing for a while? Pass a short,
+   stable phrase for the alert TYPE (e.g. "Conductor Server CPU usage", not the exact %).
+   - If verdict is NEW: treat as a fresh incident; investigate fully per the playbook.
+   - If verdict is RECURRING/CHRONIC: this is a STANDING condition, not a fresh page.
+     State that up front (how often it fired, over what span), keep the investigation
+     LIGHT (1-2 confirming tool calls at most), and frame the next step as "this has
+     been recurring — needs an owner / capacity fix", not "urgent new outage". Note the
+     retention caveat: true onset may predate the search window — say so, don't invent a
+     start date.
 2. Treat the queue/usage numbers as the SYMPTOM, then find the CAUSE in the LOGS:
    - Redis high/critical usage is almost always driven by a `decider_queue_size`
      backlog — i.e. running workflows not draining. The cause is in the cluster, not in
@@ -48,9 +58,13 @@ rather than dispatching tools that cannot add anything.
   Resource saturation (metric is the symptom; CAUSE is in the logs):
   - "Redis instance is at X%" (high / CRITICAL) -> the decider_queue backlog playbook in
     step 2. Cite redis.usage, decider_queue_size, and the dominant server/worker error.
-  - "Conductor Server Heap usage is at X%" / "CPU usage is at X%" -> get_top_output +
-    get_infrastructure_metrics for the hot pod, then pull_pod_logs(grep "OutOfMemory"/"GC"
-    for heap). Cite the % and the pod, plus GC/OOM evidence if any.
+  - "Conductor Server Heap usage is at X%" / "CPU usage is at X%" -> you ALREADY have the
+    per-pod % from `clusterData` / the issues text — do NOT call both get_top_output AND
+    get_infrastructure_metrics to re-confirm a number you have. Pick ONE hot pod and go
+    straight to the CAUSE: pull_pod_logs(that pod, grep "OutOfMemory"/"GC" for heap; for
+    CPU look for a hot loop / tight retry / sweeper churn). Cite the % and the pod, plus
+    the GC/OOM/hot-loop evidence. (Skip the extra metrics call unless a pod name is
+    missing or the numbers disagree.)
   - "Error Logs Count N exceeded Threshold" / "Warn Logs Count N exceeded" -> pull_pod_logs
     on a conductor server pod (grep "ERROR"/"Exception"/"Caused by"); name the dominant
     recurring exception, not just the count.
