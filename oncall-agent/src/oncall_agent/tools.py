@@ -14,6 +14,7 @@ from conductor.ai.agents import tool
 
 from .conductor_client import ConductorDispatcher
 from .config import Config
+from .recurrence import summarize_recurrence
 from .sql_guard import NotReadOnlySQLError, ensure_select
 
 _dispatcher: ConductorDispatcher | None = None
@@ -76,6 +77,37 @@ def get_incident_details(execution_id: str) -> dict:
         "clusterData": cluster_data,
         "componentHealth": component_health,
     }
+
+
+@tool(timeout_seconds=_T)
+def get_alert_recurrence(execution_id: str, alert_signature: str) -> dict:
+    """Is this alert NEW or has it been firing for a while? Call this EARLY (right
+    after get_incident_details) — it's the first question a human on-call asks, and
+    it changes everything: a one-off spike is an incident, but an alert firing on a
+    third of recent health-checks is a standing capacity problem, not a fresh page.
+
+    Looks back over this cluster's recent health_check runs and reports how often
+    this alert TYPE fired. Cheap (one search, no deep dive). If the verdict is
+    CHRONIC/RECURRING, say so up front and keep the investigation light — you're
+    confirming a known condition, not discovering a new one.
+
+    Args:
+        execution_id: incident execution id (used to resolve the cluster).
+        alert_signature: a SHORT, STABLE phrase identifying the alert TYPE — e.g.
+            "Conductor Server CPU usage", "Redis instance is at", "has failed",
+            "Prometheus is down". Do NOT include the varying numbers (percentages,
+            pod ids) — that would defeat the match. Take it from the issues text.
+    """
+    ctx = _context(execution_id)
+    cluster_id = ctx.get("clusterId")
+    if not cluster_id:
+        return {"error": "no_cluster_id", "detail": "cannot resolve clusterId for recurrence check"}
+    runs = _disp().recent_health_checks(cluster_id, size=100)
+    report = summarize_recurrence(runs, alert_signature)
+    out = report.as_dict()
+    out["clusterId"] = cluster_id
+    out["alertSignature"] = alert_signature
+    return out
 
 
 @tool(timeout_seconds=_T)
@@ -184,6 +216,7 @@ def run_sql_select(execution_id: str, query: str) -> dict:
 
 ALL_TOOLS = [
     get_incident_details,
+    get_alert_recurrence,
     get_cluster_metrics,
     get_infrastructure_metrics,
     get_pods_data,

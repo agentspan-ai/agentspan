@@ -92,6 +92,38 @@ class ConductorDispatcher:
             "environment": wf_input.get("environment", "prod"),
         }
 
+    def recent_health_checks(self, cluster_id: str, size: int = 100) -> list[dict]:
+        """Recent ``health_check`` runs for ONE cluster, newest first.
+
+        Filters by the cluster's unique ``clusterId`` UUID via full-text search —
+        deliberately NOT the human cluster name, which fuzzy-matches sibling
+        clusters (``one-staging`` also matched other ``*-staging`` clusters and
+        polluted the counts). A UUID is unique to the cluster, so the result set
+        is deterministic. Returns each run's ``reason`` (the alert text lives in
+        ``reasonForIncompletion``) and ``start_time`` (epoch ms) — enough for the
+        pure recurrence classifier; no per-execution fetch, so it stays fast.
+
+        ``size`` caps the window (default 100 ~= last 8h at the 5-min cadence);
+        the search index is retention-bound to a few days regardless.
+        """
+        result = self._wf.search(
+            start=0,
+            size=size,
+            free_text=cluster_id,
+            query="workflowType IN (health_check)",
+        )
+        runs: list[dict] = []
+        for s in getattr(result, "results", None) or []:
+            runs.append(
+                {
+                    "workflow_id": getattr(s, "workflow_id", None),
+                    "start_time": getattr(s, "start_time", None),
+                    "status": getattr(s, "status", None),
+                    "reason": getattr(s, "reason_for_incompletion", None),
+                }
+            )
+        return runs
+
     # ── dispatch ─────────────────────────────────────────────
     def dispatch(
         self,
