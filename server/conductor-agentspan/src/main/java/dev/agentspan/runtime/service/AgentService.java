@@ -1266,7 +1266,7 @@ public class AgentService {
      * Get the current status of an agent execution.
      */
     public Map<String, Object> getStatus(String executionId) {
-        Workflow workflow = executionService.getExecutionStatus(executionId, true);
+        Workflow workflow = requireExecution(executionId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("executionId", executionId);
         result.put("status", workflow.getStatus().name());
@@ -1313,6 +1313,43 @@ public class AgentService {
         }
 
         return result;
+    }
+
+    /**
+     * Fetch an execution or fail with a 404-mapped exception. Conductor engines differ on
+     * the missing-id contract:
+     * <ul>
+     *   <li>upstream {@code conductor-core} throws its own {@code NotFoundException} — let it propagate;</li>
+     *   <li>the orkes fork's facade returns {@code null} for a valid-but-missing id;</li>
+     *   <li>the orkes fork rejects a malformed (non-UUID) id with an {@code "Invalid UUID"} BACKEND_ERROR
+     *       before it can look it up.</li>
+     * </ul>
+     * All three are normalized to {@code NotFoundException} (HTTP 404). Any other backend
+     * failure is rethrown unchanged so real errors still surface as 500.
+     */
+    private Workflow requireExecution(String executionId) {
+        Workflow workflow;
+        try {
+            workflow = executionService.getExecutionStatus(executionId, true);
+        } catch (RuntimeException e) {
+            if (isMalformedIdError(e)) {
+                throw new NotFoundException("No execution found for id: " + executionId);
+            }
+            throw e;
+        }
+        if (workflow == null) {
+            throw new NotFoundException("No execution found for id: " + executionId);
+        }
+        return workflow;
+    }
+
+    /**
+     * The orkes engine surfaces a non-UUID execution id as an {@code "Invalid UUID"} BACKEND_ERROR
+     * rather than a not-found; scoped to that message so genuine backend errors still propagate.
+     */
+    private static boolean isMalformedIdError(RuntimeException e) {
+        String msg = e.getMessage();
+        return msg != null && msg.contains("Invalid UUID");
     }
 
     // ── Framework event push ─────────────────────────────────────────
