@@ -1067,6 +1067,13 @@ class AgentRuntime:
         if agent.termination:
             names.add(f"{agent.name}_termination")
 
+        # Long-term (OCG) memory feedback_sink — compiled path emits a SIMPLE
+        # task that delivers the human good/bad capability links out-of-band.
+        if getattr(agent, "semantic_memory", None) is not None and callable(
+            getattr(agent, "feedback_sink", None)
+        ):
+            names.add(f"{agent.name}_feedback_sink")
+
         # Callable gate (sequential pipeline)
         if getattr(agent, "gate", None) is not None and callable(agent.gate):
             names.add(f"{agent.name}_gate")
@@ -1221,6 +1228,16 @@ class AgentRuntime:
             task_name = f"{agent.name}_stop_when"
             if _server_needs(task_name):
                 self._register_stop_when_worker(agent.name, agent.stop_when, domain=domain)
+
+        # 3a. Long-term memory feedback_sink — compiled path hands the human
+        # good/bad capability links to this worker after a conversation memory
+        # is saved (mirrors run()'s post-run FeedbackEvent delivery).
+        if getattr(agent, "semantic_memory", None) is not None and callable(
+            getattr(agent, "feedback_sink", None)
+        ):
+            task_name = f"{agent.name}_feedback_sink"
+            if _server_needs(task_name):
+                self._register_feedback_sink_worker(agent.name, agent.feedback_sink, domain=domain)
 
         # 3b. Callbacks (legacy + CallbackHandler chaining)
         from conductor.ai.agents.callback import (
@@ -1600,6 +1617,75 @@ class AgentRuntime:
             thread_count=_SYSTEM_WORKER_THREADS,
             lease_extend_enabled=True,
         )(stop_when_worker)
+
+    def _register_feedback_sink_worker(
+        self, agent_name: str, feedback_sink_fn, domain: "Optional[str]" = None
+    ) -> None:
+        """Register a long-term-memory feedback_sink worker.
+
+        The compiled (server-side) memory path emits a SIMPLE task that, after
+        saving a conversation memory and minting the signed good/bad capability
+        URLs, invokes this worker with the FeedbackEvent fields. The worker
+        rebuilds a :class:`FeedbackEvent` and hands it to the user's
+        ``feedback_sink`` callable — mirroring run()'s out-of-band delivery.
+        Best-effort: failures are swallowed so memory never fails the run.
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent_name}_feedback_sink"
+
+        async def feedback_sink_worker(
+            memory_key: str = "",
+            summary: str = "",
+            facts: object = None,
+            tags: object = None,
+            good_url: str = None,
+            bad_url: str = None,
+            expires_at: str = None,
+            agent: str = None,
+            user: str = None,
+        ) -> object:
+            try:
+                from conductor.ai.agents.ocg_memory import FeedbackEvent
+
+                event = FeedbackEvent(
+                    memory_key=memory_key,
+                    summary=summary,
+                    facts=list(facts) if isinstance(facts, (list, tuple)) else [],
+                    tags=list(tags) if isinstance(tags, (list, tuple)) else [],
+                    good_url=good_url,
+                    bad_url=bad_url,
+                    expires_at=expires_at,
+                    agent=agent,
+                    user=user,
+                )
+                await _call_user_fn(feedback_sink_fn, event)
+                return {"delivered": True}
+            except Exception as e:
+                logger.warning("feedback_sink delivery failed: %s", e)
+                return {"delivered": False}
+
+        feedback_sink_worker.__annotations__ = {
+            "memory_key": str,
+            "summary": str,
+            "facts": object,
+            "tags": object,
+            "good_url": str,
+            "bad_url": str,
+            "expires_at": str,
+            "agent": str,
+            "user": str,
+            "return": object,
+        }
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(feedback_sink_worker)
 
     def _register_gate_worker(
         self, agent_name: str, gate_fn, domain: "Optional[str]" = None

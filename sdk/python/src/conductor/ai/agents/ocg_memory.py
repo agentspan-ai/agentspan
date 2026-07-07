@@ -63,6 +63,11 @@ class OCGMemoryStore(MemoryStore):
         agent: Agent owner key, e.g. ``"agent:support"`` (required).
         user: Optional user owner, e.g. ``"user:alice"``.
         token: OCG bearer token, held client-side (e.g. from ``OCG_TOKEN``).
+            Used by the client-side ``run()`` path.
+        credential: Server-resolvable credential NAME (default ``"OCG_PUBLIC_KEY"``)
+            for the OCG bearer token. Used by the COMPILED/deployed path — the
+            server resolves this via a ``#{NAME}`` HTTP-header placeholder. Distinct
+            from ``token`` (the raw client token); both can coexist.
         scope: Memory scope for writes (default ``"user"``).
         timeout: Per-request timeout in seconds.
         client: Optional pre-built ``httpx.Client`` (mainly for tests).
@@ -75,6 +80,7 @@ class OCGMemoryStore(MemoryStore):
         agent: str,
         user: Optional[str] = None,
         token: Optional[str] = None,
+        credential: str = "OCG_PUBLIC_KEY",
         scope: str = "user",
         timeout: float = 10.0,
         client: Optional[httpx.Client] = None,
@@ -86,6 +92,7 @@ class OCGMemoryStore(MemoryStore):
         self._base = url.strip().rstrip("/")
         self._agent = agent
         self._user = user
+        self._credential = credential
         self._scope = scope
         headers: Dict[str, str] = {}
         if token:

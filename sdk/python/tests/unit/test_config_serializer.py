@@ -214,6 +214,69 @@ class TestAgentConfigSerializer:
 
         assert config["memory"]["messages"] == [{"role": "system", "message": "context"}]
 
+    def test_serialize_long_term_memory(self):
+        """OCG-backed semantic_memory serializes to longTermMemory + feedbackSink."""
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.ocg_memory import OCGMemoryStore
+        from conductor.ai.agents.semantic_memory import SemanticMemory
+
+        store = OCGMemoryStore(
+            url="https://ocg.example.com/",
+            agent="agent:ce-ticket-resolution",
+            user="user:alice",
+            scope="agent",
+        )
+        sm = SemanticMemory(store=store, max_results=7)
+
+        def sink(event):  # feedback_sink callable
+            return None
+
+        agent = Agent(
+            name="ce_agent",
+            model="openai/gpt-4o",
+            instructions="Resolve tickets.",
+            semantic_memory=sm,
+            memory_summary_model="openai/gpt-4o-mini",
+            feedback_sink=sink,
+        )
+        config = self.serializer.serialize(agent)
+
+        ltm = config["longTermMemory"]
+        assert ltm["ocgUrl"] == "https://ocg.example.com"  # trailing slash stripped
+        assert ltm["credential"] == "OCG_PUBLIC_KEY"  # server-resolvable name, not token
+        assert ltm["agent"] == "agent:ce-ticket-resolution"
+        assert ltm["user"] == "user:alice"
+        assert ltm["scope"] == "agent"
+        assert ltm["maxResults"] == 7
+        assert ltm["summaryModel"] == "openai/gpt-4o-mini"
+
+        assert config["feedbackSink"] == {"taskName": "ce_agent_feedback_sink"}
+
+    def test_serialize_long_term_memory_absent(self):
+        """No semantic_memory -> no longTermMemory / feedbackSink keys (no-op)."""
+        from conductor.ai.agents.agent import Agent
+
+        agent = Agent(name="plain", model="openai/gpt-4o", instructions="Hi.")
+        config = self.serializer.serialize(agent)
+
+        assert "longTermMemory" not in config
+        assert "feedbackSink" not in config
+
+    def test_serialize_long_term_memory_summary_model_fallback(self):
+        """summaryModel falls back to the agent's own model when unset."""
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.ocg_memory import OCGMemoryStore
+        from conductor.ai.agents.semantic_memory import SemanticMemory
+
+        store = OCGMemoryStore(url="https://ocg.example.com", agent="agent:x")
+        sm = SemanticMemory(store=store, max_results=5)
+        agent = Agent(name="a", model="anthropic/claude", semantic_memory=sm)
+        config = self.serializer.serialize(agent)
+
+        assert config["longTermMemory"]["summaryModel"] == "anthropic/claude"
+        # No feedback_sink -> no feedbackSink emitted.
+        assert "feedbackSink" not in config
+
     def test_serialize_gate_text(self):
         """TextGate serializes to text_contains config."""
         from conductor.ai.agents.agent import Agent

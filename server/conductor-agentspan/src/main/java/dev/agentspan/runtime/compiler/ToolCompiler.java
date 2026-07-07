@@ -70,6 +70,16 @@ public class ToolCompiler {
     }
 
     /**
+     * Host-mode-aware rewrite of {@code ${NAME}} credential placeholders in an HTTP
+     * headers map. Exposed for compiler-emitted HTTP tasks (e.g. long-term memory)
+     * that must resolve credentials the same way tool HTTP calls do — embedded hosts
+     * get {@code ${workflow.secrets.NAME}}, standalone gets {@code #{NAME}}.
+     */
+    public static Map<String, Object> escapeCredentialHeaders(Map<?, ?> headers) {
+        return escapeCredentialPlaceholders(headers);
+    }
+
+    /**
      * Rewrite {@code ${NAME}} credential placeholders for the runtime that will resolve them.
      * When embedded in a host (e.g. orkes-conductor), emit the host's native
      * {@code ${workflow.secrets.NAME}} so the host resolves it at task-input binding. Standalone:
