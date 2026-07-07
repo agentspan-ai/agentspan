@@ -1,0 +1,64 @@
+name: Release SDK E2E Test Bundles
+
+# Packages each SDK's e2e suite into a version-stamped tarball and attaches it
+# to the GitHub release, so downstream repos (e.g. orkes-io/orkes-conductor)
+# can pin the e2e suite to the exact agentspan release they run against. Each
+# bundle pins the published SDK at the same version (PyPI / npm / Maven / NuGet).
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 0.0.10) — a release vX.Y.Z must already exist to attach to"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  package-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Packaging e2e bundles for version: ${VERSION}"
+
+      - name: Package e2e bundles (all SDKs)
+        run: |
+          ./e2e/release/package-sdk-e2e.sh --version "${{ steps.version.outputs.version }}"
+
+      - name: Validate bundles
+        run: |
+          ./e2e/release/test_package_sdk_e2e.sh
+
+      - name: Generate SHA256 checksums
+        working-directory: e2e/release/dist
+        run: |
+          for f in *.tar.gz; do
+            sha256sum "$f" | awk '{print $1}' > "${f}.sha256"
+            echo "  $(cat "${f}.sha256")  ${f}"
+          done
+
+      - name: Upload e2e bundles to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release upload "v${VERSION}" \
+            e2e/release/dist/*.tar.gz \
+            e2e/release/dist/*.sha256 \
+            --repo "${{ github.repository }}" \
+            --clobber
