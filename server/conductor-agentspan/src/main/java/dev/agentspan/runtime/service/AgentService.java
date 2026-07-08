@@ -1346,6 +1346,15 @@ public class AgentService {
     /**
      * The orkes engine surfaces a non-UUID execution id as an {@code "Invalid UUID"} BACKEND_ERROR
      * rather than a not-found; scoped to that message so genuine backend errors still propagate.
+     *
+     * <p>Matching on the message string is deliberate. A typed catch is impossible: the orkes
+     * {@code ApplicationException} is not on the compile classpath (agentspan builds against
+     * upstream conductor-core). Pre-validating the id as a UUID was rejected because execution ids
+     * are not guaranteed to be UUIDs — upstream engines may plug in a custom {@code IDGenerator},
+     * and orkes multi-tenant ids carry a 4-char org prefix ahead of the UUID — so a format guess
+     * here could 404 an execution that exists. Matching the engine's own malformed-id error makes
+     * no format assumption; at worst a reworded message falls through as a 500, which the
+     * SuiteHttpApi404 e2e catches.
      */
     private static boolean isMalformedIdError(RuntimeException e) {
         String msg = e.getMessage();
