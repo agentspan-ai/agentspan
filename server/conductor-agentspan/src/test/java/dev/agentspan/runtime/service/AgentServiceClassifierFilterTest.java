@@ -27,10 +27,8 @@ class AgentServiceClassifierFilterTest {
 
     @Test
     void classifierOnlyBecomesTheQuery() {
-        assertThat(AgentService.withClassifierFilter(null, "agent"))
-                .isEqualTo("classifier IN (agent)");
-        assertThat(AgentService.withClassifierFilter("", "agent"))
-                .isEqualTo("classifier IN (agent)");
+        assertThat(AgentService.withClassifierFilter(null, "agent")).isEqualTo("classifier IN (agent)");
+        assertThat(AgentService.withClassifierFilter("", "agent")).isEqualTo("classifier IN (agent)");
     }
 
     @Test

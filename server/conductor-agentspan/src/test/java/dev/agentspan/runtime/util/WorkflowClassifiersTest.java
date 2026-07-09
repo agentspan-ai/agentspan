@@ -22,16 +22,14 @@ class WorkflowClassifiersTest {
 
     @Test
     void nullDefResolvesToWorkflow() {
-        assertThat(WorkflowClassifiers.classifierOf((WorkflowDef) null))
-                .isEqualTo(WorkflowClassifiers.WORKFLOW);
+        assertThat(WorkflowClassifiers.classifierOf((WorkflowDef) null)).isEqualTo(WorkflowClassifiers.WORKFLOW);
     }
 
     @Test
     void nullOrEmptyMetadataResolvesToWorkflow() {
         assertThat(WorkflowClassifiers.classifierOf((Map<String, Object>) null))
                 .isEqualTo(WorkflowClassifiers.WORKFLOW);
-        assertThat(WorkflowClassifiers.classifierOf(new HashMap<>()))
-                .isEqualTo(WorkflowClassifiers.WORKFLOW);
+        assertThat(WorkflowClassifiers.classifierOf(new HashMap<>())).isEqualTo(WorkflowClassifiers.WORKFLOW);
     }
 
     @Test
@@ -62,8 +60,7 @@ class WorkflowClassifiersTest {
     void blankExplicitClassifierIsIgnored() {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("classifier", "  ");
-        assertThat(WorkflowClassifiers.classifierOf(metadata))
-                .isEqualTo(WorkflowClassifiers.WORKFLOW);
+        assertThat(WorkflowClassifiers.classifierOf(metadata)).isEqualTo(WorkflowClassifiers.WORKFLOW);
     }
 
     @Test

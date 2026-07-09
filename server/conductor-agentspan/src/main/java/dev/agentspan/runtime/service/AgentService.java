@@ -511,7 +511,13 @@ public class AgentService {
      * cores silently drop the condition, so classifier filtering stays opt-in.
      */
     public Map<String, Object> searchAgentExecutions(
-            int start, int size, String sort, String freeText, String status, String agentName, String sessionId,
+            int start,
+            int size,
+            String sort,
+            String freeText,
+            String status,
+            String agentName,
+            String sessionId,
             String classifier) {
         String classifierList = classifier == null
                 ? ""
