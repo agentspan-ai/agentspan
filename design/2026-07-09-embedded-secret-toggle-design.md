@@ -100,11 +100,14 @@ No client-library change is needed (the map rides in the preserved `inputData`).
 
 ## Dependency
 
-Requires a conductor build with PR #1255 (`ParametersUtils.substituteSecrets` + `SecretsDAO`
-resolution of `${workflow.secrets.NAME}` in task input at poll). Currently built from
-`conductor-oss` `feat/env-backed-secrets-and-environment` → mavenLocal
-`3.32.0-rc.3-runtimemeta-LOCAL` (superset of 3.32.0-rc.3), pinned in `server/build.gradle`. Revert
-to a published version once PR #1255 ships. **No SDK client-library changes are required.**
+AgentSpan references **no** PR #1255 API — it only emits `${workflow.secrets.NAME}` strings — so it
+compiles and tests against the **published** conductor (`conductorVersion = 3.32.0-rc.3`). The
+`${workflow.secrets.NAME}` references are resolved **at runtime by the embedded host** conductor's
+`ParametersUtils.substituteSecrets` / `SecretsDAO` (conductor-oss PR #1255). The host must therefore
+run a conductor build that includes PR #1255; agentspan does not need to build against it.
+**No SDK client-library changes are required.** (An earlier iteration pinned a local
+`3.32.0-rc.3-runtimemeta-LOCAL` build — reverted, because that build's new conductor-side
+`SecretResource` shadowed agentspan's `SecretController` `GET /api/secrets` in standalone tests.)
 
 ## Tests
 
