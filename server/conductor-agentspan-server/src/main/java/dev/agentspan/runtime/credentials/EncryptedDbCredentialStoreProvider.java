@@ -18,6 +18,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,7 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * <p>The master key is the 32-byte key from {@code MasterKeyConfig#credentialMasterKey()}.</p>
  */
 @Component
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvider {
 
     private static final Logger log = LoggerFactory.getLogger(EncryptedDbCredentialStoreProvider.class);

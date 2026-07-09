@@ -9,6 +9,7 @@ import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -50,6 +51,7 @@ import com.zaxxer.hikari.HikariDataSource;
  * <p>PostgreSQL: uses {@code org.postgresql.Driver} with a larger pool (default 8).</p>
  */
 @Configuration
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class CredentialDataSourceConfig {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialDataSourceConfig.class);

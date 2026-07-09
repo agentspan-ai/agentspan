@@ -11,6 +11,7 @@ import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Component;
  * pre-release development builds.</p>
  */
 @Component
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class CredentialSchemaMigrator {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialSchemaMigrator.class);

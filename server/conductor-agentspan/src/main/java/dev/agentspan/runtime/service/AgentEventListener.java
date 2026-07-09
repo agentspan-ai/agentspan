@@ -266,6 +266,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     }
 
     private void revokeWorkflowToken(WorkflowModel workflow) {
+        if (executionTokenService == null) return; // native token service gated off (embedded)
         try {
             Object ctx =
                     workflow.getVariables() != null ? workflow.getVariables().get("__agentspan_ctx__") : null;

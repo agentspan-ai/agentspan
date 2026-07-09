@@ -95,9 +95,10 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
 
             // Strip internal keys from the handler-visible input
             var handlerInput = inputData
-                .Where(kv => !string.Equals(kv.Key, "__agentspan_ctx__", StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(kv.Key, "_agent_state",      StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(kv.Key, "method",            StringComparison.OrdinalIgnoreCase))
+                .Where(kv => !string.Equals(kv.Key, "__agentspan_ctx__",       StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(kv.Key, "_agent_state",            StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(kv.Key, "__resolved_credentials__", StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(kv.Key, "method",                  StringComparison.OrdinalIgnoreCase))
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
             // Resolve and inject credentials via the centralized helper so the
@@ -105,8 +106,10 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
             // process-wide lock. See docs/design/secret-injection-contract.md.
             // Tier-2 (env-injection) path; tier-1 (explicit-key) lands when the
             // user-facing API exposes a `credentials` parameter to agent factories.
-            Dictionary<string, string> resolvedCredentials = new();
-            if (_credentialNames.Length > 0)
+            // Embedded: the host resolves ${workflow.secrets.NAME} into __resolved_credentials__
+            // at poll time. Prefer that map; otherwise fall back to the native token-pull.
+            var resolvedCredentials = ReadResolvedCredentials(inputData);
+            if (resolvedCredentials.Count == 0 && _credentialNames.Length > 0)
             {
                 var creds = await _http.ResolveCredentialsAsync(
                     toolCtx?.ExecutionToken, _credentialNames, ct);
@@ -215,6 +218,23 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
             };
             await _taskClient.UpdateTaskAsync(taskResult);
         }
+    }
+
+    /// <summary>
+    /// Read the host-delivered <c>__resolved_credentials__</c> name→value map from task input
+    /// (embedded mode). The host resolves the stamped <c>${workflow.secrets.NAME}</c> references at
+    /// poll time. Empty when absent (standalone → the native token-pull is used instead).
+    /// </summary>
+    private static Dictionary<string, string> ReadResolvedCredentials(Dictionary<string, JsonElement> inputData)
+    {
+        var result = new Dictionary<string, string>();
+        if (inputData.TryGetValue("__resolved_credentials__", out var rc) && rc.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in rc.EnumerateObject())
+                if (prop.Value.ValueKind == JsonValueKind.String)
+                    result[prop.Name] = prop.Value.GetString()!;
+        }
+        return result;
     }
 
     // ── JSON bridges (Newtonsoft ↔ System.Text.Json) ──────────

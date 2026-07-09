@@ -373,7 +373,12 @@ public class WorkerManager {
         // problem. See docs/design/secret-injection-contract.md.
         Map<String, String> resolvedSecrets = Collections.emptyMap();
         List<String> declared = taskCredentials.getOrDefault(taskName, Collections.emptyList());
-        if (!declared.isEmpty()) {
+        // Embedded: the host resolves ${workflow.secrets.NAME} into __resolved_credentials__ at
+        // poll time. Prefer that map; otherwise fall back to the native token-pull (standalone).
+        Map<String, String> hostDelivered = readResolvedCredentials(inputData);
+        if (!hostDelivered.isEmpty()) {
+            resolvedSecrets = hostDelivered;
+        } else if (!declared.isEmpty()) {
             String execToken = extractExecutionToken(inputData);
             try {
                 resolvedSecrets = credentialFetcher.fetch(execToken, declared);
@@ -415,6 +420,24 @@ public class WorkerManager {
             result.setReasonForIncompletion(e.getMessage());
         }
         return result;
+    }
+
+    /**
+     * Read the host-delivered {@code __resolved_credentials__} name→value map from task input
+     * (embedded mode). The host resolves the stamped {@code ${workflow.secrets.NAME}} references at
+     * poll time. Returns an empty map when absent (standalone → native token-pull is used instead).
+     */
+    private static Map<String, String> readResolvedCredentials(Map<String, Object> inputData) {
+        if (inputData == null) return Collections.emptyMap();
+        Object rc = inputData.get("__resolved_credentials__");
+        if (!(rc instanceof Map<?, ?> m) || m.isEmpty()) return Collections.emptyMap();
+        Map<String, String> out = new HashMap<>();
+        for (Map.Entry<?, ?> e : m.entrySet()) {
+            if (e.getKey() != null && e.getValue() instanceof String s) {
+                out.put(e.getKey().toString(), s);
+            }
+        }
+        return out;
     }
 
     /**

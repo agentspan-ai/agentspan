@@ -15,6 +15,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +32,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * (bounded risk: tokens expire with workflow TTL).</p>
  */
 @Service
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class ExecutionTokenService {
 
     private static final Logger log = LoggerFactory.getLogger(ExecutionTokenService.class);

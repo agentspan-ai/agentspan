@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -54,6 +55,7 @@ import dev.agentspan.runtime.spi.SecretOutputMasker;
  * depth — it should never block a response from going out.</p>
  */
 @ControllerAdvice
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class CredentialMaskingResponseAdvice implements ResponseBodyAdvice<Object> {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialMaskingResponseAdvice.class);

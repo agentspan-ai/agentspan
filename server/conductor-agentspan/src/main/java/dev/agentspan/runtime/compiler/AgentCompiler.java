@@ -340,6 +340,31 @@ public class AgentCompiler {
 
     // ── Agent with tools ────────────────────────────────────────────
 
+    /**
+     * Collect {@code toolName -> [credentialNames]} for the agent's tools: each tool's own declared
+     * credentials, falling back to the agent-level credential list. Fed to
+     * {@link ToolCompiler#setWorkerCreds} so SIMPLE worker tasks carry {@code __resolved_credentials__}
+     * secret references in embedded mode.
+     */
+    static Map<String, List<String>> collectToolCredentials(AgentConfig config) {
+        List<String> agentCreds = config.getCredentials() != null ? config.getCredentials() : List.of();
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                if (tool.getName() == null) continue;
+                List<String> own = new ArrayList<>();
+                if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> cl) {
+                    for (Object c : cl) {
+                        if (c instanceof String s) own.add(s);
+                    }
+                }
+                List<String> effective = own.isEmpty() ? agentCreds : own;
+                if (!effective.isEmpty()) map.put(tool.getName(), new ArrayList<>(effective));
+            }
+        }
+        return map;
+    }
+
     WorkflowDef compileWithTools(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         String llmRef = toRef(config.getName()) + "_llm";
@@ -347,6 +372,7 @@ public class AgentCompiler {
         List<ToolConfig> tools = config.getTools();
 
         ToolCompiler tc = new ToolCompiler();
+        tc.setWorkerCreds(collectToolCredentials(config));
         boolean hasApproval = tools.stream().anyMatch(ToolConfig::isApprovalRequired);
         boolean hasMcp = tools.stream().anyMatch(t -> "mcp".equals(t.getToolType()));
         boolean hasApi = tools.stream().anyMatch(t -> "api".equals(t.getToolType()));
@@ -721,6 +747,7 @@ public class AgentCompiler {
         }
 
         ToolCompiler tc = new ToolCompiler();
+        tc.setWorkerCreds(collectToolCredentials(config));
         boolean hasApproval = allTools.stream().anyMatch(ToolConfig::isApprovalRequired);
         boolean hasMcp = allTools.stream().anyMatch(t -> "mcp".equals(t.getToolType()));
         boolean hasApi = allTools.stream().anyMatch(t -> "api".equals(t.getToolType()));

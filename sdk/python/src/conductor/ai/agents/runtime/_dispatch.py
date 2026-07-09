@@ -419,8 +419,16 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
                         credential_names = list(
                             _workflow_credentials.get(task.workflow_instance_id, [])
                         )
+            # Embedded: the host resolves ${workflow.secrets.NAME} into __resolved_credentials__
+            # at poll time. Prefer that map; otherwise fall back to the native token-pull
+            # (standalone). Pop the key so it never leaks into the tool's kwargs.
+            host_delivered = task.input_data.pop("__resolved_credentials__", None)
             resolved_secrets = {}
-            if credential_names:
+            if isinstance(host_delivered, dict) and host_delivered:
+                resolved_secrets = {
+                    k: v for k, v in host_delivered.items() if isinstance(v, str)
+                }
+            elif credential_names:
                 token = _extract_execution_token(task)
                 fetcher = _get_credential_fetcher()
                 try:

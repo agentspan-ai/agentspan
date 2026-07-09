@@ -15,7 +15,11 @@ repositories {
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.32.0-rc.3'
+    // Local conductor build off conductor-oss feat/env-backed-secrets-and-environment
+    // (PR #1255: TaskDef.runtimeMetadata + Task.runtimeMetadata + poll-time resolution),
+    // published to mavenLocal. Superset of 3.32.0-rc.3. Needed for embedded host-delivered
+    // secrets via TaskDef.runtimeMetadata. Revert to a published version once PR #1255 ships.
+    conductorVersion   = '3.32.0-rc.3-runtimemeta-LOCAL'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'
     sqliteJdbcVersion  = '3.47.0.0'

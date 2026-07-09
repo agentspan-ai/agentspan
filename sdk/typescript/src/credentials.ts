@@ -13,6 +13,10 @@ interface CredentialContext {
   serverUrl: string;
   headers: Record<string, string>;
   executionToken: string;
+  // Pre-resolved name→value map. Embedded: the host resolves declared secrets at poll
+  // time and injects them onto task.runtimeMetadata; getCredential() reads them from here
+  // instead of pulling via the (dormant) execution-token endpoint.
+  resolved?: Record<string, string>;
 }
 
 // AsyncLocalStorage scopes context per async-call chain so concurrent worker
@@ -36,8 +40,9 @@ export function runWithCredentialContext<T>(
   headers: Record<string, string>,
   executionToken: string,
   fn: () => Promise<T>,
+  resolved?: Record<string, string>,
 ): Promise<T> {
-  return _credentialStore.run({ serverUrl, headers, executionToken }, fn);
+  return _credentialStore.run({ serverUrl, headers, executionToken, resolved }, fn);
 }
 
 /**
@@ -202,7 +207,17 @@ export async function getCredential(name: string): Promise<string> {
     );
   }
 
+  // Embedded / host-delivered: read from the pre-resolved map, no endpoint pull.
+  if (ctx.resolved && ctx.resolved[name] !== undefined) {
+    return ctx.resolved[name];
+  }
+
   const { serverUrl, headers, executionToken } = ctx;
+  // No token (embedded, native endpoint dormant) and not in the resolved map → the secret
+  // was not delivered. Surface as not-found (the intended off-host trim) rather than pulling.
+  if (!executionToken) {
+    throw new CredentialNotFoundError(name);
+  }
   const resolved = await resolveCredentials(serverUrl, headers, executionToken, [name]);
 
   const value = resolved[name];

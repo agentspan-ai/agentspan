@@ -119,6 +119,55 @@ public class ToolCompiler {
             Map.entry("rag_search", "LLM_SEARCH_INDEX"),
             Map.entry("pull_workflow_messages", "PULL_WORKFLOW_MESSAGES"));
 
+    /**
+     * Per-tool credential names ({@code toolName -> [names]}) used to stamp
+     * {@code __resolved_credentials__} onto SIMPLE worker-tool tasks in EMBEDDED mode, so the host
+     * resolves each {@code ${workflow.secrets.NAME}} reference from its secret store at poll time.
+     * Set by {@link AgentCompiler} (preserves agent-level credential fallback); empty by default
+     * (no stamping — standalone, or non-worker tools whose secrets travel as headers).
+     */
+    private Map<String, List<String>> workerCreds = Map.of();
+
+    /** Inject per-tool credential names so worker-tool SIMPLE tasks can carry secret references. */
+    void setWorkerCreds(Map<String, List<String>> workerCreds) {
+        this.workerCreds = workerCreds != null ? workerCreds : Map.of();
+    }
+
+    /** True if a tool compiles to a SIMPLE worker task (executed by an external SDK worker). */
+    private static boolean isWorkerTool(ToolConfig tool) {
+        String t = tool.getToolType() != null ? tool.getToolType() : "worker";
+        return "SIMPLE".equals(TYPE_MAP.getOrDefault(t, "SIMPLE"));
+    }
+
+    /**
+     * Build {@code {toolName -> {NAME: "${workflow.secrets.NAME}"}}} for this agent's SIMPLE
+     * worker tools, EMBEDDED only. The host resolves the references just-in-time at poll (via
+     * {@code ParametersUtils.substituteSecrets}); the SDK worker reads {@code __resolved_credentials__}
+     * from its task input and strips it. HTTP/MCP tools are excluded — their secrets travel as
+     * {@code ${workflow.secrets.NAME}} headers.
+     */
+    private Map<String, Object> buildWorkerCredConfig(List<ToolConfig> tools) {
+        Map<String, Object> cfg = new LinkedHashMap<>();
+        if (!EmbeddedMode.isEmbedded() || tools == null || workerCreds.isEmpty()) {
+            return cfg;
+        }
+        for (ToolConfig tool : tools) {
+            if (tool.getName() == null || !isWorkerTool(tool)) {
+                continue;
+            }
+            List<String> names = workerCreds.get(tool.getName());
+            if (names == null || names.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> refs = new LinkedHashMap<>();
+            for (String name : names) {
+                refs.put(name, "${workflow.secrets." + name + "}");
+            }
+            cfg.put(tool.getName(), refs);
+        }
+        return cfg;
+    }
+
     // ── Public API ───────────────────────────────────────────────────────
 
     /**
@@ -416,9 +465,11 @@ public class ToolCompiler {
             }
         }
         String knownToolNamesJson = JavaScriptBuilder.toJson(knownToolNames);
+        String workerCredJson = JavaScriptBuilder.toJson(buildWorkerCredConfig(tools));
 
         String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson, knownToolNamesJson);
+                httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson, wmqJson, knownToolNamesJson,
+                workerCredJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -1566,8 +1617,9 @@ public class ToolCompiler {
             }
         }
         String knownToolNamesJson = JavaScriptBuilder.toJson(knownToolNames);
+        String workerCredJson = JavaScriptBuilder.toJson(buildWorkerCredConfig(tools));
         String script = JavaScriptBuilder.enrichToolsScriptDynamic(
-                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson, knownToolNamesJson);
+                httpJson, mediaJson, agentToolJson, ragJson, humanJson, wmqJson, knownToolNamesJson, workerCredJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
