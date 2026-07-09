@@ -41,7 +41,7 @@ export default function Error({
       sessionStorage.clear(); // Clear OIDC state to prevent auth loop
 
       // Force reload to login page to ensure clean state
-      window.location.href = "/";
+      navigate("/");
       return;
     }
 

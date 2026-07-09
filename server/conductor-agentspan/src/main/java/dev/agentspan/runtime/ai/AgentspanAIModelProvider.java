@@ -9,7 +9,7 @@ import java.util.List;
 import org.conductoross.conductor.ai.AIModel;
 import org.conductoross.conductor.ai.AIModelProvider;
 import org.conductoross.conductor.ai.ModelConfiguration;
-import org.conductoross.conductor.ai.models.LLMWorkerInput;
+import org.conductoross.conductor.ai.model.LLMWorkerInput;
 import org.conductoross.conductor.ai.providers.anthropic.AnthropicConfiguration;
 import org.conductoross.conductor.ai.providers.azureopenai.AzureOpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.cohere.CohereAIConfiguration;

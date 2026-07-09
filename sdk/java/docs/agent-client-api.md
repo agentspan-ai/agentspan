@@ -122,12 +122,12 @@ AgentRequest.frameworkAgent(Framework.OPENAI, agent).build()
 
 Native agent wire shape (produced by `AgentRequest.Serializer` calling `AgentConfigSerializer.serialize(agent)`):
 ```json
-{ "agentConfig": { "name": "my_agent", "model": "openai/gpt-4o-mini", "strategy": "handoff", ... } }
+{ "agentConfig": { "name": "my_agent", "model": "anthropic/claude-sonnet-4-6", "strategy": "handoff", ... } }
 ```
 
 Framework agent wire shape:
 ```json
-{ "framework": "openai", "rawConfig": { "name": "my_agent", "model": "openai/gpt-4o-mini", "tools": [...] } }
+{ "framework": "openai", "rawConfig": { "name": "my_agent", "model": "anthropic/claude-sonnet-4-6", "tools": [...] } }
 ```
 
 ### Response — `CompileResponse`
@@ -295,7 +295,7 @@ The agent definition serialized under the `agentConfig` key by `AgentConfigSeria
 | Field | Type | Description |
 |---|---|---|
 | `name` | `String` | Agent/workflow name. |
-| `model` | `String` | `"provider/model"` e.g. `"openai/gpt-4o-mini"`. |
+| `model` | `String` | `"provider/model"` e.g. `"anthropic/claude-sonnet-4-6"`. |
 | `instructions` | `String \| Object` | System prompt or `PromptTemplateRef`. |
 | `tools` | `List<ToolConfig>` | Tool definitions. |
 | `agents` | `List<AgentConfig>` | Sub-agents (for multi-agent strategies). |

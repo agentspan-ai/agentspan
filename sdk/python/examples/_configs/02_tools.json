@@ -2,7 +2,7 @@
   "external": false,
   "instructions": "You are a helpful assistant with access to weather, calculator, and email tools.",
   "maxTurns": 25,
-  "model": "openai/gpt-4o-mini",
+  "model": "anthropic/claude-sonnet-4-6",
   "name": "tool_demo_agent",
   "timeoutSeconds": 0,
   "tools": [

@@ -99,7 +99,8 @@ export type ToolType =
   | "generate_video"
   | "generate_pdf"
   | "rag_search"
-  | "rag_index";
+  | "rag_index"
+  | "pull_workflow_messages";
 
 /**
  * Supported framework identifiers for auto-detection.
@@ -258,8 +259,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   /**
    * LLM model hint for framework agents where automatic detection fails.
-   * Accepts a model string ('openai/gpt-4o-mini') or an LLM object (e.g. ChatOpenAI instance).
-   * Required for LangGraph agents that don't use the @agentspan-ai/sdk/langgraph wrapper.
+   * Accepts a model string ('anthropic/claude-sonnet-4-6') or an LLM object (e.g. ChatOpenAI instance).
+   * Required for LangGraph agents that don't use the @conductor-oss/conductor-agent-sdk/langgraph wrapper.
    */
   model?: unknown;
   /**

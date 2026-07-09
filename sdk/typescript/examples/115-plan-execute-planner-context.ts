@@ -204,12 +204,12 @@ async function main(): Promise<void> {
 
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(harness, prompt, { timeout: 180 });
+    const result = await runtime.run(harness, prompt, { timeoutSeconds: 180 });
     console.log("status:", result.status);
     console.log("output:", JSON.stringify(result.output, null, 2));
     await showExecutedSteps(result.executionId);
   } finally {
-    await runtime.close();
+    await runtime.shutdown();
   }
 }
 

@@ -37,8 +37,8 @@ Requirements:
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
-from agentspan.agents import AgentRuntime
-from agentspan.agents.langchain import create_agent
+from conductor.ai.agents import AgentRuntime
+from conductor.ai.agents.langchain import create_agent
 
 # ---------------------------------------------------------------------------
 # Tool used by the sub-agent — returns structured domain facts to expand on

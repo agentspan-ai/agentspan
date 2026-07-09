@@ -3,14 +3,41 @@ title: Plan-Execute Strategy
 description: PLAN_EXECUTE compiles LLM-generated (or static) plans into deterministic Conductor sub-workflows — the planner reasons, the executor runs.
 ---
 
-# Plan-Execute Strategy
+# Plan-Execute
 
-`Strategy.PLAN_EXECUTE` (also called PAE; the server-side compiler is PAC, "PLAN_AND_COMPILE") splits a task into two phases:
+**The LLM decides *what* to do. Conductor handles *how* — no tokens on orchestration, retries, or branching.**
 
-1. **Plan** — a planner agent emits a JSON DAG of operations.
-2. **Execute** — the server compiles that JSON into a Conductor sub-workflow and runs it deterministically.
+Most agent frameworks route every decision through the LLM — retry logic, branch selection, parallelism. Tokens for every control flow operation. Nondeterminism throughout.
 
-The LLM is only invoked where it adds value (planning, per-op content generation). Orchestration, retries, parallelism, and validation are pure Conductor primitives — no token cost, no nondeterminism.
+Plan-Execute draws a hard line.
+
+![Plan-Execute deterministic boundary](../assets/plan-execute-boundary.svg)
+
+One planner call produces a JSON task graph. The Agentspan server compiles it into a deterministic Conductor sub-workflow. **After that single LLM call, the execution is pure Conductor** — crash-safe, replay-safe, and free of LLM randomness.
+
+!!! tip "The core insight"
+    Two identical plans produce two identical workflow definitions and two identical executions. Retries, parallelism (FORK_JOIN), branching (SWITCH), and validation are Conductor primitives — not LLM turns. The LLM is only invoked where it genuinely adds value: planning the shape of work, and generating per-step content.
+
+The two phases in detail:
+
+1. **Plan** — the planner agent emits a JSON DAG of operations once.
+2. **Execute** — the server compiles that JSON into an immutable Conductor sub-workflow and runs it deterministically.
+
+(The strategy is called `PLAN_EXECUTE` in the SDK. The server-side compiler is PAC, "PLAN_AND_COMPILE".)
+
+---
+
+## Why this wins against a plain LLM loop
+
+| | LLM-loop agent | Plan-Execute |
+|---|---|---|
+| Retries | LLM re-reasons | Conductor retry, no token cost |
+| Parallelism | Ask LLM to fan out | FORK_JOIN — deterministic, exact |
+| Branching | LLM decides each turn | SWITCH on JS expression |
+| Crash recovery | Restart from scratch | Resume at last completed step |
+| Replay two runs | Different each time | Identical — plan is a value |
+| Validation | LLM self-checks | Deterministic validator + SWITCH gate |
+| Testing | Non-deterministic | Pass a static plan — no LLM at all |
 
 ## The deterministic boundary
 
@@ -79,7 +106,7 @@ If you need fully agentic exploration with no fixed shape, use `Strategy.HANDOFF
 ## The shape
 
 ```python
-from agentspan.agents import Strategy, Agent, plan_execute
+from conductor.ai.agents import Strategy, Agent, plan_execute
 
 # One-call construction (recommended):
 harness = plan_execute(
@@ -149,7 +176,7 @@ The schema PAC consumes:
 For static plans (or plans you build programmatically), import the typed builders:
 
 ```python
-from agentspan.agents import Plan, Step, Op, Generate, Validation, Action
+from conductor.ai.agents import Plan, Step, Op, Generate, Validation, Action
 
 plan = Plan(
     steps=[
@@ -179,7 +206,7 @@ IDE autocomplete, Pylance type-checks, no escaping nightmares.
 Wire the **whole output** of one step into the args of a later step with `Ref("step_id")`. No JSON path, no field selection, no Conductor task-ref naming to memorise.
 
 ```python
-from agentspan.agents import Op, Plan, Ref, Step
+from conductor.ai.agents import Op, Plan, Ref, Step
 
 plan = Plan(steps=[
     Step("fetch", operations=[Op("fetch_data", args={"url": URL})]),
@@ -376,7 +403,7 @@ The planner's `instructions` are fine for "how to emit a plan." They're a poor f
 `planner_context` injects those rules into the planner's user prompt at runtime, as a `## Reference Context` block. Two entry shapes:
 
 ```python
-from agentspan.agents import Agent, Context, Strategy
+from conductor.ai.agents import Agent, Context, Strategy
 
 harness = Agent(
     name="onboarding_harness",

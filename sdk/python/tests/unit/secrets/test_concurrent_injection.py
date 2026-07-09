@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agentspan.agents.runtime.secret_injection import inject_via_env
+from conductor.ai.agents.runtime.secret_injection import inject_via_env
 
 # Two unique env var names so this test never collides with anything real on
 # the developer's machine or in CI.
@@ -246,7 +246,7 @@ def test_native_dispatch_and_framework_share_one_lock():
     threads; verify one is blocked while the other holds the lock. Both
     paths import the same helper, so a single lock is the invariant we test.
     """
-    from agentspan.agents.runtime.secret_injection import _env_injection_lock
+    from conductor.ai.agents.runtime.secret_injection import _env_injection_lock
 
     held = threading.Event()
     release = threading.Event()

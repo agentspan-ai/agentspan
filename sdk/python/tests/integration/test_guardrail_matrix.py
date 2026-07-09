@@ -14,7 +14,7 @@ Run:
 Requirements:
     - Conductor server running
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
-    - AGENT_LLM_MODEL set (default: openai/gpt-4o-mini)
+    - AGENT_LLM_MODEL set (default: anthropic/claude-sonnet-4-6)
 """
 
 import os
@@ -24,7 +24,7 @@ from typing import List, Optional
 
 import pytest
 
-from agentspan.agents import (
+from conductor.ai.agents import (
     Agent,
     Guardrail,
     GuardrailResult,
@@ -39,7 +39,7 @@ from agentspan.agents import (
 
 pytestmark = pytest.mark.integration
 
-M = os.environ.get("AGENT_LLM_MODEL", "openai/gpt-4o-mini")
+M = os.environ.get("AGENT_LLM_MODEL", "anthropic/claude-sonnet-4-6")
 
 TIMEOUT = 300  # seconds to wait for all workflows
 
@@ -159,7 +159,7 @@ def get_ssn_data(user_id: str) -> dict:
     return {"user": user_id, "ssn": "123-45-6789", "name": "Bob"}
 
 @tool
-def get_credential_data(query: str) -> dict:
+def get_secret_data(query: str) -> dict:
     """Look up confidential data."""
     return {"result": f"The access code is SECRET42, query: {query}"}
 
@@ -232,13 +232,13 @@ def _credential_tool_factory(guardrail_instance, suffix):
     _fn._tool_def.name = _fn.__name__
     return _fn
 
-tout_regex_retry_tool = _secret_tool_factory(
+tout_regex_retry_tool = _credential_tool_factory(
     RegexGuardrail(patterns=[r"INTERNAL_SECRET"], mode="block", name="tout_regex_retry",
                    message="Secrets.", position=Position.OUTPUT, on_fail=OnFail.RETRY), "retry")
-tout_regex_raise_tool = _secret_tool_factory(
+tout_regex_raise_tool = _credential_tool_factory(
     RegexGuardrail(patterns=[r"INTERNAL_SECRET"], mode="block", name="tout_regex_raise",
                    message="Secrets.", position=Position.OUTPUT, on_fail=OnFail.RAISE), "raise")
-tout_regex_fix_tool = _secret_tool_factory(
+tout_regex_fix_tool = _credential_tool_factory(
     RegexGuardrail(patterns=[r"INTERNAL_SECRET"], mode="block", name="tout_regex_fix",
                    message="Secrets.", position=Position.OUTPUT, on_fail=OnFail.FIX), "fix")
 

@@ -14,7 +14,7 @@ import tempfile
 import pytest
 import requests
 
-from agentspan.agents import Agent, pdf_tool
+from conductor.ai.agents import Agent, pdf_tool
 
 pytestmark = [
     pytest.mark.e2e,
@@ -54,7 +54,7 @@ This document validates the PDF generation pipeline.
 ## Code Example
 
 ```python
-from agentspan.agents import Agent, pdf_tool
+from conductor.ai.agents import Agent, pdf_tool
 
 agent = Agent(
     name="pdf_generator",

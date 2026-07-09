@@ -14,8 +14,8 @@ Requirements:
     - export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 """
 
-from agentspan.agents import Agent, AgentRuntime, CodeExecutionConfig
-from agentspan.agents.code_executor import JupyterCodeExecutor
+from conductor.ai.agents import Agent, AgentRuntime, CodeExecutionConfig
+from conductor.ai.agents.code_executor import JupyterCodeExecutor
 from settings import settings
 
 jupyter_coder = Agent(

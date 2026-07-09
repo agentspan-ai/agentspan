@@ -21,7 +21,7 @@ import org.conductoross.conductor.ai.model.ToolDef;
  * <p>Mirrors the Python pattern:
  * <pre>{@code
  * from agents import Agent
- * agent = Agent(name="greeter", instructions="...", model="openai/gpt-4o-mini")
+ * agent = Agent(name="greeter", instructions="...", model="anthropic/claude-sonnet-4-6")
  * runtime.run(agent, "Say hi")
  * }</pre>
  *

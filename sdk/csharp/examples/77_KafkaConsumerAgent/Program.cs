@@ -21,8 +21,8 @@
 //   - AGENTSPAN_LLM_MODEL set in environment
 
 using Confluent.Kafka;
-using Agentspan;
-using Agentspan.Examples;
+using Conductor.AI;
+using Conductor.AI.Examples;
 
 const string KafkaBootstrap = "localhost:9092";
 const string KafkaTopic     = "agentspan_topic";

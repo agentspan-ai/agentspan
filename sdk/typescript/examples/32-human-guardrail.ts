@@ -15,8 +15,8 @@
 
 import * as readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { Agent, AgentRuntime, guardrail, tool } from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, guardrail, tool } from '@conductor-oss/conductor-agent-sdk';
+import type { GuardrailResult } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from './settings';
 
 // -- Guardrail ---------------------------------------------------------------

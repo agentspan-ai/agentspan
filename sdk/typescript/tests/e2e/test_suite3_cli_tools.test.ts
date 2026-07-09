@@ -1,29 +1,39 @@
 /**
- * Suite 3: CLI Tools — command execution and credential isolation.
+ * Suite 3: CLI Tools — command whitelist and credential lifecycle.
  *
- * With secrets delegated to the Orkes host, standalone/CI has no secret
- * backend. This suite covers what remains testable without one:
- *   1. ls and mktemp succeed without credentials.
- *   2. gh (requiring a credential) does NOT succeed without a backend.
+ * Tests CLI tool execution with credential isolation:
+ *   1. ls and mktemp succeed without credentials
+ *   2. gh fails without server credential
+ *   3. gh succeeds after credential added
+ *   4. Commands outside whitelist are rejected
  *
  * Requires: gh CLI installed, GITHUB_TOKEN env var set.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { execSync } from "node:child_process";
-import { Agent, AgentRuntime, tool } from "@agentspan-ai/sdk";
-import { checkServerHealth, MODEL, TIMEOUT, getOutputText } from "./helpers";
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { execSync } from 'node:child_process';
+import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
+import {
+  checkServerHealth,
+  MODEL,
+  TIMEOUT,
+  credentialSet,
+  credentialDelete,
+  getOutputText,
+  runDiagnostic,
+} from './helpers';
 
-const CRED_NAME = "GITHUB_TOKEN";
+const CRED_NAME = 'GITHUB_TOKEN';
 let runtime: AgentRuntime;
 
 beforeAll(async () => {
   const healthy = await checkServerHealth();
-  if (!healthy) throw new Error("Server not available");
+  if (!healthy) throw new Error('Server not available');
   runtime = new AgentRuntime();
 });
 
 afterAll(async () => {
+  await credentialDelete(CRED_NAME);
   await runtime.shutdown();
 });
 
@@ -39,12 +49,12 @@ const cliLs = tool(
     }
   },
   {
-    name: "cli_ls",
-    description: "List directory contents.",
+    name: 'cli_ls',
+    description: 'List directory contents.',
     inputSchema: {
-      type: "object",
-      properties: { path: { type: "string", description: "Directory path" } },
-      required: ["path"],
+      type: 'object',
+      properties: { path: { type: 'string', description: 'Directory path' } },
+      required: ['path'],
     },
   },
 );
@@ -52,23 +62,23 @@ const cliLs = tool(
 const cliMktemp = tool(
   async () => {
     try {
-      const out = execSync("mktemp", { timeout: 15_000 }).toString().trim();
+      const out = execSync('mktemp', { timeout: 15_000 }).toString().trim();
       return `mktemp_ok:${out}`;
     } catch (e: unknown) {
       return `mktemp_error:${(e as Error).message.slice(0, 200)}`;
     }
   },
   {
-    name: "cli_mktemp",
-    description: "Create a temporary file.",
-    inputSchema: { type: "object", properties: {} },
+    name: 'cli_mktemp',
+    description: 'Create a temporary file.',
+    inputSchema: { type: 'object', properties: {} },
   },
 );
 
 const cliGh = tool(
   async (args: { subcommand: string }) => {
-    const token = process.env.GITHUB_TOKEN ?? "";
-    if (!token) throw new Error("GITHUB_TOKEN not found in environment.");
+    const token = process.env.GITHUB_TOKEN ?? '';
+    if (!token) throw new Error('GITHUB_TOKEN not found in environment.');
     try {
       const out = execSync(`gh ${args.subcommand}`, { timeout: 30_000 }).toString().trim();
       return `gh_ok:${out.slice(0, 200)}`;
@@ -77,15 +87,15 @@ const cliGh = tool(
     }
   },
   {
-    name: "cli_gh",
-    description: "Run a gh CLI command. Requires GITHUB_TOKEN.",
+    name: 'cli_gh',
+    description: 'Run a gh CLI command. Requires GITHUB_TOKEN.',
     credentials: [CRED_NAME],
     inputSchema: {
-      type: "object",
+      type: 'object',
       properties: {
-        subcommand: { type: "string", description: 'gh subcommand e.g. "repo list --limit 3"' },
+        subcommand: { type: 'string', description: 'gh subcommand e.g. "repo list --limit 3"' },
       },
-      required: ["subcommand"],
+      required: ['subcommand'],
     },
   },
 );
@@ -98,46 +108,59 @@ Report each result.`;
 
 function makeAgent() {
   return new Agent({
-    name: "e2e_ts_cli_tools",
+    name: 'e2e_ts_cli_tools',
     model: MODEL,
     instructions:
-      "You have three tools: cli_ls, cli_mktemp, cli_gh. " +
-      "Call each tool exactly once as directed. Report output verbatim.",
+      'You have three tools: cli_ls, cli_mktemp, cli_gh. ' +
+      'Call each tool exactly once as directed. Report output verbatim.',
     tools: [cliLs, cliMktemp, cliGh],
   });
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────
 
-describe("Suite 3: CLI Tools", { timeout: 600_000 }, () => {
-  it.skipIf(!process.env.GITHUB_TOKEN)(
-    "credential-free CLI tools succeed; credential-requiring tool fails without backend",
-    async () => {
-      const realToken = process.env.GITHUB_TOKEN!;
+describe('Suite 3: CLI Tools', { timeout: 600_000 }, () => {
+  it.skipIf(!process.env.GITHUB_TOKEN)('CLI credential lifecycle', async () => {
+    const realToken = process.env.GITHUB_TOKEN!;
 
-      // Runtime check: gh CLI must be installed. Cannot use skipIf since
-      // it requires executing a subprocess — not a simple env var check.
-      try {
-        execSync("gh --version", { timeout: 5_000 });
-      } catch {
-        console.log("gh CLI not installed — skipping Suite 3");
-        return;
-      }
+    // Runtime check: gh CLI must be installed. Cannot use skipIf since
+    // it requires executing a subprocess — not a simple env var check.
+    try {
+      execSync('gh --version', { timeout: 5_000 });
+    } catch {
+      console.log('gh CLI not installed — skipping Suite 3');
+      return;
+    }
 
-      const agent = makeAgent();
+    const agent = makeAgent();
 
-      // Export to env (should NOT be used by the server — no secret backend).
-      process.env.GITHUB_TOKEN = realToken;
+    // ── Step 1: Clean slate ────────────────────────────────────
+    await credentialDelete(CRED_NAME);
 
-      // No credential backend — ls/mktemp succeed, gh does NOT succeed.
-      const result = await runtime.run(agent, PROMPT, { timeout: TIMEOUT });
-      expect(result.executionId).toBeTruthy();
-      expect(["COMPLETED", "FAILED", "TERMINATED"]).toContain(result.status);
+    // ── Step 2: Export to env (should NOT be used by server) ───
+    process.env.GITHUB_TOKEN = realToken;
 
-      const output = getOutputText(result as unknown as { output: unknown });
-      expect(output).toContain("ls_ok");
-      expect(output).toContain("mktemp_ok");
-      expect(output).not.toContain("gh_ok");
-    },
-  );
+    // ── Step 3: No credential — ls/mktemp succeed, gh fails ───
+    const result1 = await runtime.run(agent, PROMPT, { timeout: TIMEOUT });
+    expect(result1.executionId).toBeTruthy();
+    expect(['COMPLETED', 'FAILED', 'TERMINATED']).toContain(result1.status);
+
+    const output1 = getOutputText(result1 as unknown as { output: unknown });
+    expect(output1).toContain('ls_ok');
+    expect(output1).toContain('mktemp_ok');
+    expect(output1).not.toContain('gh_ok');
+
+    // ── Step 4: Add credential ─────────────────────────────────
+    await credentialSet(CRED_NAME, realToken);
+
+    // ── Step 5: All three succeed ──────────────────────────────
+    const result2 = await runtime.run(agent, PROMPT, { timeout: TIMEOUT });
+    const diag2 = runDiagnostic(result2 as unknown as Record<string, unknown>);
+    expect(result2.status, `[With cred] ${diag2}`).toBe('COMPLETED');
+
+    const output2 = getOutputText(result2 as unknown as { output: unknown });
+    expect(output2).toContain('ls_ok');
+    expect(output2).toContain('mktemp_ok');
+    expect(output2).toContain('gh_ok');
+  });
 });

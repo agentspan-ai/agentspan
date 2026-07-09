@@ -10,7 +10,7 @@ Get Agentspan running locally in under 60 seconds.
 ## Step 1 — Install
 
 ```bash
-pip install agentspan
+pip install conductor-agent-sdk
 ```
 
 This installs the Python SDK and the `agentspan` CLI — everything you need as a Python developer.
@@ -21,7 +21,7 @@ Verify your setup:
 agentspan doctor
 ```
 
-> **uv:** `uv pip install agentspan` also works.
+> **uv:** `uv pip install conductor-agent-sdk` also works.
 >
 > **CLI only (no Python SDK):** `npm install -g @agentspan-ai/agentspan` — downloads the binary eagerly at install time, no Python required.
 
@@ -52,7 +52,7 @@ On first run, this downloads the Agentspan server JAR (~50 MB) and starts it on 
 Save this as `hello.py` and run `python hello.py`:
 
 ```python
-from agentspan.agents import Agent, AgentRuntime, tool
+from conductor.ai.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -96,7 +96,7 @@ See [Tools](/docs/concepts/tools) for all tool types.
 If you prefer not to use the context manager, module-level functions are available. They use a shared singleton runtime under the hood:
 
 ```python
-from agentspan.agents import Agent, tool, run
+from conductor.ai.agents import Agent, tool, run
 
 @tool
 def get_weather(city: str) -> str:

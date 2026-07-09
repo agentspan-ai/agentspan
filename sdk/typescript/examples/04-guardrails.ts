@@ -13,8 +13,8 @@ import {
   RegexGuardrail,
   LLMGuardrail,
   guardrail,
-} from '@agentspan-ai/sdk';
-import type { GuardrailResult } from '@agentspan-ai/sdk';
+} from '@conductor-oss/conductor-agent-sdk';
+import type { GuardrailResult } from '@conductor-oss/conductor-agent-sdk';
 
 const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 
@@ -34,7 +34,7 @@ const piiBlocker = new RegexGuardrail({
 // -- LLMGuardrail: detect biased language --
 const biasDetector = new LLMGuardrail({
   name: 'bias_detector',
-  model: 'openai/gpt-4o-mini',
+  model: 'anthropic/claude-sonnet-4-6',
   policy: 'Check for biased language or stereotypes. If found, provide a corrected version.',
   position: 'output',
   onFail: 'fix',

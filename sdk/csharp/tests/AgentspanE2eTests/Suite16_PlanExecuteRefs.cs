@@ -16,10 +16,10 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Xunit;
-using Agentspan.Examples;
-using Agentspan.Plans;
+using Conductor.AI.Examples;
+using Conductor.AI.Plans;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite16_PlanExecuteRefs

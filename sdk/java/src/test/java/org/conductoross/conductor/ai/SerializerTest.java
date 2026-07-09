@@ -90,7 +90,7 @@ class SerializerTest {
     void stateful_propagates_true_to_each_tool() {
         Agent agent = Agent.builder()
                 .name("stateful_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .stateful(true)
                 .tools(List.of(workerTool("tool_a"), workerTool("tool_b")))
@@ -108,7 +108,7 @@ class SerializerTest {
     void non_stateful_agent_does_not_set_tool_stateful() {
         Agent agent = Agent.builder()
                 .name("normal_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .tools(List.of(workerTool("tool_c")))
                 .build();
@@ -125,7 +125,7 @@ class SerializerTest {
     void cli_config_injects_run_command_worker_tool() {
         Agent agent = Agent.builder()
                 .name("ops")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .cliConfig(CliConfig.builder()
                         .allowedCommands(List.of("git", "gh"))
@@ -163,7 +163,7 @@ class SerializerTest {
     void disabled_cli_config_does_not_inject_run_command_tool() {
         Agent agent = Agent.builder()
                 .name("ops2")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .cliConfig(CliConfig.builder()
                         .enabled(false)
@@ -184,7 +184,7 @@ class SerializerTest {
     void base_url_serialized() {
         Agent agent = Agent.builder()
                 .name("baseurl_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .baseUrl("http://proxy.internal/v1")
                 .build();
@@ -198,7 +198,7 @@ class SerializerTest {
     void missing_base_url_not_serialized() {
         Agent agent = Agent.builder()
                 .name("no_baseurl_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .build();
 
@@ -213,7 +213,7 @@ class SerializerTest {
     void text_gate_serialized_with_all_fields() {
         Agent agent = Agent.builder()
                 .name("gate_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .gate(new TextGate("STOP", false))
                 .build();
@@ -232,7 +232,7 @@ class SerializerTest {
     void text_gate_case_sensitive_default() {
         Agent agent = Agent.builder()
                 .name("gate_cs_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .gate(new TextGate("DONE"))
                 .build();
@@ -251,7 +251,7 @@ class SerializerTest {
     void before_agent_callback_serialized() {
         Agent agent = Agent.builder()
                 .name("before_cb_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .beforeAgentCallback(ctx -> ctx)
                 .build();
@@ -270,7 +270,7 @@ class SerializerTest {
     void after_agent_callback_serialized() {
         Agent agent = Agent.builder()
                 .name("after_cb_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .afterAgentCallback(ctx -> ctx)
                 .build();
@@ -289,7 +289,7 @@ class SerializerTest {
     void both_callbacks_produce_two_entries() {
         Agent agent = Agent.builder()
                 .name("both_cb_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .beforeAgentCallback(ctx -> ctx)
                 .afterAgentCallback(ctx -> ctx)
@@ -311,7 +311,7 @@ class SerializerTest {
     void no_callbacks_absent_from_output() {
         Agent agent = Agent.builder()
                 .name("no_cb_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .build();
 
@@ -327,7 +327,7 @@ class SerializerTest {
     void stop_message_termination_serialized() {
         Agent agent = Agent.builder()
                 .name("stop_msg_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .termination(StopMessageTermination.of("DONE"))
                 .build();
@@ -377,7 +377,7 @@ class SerializerTest {
 
         Agent agent = Agent.builder()
                 .name("regex_guard_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .guardrails(List.of(guard))
                 .build();
@@ -401,7 +401,7 @@ class SerializerTest {
 
         Agent agent = Agent.builder()
                 .name("block_guard_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .guardrails(List.of(guard))
                 .build();
@@ -421,7 +421,7 @@ class SerializerTest {
 
         Agent agent = Agent.builder()
                 .name("allow_guard_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .guardrails(List.of(guard))
                 .build();
@@ -444,7 +444,7 @@ class SerializerTest {
     void llm_guardrail_type_model_policy_at_top_level() {
         GuardrailDef guard = LLMGuardrail.builder()
                 .name("safety_guard")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .policy("Reject harmful content.")
                 .position(Position.OUTPUT)
                 .onFail(OnFail.RETRY)
@@ -452,7 +452,7 @@ class SerializerTest {
 
         Agent agent = Agent.builder()
                 .name("llm_guard_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .guardrails(List.of(guard))
                 .build();
@@ -462,7 +462,7 @@ class SerializerTest {
 
         assertEquals("llm", g.get("guardrailType"));
         // model and policy are inlined at top level, NOT nested under config
-        assertEquals("openai/gpt-4o-mini", g.get("model"), "model should be at top level of guardrail map");
+        assertEquals("anthropic/claude-sonnet-4-6", g.get("model"), "model should be at top level of guardrail map");
         assertEquals("Reject harmful content.", g.get("policy"), "policy should be at top level of guardrail map");
         assertNull(g.get("config"), "there should be no nested 'config' key");
     }
@@ -474,7 +474,7 @@ class SerializerTest {
                 () -> LLMGuardrail.builder().name("no_model").policy("test").build());
         assertThrows(IllegalArgumentException.class, () -> LLMGuardrail.builder()
                 .name("no_policy")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .build());
     }
 
@@ -484,17 +484,17 @@ class SerializerTest {
     @SuppressWarnings("unchecked")
     void on_condition_handoff_serialized_with_target() {
         Agent supervisor =
-                Agent.builder().name("supervisor").model("openai/gpt-4o-mini").build();
+                Agent.builder().name("supervisor").model("anthropic/claude-sonnet-4-6").build();
         Agent worker = Agent.builder()
                 .name("worker")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .handoffs(List.of(new OnCondition("supervisor", ctx -> Boolean.TRUE.equals(ctx.get("escalate")))))
                 .build();
 
         Agent team = Agent.builder()
                 .name("team")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .agents(supervisor, worker)
                 .strategy(Strategy.HANDOFF)
@@ -549,7 +549,7 @@ class SerializerTest {
         ToolDef img = MediaTools.imageTool("img_tool", "image", "openai", "dall-e-3");
         Agent agent = Agent.builder()
                 .name("media_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .tools(List.of(img))
                 .build();
@@ -571,7 +571,7 @@ class SerializerTest {
         ToolDef wait = WaitForMessageTool.create("wait_tool", "Wait for messages");
         Agent agent = Agent.builder()
                 .name("wait_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .tools(List.of(wait))
                 .build();
@@ -593,7 +593,7 @@ class SerializerTest {
         ToolDef human = HumanTool.create("human_tool", "Ask human");
         Agent agent = Agent.builder()
                 .name("human_agent")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .instructions("test")
                 .tools(List.of(human))
                 .build();
@@ -667,7 +667,7 @@ class SerializerTest {
     void skill_agent_uses_framework_fast_path() {
         Agent skillAgent = Agent.builder()
                 .name("my_skill")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .framework("skill")
                 .frameworkConfig(Map.of("skillMd", "# My Skill\nDo things."))
                 .build();
@@ -848,7 +848,7 @@ class SerializerTest {
         // byte-equal across SDKs so the server compiler sees the same
         // payload regardless of language.
         Agent planner =
-                Agent.builder().name("planner_sub").model("openai/gpt-4o-mini").build();
+                Agent.builder().name("planner_sub").model("anthropic/claude-sonnet-4-6").build();
         ToolDef stub = ToolDef.builder()
                 .name("stub")
                 .description("stub")
@@ -856,7 +856,7 @@ class SerializerTest {
                 .build();
         Agent harness = Agent.builder()
                 .name("h")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .strategy(Strategy.PLAN_EXECUTE)
                 .planner(planner)
                 .tools(List.of(stub))
@@ -886,7 +886,7 @@ class SerializerTest {
         // Counterfactual: without plannerContext the field MUST NOT appear
         // on the wire. Pairs with the positive test — pins the gating.
         Agent planner =
-                Agent.builder().name("planner_sub").model("openai/gpt-4o-mini").build();
+                Agent.builder().name("planner_sub").model("anthropic/claude-sonnet-4-6").build();
         ToolDef stub = ToolDef.builder()
                 .name("stub")
                 .description("stub")
@@ -894,7 +894,7 @@ class SerializerTest {
                 .build();
         Agent harness = Agent.builder()
                 .name("h")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .strategy(Strategy.PLAN_EXECUTE)
                 .planner(planner)
                 .tools(List.of(stub))
@@ -907,10 +907,10 @@ class SerializerTest {
     void planner_context_rejected_on_non_plan_execute_strategy() {
         // Same guard shape as planner=/fallback= — setting plannerContext
         // on anything other than PLAN_EXECUTE is a silent bug.
-        Agent sub = Agent.builder().name("sub").model("openai/gpt-4o-mini").build();
+        Agent sub = Agent.builder().name("sub").model("anthropic/claude-sonnet-4-6").build();
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Agent.builder()
                 .name("h")
-                .model("openai/gpt-4o-mini")
+                .model("anthropic/claude-sonnet-4-6")
                 .strategy(Strategy.HANDOFF)
                 .agents(List.of(sub))
                 .plannerContext("rule")
@@ -957,7 +957,7 @@ class SerializerTest {
     @Test
     void parity_fields_absent_when_unset() {
         Agent agent =
-                Agent.builder().name("plain_agent").model("openai/gpt-4o-mini").build();
+                Agent.builder().name("plain_agent").model("anthropic/claude-sonnet-4-6").build();
         Map<String, Object> out = ser.serialize(agent);
         assertFalse(out.containsKey("reasoningEffort"), "reasoningEffort omitted when unset");
         assertFalse(out.containsKey("maskedFields"), "maskedFields omitted when unset");

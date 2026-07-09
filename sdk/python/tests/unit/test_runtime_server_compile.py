@@ -9,8 +9,8 @@ class TestServerCompileIntegration:
 
     def test_compile_via_server_serializes_correctly(self):
         """AgentConfigSerializer produces correct JSON for server compilation."""
-        from agentspan.agents.agent import Agent
-        from agentspan.agents.config_serializer import AgentConfigSerializer
+        from conductor.ai.agents.agent import Agent
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
 
         agent = Agent(name="test", model="openai/gpt-4o", instructions="Hello")
         serializer = AgentConfigSerializer()

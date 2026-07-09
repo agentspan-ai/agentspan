@@ -30,7 +30,7 @@ A single agent handles each ticket end-to-end:
 ## Full code
 
 ```python
-from agentspan.agents import Agent, AgentHandle, AgentRuntime, tool, start
+from conductor.ai.agents import Agent, AgentHandle, AgentRuntime, tool, start
 from pydantic import BaseModel
 from enum import Enum
 
@@ -84,7 +84,7 @@ def apply_credit(customer_id: str, amount_usd: float, note: str) -> dict:
 
 support_agent = Agent(
     name="support_agent",
-    model="openai/gpt-4o-mini",
+    model="anthropic/claude-sonnet-4-6",
     output_type=Resolution,
     tools=[
         lookup_customer,

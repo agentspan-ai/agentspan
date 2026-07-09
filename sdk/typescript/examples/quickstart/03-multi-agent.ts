@@ -2,7 +2,7 @@
  * Multi-agent — sequential pipeline with two agents.
  */
 
-import { Agent, AgentRuntime } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime } from '@conductor-oss/conductor-agent-sdk';
 import { llmModel } from '../settings.js';
 
 const researcher = new Agent({

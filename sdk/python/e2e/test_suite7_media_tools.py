@@ -14,7 +14,7 @@ import os
 import pytest
 import requests
 
-from agentspan.agents import Agent, audio_tool, image_tool
+from conductor.ai.agents import Agent, audio_tool, image_tool
 
 pytestmark = [
     pytest.mark.e2e,

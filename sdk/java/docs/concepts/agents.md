@@ -7,7 +7,7 @@
 ```java
 Agent agent = Agent.builder()
     .name("my_agent")                          // required; becomes the Conductor workflow name
-    .model("openai/gpt-4o-mini")               // required; "provider/model" format
+    .model("anthropic/claude-sonnet-4-6")               // required; "provider/model" format
     .instructions("You are a helpful agent.")  // system prompt
     .build();
 ```
@@ -114,7 +114,7 @@ import org.conductoross.conductor.ai.internal.ToolRegistry;
 
 Agent agent = Agent.builder()
     .name("tool_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .tools(ToolRegistry.fromInstance(new MyTools()))          // from @Tool-annotated POJO
     .tools(HttpTool.builder()
         .name("search")
@@ -132,7 +132,7 @@ Agent pipeline = writer.then(editor);             // .then() = Strategy.SEQUENTI
 
 Agent team = Agent.builder()
     .name("team")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .agents(writer, editor, reviewer)
     .strategy(Strategy.PARALLEL)
     .build();
@@ -150,14 +150,14 @@ import org.conductoross.conductor.ai.enums.OnFail;
 
 Agent agent = Agent.builder()
     .name("safe_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .guardrails(
         RegexGuardrail.builder()
             .name("no_phone").position(Position.OUTPUT)
             .patterns("\\d{10}").onFail(OnFail.RAISE).build(),
         LLMGuardrail.builder()
             .name("tone_check").position(Position.OUTPUT)
-            .model("openai/gpt-4o-mini").policy("The tone must be professional.")
+            .model("anthropic/claude-sonnet-4-6").policy("The tone must be professional.")
             .onFail(OnFail.RETRY).build())
     .build();
 ```
@@ -171,13 +171,13 @@ Declare which secrets the agent's tools require. The SDK fetches them from the A
 ```java
 Agent agent = Agent.builder()
     .name("github_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .credentials("GITHUB_TOKEN", "JIRA_API_KEY")
     .build();
 
-// In the tool:
+// In the tool — read the resolved secret off the injected ToolContext:
 public String createIssue(String title, ToolContext ctx) {
-    String token = Credentials.get("GITHUB_TOKEN");
+    String token = ctx.getCredential("GITHUB_TOKEN");
     // ...
 }
 ```
@@ -187,7 +187,7 @@ public String createIssue(String title, ToolContext ctx) {
 ```java
 Agent agent = Agent.builder()
     .name("coder")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .localCodeExecution(true)
     .allowedLanguages(List.of("python", "javascript"))
     .codeExecutionTimeout(30)          // seconds per execution
@@ -201,7 +201,7 @@ Intercept the agent loop before or after each model call:
 ```java
 Agent agent = Agent.builder()
     .name("observed_agent")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .beforeModelCallback(ctx -> {
         System.out.println("Calling LLM with: " + ctx.get("messages"));
         return ctx;  // return modified context or the original
@@ -213,6 +213,9 @@ Agent agent = Agent.builder()
     .build();
 ```
 
+For composable, reusable hooks — including `onToolStart`/`onToolEnd` and agent-level
+start/end — use a `CallbackHandler`. See [Callbacks](callbacks.md).
+
 ### Fallback
 
 Run a second agent if the first exceeds `fallbackMaxTurns`:
@@ -220,7 +223,7 @@ Run a second agent if the first exceeds `fallbackMaxTurns`:
 ```java
 Agent agent = Agent.builder()
     .name("primary")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .fallback(Agent.builder().name("backup").model("anthropic/claude-haiku-4-5-20251001").build())
     .fallbackMaxTurns(5)
     .build();

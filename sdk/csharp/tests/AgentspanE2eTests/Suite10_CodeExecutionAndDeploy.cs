@@ -20,9 +20,9 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using Xunit;
-using Agentspan.Examples;
+using Conductor.AI.Examples;
 
-namespace Agentspan.E2eTests;
+namespace Conductor.AI.E2eTests;
 
 [Collection("E2e")]
 public sealed class Suite10_CodeExecutionAndDeploy

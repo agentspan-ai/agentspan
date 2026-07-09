@@ -8,7 +8,7 @@ import type {
   GuardrailDef,
   FrameworkId,
 } from "./types.js";
-import { AgentAPIError, AgentspanError } from "./errors.js";
+import { AgentspanError } from "./errors.js";
 import { AgentConfig } from "./config.js";
 import type { AgentConfigOptions } from "./config.js";
 import { Agent } from "./agent.js";
@@ -23,7 +23,8 @@ import type { TerminationCondition } from "./termination.js";
 import type { HandoffContext } from "./handoff.js";
 import { detectFramework } from "./frameworks/detect.js";
 import { Schedule, ScheduleClient } from "./schedule.js";
-import type { SchedulerFetcher } from "./schedule.js";
+import { AgentClient } from "./agent-client.js";
+import { WorkflowClient } from "./workflow-client.js";
 import { serializeFrameworkAgent } from "./frameworks/serializer.js";
 import { serializeLangGraph } from "./frameworks/langgraph-serializer.js";
 import { serializeLangChain } from "./frameworks/langchain-serializer.js";
@@ -73,19 +74,26 @@ export interface AgentHandle {
  */
 export class AgentRuntime {
   readonly config: AgentConfig;
-  private readonly authHeaders: Record<string, string>;
+  /** Control-plane client for `/agent/*` (compile/deploy/start/status/...). */
+  readonly client: AgentClient;
   private readonly serializer: AgentConfigSerializer;
   private readonly workerManager: WorkerManager;
 
   constructor(options?: AgentConfigOptions) {
     this.config = new AgentConfig(options);
-    this.authHeaders = this._buildAuthHeaders();
+    this.client = new AgentClient(this.config);
     this.serializer = new AgentConfigSerializer();
     this.workerManager = new WorkerManager(
       this.config.serverUrl,
-      this.authHeaders,
+      {},
       this.config.workerPollIntervalMs,
+      () => this.client.authHeaders(),
     );
+  }
+
+  /** Read-only workflow client (Conductor workflow executions). */
+  get workflows(): WorkflowClient {
+    return this.client.workflows;
   }
 
   // ── run() ─────────────────────────────────────────────
@@ -160,7 +168,7 @@ export class AgentRuntime {
       const sseUrl = `${this.config.serverUrl}/agent/stream/${executionId}`;
       const agentStream = new AgentStream(
         sseUrl,
-        this.authHeaders,
+        await this.client.authHeaders(),
         executionId,
         async (body) => this._respond(executionId, body, options?.signal),
         this.config.serverUrl,
@@ -278,6 +286,9 @@ export class AgentRuntime {
     await this._registerSystemWorkers(nativeAgent, requiredWorkers, runId);
     await this.workerManager.startPolling();
 
+    // Resolve auth headers once for the (synchronous) stream() closure below.
+    const streamHeaders = await this.client.authHeaders();
+
     const handle: AgentHandle = {
       executionId,
       correlationId,
@@ -352,7 +363,7 @@ export class AgentRuntime {
         const sseUrl = `${this.config.serverUrl}/agent/stream/${executionId}`;
         return new AgentStream(
           sseUrl,
-          this.authHeaders,
+          streamHeaders,
           executionId,
           async (body) => this._respond(executionId, body, options?.signal),
           this.config.serverUrl,
@@ -414,50 +425,15 @@ export class AgentRuntime {
     return info;
   }
 
-  /** Lazily-constructed `ScheduleClient` backed by this runtime's HTTP plumbing. */
+  /** `ScheduleClient` — shares the control-plane client's schedule surface. */
   schedulesClient(): ScheduleClient {
-    if (!this._scheduleClient) {
-      const fetcher: SchedulerFetcher = {
-        request: async (method, path, body) =>
-          this._httpRequestUntyped(method, path, body),
-      };
-      this._scheduleClient = new ScheduleClient(fetcher);
-    }
-    return this._scheduleClient;
+    return this.client.schedules;
   }
 
-  /** HTTP request returning unknown — used by the scheduler which sometimes receives arrays. */
-  async _httpRequestUntyped(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<unknown> {
-    const url = `${this.config.serverUrl}${path}`;
-    const requestInit: RequestInit = {
-      method,
-      headers: { ...this.authHeaders, "Content-Type": "application/json" },
-    };
-    if (body !== undefined) requestInit.body = JSON.stringify(body);
-    const response = await fetch(url, requestInit);
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      const err = new Error(`HTTP ${response.status}: ${text || response.statusText}`) as Error & {
-        status?: number;
-        body?: string;
-      };
-      err.status = response.status;
-      err.body = text;
-      throw err;
-    }
-    const ct = response.headers.get("content-type") ?? "";
-    if (!ct.includes("application/json")) {
-      const text = await response.text();
-      return text === "" ? null : text;
-    }
-    return response.json();
+  /** HTTP request returning unknown — delegates to the control-plane client. */
+  async _httpRequestUntyped(method: string, path: string, body?: unknown): Promise<unknown> {
+    return this.client._rawRequestUntyped(method, path, body);
   }
-
-  private _scheduleClient?: ScheduleClient;
 
   // ── plan() ────────────────────────────────────────────
 
@@ -521,23 +497,8 @@ export class AgentRuntime {
   // ── Private helpers ───────────────────────────────────
 
   /**
-   * Build auth headers from config.
-   */
-  private _buildAuthHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {};
-
-    if (this.config.apiKey) {
-      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
-    } else if (this.config.authKey && this.config.authSecret) {
-      headers["X-Auth-Key"] = this.config.authKey;
-      headers["X-Auth-Secret"] = this.config.authSecret;
-    }
-
-    return headers;
-  }
-
-  /**
-   * Shared HTTP request wrapper with auth headers and error handling.
+   * Shared HTTP request wrapper for `/agent/*` — delegates to the
+   * control-plane {@link AgentClient} (which owns the Orkes JWT auth).
    */
   async _httpRequest(
     method: string,
@@ -545,63 +506,21 @@ export class AgentRuntime {
     body?: unknown,
     signal?: AbortSignal,
   ): Promise<Record<string, unknown>> {
-    const url = `${this.config.serverUrl}${path}`;
-
-    const requestInit: RequestInit = {
-      method,
-      headers: {
-        ...this.authHeaders,
-        "Content-Type": "application/json",
-      },
-    };
-
-    if (body !== undefined) {
-      requestInit.body = JSON.stringify(body);
-    }
-
-    if (signal) {
-      requestInit.signal = signal;
-    }
-
-    const response = await fetch(url, requestInit);
-
-    if (!response.ok) {
-      const responseBody = await response.text();
-      throw new AgentAPIError(
-        `HTTP ${method} ${path} failed: ${response.status}`,
-        response.status,
-        responseBody,
-      );
-    }
-
-    const text = await response.text();
-    if (!text || text.trim() === "") return {};
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { result: text };
-    }
+    return this.client._request(method, path, body, signal);
   }
 
   /**
    * Get agent status by execution ID.
    */
   async getStatus(executionId: string, signal?: AbortSignal): Promise<AgentStatus> {
-    const response = await this._httpRequest(
-      "GET",
-      `/agent/${executionId}/status`,
-      undefined,
-      signal,
-    );
-    return response as unknown as AgentStatus;
+    return this.client.status(executionId, signal);
   }
 
   /**
    * Send a respond payload to a waiting agent.
    */
   private async _respond(executionId: string, body: unknown, signal?: AbortSignal): Promise<void> {
-    await this._httpRequest("POST", `/agent/${executionId}/respond`, body, signal);
+    await this.client.respond(executionId, body, signal);
   }
 
   /**
@@ -612,11 +531,7 @@ export class AgentRuntime {
     executionId: string,
     signal?: AbortSignal,
   ): Promise<Record<string, unknown> | null> {
-    try {
-      return await this._httpRequest("GET", `/agent/execution/${executionId}`, undefined, signal);
-    } catch {
-      return null;
-    }
+    return this.client.getExecution(executionId, signal);
   }
 
   /**
@@ -1501,7 +1416,7 @@ export class AgentRuntime {
       const sseUrl = `${this.config.serverUrl}/agent/stream/${executionId}`;
       const agentStream = new AgentStream(
         sseUrl,
-        this.authHeaders,
+        await this.client.authHeaders(),
         executionId,
         async (body) => this._respond(executionId, body, options?.signal),
         this.config.serverUrl,
@@ -1596,6 +1511,9 @@ export class AgentRuntime {
 
     const executionId = startResponse.executionId as string;
 
+    // Resolve auth headers once for the (synchronous) stream() closure below.
+    const streamHeaders = await this.client.authHeaders();
+
     const handle: AgentHandle = {
       executionId,
       correlationId,
@@ -1670,7 +1588,7 @@ export class AgentRuntime {
         const sseUrl = `${this.config.serverUrl}/agent/stream/${executionId}`;
         return new AgentStream(
           sseUrl,
-          this.authHeaders,
+          streamHeaders,
           executionId,
           async (body) => this._respond(executionId, body, options?.signal),
           this.config.serverUrl,

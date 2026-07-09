@@ -23,7 +23,7 @@ import java.util.Map;
  *     .addSystem("You are a concise assistant.")
  *     .addUser("Hello");
  *
- * Agent agent = Agent.builder().name("chat").model("openai/gpt-4o-mini").memory(memory).build();
+ * Agent agent = Agent.builder().name("chat").model("anthropic/claude-sonnet-4-6").memory(memory).build();
  * }</pre>
  */
 public class ConversationMemory {

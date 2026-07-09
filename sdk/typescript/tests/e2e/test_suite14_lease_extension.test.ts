@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Agent, AgentRuntime, tool } from '@agentspan-ai/sdk';
+import { Agent, AgentRuntime, tool } from '@conductor-oss/conductor-agent-sdk';
 import { checkServerHealth, MODEL, findToolTasks, runDiagnostic } from './helpers';
 
 let runtime: AgentRuntime;

@@ -19,7 +19,7 @@
 //   - Agentspan server running at AGENTSPAN_SERVER_URL
 //   - monitoring_63d agent previously deployed (run 63d first)
 
-using Agentspan;
+using Conductor.AI;
 
 await using var runtime = new AgentRuntime();
 

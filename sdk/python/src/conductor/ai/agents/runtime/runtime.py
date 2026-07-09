@@ -1,0 +1,5670 @@
+# Copyright (c) 2025 Agentspan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
+"""AgentRuntime — the execution engine for running agents on Conductor.
+
+This is the core orchestrator that:
+1. Sends agent config to the server for compilation into a Conductor workflow.
+2. Registers and starts tool workers with Conductor.
+3. Executes the agent and manages the lifecycle.
+4. Converts Conductor workflow results back into AgentResult/AgentHandle.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import re
+import threading
+import time
+import uuid
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Union
+
+from conductor.ai.agents.agent import Agent
+from conductor.ai.agents.exceptions import _raise_api_error
+from conductor.ai.agents.result import (
+    AgentEvent,
+    AgentHandle,
+    AgentResult,
+    AgentStatus,
+    AgentStream,
+    AsyncAgentStream,
+    DeploymentInfo,
+    EventType,
+    FinishReason,
+    TokenUsage,
+)
+from conductor.ai.agents.runtime.http_client import AgentClient, SSEUnavailableError
+
+logger = logging.getLogger("conductor.ai.agents.runtime")
+
+
+_RETRY_POLICY_MAP = {
+    "fixed": "FIXED",
+    "linear_backoff": "LINEAR_BACKOFF",
+    "exponential_backoff": "EXPONENTIAL_BACKOFF",
+}
+
+VALID_RETRY_POLICIES = frozenset(_RETRY_POLICY_MAP.keys())
+
+
+def _resolve_retry_logic(policy: str) -> str:
+    """Convert a user-friendly retry policy name to the Conductor retry logic constant."""
+    key = policy.lower().strip()
+    if key in _RETRY_POLICY_MAP:
+        return _RETRY_POLICY_MAP[key]
+    upper = key.upper()
+    if upper in _RETRY_POLICY_MAP.values():
+        return upper
+    raise ValueError(
+        f"Invalid retry_policy '{policy}'. Valid options: {', '.join(sorted(VALID_RETRY_POLICIES))}"
+    )
+
+
+def _default_task_def(
+    name: str,
+    *,
+    response_timeout_seconds: int = 10,
+    retry_count: int = 2,
+    retry_delay_seconds: int = 2,
+    retry_policy: str = "linear_backoff",
+) -> Any:
+    """Create a TaskDef with standard retry policy for agent worker tasks.
+
+    Timeout is 0 (no timeout) — the agent configuration controls execution
+    duration, not the task definition.
+
+    response_timeout_seconds (default 10s): if a worker fails to respond
+    within this time, Conductor marks the task as timed out and retries.
+    Kept short to detect dead workers quickly; lease extension heartbeats
+    (at 80% of this value) keep long-running tasks alive automatically.
+    """
+    from conductor.client.http.models.task_def import TaskDef
+
+    td = TaskDef(name=name)
+    td.retry_count = retry_count
+    td.retry_logic = _resolve_retry_logic(retry_policy)
+    td.retry_delay_seconds = retry_delay_seconds
+    td.timeout_seconds = 0
+    td.response_timeout_seconds = response_timeout_seconds
+    td.timeout_policy = "RETRY"
+    return td
+
+
+def _passthrough_task_def(name: str) -> Any:
+    """Create a TaskDef for framework passthrough workers.
+
+    Timeout is 0 (no timeout) — the agent configuration controls execution
+    duration, not the task definition.
+
+    response_timeout_seconds is 10s: same reasoning as _default_task_def.
+    """
+    from conductor.client.http.models.task_def import TaskDef
+
+    td = TaskDef(name=name)
+    td.retry_count = 2
+    td.retry_logic = "LINEAR_BACKOFF"
+    td.retry_delay_seconds = 2
+    td.timeout_seconds = 0
+    td.response_timeout_seconds = 10
+    td.timeout_policy = "RETRY"
+    return td
+
+
+def _has_stateful_tools(agent: Any) -> bool:
+    """Return True if the agent is stateful or any @tool has stateful=True."""
+    from conductor.ai.agents.tool import ToolDef, get_tool_defs
+
+    if getattr(agent, "stateful", False):
+        return True
+    # Only inspect tools that can carry stateful metadata — callables
+    # (@tool / @worker_task) and ToolDef instances.  Plain strings (e.g.
+    # built-in tool names) can never be stateful and must be skipped so
+    # get_tool_def() does not raise TypeError.
+    resolvable = [t for t in getattr(agent, "tools", []) if callable(t) or isinstance(t, ToolDef)]
+    for td in get_tool_defs(resolvable):
+        if getattr(td, "stateful", False):
+            return True
+    for sub in getattr(agent, "agents", []):
+        if _has_stateful_tools(sub):
+            return True
+    return False
+
+
+# Thread count for system-level async workers (guardrails, handoff checks, etc.).
+# User-defined tool workers keep the per-worker default from @worker_task.
+_SYSTEM_WORKER_THREADS = 10
+
+
+async def _call_user_fn(fn, *args, **kwargs):
+    """Call a user-provided function, awaiting if it's async."""
+    import asyncio
+    import inspect
+
+    if inspect.iscoroutinefunction(fn):
+        return await fn(*args, **kwargs)
+    return await asyncio.to_thread(fn, *args, **kwargs)
+
+
+def _resolve_loop_iteration(iteration: object) -> int:
+    """Resolve the current DO_WHILE loop iteration robustly across Conductor cores.
+
+    The compiler wires a worker's ``iteration`` input from the loop counter
+    reference ``${<agent>_loop.iteration}``. Conductor cores disagree on whether
+    that loop-output reference resolves for tasks executing *inside* the loop
+    body: the OSS core agentspan compiles against resolves it to the live integer,
+    but some embedding hosts' cores (e.g. orkes-conductor) leave it unresolved and
+    deliver ``None`` — which then crashes ``iteration >= max_retries`` comparisons.
+
+    The authoritative per-iteration value is always present on the Task object
+    (``task.iteration``), set identically by every core (1-based inside a loop,
+    0 outside). So: trust a valid integer input when present (preserves the OSS
+    path exactly, no regression), otherwise fall back to the live task iteration,
+    and finally to 0.
+    """
+    if isinstance(iteration, bool):
+        return 0
+    if isinstance(iteration, int):
+        return iteration
+    if isinstance(iteration, str) and iteration.strip().lstrip("-").isdigit():
+        return int(iteration.strip())
+    try:
+        from conductor.client.context.task_context import get_task_context
+
+        live = getattr(get_task_context().task, "iteration", None)
+        if isinstance(live, int) and not isinstance(live, bool):
+            return live
+    except Exception:
+        # No task context (e.g. unit-test direct call) or core without the field.
+        pass
+    return 0
+
+
+def _decode_jwt_exp(token: str) -> float:
+    """Best-effort decode of a JWT's `exp` (unix seconds); 0 if opaque/unavailable."""
+    from conductor.ai.agents._internal.token_utils import decode_jwt_exp
+
+    return decode_jwt_exp(token)
+
+
+def _normalize_handoff_target(task_ref: str) -> str:
+    """Extract the actual agent name from a Conductor sub-workflow reference.
+
+    Conductor generates indexed references for sub-workflows in multi-agent
+    strategies.  Examples:
+
+      - ``0_billing__1``                        → ``billing``
+      - ``pipeline_step_0_researcher``           → ``researcher``
+      - ``debate_round_robin_1_optimist__1``     → ``optimist``  (via ``_agent_``)
+      - ``analysis_parallel_0_pros_analyst``     → ``pros_analyst``
+      - ``support_handoff_0_billing``            → ``billing``
+      - ``panel_agent_1_expert``                 → ``expert``
+      - ``billing``                              → ``billing``  (already clean)
+
+    Actual patterns generated by MultiAgentCompiler:
+      - handoff/router: ``{parent}_handoff_{idx}_{child}``
+      - sequential:     ``{parent}_step_{idx}_{child}``
+      - parallel:       ``{parent}_parallel_{idx}_{child}``
+      - round_robin:    ``{parent}_agent_{idx}_{child}``
+      - swarm:          ``{parent}_agent_{idx}_{child}``
+
+    Strategy:
+      1. Strip trailing ``__N`` turn counter
+      2. Strip known strategy-indexed prefixes of the form
+         ``<parent>_<indicator>_<idx>_`` where indicator is one of
+         ``handoff``, ``agent``, ``step``, ``parallel``, etc.
+      3. Fall back to stripping a leading ``<digit>_`` index prefix
+    """
+    # Step 1: strip trailing __N (turn counter added by Conductor)
+    name = re.sub(r"__\d+$", "", task_ref)
+
+    # Step 2: strip strategy-indexed prefixes
+    # Matches: <parent>_<indicator>_<idx>_<agent_name>
+    # Also handles the no-index variant: <parent>_<indicator>_<agent_name>
+    strategy_pattern = re.match(
+        r"^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual|transfer)_(?:\d+_)?(.*)",
+        name,
+    )
+    if strategy_pattern:
+        return strategy_pattern.group(1)
+
+    # Step 3: strip leading <digit>_ index prefix (e.g. "0_billing")
+    idx_pattern = re.match(r"^\d+_(.*)", name)
+    if idx_pattern:
+        return idx_pattern.group(1)
+
+    return name
+
+
+# Backward compat alias — SSEUnavailableError is now in http_client
+_SSEUnavailableError = SSEUnavailableError
+
+
+class ServerCompiledWorkflow:
+    """Thin wrapper around a server-compiled WorkflowDef dict.
+
+    The server returns a camelCase JSON dict.  The Conductor API client's
+    ``sanitize_for_serialization`` passes dicts through as-is, so no
+    conversion to model objects is needed — we just hold the raw dict
+    and hand it back when the runtime asks for it.
+    """
+
+    def __init__(self, executor: Any, workflow_def_dict: Dict[str, Any]):
+        self._executor = executor
+        self._workflow_def_dict = workflow_def_dict
+        self._name = workflow_def_dict.get("name", "")
+        self._version = workflow_def_dict.get("version", 1)
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def version(self) -> int:
+        return self._version
+
+    def to_workflow_def(self) -> Dict[str, Any]:
+        """Return the raw WorkflowDef dict (camelCase, server-ready)."""
+        return self._workflow_def_dict
+
+    def start_workflow_with_input(
+        self,
+        workflow_input: Optional[dict] = None,
+        correlation_id: Optional[str] = None,
+        task_to_domain: Optional[Dict[str, str]] = None,
+        priority: Optional[int] = None,
+        idempotency_key: Optional[str] = None,
+        idempotency_strategy: Any = None,
+    ) -> str:
+        from conductor.client.http.models import StartWorkflowRequest
+
+        workflow_input = workflow_input or {}
+        request = StartWorkflowRequest()
+        request.workflow_def = self._workflow_def_dict
+        request.name = self._name
+        request.version = self._version
+        request.input = workflow_input
+        request.correlation_id = correlation_id
+        request.idempotency_key = idempotency_key
+        if idempotency_strategy is not None:
+            request.idempotency_strategy = idempotency_strategy
+        request.priority = priority
+        request.task_to_domain = task_to_domain
+
+        return self._executor.start_workflow(request)
+
+
+_SCHEDULES_UNSET = object()
+"""Sentinel for the ``schedules=`` kwarg on deploy(). ``None`` means purge;
+omitted (``_SCHEDULES_UNSET``) means do not touch existing schedules."""
+
+
+class AgentRuntime:
+    """Execution runtime for Conductor agents.
+
+    Manages the full lifecycle: compile -> execute -> collect results.
+
+    ``AgentRuntime`` is the primary entry point for executing agents.  Create
+    one, use it to run agents, and shut it down when done::
+
+        from conductor.ai.agents import Agent, AgentRuntime
+
+        agent = Agent(name="hello", model="openai/gpt-4o")
+
+        with AgentRuntime() as runtime:
+            result = runtime.run(agent, "Hello!")
+            print(result.output)
+
+    Connection params can be passed directly or loaded from environment
+    variables (``AGENTSPAN_SERVER_URL``, ``AGENTSPAN_AUTH_KEY``,
+    ``AGENTSPAN_AUTH_SECRET``).
+
+    Args:
+        server_url: AgentSpan server API URL.  Overrides env and *config*.
+        api_key: Agentspan auth key.  Overrides env and *config*.
+        api_secret: Agentspan auth secret.  Overrides env and *config*.
+        config: Optional :class:`AgentConfig` for full control over all
+            settings.  Explicit keyword params take precedence over values
+            in *config*.
+    """
+
+    def __init__(
+        self,
+        *,
+        server_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+        config: Optional[Any] = None,
+    ) -> None:
+        from dataclasses import replace
+
+        from conductor.ai.agents.runtime.config import AgentConfig
+
+        base = config if config is not None else AgentConfig.from_env()
+        overrides: dict = {}
+        if server_url is not None:
+            overrides["server_url"] = server_url
+        if api_key is not None:
+            overrides["api_key"] = api_key
+        if api_secret is not None:
+            overrides["auth_secret"] = api_secret
+        self._config = replace(base, **overrides) if overrides else base
+
+        # Auto-start the server if it targets localhost and is not responding.
+        if self._config.auto_start_server:
+            from conductor.ai.agents.runtime.server import ensure_server_running
+
+            ensure_server_running(self._config.server_url)
+        else:
+            # Fail fast with a clear message when auto-start is disabled
+            # and the server is unreachable.
+            from conductor.ai.agents.runtime.server import _is_server_ready
+
+            if not _is_server_ready(self._config.server_url):
+                import sys
+
+                print(
+                    f"\n[agentspan] Error: Cannot connect to the Agentspan server at "
+                    f"{self._config.server_url}\n"
+                    f"[agentspan] The server does not appear to be running and "
+                    f"auto_start_server is disabled.\n"
+                    f"[agentspan] Please ensure the server is running at the configured "
+                    f"URL, or remove AGENTSPAN_AUTO_START_SERVER=false to start it automatically.",
+                    file=sys.stderr,
+                )
+                raise SystemExit(1)
+
+        self._conductor_config = self._config.to_conductor_configuration()
+
+        from conductor.client.orkes_clients import OrkesClients
+
+        self._clients = OrkesClients(configuration=self._conductor_config)
+        self._executor = self._clients.get_workflow_executor()
+        self._workflow_client = self._clients.get_workflow_client()
+        self._task_client = self._clients.get_task_client()
+        self._schedule_client_instance: Optional[Any] = None
+
+        from conductor.ai.agents.runtime.worker_manager import WorkerManager
+
+        self._worker_manager = WorkerManager(
+            configuration=self._conductor_config,
+            poll_interval_ms=self._config.worker_poll_interval_ms,
+            thread_count=self._config.worker_thread_count,
+            daemon=self._config.daemon_workers,
+        )
+
+        self._compiled_workflows: Dict[str, Any] = {}
+        self._workers_started = False
+        self._registered_tool_names: set = set()
+        self._worker_start_lock = threading.Lock()
+        self._shutdown_lock = threading.Lock()
+        self._is_shutdown = False
+        self._integration_client_instance: Optional[Any] = None
+        self._prompt_client_instance: Optional[Any] = None
+        self._ensured_models: set = set()
+        self._integration_api_available: Optional[bool] = None
+        self._sse_fallback_warned = False
+
+        # Apply user-configured log level to all conductor.ai loggers
+        logging.getLogger("conductor.ai").setLevel(
+            getattr(logging, self._config.log_level.upper(), logging.INFO)
+        )
+
+        # Control-plane client for the agent API. Bound to this runtime so it
+        # shares the runtime's Conductor clients and schedule surface. It is
+        # both the async HTTP client (compile/start/status/respond/stream) and
+        # the control-plane run/deploy/schedule entry point exposed via
+        # :attr:`client`.
+        self._http = AgentClient(runtime=self)
+
+        logger.info("AgentRuntime initialized (server=%s)", self._config.server_url)
+
+    # ── Sync/async bridge ────────────────────────────────────────────
+
+    @staticmethod
+    def _run_sync(coro: Any) -> Any:
+        """Run a coroutine from sync context.
+
+        Handles nested event loops (e.g. Jupyter, IPython) by offloading
+        to a thread with a fresh event loop.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None and loop.is_running():
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        return asyncio.run(coro)
+
+    # ── Agent Runtime API helpers ────────────────────────────────────
+
+    def _agent_api_url(self, path: str) -> str:
+        """Build a URL for the agent runtime API."""
+        base = self._config.server_url.rstrip("/")
+        return f"{base}/agent{path}"
+
+    def _agent_api_token(self) -> "Optional[str]":
+        """Resolve the bearer token for agent runtime API calls (sent as X-Authorization).
+
+        Prefers an explicit ``api_key`` (already a token). Otherwise mints and caches a JWT
+        from ``auth_key``/``auth_secret`` via ``POST {server}/token`` — the orkes internal-key
+        (service-account) auth path, the same exchange the worker client and CLI use. Returns
+        ``None`` when no credentials are configured (anonymous / security-disabled servers).
+        """
+        from conductor.ai.agents._internal.token_utils import resolve_agent_api_token
+
+        return resolve_agent_api_token(
+            self._config.server_url,
+            api_key=self._config.api_key,
+            auth_key=self._config.auth_key,
+            auth_secret=self._config.auth_secret,
+        )
+
+    def _agent_api_headers(self, content_type: str = "application/json") -> Dict[str, str]:
+        """Build headers for agent runtime API requests."""
+        headers: Dict[str, str] = {}
+        if content_type:
+            headers["Content-Type"] = content_type
+        token = self._agent_api_token()
+        if token:
+            # orkes accepts X-Authorization (and Authorization: Bearer); the standalone
+            # anonymous server ignores it. X-Authorization matches the UI/CLI convention.
+            headers["X-Authorization"] = token
+        return headers
+
+    def _register_workflow_credentials(
+        self, execution_id: str, credentials: Optional[List[str]]
+    ) -> None:
+        """Register request-scoped credential names for extracted framework tools."""
+        if not credentials:
+            return
+        from conductor.ai.agents.runtime._dispatch import (
+            _workflow_credentials,
+            _workflow_credentials_lock,
+        )
+
+        with _workflow_credentials_lock:
+            _workflow_credentials[execution_id] = list(credentials)
+
+    def _clear_workflow_credentials(
+        self, execution_id: str, credentials: Optional[List[str]]
+    ) -> None:
+        """Clear request-scoped credential names after execution completion."""
+        if not credentials:
+            return
+        from conductor.ai.agents.runtime._dispatch import (
+            _workflow_credentials,
+            _workflow_credentials_lock,
+        )
+
+        with _workflow_credentials_lock:
+            _workflow_credentials.pop(execution_id, None)
+
+    def _resolve_worker_domain(self, execution_id: str, run_id: Optional[str]) -> Optional[str]:
+        """Return the domain workers should poll for this execution.
+
+        A fresh stateful start uses ``run_id`` as the task domain.  If the
+        server returns an existing execution for an idempotency key, that
+        execution already has its original ``taskToDomain`` mapping, so the
+        freshly generated ``run_id`` would be wrong.  Prefer the server's
+        recorded domain and fall back to the generated one for brand-new runs
+        or older servers.
+        """
+        if not run_id:
+            return None
+        return self._extract_domain(execution_id) or run_id
+
+    def _pre_deploy_nested_skills(self, agent: Agent) -> list:
+        """Pre-deploy any skill agents nested inside agent_tool wrappers.
+
+        Returns a list of skill agents that need their workers registered
+        (with domain) after run_id is generated.
+        """
+        from conductor.ai.agents.tool import get_tool_def
+
+        skills_to_register: list = []
+
+        for t in getattr(agent, "tools", []):
+            try:
+                td = get_tool_def(t)
+            except Exception:
+                continue
+            if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
+                nested = td.config["agent"]
+                if getattr(nested, "_framework", None) == "skill":
+                    from conductor.ai.agents.skill import create_skill_workers
+
+                    workflow_name = self._deploy_via_server(nested, framework="skill")
+                    logger.info(
+                        "Pre-deployed skill '%s' as workflow '%s'", nested.name, workflow_name
+                    )
+                    # Save for later registration with domain (run_id not known yet)
+                    skills_to_register.append(nested)
+                    td.config["workflowName"] = workflow_name
+                    td.config["workerNames"] = [sw.name for sw in create_skill_workers(nested)]
+                    td.config.pop("agent", None)
+
+        for sub in getattr(agent, "agents", []):
+            skills_to_register.extend(self._pre_deploy_nested_skills(sub))
+
+        return skills_to_register
+
+    def _start_via_server(
+        self,
+        agent: Agent,
+        prompt: str,
+        *,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+        static_plan: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Start an agent via the server's /api/agent/start endpoint.
+
+        Sends the agent config + prompt to the server, which compiles,
+        registers, and starts the execution in one call.
+
+        Returns:
+            The execution ID.
+        """
+        import requests as req_lib
+
+        pre_deployed_skills = self._pre_deploy_nested_skills(agent)
+
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
+
+        serializer = AgentConfigSerializer()
+        config_json = serializer.serialize(agent)
+
+        payload = {
+            "agentConfig": config_json,
+            "prompt": prompt,
+            "sessionId": session_id or "",
+            "media": media or [],
+        }
+        if context:
+            payload["context"] = context
+        if idempotency_key:
+            payload["idempotencyKey"] = idempotency_key
+        if timeout is not None:
+            payload["timeoutSeconds"] = timeout
+        if credentials:
+            payload["credentials"] = credentials
+        if run_id:
+            payload["runId"] = run_id
+        if static_plan is not None:
+            # Server's extract_json INLINE reads `workflow.input.static_plan`
+            # as the Case-0 plan source. Whatever the planner LLM emits is
+            # discarded when this is set.
+            payload["static_plan"] = static_plan
+
+        url = self._agent_api_url("/start")
+        resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        data = resp.json()
+        execution_id = data.get("executionId", "")
+        required_workers: Optional[set] = None
+        if "requiredWorkers" in data:
+            required_workers = set(data["requiredWorkers"])
+            logger.info(
+                "Started agent '%s' via server (execution_id=%s, requiredWorkers=%s)",
+                agent.name,
+                execution_id,
+                sorted(required_workers),
+            )
+        else:
+            logger.info("Started agent '%s' via server (execution_id=%s)", agent.name, execution_id)
+        return execution_id, required_workers, pre_deployed_skills
+
+    async def _start_via_server_async(
+        self,
+        agent: Agent,
+        prompt: str,
+        *,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+    ) -> str:
+        """Async version of :meth:`_start_via_server`."""
+        pre_deployed_skills = self._pre_deploy_nested_skills(agent)
+
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
+
+        serializer = AgentConfigSerializer()
+        config_json = serializer.serialize(agent)
+
+        payload = {
+            "agentConfig": config_json,
+            "prompt": prompt,
+            "sessionId": session_id or "",
+            "media": media or [],
+        }
+        if context:
+            payload["context"] = context
+        if idempotency_key:
+            payload["idempotencyKey"] = idempotency_key
+        if timeout is not None:
+            payload["timeoutSeconds"] = timeout
+        if credentials:
+            payload["credentials"] = credentials
+        if run_id:
+            payload["runId"] = run_id
+
+        data = await self._http.start_agent(payload)
+        execution_id = data.get("executionId", "")
+        required_workers: Optional[set] = None
+        if "requiredWorkers" in data:
+            required_workers = set(data["requiredWorkers"])
+            logger.info(
+                "Started agent '%s' via server (execution_id=%s, requiredWorkers=%s)",
+                agent.name,
+                execution_id,
+                sorted(required_workers),
+            )
+        else:
+            logger.info("Started agent '%s' via server (execution_id=%s)", agent.name, execution_id)
+        return execution_id, required_workers, pre_deployed_skills
+
+    async def _start_framework_via_server_async(
+        self,
+        *,
+        framework: str,
+        raw_config: Dict[str, Any],
+        prompt: str,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Async version of :meth:`_start_framework_via_server`."""
+        payload: Dict[str, Any] = {
+            "framework": framework,
+            "rawConfig": raw_config,
+            "prompt": prompt,
+            "sessionId": session_id or "",
+            "media": media or [],
+            "context": context or {},
+        }
+        if idempotency_key:
+            payload["idempotencyKey"] = idempotency_key
+        if credentials:
+            payload["credentials"] = credentials
+
+        data = await self._http.start_agent(payload)
+        execution_id = data.get("executionId", "")
+        logger.info(
+            "Started %s framework agent via server (execution_id=%s)",
+            framework,
+            execution_id,
+        )
+        return execution_id
+
+    # ── Context manager ──────────────────────────────────────────────
+
+    def __enter__(self) -> "AgentRuntime":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.shutdown()
+
+    async def __aenter__(self) -> "AgentRuntime":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        await self.shutdown_async()
+
+    # ── Compilation ─────────────────────────────────────────────────
+
+    def _compile_agent(self, agent: Agent) -> Any:
+        """Compile an agent to a Conductor workflow via the server (cached).
+
+        Compilation is always server-side. The Python SDK serializes
+        the agent config and sends it to the Java runtime which compiles
+        the Conductor workflow.
+        """
+        if agent.name not in self._compiled_workflows:
+            wf = self._compile_via_server(agent)
+            self._compiled_workflows[agent.name] = wf
+            logger.info("Compiled agent '%s' via server", agent.name)
+        return self._compiled_workflows[agent.name]
+
+    def _compile_via_server(self, agent: Agent) -> Any:
+        """Compile an agent via the server's /agent/compile endpoint.
+
+        Serializes the Agent to an AgentConfig JSON payload and POSTs it
+        to the server.  The server compiles the workflow and returns the
+        WorkflowDef JSON.
+
+        Returns a ``ServerCompiledWorkflow`` — a thin wrapper around the
+        raw ``WorkflowDef`` that implements the interface the runtime
+        needs (``to_workflow_def()``, ``start_workflow_with_input()``).
+        """
+        import requests
+
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
+
+        serializer = AgentConfigSerializer()
+        config_json = serializer.serialize(agent)
+
+        server_url = self._config.server_url.rstrip("/")
+        url = f"{server_url}/agent/compile"
+
+        headers = self._agent_api_headers()
+
+        payload = {"agentConfig": config_json}
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        data = response.json()
+
+        workflow_def_dict = data.get("workflowDef", data)
+
+        return ServerCompiledWorkflow(
+            executor=self._executor,
+            workflow_def_dict=workflow_def_dict,
+        )
+
+    async def _compile_via_server_async(self, agent: Agent) -> Any:
+        """Async version of :meth:`_compile_via_server`."""
+        from conductor.ai.agents.config_serializer import AgentConfigSerializer
+
+        serializer = AgentConfigSerializer()
+        config_json = serializer.serialize(agent)
+
+        data = await self._http.compile_agent({"agentConfig": config_json})
+        workflow_def_dict = data.get("workflowDef", data)
+
+        return ServerCompiledWorkflow(
+            executor=self._executor,
+            workflow_def_dict=workflow_def_dict,
+        )
+
+    def _prepare(self, agent: Agent) -> Any:
+        """Compile and set up workers."""
+        # Auto-register integrations if enabled
+        if self._config.auto_register_integrations:
+            self._ensure_models_for_agent(agent)
+
+        # Associate prompt templates with the agent's model (if any)
+        self._associate_templates_with_models(agent)
+
+        wf = self._compile_agent(agent)
+
+        # Workers are registered separately from server-side compilation.
+        self._register_workers(agent)
+
+        # Workers are registered during compilation (via @worker_task decorator).
+        # Start workers if any agent has tools.  If workers are already running
+        # but new tools were registered, restart to pick them up.
+        if self._config.auto_start_workers and self._has_worker_tools(agent):
+            with self._worker_start_lock:
+                worker_names = self._collect_worker_names(agent)
+                new_workers = worker_names - self._registered_tool_names
+                if new_workers:
+                    logger.info(
+                        "New workers detected (%s), starting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._registered_tool_names.update(worker_names)
+                if not self._workers_started:
+                    logger.debug("Starting workers for agent '%s'", agent.name)
+                    self._worker_manager.start()
+                    self._workers_started = True
+                else:
+                    # New stateful runs can register the same task names under
+                    # a different domain. WorkerManager is domain-aware and
+                    # starts only missing (task_name, domain) pairs, so call it
+                    # even when the task-name set has not changed — this avoids
+                    # the fork() deadlock window of a full stop/restart cycle.
+                    self._worker_manager.start()
+
+        return wf
+
+    def prepare(self, agent: Any) -> None:
+        """Pre-register workers for an agent without starting executions.
+
+        Call this for every agent *before* the first :meth:`start` when you
+        know all agents up-front (e.g. a test matrix).  This ensures all
+        workers are in the global ``_decorated_functions`` registry when the
+        ``TaskHandler`` is created, so every worker gets a process in the
+        initial batch — avoiding incremental ``fork()`` calls that deadlock
+        on macOS.
+
+        .. code-block:: python
+
+            # Register all agents first
+            for agent in agents:
+                runtime.prepare(agent)
+
+            # Then start executions — all workers poll from the start
+            for agent, prompt in work:
+                handle = runtime.start(agent, prompt)
+        """
+        from conductor.ai.agents.frameworks.serializer import detect_framework
+
+        if isinstance(agent, str):
+            return  # nothing to prepare for run-by-name
+
+        framework = detect_framework(agent)
+        if framework is not None:
+            # Pre-register framework agent workers (e.g. Google ADK, OpenAI) so
+            # all workers land in _decorated_functions before the first
+            # TaskHandler is created — avoids incremental fork() on macOS.
+            from conductor.ai.agents.frameworks.serializer import serialize_agent
+            from conductor.ai.agents.runtime._dispatch import make_tool_worker
+            from conductor.client.worker.worker_task import worker_task
+
+            _, workers = serialize_agent(agent)
+            for w in workers:
+                wrapper = make_tool_worker(w.func, w.name)
+                worker_task(
+                    task_definition_name=w.name,
+                    task_def=_default_task_def(w.name),
+                    register_task_def=True,
+                    overwrite_task_def=True,
+                    lease_extend_enabled=True,
+                )(wrapper)
+            if workers:
+                self._registered_tool_names.update(w.name for w in workers)
+            return
+
+        # Auto-register integrations if enabled
+        if self._config.auto_register_integrations:
+            self._ensure_models_for_agent(agent)
+
+        # Associate prompt templates with the agent's model (if any)
+        self._associate_templates_with_models(agent)
+
+        # Register worker functions locally (tools, guardrails, etc.)
+        self._register_workers(agent)
+
+        # Track worker names so _prepare_workers doesn't re-log them
+        if self._has_worker_tools(agent):
+            worker_names = self._collect_worker_names(agent)
+            self._registered_tool_names.update(worker_names)
+
+    def _prepare_workers(
+        self, agent: Agent, *, required_workers: Optional[set] = None, domain: Optional[str] = None
+    ) -> None:
+        """Register and start workers without compiling.
+
+        Used when starting via the server API (``/api/agent/start``)
+        which handles compilation server-side.  We still need local
+        workers for tool execution, custom guardrails, etc.
+
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), only system workers whose task
+        names appear in the set are registered.  User-defined tool
+        workers are always registered.
+        """
+        # Auto-register integrations if enabled
+        if self._config.auto_register_integrations:
+            self._ensure_models_for_agent(agent)
+
+        # Associate prompt templates with the agent's model (if any)
+        self._associate_templates_with_models(agent)
+
+        if required_workers is not None:
+            logger.info("Server expects workers: %s", sorted(required_workers))
+
+        # Register worker functions locally
+        self._register_workers(agent, required_workers=required_workers, domain=domain)
+
+        # Start worker polling if needed
+        if self._config.auto_start_workers and self._has_worker_tools(agent):
+            with self._worker_start_lock:
+                worker_names = self._collect_worker_names(agent, required_workers=required_workers)
+                new_workers = worker_names - self._registered_tool_names
+                if new_workers:
+                    logger.info(
+                        "New workers detected (%s), starting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._registered_tool_names.update(worker_names)
+                if not self._workers_started:
+                    logger.debug("Starting workers for agent '%s'", agent.name)
+                    self._worker_manager.start()
+                    self._workers_started = True
+                else:
+                    # New stateful runs can register the same task names under
+                    # a different domain. WorkerManager is domain-aware and
+                    # starts only missing (task_name, domain) pairs, so call it
+                    # even when the task-name set has not changed — this avoids
+                    # the fork() deadlock window of a full stop/restart cycle.
+                    self._worker_manager.start()
+
+    def _collect_worker_names(self, agent: Agent, *, required_workers: Optional[set] = None) -> set:
+        """Collect all worker task names from an agent tree.
+
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), the server-provided set is used
+        as the authoritative list of system workers.  User-defined tool
+        names are still collected from the agent tree and merged in.
+
+        When *required_workers* is ``None`` (older server / fallback),
+        the full detection logic runs as before.
+        """
+        from conductor.ai.agents.guardrail import LLMGuardrail, RegexGuardrail
+        from conductor.ai.agents.tool import get_tool_def
+
+        # Skill agents — collect worker names from create_skill_workers
+        if getattr(agent, "_framework", None) == "skill":
+            from conductor.ai.agents.skill import create_skill_workers
+
+            return {sw.name for sw in create_skill_workers(agent)}
+
+        # Always collect user-defined tool names from the agent tree
+        tool_names: set = set()
+        for t in agent.tools:
+            try:
+                td = get_tool_def(t)
+                if td.tool_type in ("worker", "cli"):
+                    tool_names.add(td.name)
+                elif td.tool_type == "agent_tool" and td.config and "agent" in td.config:
+                    nested_agent = td.config["agent"]
+                    if not getattr(nested_agent, "external", False):
+                        tool_names.update(
+                            self._collect_worker_names(
+                                nested_agent, required_workers=required_workers
+                            )
+                        )
+                # Tool-level guardrails
+                for g in td.guardrails:
+                    if (
+                        not g.external
+                        and not isinstance(g, (RegexGuardrail, LLMGuardrail))
+                        and g.func is not None
+                    ):
+                        tool_names.add(g.name)
+            except TypeError:
+                continue
+
+        # Recurse into sub-agents for their tool names
+        for sub in agent.agents:
+            if getattr(sub, "is_claude_code", False):
+                tool_names.add(sub.name)
+            elif not getattr(sub, "external", False):
+                tool_names.update(
+                    self._collect_worker_names(sub, required_workers=required_workers)
+                )
+
+        # If the server told us which system workers are needed, use that
+        # as the authoritative list and merge in user-defined tool names.
+        if required_workers is not None:
+            return tool_names | required_workers
+
+        # Fallback: detect system workers from the agent tree
+        names: set = set(tool_names)
+
+        # Custom guardrails (not Regex/LLM/external)
+        custom_guardrails = [
+            g
+            for g in agent.guardrails
+            if not g.external
+            and not isinstance(g, (RegexGuardrail, LLMGuardrail))
+            and g.func is not None
+        ]
+        if custom_guardrails:
+            names.add(f"{agent.name}_output_guardrail")
+            for g in custom_guardrails:
+                names.add(g.name)
+
+        # stop_when / termination
+        if agent.stop_when and callable(agent.stop_when):
+            names.add(f"{agent.name}_stop_when")
+        if agent.termination:
+            names.add(f"{agent.name}_termination")
+
+        # Callable gate (sequential pipeline)
+        if getattr(agent, "gate", None) is not None and callable(agent.gate):
+            names.add(f"{agent.name}_gate")
+
+        # Check transfer (hybrid handoff: agent has tools + sub-agents)
+        if agent.tools and agent.agents:
+            names.add(f"{agent.name}_check_transfer")
+            # Transfer tool no-op workers (one per sub-agent)
+            for sub in agent.agents:
+                names.add(f"{agent.name}_transfer_to_{sub.name}")
+
+        # Function-based router
+        if (
+            agent.strategy == "router"
+            and agent.router
+            and callable(agent.router)
+            and not hasattr(agent.router, "model")
+        ):
+            names.add(f"{agent.name}_router_fn")
+
+        # Handoff check — needed for any SWARM parent (server always generates
+        # the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
+            names.add(f"{agent.name}_handoff_check")
+
+        # Swarm transfer workers — prefixed with SOURCE agent name
+        if agent.strategy == "swarm" and agent.agents:
+            all_names = [agent.name] + [sub.name for sub in agent.agents]
+            for n in all_names:
+                for peer in all_names:
+                    if peer != n:
+                        names.add(f"{n}_transfer_to_{peer}")
+
+        # Manual selection
+        if agent.strategy == "manual" and agent.agents:
+            names.add(f"{agent.name}_process_selection")
+
+        return names
+
+    def _register_workers(
+        self, agent: Agent, *, required_workers: Optional[set] = None, domain: Optional[str] = None
+    ) -> None:
+        """Register all workers needed for SDK-side execution.
+
+        With server-side compilation, the workflow JSON comes from the
+        Java runtime but Python worker functions still need to be
+        registered locally for polling.  This covers tools, custom
+        guardrails, stop_when, termination, check_transfer, router,
+        handoff, and manual selection workers.
+
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), system workers are only registered
+        if their task name appears in the set.  User-defined tool workers
+        (from ``@tool``) are always registered regardless.  When
+        *required_workers* is ``None`` (older server or fallback), all
+        workers are registered unconditionally (previous behavior).
+        """
+        from conductor.ai.agents.guardrail import LLMGuardrail, RegexGuardrail
+        from conductor.ai.agents.runtime.tool_registry import ToolRegistry
+
+        # 0. Skill workers — register script and read_skill_file workers
+        if getattr(agent, "_framework", None) == "skill":
+            self._register_skill_workers(agent, domain=domain)
+            return  # Skill agents have no native tools/guardrails/sub-agents
+
+        def _server_needs(task_name: str) -> bool:
+            """Return True if the server expects this system worker."""
+            if required_workers is None:
+                return True  # fallback: register everything
+            return task_name in required_workers
+
+        # Claude-code top-level agents: register the passthrough worker, skip tool registration
+        if getattr(agent, "is_claude_code", False):
+            if _server_needs(agent.name):
+                from conductor.ai.agents.frameworks.claude_agent_sdk import (
+                    agent_to_claude_code_options,
+                    make_claude_agent_sdk_worker,
+                )
+                from conductor.ai.agents.frameworks.serializer import WorkerInfo
+
+                cc_opts = agent_to_claude_code_options(agent)
+                worker_fn = make_claude_agent_sdk_worker(
+                    cc_opts,
+                    agent.name,
+                    self._config.server_url,
+                    self._config.auth_key or "",
+                    self._config.auth_secret or "",
+                )
+                worker = WorkerInfo(
+                    name=agent.name,
+                    description=f"Claude Agent SDK passthrough worker for {agent.name}",
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "prompt": {"type": "string"},
+                            "session_id": {"type": "string"},
+                        },
+                    },
+                    func=worker_fn,
+                    _pre_wrapped=True,
+                )
+                self._register_passthrough_worker(worker)
+            return
+
+        # 1. Tools (and tool-level guardrails) — always registered
+        if agent.tools:
+            tc = ToolRegistry()
+            tc.register_tool_workers(
+                agent.tools,
+                agent.name,
+                domain=domain,
+                agent_stateful=getattr(agent, "stateful", False),
+            )
+            for t in agent.tools:
+                from conductor.ai.agents.tool import get_tool_def
+
+                td = get_tool_def(t)
+                # Recurse into agent_tool nested agents
+                if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
+                    nested_agent = td.config["agent"]
+                    if not getattr(nested_agent, "external", False):
+                        self._register_workers(nested_agent, required_workers=required_workers)
+                # Register tool-level guardrail workers
+                tool_guardrails = [
+                    g
+                    for g in td.guardrails
+                    if not g.external
+                    and not isinstance(g, (RegexGuardrail, LLMGuardrail))
+                    and g.func is not None
+                ]
+                for g in tool_guardrails:
+                    if _server_needs(g.name):
+                        self._register_single_guardrail_worker(g)
+
+        # 2. Custom guardrails (not Regex/LLM/external)
+        custom_guardrails = [
+            g
+            for g in agent.guardrails
+            if not g.external
+            and not isinstance(g, (RegexGuardrail, LLMGuardrail))
+            and g.func is not None
+        ]
+        if custom_guardrails:
+            # Check if any guardrail worker is needed by the server
+            needed_guardrails = [g for g in custom_guardrails if _server_needs(g.name)]
+            combined_name = f"{agent.name}_output_guardrail"
+            if needed_guardrails or _server_needs(combined_name):
+                self._register_guardrail_worker(agent.name, custom_guardrails, domain=domain)
+
+        # 3. stop_when
+        if agent.stop_when and callable(agent.stop_when):
+            task_name = f"{agent.name}_stop_when"
+            if _server_needs(task_name):
+                self._register_stop_when_worker(agent.name, agent.stop_when, domain=domain)
+
+        # 3b. Callbacks (legacy + CallbackHandler chaining)
+        from conductor.ai.agents.callback import (
+            _LEGACY_ATTR_TO_POSITION,
+            POSITION_TO_METHOD,
+            _chain_callbacks_for_position,
+        )
+
+        handlers = getattr(agent, "callbacks", None) or []
+        for position in POSITION_TO_METHOD:
+            # Find the legacy callable for this position (if any).
+            legacy_attr = next(
+                (attr for attr, pos in _LEGACY_ATTR_TO_POSITION.items() if pos == position),
+                None,
+            )
+            legacy_fn = getattr(agent, legacy_attr, None) if legacy_attr else None
+            chained = _chain_callbacks_for_position(position, handlers, legacy_fn)
+            if chained is not None:
+                task_name = f"{agent.name}_{position}"
+                if _server_needs(task_name):
+                    self._register_callback_worker(agent.name, position, chained, domain=domain)
+
+        # 3c. Callable gate (sequential pipeline)
+        if getattr(agent, "gate", None) is not None and callable(agent.gate):
+            task_name = f"{agent.name}_gate"
+            if _server_needs(task_name):
+                self._register_gate_worker(agent.name, agent.gate, domain=domain)
+
+        # 4. termination
+        if agent.termination:
+            task_name = f"{agent.name}_termination"
+            if _server_needs(task_name):
+                self._register_termination_worker(agent.name, agent.termination, domain=domain)
+
+        # 5. Check transfer (agent has tools + sub-agents → hybrid handoff)
+        if agent.tools and agent.agents:
+            task_name = f"{agent.name}_check_transfer"
+            if _server_needs(task_name):
+                self._register_check_transfer_worker(agent.name, domain=domain)
+            # Always register transfer tool workers — same reasoning as swarm:
+            # collectSimpleTaskNames may not recurse into nested sub-workflows.
+            self._register_hybrid_transfer_workers(agent, domain=domain)
+
+        # 6. Function-based router
+        if (
+            agent.strategy == "router"
+            and agent.router
+            and callable(agent.router)
+            and not hasattr(agent.router, "model")
+        ):
+            task_name = f"{agent.name}_router_fn"
+            if _server_needs(task_name):
+                self._register_router_worker(agent, domain=domain)
+
+        # 7. Handoff check — needed for any SWARM parent (server always
+        #    generates the task) or any agent with explicit handoff conditions.
+        if agent.handoffs or (agent.strategy == "swarm" and agent.agents):
+            task_name = f"{agent.name}_handoff_check"
+            if _server_needs(task_name):
+                self._register_handoff_worker(agent, domain=domain)
+
+        # 7b. Swarm transfer tools and check_transfer workers
+        if agent.strategy == "swarm" and agent.agents:
+            # Always register transfer workers for swarm agents — the server's
+            # requiredWorkers may not include them when the swarm is a nested
+            # registered sub-workflow (collectSimpleTaskNames doesn't recurse
+            # into separately-stored sub-workflow definitions).
+            self._register_swarm_transfer_workers(agent, domain=domain)
+            if _server_needs(f"{agent.name}_check_transfer"):
+                self._register_check_transfer_worker(agent.name, domain=domain)  # parent
+            for sub in agent.agents:
+                if _server_needs(f"{sub.name}_check_transfer"):
+                    self._register_check_transfer_worker(sub.name, domain=domain)
+
+        # 8. Manual selection
+        if agent.strategy == "manual" and agent.agents:
+            task_name = f"{agent.name}_process_selection"
+            if _server_needs(task_name):
+                self._register_manual_selection_worker(agent, domain=domain)
+
+        # Recurse into sub-agents
+        for sub in agent.agents:
+            if getattr(sub, "is_claude_code", False):
+                if _server_needs(sub.name):
+                    # Register passthrough worker for claude-code sub-agent
+                    from conductor.ai.agents.frameworks.claude_agent_sdk import (
+                        agent_to_claude_code_options,
+                        make_claude_agent_sdk_worker,
+                    )
+                    from conductor.ai.agents.frameworks.serializer import WorkerInfo
+
+                    cc_options = agent_to_claude_code_options(sub)
+                    worker_func = make_claude_agent_sdk_worker(
+                        cc_options,
+                        sub.name,
+                        self._config.server_url,
+                        self._config.auth_key or "",
+                        self._config.auth_secret or "",
+                    )
+                    worker = WorkerInfo(
+                        name=sub.name,
+                        description=f"Claude Agent SDK passthrough worker for {sub.name}",
+                        input_schema={
+                            "type": "object",
+                            "properties": {
+                                "prompt": {"type": "string"},
+                                "session_id": {"type": "string"},
+                            },
+                        },
+                        func=worker_func,
+                        _pre_wrapped=True,
+                    )
+                    self._register_passthrough_worker(worker)
+            elif not sub.external:
+                self._register_workers(sub, required_workers=required_workers, domain=domain)
+
+    # ── Worker registration helpers ────────────────────────────────
+
+    def _register_and_start_skill_workers(
+        self, skill_agents: list, domain: "Optional[str]" = None
+    ) -> None:
+        """Register pre-deployed skill workers and ensure polling is started.
+
+        Called after ``_prepare_workers`` for skills nested in ``agent_tool``
+        wrappers.  The parent agent may not have any ``@tool`` workers itself,
+        so ``_prepare_workers`` won't start the TaskRunner.  This method
+        handles both registration and polling start.
+        """
+        if not skill_agents:
+            return
+        for skill_agent in skill_agents:
+            self._register_skill_workers(skill_agent, domain=domain)
+        # Ensure the TaskRunner is polling — _prepare_workers may have
+        # skipped starting because the parent had no tool workers.
+        with self._worker_start_lock:
+            if not self._workers_started:
+                logger.info("Starting workers for pre-deployed skill workers")
+                self._worker_manager.start()
+                self._workers_started = True
+            else:
+                # Workers already running — inject new skill workers
+                self._worker_manager.start()
+
+    def _register_skill_workers(self, agent: Agent, domain: "Optional[str]" = None) -> None:
+        """Register skill workers (scripts + read_skill_file) for a skill-based agent."""
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.skill import create_skill_workers
+        from conductor.client.worker.worker_task import worker_task
+
+        skill_workers = create_skill_workers(agent)
+        if not skill_workers:
+            return
+
+        for sw in skill_workers:
+            wrapper = make_tool_worker(sw.func, sw.name)
+            worker_task(
+                task_definition_name=sw.name,
+                task_def=_default_task_def(sw.name),
+                register_task_def=True,
+                overwrite_task_def=True,
+                domain=domain,
+                lease_extend_enabled=True,
+            )(wrapper)
+            logger.debug("Registered skill worker '%s'", sw.name)
+
+    def _register_guardrail_worker(
+        self, agent_name: str, guardrails: list, domain: "Optional[str]" = None
+    ) -> None:
+        """Register guardrail workers for custom function guardrails.
+
+        For server-side compilation, each custom guardrail is compiled as
+        a separate SIMPLE task using the guardrail's name as the task
+        definition name.  For local compilation, all custom guardrails
+        are combined into one worker (``{agent_name}_output_guardrail``).
+
+        We register both patterns so both compile paths work.
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        # Register individual guardrail workers (server compile path).
+        # The server compiler uses guardrail.name as the task definition
+        # name (see GuardrailCompiler.compileCustomGuardrail).
+        for g in guardrails:
+            self._register_single_guardrail_worker(g, domain=domain)
+
+        # Also register the combined worker (local compile path).
+        task_name = f"{agent_name}_output_guardrail"
+
+        guardrail_specs = []
+        for g in guardrails:
+            guardrail_specs.append(
+                {
+                    "func": g.func,
+                    "name": g.name,
+                    "on_fail": g.on_fail,
+                    "max_retries": g.max_retries,
+                }
+            )
+
+        def make_combined(specs):
+            async def combined_guardrail_worker(
+                content: object = None, iteration: int = 0
+            ) -> object:
+                iteration = _resolve_loop_iteration(iteration)
+                if content is None:
+                    content_str = ""
+                elif isinstance(content, str):
+                    content_str = content
+                else:
+                    import json as _json
+
+                    try:
+                        content_str = _json.dumps(content, default=str)
+                    except (TypeError, ValueError):
+                        content_str = str(content)
+                for spec in specs:
+                    try:
+                        result = await _call_user_fn(spec["func"], content_str)
+                        if not result.passed:
+                            on_fail = spec["on_fail"]
+                            fixed_output = getattr(result, "fixed_output", None)
+                            if on_fail == "retry" and iteration >= spec["max_retries"]:
+                                on_fail = "raise"
+                            if on_fail == "fix" and fixed_output is None:
+                                on_fail = "raise"
+                            return {
+                                "passed": False,
+                                "message": result.message,
+                                "on_fail": on_fail,
+                                "fixed_output": fixed_output,
+                                "guardrail_name": spec["name"],
+                                "should_continue": on_fail == "retry",
+                            }
+                    except Exception as e:
+                        logger.error("Guardrail '%s' raised exception: %s", spec["name"], e)
+                        on_fail = spec["on_fail"]
+                        if on_fail == "retry" and iteration >= spec["max_retries"]:
+                            on_fail = "raise"
+                        return {
+                            "passed": False,
+                            "message": f"Guardrail error: {e}",
+                            "on_fail": on_fail,
+                            "fixed_output": None,
+                            "guardrail_name": spec["name"],
+                            "should_continue": on_fail == "retry",
+                        }
+                return {
+                    "passed": True,
+                    "message": "",
+                    "on_fail": "pass",
+                    "fixed_output": None,
+                    "guardrail_name": "",
+                    "should_continue": False,
+                }
+
+            return combined_guardrail_worker
+
+        worker_fn = make_combined(guardrail_specs)
+        worker_fn.__annotations__ = {"content": object, "iteration": int, "return": object}
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(worker_fn)
+
+    def _register_single_guardrail_worker(self, guardrail, domain: "Optional[str]" = None) -> None:
+        """Register a single guardrail function as a worker.
+
+        The server compiler uses the guardrail's name as the task
+        definition name for each custom guardrail.
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = guardrail.name
+        func = guardrail.func
+        on_fail = guardrail.on_fail
+        max_retries = guardrail.max_retries
+        g_name = guardrail.name
+
+        async def guardrail_worker(content: object = None, iteration: int = 0) -> object:
+            iteration = _resolve_loop_iteration(iteration)
+            if content is None:
+                content_str = ""
+            elif isinstance(content, str):
+                content_str = content
+            else:
+                import json as _json
+
+                try:
+                    content_str = _json.dumps(content, default=str)
+                except (TypeError, ValueError):
+                    content_str = str(content)
+            try:
+                result = await _call_user_fn(func, content_str)
+                if not result.passed:
+                    effective_on_fail = on_fail
+                    fixed_output = getattr(result, "fixed_output", None)
+                    if effective_on_fail == "retry" and iteration >= max_retries:
+                        effective_on_fail = "raise"
+                    if effective_on_fail == "fix" and fixed_output is None:
+                        effective_on_fail = "raise"
+                    return {
+                        "passed": False,
+                        "message": result.message,
+                        "on_fail": effective_on_fail,
+                        "fixed_output": fixed_output,
+                        "guardrail_name": g_name,
+                        "should_continue": effective_on_fail == "retry",
+                    }
+            except Exception as e:
+                logger.error("Guardrail '%s' raised exception: %s", g_name, e)
+                effective_on_fail = on_fail
+                if effective_on_fail == "retry" and iteration >= max_retries:
+                    effective_on_fail = "raise"
+                return {
+                    "passed": False,
+                    "message": f"Guardrail error: {e}",
+                    "on_fail": effective_on_fail,
+                    "fixed_output": None,
+                    "guardrail_name": g_name,
+                    "should_continue": effective_on_fail == "retry",
+                }
+            return {
+                "passed": True,
+                "message": "",
+                "on_fail": "pass",
+                "fixed_output": None,
+                "guardrail_name": "",
+                "should_continue": False,
+            }
+
+        guardrail_worker.__annotations__ = {"content": object, "iteration": int, "return": object}
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(guardrail_worker)
+
+    def _register_stop_when_worker(
+        self, agent_name: str, stop_when_fn, domain: "Optional[str]" = None
+    ) -> None:
+        """Register a stop_when worker."""
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent_name}_stop_when"
+
+        async def stop_when_worker(result="", iteration: int = 0, messages=None) -> object:
+            iteration = _resolve_loop_iteration(iteration)
+            context = {"result": result, "messages": messages or [], "iteration": iteration}
+            try:
+                should_stop = await _call_user_fn(stop_when_fn, context)
+                return {"should_continue": not should_stop}
+            except Exception as e:
+                logger.error("stop_when evaluation failed: %s", e)
+                return {"should_continue": True}
+
+        stop_when_worker.__annotations__ = {
+            "result": object,
+            "iteration": int,
+            "messages": object,
+            "return": object,
+        }
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(stop_when_worker)
+
+    def _register_gate_worker(
+        self, agent_name: str, gate_fn, domain: "Optional[str]" = None
+    ) -> None:
+        """Register a callable gate worker for conditional sequential pipelines."""
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent_name}_gate"
+
+        async def gate_worker(result: str = "") -> object:
+            try:
+                output = {"result": result}
+                should_continue = await _call_user_fn(gate_fn, output)
+                return {"decision": "continue" if should_continue else "stop"}
+            except Exception as e:
+                logger.error("Gate evaluation failed: %s", e)
+                return {"decision": "continue"}  # safe fallback
+
+        gate_worker.__annotations__ = {"result": str, "return": object}
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(gate_worker)
+
+    def _register_callback_worker(
+        self, agent_name: str, position: str, callback_fn, domain: "Optional[str]" = None
+    ) -> None:
+        """Register a before_model or after_model callback worker."""
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent_name}_{position}"
+
+        async def callback_worker(messages: object = None, llm_result: str = None) -> object:
+            try:
+                kwargs = {}
+                if messages is not None:
+                    kwargs["messages"] = messages
+                if llm_result is not None:
+                    kwargs["llm_result"] = llm_result
+                result = await _call_user_fn(callback_fn, **kwargs)
+                return result if isinstance(result, dict) else {}
+            except Exception as e:
+                logger.error("Callback %s failed: %s", task_name, e)
+                return {}
+
+        callback_worker.__annotations__ = {"messages": object, "llm_result": str, "return": object}
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(callback_worker)
+
+    def _register_termination_worker(
+        self, agent_name: str, termination_cond, domain: "Optional[str]" = None
+    ) -> None:
+        """Register a termination condition worker."""
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent_name}_termination"
+
+        async def termination_worker(result: str = "", iteration: int = 0) -> object:
+            iteration = _resolve_loop_iteration(iteration)
+            context = {"result": result, "messages": [], "iteration": iteration}
+            try:
+                outcome = await _call_user_fn(termination_cond.should_terminate, context)
+                return {"should_continue": not outcome.should_terminate, "reason": outcome.reason}
+            except Exception as e:
+                logger.error("termination condition evaluation failed: %s", e)
+                return {"should_continue": True, "reason": ""}
+
+        termination_worker.__annotations__ = {"result": str, "iteration": int, "return": object}
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(termination_worker)
+
+    def _register_check_transfer_worker(
+        self, agent_name: str, domain: "Optional[str]" = None
+    ) -> None:
+        """Register a check_transfer worker for hybrid handoff agents."""
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent_name}_check_transfer"
+
+        async def check_transfer_worker(tool_calls: object = None, _unused: str = "") -> object:
+            for tc in tool_calls or []:
+                name = tc.get("name", "")
+                if "_transfer_to_" in name:
+                    return {"is_transfer": True, "transfer_to": name.split("_transfer_to_", 1)[1]}
+            return {"is_transfer": False, "transfer_to": ""}
+
+        check_transfer_worker.__annotations__ = {
+            "tool_calls": object,
+            "_unused": str,
+            "return": object,
+        }
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(check_transfer_worker)
+
+    def _register_hybrid_transfer_workers(
+        self, agent: Agent, domain: "Optional[str]" = None
+    ) -> None:
+        """Register transfer_to_<name> no-op workers for hybrid agents (tools + sub-agents).
+
+        The transfer tools are no-ops — the actual handoff is detected by
+        check_transfer which inspects toolCalls output from the LLM task.
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        def make_worker(tool_name: str, _domain: "Optional[str]" = domain) -> None:
+            async def transfer_worker() -> object:
+                return {}
+
+            transfer_worker.__annotations__ = {"return": object}
+            worker_task(
+                task_definition_name=tool_name,
+                task_def=_default_task_def(tool_name),
+                register_task_def=True,
+                overwrite_task_def=True,
+                domain=_domain,
+                thread_count=_SYSTEM_WORKER_THREADS,
+                lease_extend_enabled=True,
+            )(transfer_worker)
+
+        for sub in agent.agents:
+            make_worker(f"{agent.name}_transfer_to_{sub.name}")
+
+    def _register_router_worker(self, agent: Agent, domain: "Optional[str]" = None) -> None:
+        """Register a function-based router worker."""
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent.name}_router_fn"
+        router_fn = agent.router
+        agent_names = [a.name for a in agent.agents]
+
+        async def router_worker(prompt: str = "") -> object:
+            try:
+                result = await _call_user_fn(router_fn, prompt)
+                return {"selected_agent": str(result)}
+            except Exception as e:
+                logger.error("Router function failed: %s", e)
+                return {"selected_agent": agent_names[0] if agent_names else ""}
+
+        router_worker.__annotations__ = {"prompt": str, "return": object}
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(router_worker)
+
+    def _register_handoff_worker(self, agent: Agent, domain: "Optional[str]" = None) -> None:
+        """Register a handoff check worker for swarm strategy.
+
+        Supports dual-mechanism handoffs:
+        1. Primary: Transfer tool detected (is_transfer=true, transfer_to=<name>)
+        2. Secondary: Condition-based handoffs (OnTextMention, OnCondition, etc.)
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent.name}_handoff_check"
+        handoff_conditions = agent.handoffs
+        # Parent agent is "0", sub-agents are "1", "2", ...
+        name_to_idx = {agent.name: "0"}
+        name_to_idx.update({sub.name: str(i + 1) for i, sub in enumerate(agent.agents)})
+        idx_to_name = {v: k for k, v in name_to_idx.items()}
+        allowed = agent.allowed_transitions
+        # Track consecutive blocked transfers per agent to prevent
+        # infinite loops. After max_blocked_retries, exit the loop.
+        max_blocked_retries = 3
+        blocked_counts: dict[str, int] = {}
+
+        def _is_transfer_truthy(val: object) -> bool:
+            if val is True:
+                return True
+            if isinstance(val, str):
+                return val.strip().lower() == "true"
+            return False
+
+        def _is_allowed(source_idx: str, target_name: str) -> bool:
+            """Check if transition is allowed. No constraints → allow all."""
+            if not allowed:
+                return True
+            source_name = idx_to_name.get(source_idx, "")
+            return target_name in allowed.get(source_name, [])
+
+        async def handoff_check_worker(
+            result: str = "",
+            active_agent: str = "0",
+            conversation: str = "",
+            is_transfer: object = False,
+            transfer_to: str = "",
+        ) -> object:
+            # Priority 1: Transfer tool detected
+            if _is_transfer_truthy(is_transfer):
+                if _is_allowed(active_agent, transfer_to):
+                    blocked_counts.pop(active_agent, None)
+                    target_idx = name_to_idx.get(transfer_to, active_agent)
+                    if target_idx != active_agent:
+                        return {"active_agent": target_idx, "handoff": True}
+                elif allowed:
+                    # Transfer blocked — give the agent a few retries to
+                    # self-correct, then exit the loop.
+                    count = blocked_counts.get(active_agent, 0) + 1
+                    blocked_counts[active_agent] = count
+                    if count <= max_blocked_retries:
+                        return {"active_agent": active_agent, "handoff": True}
+                    # Max retries exceeded — exit the loop
+                    blocked_counts.pop(active_agent, None)
+                    return {"active_agent": active_agent, "handoff": False}
+
+            # Priority 2: Condition-based handoffs (fallback)
+            context = {
+                "result": result,
+                "messages": conversation,
+                "tool_name": "",
+                "tool_result": "",
+            }
+            for cond in handoff_conditions:
+                if cond.should_handoff(context):
+                    if _is_allowed(active_agent, cond.target):
+                        target_idx = name_to_idx.get(cond.target, active_agent)
+                        if target_idx != active_agent:
+                            return {"active_agent": target_idx, "handoff": True}
+
+            # Neither transfer nor condition → loop exits
+            return {"active_agent": active_agent, "handoff": False}
+
+        handoff_check_worker.__annotations__ = {
+            "result": str,
+            "active_agent": str,
+            "conversation": str,
+            "is_transfer": object,
+            "transfer_to": str,
+            "return": object,
+        }
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(handoff_check_worker)
+
+    def _register_swarm_transfer_workers(
+        self, agent: Agent, domain: "Optional[str]" = None
+    ) -> None:
+        """Register transfer_to_<name> workers for swarm agents.
+
+        Each agent in the swarm gets transfer tools for its peers.
+        The transfer tools are no-ops — the actual handoff is detected
+        by check_transfer which inspects toolCalls output.
+
+        When allowed_transitions is set, transfers to targets that no
+        agent is allowed to reach return an error message so the LLM
+        knows to try a different tool.
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        # Build set of all valid transfer targets from allowed_transitions
+        allowed = agent.allowed_transitions
+        valid_targets: set[str] = set()
+        if allowed:
+            for targets in allowed.values():
+                valid_targets.update(targets)
+
+        all_names = [agent.name] + [sub.name for sub in agent.agents]
+        registered = set()
+        for name in all_names:
+            for peer_name in all_names:
+                if peer_name == name:
+                    continue
+                # Prefix with the SOURCE agent name (the one calling transfer),
+                # matching the server compiler which uses self.getName()
+                tool_name = f"{name}_transfer_to_{peer_name}"
+                if tool_name in registered:
+                    continue
+                registered.add(tool_name)
+
+                # If this target is never reachable via allowed_transitions,
+                # return an error message so the LLM knows to stop trying.
+                is_unreachable = allowed and peer_name not in valid_targets
+
+                def make_worker(tn, target, unreachable, _domain=domain):
+                    if unreachable:
+
+                        async def transfer_worker() -> str:
+                            return (
+                                f"ERROR: {tn} is not available. "
+                                f"Use a different transfer tool, or if you are "
+                                f"done, just provide your final response without "
+                                f"calling any transfer tool."
+                            )
+
+                        transfer_worker.__annotations__ = {"return": str}
+                    else:
+
+                        async def transfer_worker() -> object:
+                            return {}
+
+                        transfer_worker.__annotations__ = {"return": object}
+                    worker_task(
+                        task_definition_name=tn,
+                        task_def=_default_task_def(tn),
+                        register_task_def=True,
+                        overwrite_task_def=True,
+                        domain=_domain,
+                        thread_count=_SYSTEM_WORKER_THREADS,
+                        lease_extend_enabled=True,
+                    )(transfer_worker)
+
+                make_worker(tool_name, peer_name, is_unreachable)
+
+    def _register_manual_selection_worker(
+        self, agent: Agent, domain: "Optional[str]" = None
+    ) -> None:
+        """Register a process_selection worker for manual strategy."""
+        from conductor.client.worker.worker_task import worker_task
+
+        task_name = f"{agent.name}_process_selection"
+        name_to_idx = {sub.name: str(i) for i, sub in enumerate(agent.agents)}
+
+        async def process_selection_worker(human_output: object = None) -> object:
+            if human_output is None:
+                return {"selected": "0"}
+            if isinstance(human_output, dict):
+                selected = human_output.get("selected", human_output.get("agent", "0"))
+                if selected in name_to_idx:
+                    return {"selected": name_to_idx[selected]}
+                return {"selected": str(selected)}
+            return {"selected": str(human_output)}
+
+        process_selection_worker.__annotations__ = {"human_output": object, "return": object}
+        worker_task(
+            task_definition_name=task_name,
+            task_def=_default_task_def(task_name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            domain=domain,
+            thread_count=_SYSTEM_WORKER_THREADS,
+            lease_extend_enabled=True,
+        )(process_selection_worker)
+
+    # ── Prompt template resolution ─────────────────────────────────
+
+    @property
+    def _prompt_client(self) -> Any:
+        """Lazily create the prompt client (only when templates are used)."""
+        if self._prompt_client_instance is None:
+            self._prompt_client_instance = self._clients.get_prompt_client()
+        return self._prompt_client_instance
+
+    def _resolve_prompt(self, prompt: Any) -> str:
+        """Resolve a prompt to a string.
+
+        If *prompt* is a plain string, return it as-is.
+        If it's a :class:`PromptTemplate`, fetch the template from the server,
+        substitute variables, and return the resolved text.
+        """
+        from conductor.ai.agents.agent import PromptTemplate
+
+        if prompt is None:
+            return ""
+        if isinstance(prompt, str):
+            return prompt
+        if not isinstance(prompt, PromptTemplate):
+            return str(prompt)
+
+        template_obj = self._prompt_client.get_prompt(prompt.name)
+        if template_obj is None:
+            raise ValueError(f"Prompt template '{prompt.name}' not found on the Conductor server")
+        text = template_obj.template
+        for key, value in prompt.variables.items():
+            text = text.replace(f"${{{key}}}", str(value))
+        return text
+
+    @staticmethod
+    def _has_meaningful_media(media: Optional[List[str]]) -> bool:
+        """Return True when at least one media item is non-empty."""
+        if not media:
+            return False
+        return any(str(item).strip() for item in media if item is not None)
+
+    @staticmethod
+    def _has_meaningful_context(context: Optional[Dict[str, Any]]) -> bool:
+        """Return True when the context contains at least one entry."""
+        return bool(context)
+
+    def _validate_execution_input(
+        self,
+        prompt: str,
+        *,
+        media: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Require some meaningful user input before starting execution."""
+        if prompt.strip():
+            return
+        if self._has_meaningful_media(media):
+            return
+        if self._has_meaningful_context(context):
+            return
+        raise ValueError(
+            "Agent execution requires a non-empty prompt, at least one media item, "
+            "or non-empty context."
+        )
+
+    def _associate_templates_with_models(self, agent: Agent) -> None:
+        """Ensure prompt templates used by the agent are associated with its model.
+
+        Conductor requires that a prompt template is associated with the
+        ``integration:model`` it will be used with.  This walks the agent tree,
+        finds all :class:`PromptTemplate` instructions, and updates each template's
+        model associations on the server if needed.
+        """
+        from conductor.ai.agents._internal.model_parser import parse_model
+        from conductor.ai.agents.agent import PromptTemplate
+
+        seen: set = set()
+
+        from conductor.ai.agents.agent import Agent as _Agent
+
+        def _collect(a: Agent) -> None:
+            if not isinstance(a, _Agent):
+                return
+            if isinstance(a.instructions, PromptTemplate) and a.model:
+                key = (a.instructions.name, a.model)
+                if key not in seen:
+                    seen.add(key)
+            for sub in a.agents:
+                _collect(sub)
+
+        _collect(agent)
+        if not seen:
+            return
+
+        for template_name, model_string in seen:
+            try:
+                parsed = parse_model(model_string)
+                model_key = f"{parsed.provider}:{parsed.model}"
+
+                template_obj = self._prompt_client.get_prompt(template_name)
+                if template_obj is None:
+                    logger.warning(
+                        "Prompt template '%s' not found — skipping model association",
+                        template_name,
+                    )
+                    continue
+
+                # Check if model is already associated
+                existing_models = getattr(template_obj, "integrations", None) or []
+                if model_key in existing_models:
+                    logger.debug(
+                        "Template '%s' already associated with '%s'",
+                        template_name,
+                        model_key,
+                    )
+                    continue
+
+                # Add model association by re-saving with updated models list
+                updated_models = list(existing_models) + [model_key]
+                self._prompt_client.save_prompt(
+                    prompt_name=template_name,
+                    description=getattr(template_obj, "description", "") or template_name,
+                    prompt_template=template_obj.template,
+                    models=updated_models,
+                )
+                logger.info(
+                    "Associated template '%s' with model '%s'",
+                    template_name,
+                    model_key,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to associate template '%s' with model '%s': %s",
+                    template_name,
+                    model_string,
+                    e,
+                )
+
+    # ── Integration auto-registration ──────────────────────────────
+
+    @property
+    def _integration_client(self) -> Any:
+        """Lazily create the integration client (only when auto-register is used)."""
+        if self._integration_client_instance is None:
+            self._integration_client_instance = self._clients.get_integration_client()
+        return self._integration_client_instance
+
+    def _ensure_model(self, model_string: str) -> None:
+        """Ensure an LLM integration and model are registered on the server.
+
+        Idempotent: skips if already checked in this runtime session.
+        Uses upsert (create-or-update) to ensure the integration is always
+        enabled with the correct API key, even if it previously existed in
+        a broken state.
+        Fail-safe: if the integration API is unavailable (e.g. OSS Conductor),
+        logs a warning once and becomes a no-op for subsequent calls.
+        """
+
+        if model_string in self._ensured_models:
+            return
+
+        # Short-circuit if we already know the integration API is unavailable
+        if self._integration_api_available is False:
+            return
+
+        from conductor.ai.agents._internal.model_parser import parse_model
+        from conductor.ai.agents._internal.provider_registry import get_provider_spec
+
+        parsed = parse_model(model_string)
+        spec = get_provider_spec(parsed.provider)
+        if spec is None:
+            logger.warning(
+                "Unknown provider '%s' — cannot auto-register integration. "
+                "Set it up manually on the Conductor server.",
+                parsed.provider,
+            )
+            self._ensured_models.add(model_string)
+            return
+
+        api_key = os.environ.get(spec.api_key_env)
+        if not api_key:
+            logger.warning(
+                "No API key found for %s (set %s). Skipping auto-registration for '%s'.",
+                spec.display_name,
+                spec.api_key_env,
+                model_string,
+            )
+            self._ensured_models.add(model_string)
+            return
+
+        try:
+            from conductor.client.http.models.integration_api_update import IntegrationApiUpdate
+            from conductor.client.http.models.integration_update import IntegrationUpdate
+
+            # Upsert integration — always save to ensure it's enabled with
+            # the correct API key, even if a previous run left it inactive.
+            logger.info(
+                "Ensuring %s integration '%s' is configured and enabled",
+                spec.display_name,
+                parsed.provider,
+            )
+            self._integration_client.save_integration(
+                parsed.provider,
+                IntegrationUpdate(
+                    category="AI_MODEL",
+                    type=spec.integration_type,
+                    configuration={"api_key": api_key},
+                    enabled=True,
+                    description=spec.display_name,
+                ),
+            )
+
+            # Upsert model — always save to ensure it's enabled.
+            logger.info(
+                "Ensuring model '%s' is registered under '%s'",
+                parsed.model,
+                parsed.provider,
+            )
+            self._integration_client.save_integration_api(
+                parsed.provider,
+                parsed.model,
+                IntegrationApiUpdate(
+                    description=parsed.model,
+                    enabled=True,
+                ),
+            )
+
+            self._integration_api_available = True
+        except Exception as e:
+            if self._integration_api_available is None:
+                # First failure — likely OSS Conductor without integration API
+                logger.warning(
+                    "Integration API not available (OSS Conductor?). "
+                    "Auto-registration disabled: %s",
+                    e,
+                )
+                self._integration_api_available = False
+            else:
+                logger.warning(
+                    "Failed to auto-register '%s': %s",
+                    model_string,
+                    e,
+                )
+
+        self._ensured_models.add(model_string)
+
+    def _ensure_models_for_agent(self, agent: Agent) -> None:
+        """Walk the agent tree and ensure all referenced models are registered."""
+        seen: set = set()
+
+        def _collect(a: Agent) -> None:
+            if not isinstance(a, Agent):
+                return
+            if a.model and a.model not in seen:
+                seen.add(a.model)
+            for sub in a.agents:
+                _collect(sub)
+
+        _collect(agent)
+
+        for model_str in seen:
+            self._ensure_model(model_str)
+
+    def _has_worker_tools(self, agent: Agent) -> bool:
+        """Check if this agent or any sub-agent has tools or guardrails that need local workers.
+
+        ``@tool``-decorated functions (tool_type="worker") and custom function
+        guardrails require a local worker process.  Server-side tools
+        (``http_tool``, ``mcp_tool``), ``RegexGuardrail`` (InlineTask),
+        ``LLMGuardrail`` (LlmChatComplete), and external guardrails
+        (SimpleTask) do not need workers.
+        """
+        # Claude-code agents always need a passthrough worker
+        if getattr(agent, "is_claude_code", False):
+            return True
+        # Skill agents need script and read_skill_file workers
+        if getattr(agent, "_framework", None) == "skill":
+            return True
+        from conductor.ai.agents.guardrail import LLMGuardrail, RegexGuardrail
+        from conductor.ai.agents.tool import get_tool_def
+
+        # Only custom function guardrails need workers.
+        # RegexGuardrails compile to InlineTasks, LLMGuardrails to LlmChatComplete,
+        # external guardrails to SimpleTasks — none need local workers.
+        if any(
+            not g.external and not isinstance(g, RegexGuardrail) and not isinstance(g, LLMGuardrail)
+            for g in agent.guardrails
+        ):
+            return True
+
+        # Multi-agent strategies that compile to worker tasks
+        if agent.handoffs:
+            return True
+        if agent.strategy == "manual":
+            return True
+        if (
+            agent.strategy == "router"
+            and agent.router
+            and callable(agent.router)
+            and not hasattr(agent.router, "model")
+        ):
+            return True
+
+        for t in agent.tools:
+            try:
+                td = get_tool_def(t)
+            except TypeError:
+                continue
+            if td.tool_type in ("worker", "cli"):
+                return True
+            if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
+                nested_agent = td.config["agent"]
+                if not getattr(nested_agent, "external", False):
+                    if self._has_worker_tools(nested_agent):
+                        return True
+        return any(self._has_worker_tools(sub) for sub in agent.agents)
+
+    # ── Plan (compile without executing) ────────────────────────────
+
+    def plan(self, agent: Agent) -> Any:
+        """Compile an agent to a Conductor workflow definition and return it.
+
+        This does NOT register, start workers, or execute. Useful for
+        inspecting, debugging, or exporting the compiled workflow.
+
+        Args:
+            agent: The agent to compile.
+
+        Returns:
+            The raw server response dict with ``workflowDef`` and
+            ``requiredWorkers`` keys.
+        """
+        import requests
+
+        from conductor.ai.agents.frameworks.serializer import detect_framework
+
+        framework = detect_framework(agent)
+        if framework:
+            from conductor.ai.agents.frameworks.serializer import serialize_agent
+
+            raw_config, _ = serialize_agent(agent)
+            payload = {
+                "framework": framework,
+                "rawConfig": raw_config,
+            }
+        else:
+            from conductor.ai.agents.config_serializer import AgentConfigSerializer
+
+            serializer = AgentConfigSerializer()
+            config_json = serializer.serialize(agent)
+            payload = {"agentConfig": config_json}
+
+        server_url = self._config.server_url.rstrip("/")
+        url = f"{server_url}/agent/compile"
+
+        headers = self._agent_api_headers()
+
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        return response.json()
+
+    # ── Deploy (CI/CD) ─────────────────────────────────────────────
+
+    def deploy(
+        self,
+        *agents: Any,
+        packages: Optional[List[str]] = None,
+        schedules: Any = _SCHEDULES_UNSET,
+    ) -> List[DeploymentInfo]:
+        """Compile and register agents on the server without executing them.
+
+        This is a CI/CD operation: it pushes the workflow definitions and
+        task definitions to the server.  It does NOT register local workers
+        or start any processes.  Use :meth:`serve` separately for the runtime.
+
+        Args:
+            *agents: Agent objects to deploy (native or foreign framework).
+            packages: Python packages to scan for Agent instances.
+            schedules: Cron schedules to attach to the (single) deployed agent.
+                Omitted or ``None`` leaves existing schedules untouched; ``[]``
+                purges all schedules for this agent; a non-empty list upserts
+                those and prunes the rest. Only valid when exactly one agent
+                is being deployed.
+
+        Returns:
+            List of :class:`DeploymentInfo`, one per deployed agent.
+        """
+        from conductor.ai.agents.runtime.discovery import discover_agents
+
+        all_agents = list(agents)
+        if packages:
+            all_agents.extend(discover_agents(packages))
+
+        if not all_agents:
+            raise ValueError("deploy() requires at least one agent.")
+
+        if schedules is not _SCHEDULES_UNSET and len(all_agents) != 1:
+            raise ValueError(
+                f"deploy(..., schedules=...) requires exactly one agent; got {len(all_agents)}"
+            )
+
+        results = []
+        for agent in all_agents:
+            from conductor.ai.agents.frameworks.serializer import detect_framework
+
+            framework = detect_framework(agent)
+
+            registered_name = self._deploy_via_server(agent, framework=framework)
+            agent_name = agent.name if hasattr(agent, "name") else registered_name
+            results.append(DeploymentInfo(registered_name=registered_name, agent_name=agent_name))
+            logger.info("Deployed agent '%s' as '%s'", agent_name, registered_name)
+
+        if schedules is not _SCHEDULES_UNSET:
+            self.schedules_client().reconcile(all_agents[0].name, schedules)
+
+        return results
+
+    async def deploy_async(
+        self,
+        *agents: Any,
+        packages: Optional[List[str]] = None,
+        schedules: Any = _SCHEDULES_UNSET,
+    ) -> List[DeploymentInfo]:
+        """Async version of :meth:`deploy`."""
+        from conductor.ai.agents.runtime.discovery import discover_agents
+
+        all_agents = list(agents)
+        if packages:
+            all_agents.extend(discover_agents(packages))
+
+        if not all_agents:
+            raise ValueError("deploy() requires at least one agent.")
+
+        if schedules is not _SCHEDULES_UNSET and len(all_agents) != 1:
+            raise ValueError(
+                "deploy_async(..., schedules=...) requires exactly one agent; "
+                f"got {len(all_agents)}"
+            )
+
+        results = []
+        for agent in all_agents:
+            from conductor.ai.agents.frameworks.serializer import detect_framework
+
+            framework = detect_framework(agent)
+
+            registered_name = await self._deploy_via_server_async(agent, framework=framework)
+            agent_name = agent.name if hasattr(agent, "name") else registered_name
+            results.append(DeploymentInfo(registered_name=registered_name, agent_name=agent_name))
+            logger.info("Deployed agent '%s' as '%s'", agent_name, registered_name)
+
+        if schedules is not _SCHEDULES_UNSET:
+            self.schedules_client().reconcile(all_agents[0].name, schedules)
+
+        return results
+
+    @property
+    def client(self) -> Any:
+        """The control-plane :class:`AgentClient` for this runtime.
+
+        Exposes ``run``/``run_async``, ``start``/``start_async``, ``deploy``,
+        ``schedule``, the schedule lifecycle (:attr:`AgentClient.schedules`),
+        and the raw ``/agent/*`` endpoints. **Control-plane only** — its
+        ``run`` does NOT manage local tool workers (use :meth:`run` on the
+        runtime for agents with local ``@tool`` functions).
+        """
+        return self._http
+
+    def schedules_client(self) -> Any:
+        """Return the shared :class:`ScheduleClient` for this runtime.
+
+        Delegates to :attr:`client` so the runtime and the control-plane
+        client expose the *same* schedule surface (one instance, not two).
+        """
+        if self._schedule_client_instance is None:
+            from conductor.ai.agents.schedule.client import ScheduleClient
+
+            self._schedule_client_instance = ScheduleClient(
+                self._clients.get_scheduler_client(),
+                self._workflow_client,
+            )
+        return self._schedule_client_instance
+
+    def _deploy_via_server(self, agent: Any, *, framework: Optional[str] = None) -> str:
+        """Deploy agent via /api/agent/deploy.  Returns registered name."""
+        import requests as req_lib
+
+        if framework:
+            from conductor.ai.agents.frameworks.serializer import serialize_agent
+
+            raw_config, _ = serialize_agent(agent)
+            payload = {
+                "framework": framework,
+                "rawConfig": raw_config,
+            }
+        else:
+            from conductor.ai.agents.config_serializer import AgentConfigSerializer
+
+            serializer = AgentConfigSerializer()
+            payload = {"agentConfig": serializer.serialize(agent)}
+
+        url = self._agent_api_url("/deploy")
+        resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        deploy_data = resp.json()
+        return deploy_data.get("agentName", "")
+
+    async def _deploy_via_server_async(self, agent: Any, *, framework: Optional[str] = None) -> str:
+        """Async version of :meth:`_deploy_via_server`."""
+        if framework:
+            from conductor.ai.agents.frameworks.serializer import serialize_agent
+
+            raw_config, _ = serialize_agent(agent)
+            payload = {
+                "framework": framework,
+                "rawConfig": raw_config,
+            }
+        else:
+            from conductor.ai.agents.config_serializer import AgentConfigSerializer
+
+            serializer = AgentConfigSerializer()
+            payload = {"agentConfig": serializer.serialize(agent)}
+
+        data = await self._http.deploy_agent(payload)
+        return data.get("agentName", "")
+
+    # ── Serve (runtime worker service) ─────────────────────────────
+
+    def _serve_framework_workers(self, agent_obj: Any, framework: str) -> None:
+        """Register workers for a foreign framework agent (LangGraph, etc.).
+
+        Mirrors the worker registration in ``_start_framework`` without
+        starting an execution — serialize the agent, detect the
+        serialization path, and register the appropriate workers.
+        """
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
+
+        raw_config, workers = serialize_agent(agent_obj)
+
+        if workers and workers[0].func is None:
+            worker = workers[0]
+            worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
+            self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
+        else:
+            self._register_framework_workers(workers)
+
+    def serve(
+        self,
+        *agents: Any,
+        packages: Optional[List[str]] = None,
+        blocking: bool = True,
+    ) -> None:
+        """Register workers and keep them polling until interrupted.
+
+        This is a runtime operation: it registers the Python tool functions
+        (tools, custom guardrails, callbacks, handoff checks, etc.) as
+        Conductor workers and starts polling for tasks.
+
+        Args:
+            *agents: Agents whose workers should be served.
+            packages: Python packages/modules to scan for Agent instances.
+                Recursively imports the package and discovers all module-level
+                Agent objects (e.g. ``packages=["myapp.agents"]``).
+            blocking: If ``True`` (default), blocks until Ctrl+C / SIGTERM.
+
+        At least one agent must be provided (directly or via packages).
+        """
+        from conductor.ai.agents.runtime.discovery import discover_agents
+
+        all_agents = list(agents)
+        if packages:
+            all_agents.extend(discover_agents(packages))
+
+        if not all_agents:
+            raise ValueError(
+                "serve() requires at least one Agent -- pass agents directly "
+                "or use packages= to auto-discover them."
+            )
+
+        # Register local Python worker functions for each agent
+        from conductor.ai.agents.frameworks.serializer import detect_framework
+
+        has_new = False
+        for agent in all_agents:
+            framework = detect_framework(agent)
+            if framework is not None:
+                self._serve_framework_workers(agent, framework)
+                has_new = True
+                continue
+
+            self._register_workers(agent)
+            worker_names = self._collect_worker_names(agent)
+            new_workers = worker_names - self._registered_tool_names
+            if new_workers:
+                logger.info(
+                    "New workers detected (%s), starting workers",
+                    ", ".join(sorted(new_workers)),
+                )
+                self._registered_tool_names.update(worker_names)
+                has_new = True
+
+        if not self._workers_started:
+            self._worker_manager.start()
+            self._workers_started = True
+        elif has_new:
+            self._worker_manager.start()
+
+        logger.info(
+            "Serving %d worker(s) for %d agent(s). Press Ctrl+C to stop.",
+            len(self._registered_tool_names),
+            len(all_agents),
+        )
+
+        if blocking:
+            import signal
+
+            stop = threading.Event()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                signal.signal(sig, lambda *_: stop.set())
+            try:
+                stop.wait()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                logger.info("Shutting down...")
+                self.shutdown()
+
+    # ── Input guardrail pre-flight ─────────────────────────────────
+
+    def _check_input_guardrails(self, agent: Agent, prompt: str) -> str:
+        """Run input guardrails before execution.
+
+        Returns the (possibly modified) prompt.  Raises :class:`ValueError`
+        for ``on_fail="raise"`` failures.
+
+        Supported ``on_fail`` modes for input guardrails:
+
+        - ``"raise"`` — raise immediately.
+        - ``"fix"`` — replace the prompt with ``fixed_output``.
+        - ``"retry"`` — not meaningful for input; logged as warning, treated as raise.
+        - ``"human"`` — blocked at construction time (cannot be set on input guardrails).
+        """
+        for guard in agent.guardrails:
+            if guard.position != "input":
+                continue
+            result = guard.check(prompt)
+            logger.debug("Input guardrail '%s': passed=%s", guard.name, result.passed)
+            if result.passed:
+                continue
+
+            if guard.on_fail == "fix" and result.fixed_output is not None:
+                logger.info("Input guardrail '%s' applied fix to prompt", guard.name)
+                prompt = result.fixed_output
+            elif guard.on_fail == "retry":
+                logger.warning(
+                    "Input guardrail '%s' failed with on_fail='retry', "
+                    "but retry is not meaningful for input guardrails. "
+                    "Treating as 'raise'.",
+                    guard.name,
+                )
+                raise ValueError(f"Input guardrail '{guard.name}' failed: {result.message}")
+            else:
+                # "raise" or any unrecognized mode
+                raise ValueError(f"Input guardrail '{guard.name}' failed: {result.message}")
+        return prompt
+
+    # ── Synchronous execution ───────────────────────────────────────
+
+    def run(
+        self,
+        agent: Any,
+        prompt: "Union[str, Any]" = None,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        """Execute an agent synchronously and return the result.
+
+        Accepts native :class:`Agent` objects, foreign framework agents
+        (e.g. OpenAI Agent SDK, Google ADK), or an **agent name string**
+        to run a pre-deployed agent by name.
+
+        Args:
+            agent: The agent to execute — a native :class:`Agent`, a
+                foreign framework agent object, or a ``str`` agent name
+                for a pre-deployed agent.
+            prompt: The user's input message — a string or a
+                :class:`PromptTemplate` referencing a server-side template.
+            version: Agent version (only used when *agent* is a string).
+            media: Optional list of media URLs (images, video, audio) to
+                include with the prompt.  Each URL is passed as part of
+                the user message to vision-capable models.
+            session_id: Optional session ID for conversation continuity.
+            idempotency_key: Optional idempotency key.
+            on_event: Optional callback invoked for each streaming event.
+                When provided, the agent runs asynchronously via SSE and
+                calls ``on_event(event)`` as events arrive.  The full
+                :class:`AgentResult` (with messages, token_usage, etc.)
+                is still returned after completion.
+            **kwargs: Additional input parameters.
+
+        Returns:
+            An :class:`AgentResult`.
+        """
+        # Run by name — pre-deployed agent
+        if isinstance(agent, str):
+            return self._run_by_name(
+                agent,
+                prompt,
+                version=version,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                on_event=on_event,
+                timeout=timeout,
+                context=context,
+                **kwargs,
+            )
+
+        # Check for foreign framework agent
+        from conductor.ai.agents.frameworks.serializer import detect_framework
+
+        framework = detect_framework(agent)
+
+        if framework is not None:
+            return self._run_framework(
+                agent,
+                framework,
+                prompt,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                on_event=on_event,
+                timeout=timeout,
+                credentials=credentials,
+                context=context,
+                **kwargs,
+            )
+
+        # Static plan for Strategy.PLAN_EXECUTE harness — the SDK forwards
+        # the user-supplied Plan/dict into `workflow.input.static_plan`,
+        # which the server's extract_json picks up as the Case-0 source
+        # (wins over the planner LLM's output). See plan-execute.md.
+        plan_kwarg = kwargs.pop("plan", None)
+        static_plan: Optional[Dict[str, Any]] = None
+        if plan_kwarg is not None:
+            from conductor.ai.agents.plans import coerce_plan
+
+            static_plan = coerce_plan(plan_kwarg)
+
+        if kwargs:
+            logger.warning("Unrecognized keyword arguments: %s", ", ".join(kwargs.keys()))
+
+        if on_event is not None:
+            return self._run_with_events(
+                agent,
+                prompt,
+                on_event=on_event,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                timeout=timeout,
+                context=context,
+            )
+
+        # Session continuity: inject prior conversation into memory
+        if session_id:
+            prior_messages = self._get_session_messages(session_id, agent.name)
+            if prior_messages:
+                agent = self._inject_session_memory(agent, prior_messages)
+
+        resolved_prompt = self._resolve_prompt(prompt)
+        resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        correlation_id = str(uuid.uuid4())
+
+        logger.info("Executing agent '%s'", agent.name)
+
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
+
+        # Start via server first to get requiredWorkers, then register
+        # locally.  Conductor queues tasks so workers can start polling
+        # immediately after registration without missing work.
+        execution_id, required_workers, pre_deployed_skills = self._start_via_server(
+            agent,
+            resolved_prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            timeout=timeout,
+            credentials=credentials,
+            context=context,
+            run_id=run_id,
+            static_plan=static_plan,
+        )
+
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
+
+        self._register_workflow_credentials(execution_id, credentials)
+
+        # Poll until complete
+        effective_timeout = timeout or (
+            agent.timeout_seconds if agent.timeout_seconds > 0 else None
+        )
+        try:
+            status = self._poll_status_until_complete(execution_id, timeout=effective_timeout)
+        finally:
+            self._clear_workflow_credentials(execution_id, credentials)
+
+        output = status.output
+        raw_status = status.status
+
+        if raw_status in ("FAILED", "TERMINATED"):
+            logger.warning("Agent '%s' execution %s", agent.name, raw_status)
+            # Surface the termination reason when no output is available
+            has_output = output and not (
+                isinstance(output, dict) and all(v is None for v in output.values())
+            )
+            if not has_output and status.reason:
+                output = status.reason
+
+        # Normalize output to always be a dict
+        output = self._normalize_output(output, raw_status, status.reason)
+
+        # Fetch full execution to populate tool_calls, messages,
+        # and token_usage — these are not available from the status endpoint.
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        task_failure_reason: Optional[str] = None
+        try:
+            wf = self._workflow_client.get_workflow(
+                execution_id,
+                include_tasks=True,
+            )
+            tool_calls = self._extract_tool_calls(wf)
+            messages = self._extract_messages(wf)
+            token_usage = self._extract_token_usage(execution_id)
+            if raw_status == "FAILED":
+                task_failure_reason = self._extract_failed_task_reason(wf)
+        except Exception as exc:
+            logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
+
+        # Build the richest error message available: prefer task-level reason
+        # (includes which task failed and why) over the workflow-level reason.
+        error_reason: Optional[str] = None
+        if raw_status in ("FAILED", "TERMINATED"):
+            error_reason = task_failure_reason or status.reason
+
+        logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
+        return AgentResult(
+            output=output,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            status=raw_status,
+            finish_reason=self._derive_finish_reason(raw_status, status.output),
+            error=error_reason,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+            sub_results=self._extract_sub_results(output),
+        )
+
+    # ── Run-by-name (pre-deployed agents) ──────────────────────────
+
+    def _run_by_name(
+        self,
+        name: str,
+        prompt: str,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        """Execute a pre-deployed agent by name."""
+        from conductor.client.http.models import StartWorkflowRequest
+
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        req = StartWorkflowRequest()
+        req.name = name
+        req.version = version
+        req.input = {
+            "prompt": resolved_prompt,
+            "media": media or [],
+            "session_id": session_id or "",
+            "context": context or {},
+            **kwargs,
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        execution_id = self._workflow_client.start_workflow(req)
+        correlation_id = str(uuid.uuid4())
+        logger.info("Executing '%s' by name (execution_id=%s)", name, execution_id)
+
+        # If on_event requested, stream events
+        if on_event is not None:
+            handle = AgentHandle(
+                execution_id=execution_id, runtime=self, correlation_id=correlation_id
+            )
+            agent_stream = AgentStream(
+                handle=handle, event_iterator=self._stream_workflow(execution_id)
+            )
+            for event in agent_stream:
+                on_event(event)
+            return agent_stream.get_result()
+
+        # Poll until complete
+        status = self._poll_status_until_complete(execution_id, timeout=timeout)
+        output = self._normalize_output(status.output, status.status, status.reason)
+
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        task_failure_reason: Optional[str] = None
+        try:
+            wf = self._workflow_client.get_workflow(execution_id, include_tasks=True)
+            tool_calls = self._extract_tool_calls(wf)
+            messages = self._extract_messages(wf)
+            token_usage = self._extract_token_usage(execution_id)
+            if status.status == "FAILED":
+                task_failure_reason = self._extract_failed_task_reason(wf)
+        except Exception as exc:
+            logger.debug("Could not fetch execution details: %s", exc)
+
+        error_reason: Optional[str] = None
+        if status.status in ("FAILED", "TERMINATED"):
+            error_reason = task_failure_reason or status.reason
+
+        return AgentResult(
+            output=output,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            status=status.status,
+            finish_reason=self._derive_finish_reason(status.status, status.output),
+            error=error_reason,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+        )
+
+    def _start_by_name(
+        self,
+        name: str,
+        prompt: str,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentHandle:
+        """Start a pre-deployed agent by name (fire-and-forget)."""
+        from conductor.client.http.models import StartWorkflowRequest
+
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        req = StartWorkflowRequest()
+        req.name = name
+        req.version = version
+        req.input = {
+            "prompt": resolved_prompt,
+            "media": media or [],
+            "session_id": session_id or "",
+            "context": context or {},
+            **kwargs,
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        execution_id = self._workflow_client.start_workflow(req)
+        correlation_id = str(uuid.uuid4())
+        logger.info("Started '%s' by name (execution_id=%s)", name, execution_id)
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
+
+    async def _run_by_name_async(
+        self,
+        name: str,
+        prompt: str,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        """Async version of :meth:`_run_by_name`."""
+        from conductor.client.http.models import StartWorkflowRequest
+
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        req = StartWorkflowRequest()
+        req.name = name
+        req.version = version
+        req.input = {
+            "prompt": resolved_prompt,
+            "media": media or [],
+            "session_id": session_id or "",
+            "context": context or {},
+            **kwargs,
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        loop = asyncio.get_event_loop()
+        execution_id = await loop.run_in_executor(
+            None,
+            lambda: self._workflow_client.start_workflow(req),
+        )
+        correlation_id = str(uuid.uuid4())
+        logger.info("Executing '%s' by name async (execution_id=%s)", name, execution_id)
+
+        status = await self._poll_status_until_complete_async(execution_id, timeout=timeout)
+        output = self._normalize_output(status.output, status.status, status.reason)
+
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        try:
+            wf = await loop.run_in_executor(
+                None,
+                lambda: self._workflow_client.get_workflow(execution_id, include_tasks=True),
+            )
+            tool_calls = self._extract_tool_calls(wf)
+            messages = self._extract_messages(wf)
+            token_usage = self._extract_token_usage(execution_id)
+        except Exception as exc:
+            logger.debug("Could not fetch execution details: %s", exc)
+
+        return AgentResult(
+            output=output,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            status=status.status,
+            finish_reason=self._derive_finish_reason(status.status, status.output),
+            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+        )
+
+    async def _start_by_name_async(
+        self,
+        name: str,
+        prompt: str,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentHandle:
+        """Async version of :meth:`_start_by_name`."""
+        from conductor.client.http.models import StartWorkflowRequest
+
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        req = StartWorkflowRequest()
+        req.name = name
+        req.version = version
+        req.input = {
+            "prompt": resolved_prompt,
+            "media": media or [],
+            "session_id": session_id or "",
+            "context": context or {},
+            **kwargs,
+        }
+        if idempotency_key:
+            req.correlation_id = idempotency_key
+
+        loop = asyncio.get_event_loop()
+        execution_id = await loop.run_in_executor(
+            None,
+            lambda: self._workflow_client.start_workflow(req),
+        )
+        correlation_id = str(uuid.uuid4())
+        logger.info("Started '%s' by name async (execution_id=%s)", name, execution_id)
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
+
+    # ── Foreign framework support ────────────────────────────────────
+
+    def _run_framework(
+        self,
+        agent_obj: Any,
+        framework: str,
+        prompt: "Union[str, Any]",
+        *,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        """Run a foreign-framework agent via server-side normalization."""
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
+
+        raw_config, workers = serialize_agent(agent_obj)
+        agent_name = raw_config.get("name", framework + "_agent")
+        logger.info(
+            "Running %s framework agent '%s' (%d workers)",
+            framework,
+            agent_name,
+            len(workers),
+        )
+
+        # Register workers — three paths:
+        # 1. Passthrough: single worker with func=None (whole graph runs in one task)
+        # 2. Graph-structure: pre-wrapped node/router workers (_pre_wrapped=True)
+        # 3. Full extraction: individual tool workers with raw callables
+        if workers and workers[0].func is None:
+            worker = workers[0]
+            worker.func = self._build_passthrough_func(
+                agent_obj,
+                framework,
+                worker.name,
+                credentials=credentials,
+            )
+            self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
+        else:
+            self._register_framework_workers(workers, credentials=credentials)
+
+        correlation_id = str(uuid.uuid4())
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        execution_id = self._start_framework_via_server(
+            framework=framework,
+            raw_config=raw_config,
+            prompt=resolved_prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            credentials=credentials,
+            context=context,
+        )
+        # Also register in _workflow_credentials for full-extraction tool workers
+        self._register_workflow_credentials(execution_id, credentials)
+
+        try:
+            if on_event is not None:
+                return self._run_framework_with_events(
+                    execution_id,
+                    correlation_id,
+                    on_event,
+                    timeout=timeout,
+                )
+
+            # Poll until complete
+            status = self._poll_status_until_complete(execution_id, timeout=timeout)
+
+            output = status.output
+            raw_status = status.status
+
+            if raw_status in ("FAILED", "TERMINATED"):
+                logger.warning("Framework agent '%s' execution %s", agent_name, raw_status)
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason:
+                    output = status.reason
+
+            output = self._normalize_output(output, raw_status, status.reason)
+            logger.info(
+                "Framework agent '%s' completed (execution_id=%s)", agent_name, execution_id
+            )
+            token_usage = self._extract_token_usage(execution_id)
+            return AgentResult(
+                output=output,
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+                status=raw_status,
+                finish_reason=self._derive_finish_reason(raw_status, status.output),
+                error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+                token_usage=token_usage,
+                sub_results=self._extract_sub_results(output),
+            )
+        finally:
+            self._clear_workflow_credentials(execution_id, credentials)
+
+    def _start_framework(
+        self,
+        agent_obj: Any,
+        framework: str,
+        prompt: "Union[str, Any]",
+        *,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> AgentHandle:
+        """Start a foreign-framework agent asynchronously."""
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
+
+        raw_config, workers = serialize_agent(agent_obj)
+
+        if workers and workers[0].func is None:
+            worker = workers[0]
+            worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
+            self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
+        else:
+            self._register_framework_workers(workers)
+
+        correlation_id = str(uuid.uuid4())
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        execution_id = self._start_framework_via_server(
+            framework=framework,
+            raw_config=raw_config,
+            prompt=resolved_prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            context=context,
+        )
+
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
+
+    def _start_framework_via_server(
+        self,
+        *,
+        framework: str,
+        raw_config: Dict[str, Any],
+        prompt: str,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """POST to /api/agent/start with framework + rawConfig."""
+        import requests as req_lib
+
+        payload: Dict[str, Any] = {
+            "framework": framework,
+            "rawConfig": raw_config,
+            "prompt": prompt,
+            "sessionId": session_id or "",
+            "media": media or [],
+            "context": context or {},
+        }
+        if idempotency_key:
+            payload["idempotencyKey"] = idempotency_key
+        if credentials:
+            payload["credentials"] = credentials
+
+        url = self._agent_api_url("/start")
+        resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        data = resp.json()
+        execution_id = data.get("executionId", "")
+        logger.info(
+            "Started %s framework agent via server (execution_id=%s)",
+            framework,
+            execution_id,
+        )
+        return execution_id
+
+    def _register_framework_workers(
+        self, workers: list, credentials: Optional[List[str]] = None
+    ) -> None:
+        """Register extracted callable workers from a foreign framework agent."""
+        if not workers:
+            return
+
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
+        from conductor.client.worker.worker_task import worker_task
+
+        for w in workers:
+            try:
+                setattr(w.func, "_agentspan_framework_callable", True)
+            except Exception:
+                pass
+            wrapper = make_tool_worker(w.func, w.name, credential_names=credentials)
+            worker_task(
+                task_definition_name=w.name,
+                task_def=_default_task_def(w.name),
+                register_task_def=True,
+                overwrite_task_def=True,
+                lease_extend_enabled=True,
+            )(wrapper)
+            logger.debug("Registered framework worker '%s'", w.name)
+
+        # Start worker polling if needed — guarded by a lock so that concurrent
+        # calls from run_all.py's thread pool don't race on _workers_started /
+        # _registered_tool_names and leave some workers unstarted (pollCount=0).
+        if self._config.auto_start_workers:
+            with self._worker_start_lock:
+                new_names = {w.name for w in workers}
+                new_workers = new_names - self._registered_tool_names
+                if new_workers:
+                    logger.info(
+                        "New framework workers detected (%s), starting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._registered_tool_names.update(new_names)
+                if not self._workers_started:
+                    logger.debug("Starting workers for framework agent")
+                    self._worker_manager.start()
+                    self._workers_started = True
+                elif new_workers:
+                    self._worker_manager.start()
+
+    def _register_passthrough_worker(self, worker: Any) -> None:
+        """Register a pre-wrapped framework passthrough worker (LangGraph/LangChain).
+
+        Unlike _register_framework_workers, this does NOT call make_tool_worker —
+        worker.func is already a pre-wrapped tool_worker(task) -> TaskResult closure.
+        Uses _passthrough_task_def (600s timeout) instead of _default_task_def (10s).
+        """
+        from conductor.client.worker.worker_task import worker_task
+
+        # Add minimal annotations so the Conductor SDK can introspect the function
+        worker.func.__annotations__ = {"task": object, "return": object}
+
+        worker_task(
+            task_definition_name=worker.name,
+            task_def=_passthrough_task_def(worker.name),
+            register_task_def=True,
+            overwrite_task_def=True,
+            thread_count=self._config.worker_thread_count,
+            lease_extend_enabled=True,
+        )(worker.func)
+        logger.debug("Registered passthrough worker '%s'", worker.name)
+
+        if self._config.auto_start_workers:
+            with self._worker_start_lock:
+                is_new = worker.name not in self._registered_tool_names
+                if is_new:
+                    self._registered_tool_names.add(worker.name)
+                if not self._workers_started:
+                    logger.debug("Starting workers for passthrough worker '%s'", worker.name)
+                    self._worker_manager.start()
+                    self._workers_started = True
+                elif is_new:
+                    self._worker_manager.start()
+
+    def _register_graph_workers(self, raw_config: dict, workers: list) -> None:
+        """Register pre-wrapped graph-structure workers (node + router workers).
+
+        Unlike _register_framework_workers, this does NOT call make_tool_worker —
+        the workers are pre-wrapped Task→TaskResult functions built by
+        make_node_worker / make_router_worker in langgraph.py.
+
+        Uses _default_task_def (10s response timeout) since each node is a
+        quick task, not a long-running passthrough.
+        """
+        if not workers:
+            return
+
+        from conductor.ai.agents.frameworks.langgraph import (
+            make_llm_finish_worker,
+            make_llm_prep_worker,
+            make_node_worker,
+            make_router_worker,
+            make_subgraph_finish_worker,
+            make_subgraph_prep_worker,
+        )
+        from conductor.client.worker.worker_task import worker_task
+
+        graph_info = raw_config.get("_graph", {})
+        router_refs = {
+            ce["_router_ref"]
+            for ce in graph_info.get("conditional_edges", [])
+            if "_router_ref" in ce
+        }
+
+        for w in workers:
+            extra = w._extra or {}
+            llm_role = extra.get("llm_role")
+            llm_var_name = extra.get("llm_var_name")
+
+            subgraph_role = extra.get("subgraph_role")
+            subgraph_var_name = extra.get("subgraph_var_name")
+
+            if subgraph_role == "prep" and subgraph_var_name:
+                wrapped = make_subgraph_prep_worker(w.func, w.name, subgraph_var_name)
+            elif subgraph_role == "finish" and subgraph_var_name:
+                wrapped = make_subgraph_finish_worker(w.func, w.name, subgraph_var_name)
+            elif llm_role == "prep" and llm_var_name:
+                wrapped = make_llm_prep_worker(w.func, w.name, llm_var_name)
+            elif llm_role == "finish" and llm_var_name:
+                wrapped = make_llm_finish_worker(w.func, w.name, llm_var_name)
+            elif w.name in router_refs:
+                is_dynamic = extra.get("is_dynamic_fanout", False)
+                wrapped = make_router_worker(w.func, w.name, is_dynamic_fanout=is_dynamic)
+            else:
+                wrapped = make_node_worker(w.func, w.name)
+
+            worker_task(
+                task_definition_name=w.name,
+                task_def=_default_task_def(w.name),
+                register_task_def=True,
+                overwrite_task_def=True,
+                lease_extend_enabled=True,
+            )(wrapped)
+            logger.debug("Registered graph worker '%s' (llm_role=%s)", w.name, llm_role)
+
+        if self._config.auto_start_workers:
+            with self._worker_start_lock:
+                new_names = {w.name for w in workers}
+                new_workers = new_names - self._registered_tool_names
+                if new_workers:
+                    logger.info(
+                        "New graph workers detected (%s), starting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._registered_tool_names.update(new_names)
+                if not self._workers_started:
+                    logger.debug("Starting workers for graph-structure agent")
+                    self._worker_manager.start()
+                    self._workers_started = True
+                elif new_workers:
+                    self._worker_manager.start()
+
+    def _build_passthrough_func(
+        self, agent_obj: Any, framework: str, name: str, credentials: Optional[List[str]] = None
+    ) -> Any:
+        """Build the pre-wrapped tool_worker function for a passthrough worker."""
+        server_url = self._config.server_url
+        auth_key = self._config.auth_key or ""
+        auth_secret = self._config.auth_secret or ""
+
+        if framework == "langgraph":
+            from conductor.ai.agents.frameworks.langgraph import make_langgraph_worker
+
+            return make_langgraph_worker(
+                agent_obj,
+                name,
+                server_url,
+                auth_key,
+                auth_secret,
+                credential_names=credentials,
+            )
+        elif framework == "langchain":
+            from conductor.ai.agents.frameworks.langchain import make_langchain_worker
+
+            return make_langchain_worker(
+                agent_obj,
+                name,
+                server_url,
+                auth_key,
+                auth_secret,
+                credential_names=credentials,
+            )
+        elif framework == "claude_agent_sdk":
+            from conductor.ai.agents.agent import Agent as AgentClass
+            from conductor.ai.agents.frameworks.claude_agent_sdk import (
+                agent_to_claude_code_options,
+                make_claude_agent_sdk_worker,
+            )
+
+            # CRITICAL: convert Agent → ClaudeCodeOptions before passing to worker
+            if isinstance(agent_obj, AgentClass):
+                options = agent_to_claude_code_options(agent_obj)
+            else:
+                options = agent_obj  # Already ClaudeCodeOptions
+
+            return make_claude_agent_sdk_worker(
+                options,
+                name,
+                server_url,
+                auth_key,
+                auth_secret,
+                credential_names=credentials,
+            )
+        raise ValueError(f"Unknown passthrough framework: {framework}")
+
+    def _run_framework_with_events(
+        self,
+        execution_id: str,
+        correlation_id: str,
+        on_event: Any,
+        *,
+        timeout: Optional[int] = None,
+    ) -> AgentResult:
+        """Run a framework agent with event streaming."""
+        events: List[AgentEvent] = []
+        for event in self._stream_workflow(execution_id):
+            events.append(event)
+            on_event(event)
+
+        status = self._poll_status_until_complete(execution_id, timeout=timeout)
+        output = self._normalize_output(status.output, status.status, status.reason)
+        token_usage = self._extract_token_usage(execution_id)
+        return AgentResult(
+            output=output,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            status=status.status,
+            finish_reason=self._derive_finish_reason(status.status, status.output),
+            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
+            events=events,
+            sub_results=self._extract_sub_results(output),
+        )
+
+    # ── Execution helpers ─────────────────────────────────────────
+
+    def _poll_status_until_complete(
+        self, execution_id: str, *, timeout: Optional[int] = None
+    ) -> AgentStatus:
+        """Poll ``/api/agent/{id}/status`` until the execution completes."""
+        effective_timeout = timeout if timeout and timeout > 0 else 30000
+        poll_interval = 1
+        elapsed = 0
+
+        while elapsed < effective_timeout:
+            status = self.get_status(execution_id)
+            if status.is_complete:
+                return status
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+        logger.warning(
+            "Execution %s did not complete within %ds.",
+            execution_id,
+            effective_timeout,
+        )
+        return self.get_status(execution_id)
+
+    async def _poll_status_until_complete_async(
+        self, execution_id: str, *, timeout: Optional[int] = None
+    ) -> AgentStatus:
+        """Async version of :meth:`_poll_status_until_complete`."""
+        effective_timeout = timeout if timeout and timeout > 0 else 30000
+        poll_interval = 1
+        elapsed = 0
+
+        while elapsed < effective_timeout:
+            status = await self.get_status_async(execution_id)
+            if status.is_complete:
+                return status
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        logger.warning(
+            "Execution %s did not complete within %ds.",
+            execution_id,
+            effective_timeout,
+        )
+        return await self.get_status_async(execution_id)
+
+    # ── Run with event callback ──────────────────────────────────────
+
+    def _run_with_events(
+        self,
+        agent: Agent,
+        prompt: "Union[str, Any]",
+        *,
+        on_event: Any,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        timeout: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> AgentResult:
+        """Run an agent with real-time event callbacks, then return full result.
+
+        Starts the execution asynchronously, streams events via SSE (with
+        polling fallback), calls ``on_event(event)`` for each event, then
+        fetches the full execution to build a complete :class:`AgentResult`
+        with messages, token_usage, etc.
+        """
+        handle = self.start(
+            agent,
+            prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            context=context,
+        )
+
+        captured_events: List[AgentEvent] = []
+        final_output = None
+        for event in self._stream_workflow(handle.execution_id):
+            captured_events.append(event)
+            on_event(event)
+            if event.type in (EventType.DONE, EventType.ERROR):
+                final_output = event.output
+
+        # Get final status via server API
+        status = self.get_status(handle.execution_id)
+        output = final_output or status.output
+
+        # Build tool_calls from captured TOOL_CALL/TOOL_RESULT event pairs
+        tool_calls: List[Dict[str, Any]] = []
+        pending_call: Optional[Dict[str, Any]] = None
+        for ev in captured_events:
+            if ev.type == EventType.TOOL_CALL:
+                pending_call = {"name": ev.tool_name, "args": ev.args}
+            elif ev.type == EventType.TOOL_RESULT:
+                if pending_call is not None:
+                    pending_call["result"] = ev.result
+                    tool_calls.append(pending_call)
+                    pending_call = None
+                else:
+                    tool_calls.append({"name": ev.tool_name, "result": ev.result})
+
+        output = self._normalize_output(output, status.status, status.reason)
+        token_usage = self._extract_token_usage(handle.execution_id)
+        return AgentResult(
+            output=output,
+            execution_id=handle.execution_id,
+            correlation_id=handle.correlation_id,
+            status=status.status,
+            finish_reason=self._derive_finish_reason(status.status, status.output),
+            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
+            events=captured_events,
+            tool_calls=tool_calls,
+            sub_results=self._extract_sub_results(output),
+        )
+
+    async def _run_with_events_async(
+        self,
+        agent: Agent,
+        prompt: "Union[str, Any]",
+        *,
+        on_event: Any,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        timeout: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> AgentResult:
+        """Async version of :meth:`_run_with_events`."""
+        handle = await self.start_async(
+            agent,
+            prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            context=context,
+        )
+
+        captured_events: List[AgentEvent] = []
+        final_output = None
+        async for event in self._stream_workflow_async(handle.execution_id):
+            captured_events.append(event)
+            on_event(event)
+            if event.type in (EventType.DONE, EventType.ERROR):
+                final_output = event.output
+
+        status = await self.get_status_async(handle.execution_id)
+        output = final_output or status.output
+
+        # Build tool_calls from captured TOOL_CALL/TOOL_RESULT event pairs
+        tool_calls: List[Dict[str, Any]] = []
+        pending_call: Optional[Dict[str, Any]] = None
+        for ev in captured_events:
+            if ev.type == EventType.TOOL_CALL:
+                pending_call = {"name": ev.tool_name, "args": ev.args}
+            elif ev.type == EventType.TOOL_RESULT:
+                if pending_call is not None:
+                    pending_call["result"] = ev.result
+                    tool_calls.append(pending_call)
+                    pending_call = None
+                else:
+                    tool_calls.append({"name": ev.tool_name, "result": ev.result})
+
+        output = self._normalize_output(output, status.status, status.reason)
+        token_usage = self._extract_token_usage(handle.execution_id)
+        return AgentResult(
+            output=output,
+            execution_id=handle.execution_id,
+            correlation_id=handle.correlation_id,
+            status=status.status,
+            finish_reason=self._derive_finish_reason(status.status, status.output),
+            error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+            token_usage=token_usage,
+            events=captured_events,
+            tool_calls=tool_calls,
+            sub_results=self._extract_sub_results(output),
+        )
+
+    # ── SSE streaming ────────────────────────────────────────────────
+
+    def _stream_sse(self, execution_id: str) -> Iterator[AgentEvent]:
+        """Consume SSE event stream from the server.
+
+        Connects to ``GET /api/agent/stream/{executionId}`` and yields
+        :class:`AgentEvent` objects as they arrive.  Auto-reconnects with
+        ``Last-Event-ID`` if the connection drops.
+
+        If the server connects but only sends heartbeats (no real events)
+        for ``_SSE_NO_EVENT_TIMEOUT`` seconds, raises
+        :class:`_SSEUnavailableError` so the caller can fall back to polling.
+
+        Raises:
+            _SSEUnavailableError: If the server doesn't support SSE
+                (non-200 response, connection timeout, or heartbeat-only stream).
+        """
+        import requests
+
+        _SSE_NO_EVENT_TIMEOUT = 15  # seconds to wait for first real event
+
+        server_url = self._config.server_url.rstrip("/")
+        url = f"{server_url}/agent/stream/{execution_id}"
+        headers: Dict[str, str] = {"Accept": "text/event-stream"}
+        token = self._agent_api_token()
+        if token:
+            headers["X-Authorization"] = token
+
+        last_event_id: Optional[str] = None
+        first_connect = True
+        got_real_event = False
+
+        while True:
+            try:
+                req_headers = dict(headers)
+                if last_event_id is not None:
+                    req_headers["Last-Event-ID"] = last_event_id
+
+                with requests.get(url, headers=req_headers, stream=True, timeout=(5, 30)) as resp:
+                    if resp.status_code != 200:
+                        if first_connect:
+                            raise _SSEUnavailableError(f"Server returned {resp.status_code}")
+                        # Reconnection failed — stop
+                        logger.warning(
+                            "SSE reconnect failed (status=%s), stopping stream",
+                            resp.status_code,
+                        )
+                        return
+
+                    first_connect = False
+                    connect_time = time.monotonic()
+
+                    for sse_event in self._parse_sse(resp.iter_lines()):
+                        # Heartbeat marker — check timeout
+                        if sse_event.get("_heartbeat"):
+                            if (
+                                not got_real_event
+                                and time.monotonic() - connect_time > _SSE_NO_EVENT_TIMEOUT
+                            ):
+                                raise _SSEUnavailableError(
+                                    "SSE connected but no events received "
+                                    f"(only heartbeats for "
+                                    f"{_SSE_NO_EVENT_TIMEOUT}s)"
+                                )
+                            continue
+
+                        if sse_event.get("id"):
+                            last_event_id = sse_event["id"]
+
+                        agent_event = self._sse_to_agent_event(sse_event, execution_id)
+                        if agent_event is not None:
+                            got_real_event = True
+                            yield agent_event
+                            if agent_event.type in (
+                                EventType.DONE,
+                                EventType.ERROR,
+                            ):
+                                return
+
+                # Stream ended cleanly (server completed the emitter)
+                return
+
+            except _SSEUnavailableError:
+                raise
+            except Exception as e:
+                if first_connect:
+                    raise _SSEUnavailableError(str(e))
+                logger.warning("SSE connection lost (%s), reconnecting in 1s...", e)
+                time.sleep(1)
+
+    @staticmethod
+    def _parse_sse(lines: Iterator) -> Iterator[Dict[str, Any]]:
+        """Parse SSE wire format into event dicts.
+
+        Comment lines (heartbeats) yield a ``{"_heartbeat": True}`` marker
+        so callers can implement timeout logic even when no real events
+        are being emitted.
+        """
+        event_type: Optional[str] = None
+        event_id: Optional[str] = None
+        data_lines: List[str] = []
+
+        for raw_line in lines:
+            line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+
+            if line.startswith(":"):
+                yield {"_heartbeat": True}
+                continue  # Comment (heartbeat)
+            if line == "":
+                # End of event
+                if data_lines:
+                    data_str = "\n".join(data_lines)
+                    try:
+                        data = json.loads(data_str)
+                    except (json.JSONDecodeError, ValueError):
+                        data = {"content": data_str}
+                    yield {
+                        "event": event_type,
+                        "id": event_id,
+                        "data": data,
+                    }
+                event_type = None
+                event_id = None
+                data_lines = []
+                continue
+
+            if line.startswith("event:"):
+                event_type = line[6:].strip()
+            elif line.startswith("id:"):
+                event_id = line[3:].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line[5:].strip())
+
+    @staticmethod
+    def _sse_to_agent_event(sse_event: Dict[str, Any], execution_id: str) -> Optional[AgentEvent]:
+        """Convert a parsed SSE event dict to an :class:`AgentEvent`."""
+        data = sse_event.get("data", {})
+        event_type = sse_event.get("event") or data.get("type")
+        if event_type is None:
+            return None
+
+        return AgentEvent(
+            type=event_type,
+            content=data.get("content"),
+            tool_name=data.get("toolName"),
+            args=data.get("args"),
+            result=data.get("result"),
+            target=data.get("target"),
+            output=data.get("output"),
+            execution_id=data.get("executionId", execution_id),
+            guardrail_name=data.get("guardrailName"),
+        )
+
+    # ── Fire-and-forget execution ───────────────────────────────────
+
+    def start(
+        self,
+        agent: Any,
+        prompt: "Union[str, Any]" = None,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentHandle:
+        """Start an agent asynchronously and return a handle.
+
+        Accepts native :class:`Agent` objects, foreign framework agents
+        (e.g. OpenAI Agent SDK, Google ADK), or an **agent name string**.
+
+        Args:
+            agent: The agent to execute — a native :class:`Agent`, a
+                foreign framework agent object, or a ``str`` agent name.
+            prompt: The user's input message.
+            version: Agent version (only used when *agent* is a string).
+            media: Optional list of media URLs (images, video, audio).
+            session_id: Optional session ID.
+            idempotency_key: Optional idempotency key.
+            **kwargs: Additional input parameters.
+
+        Returns:
+            An :class:`AgentHandle`.
+        """
+        # Run by name
+        if isinstance(agent, str):
+            return self._start_by_name(
+                agent,
+                prompt,
+                version=version,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                context=context,
+                **kwargs,
+            )
+
+        # Check for foreign framework agent
+        from conductor.ai.agents.frameworks.serializer import detect_framework
+
+        framework = detect_framework(agent)
+        if framework is not None:
+            return self._start_framework(
+                agent,
+                framework,
+                prompt,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+
+        resolved_prompt = self._resolve_prompt(prompt)
+
+        # Run input guardrails before submission
+        resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        correlation_id = str(uuid.uuid4())
+
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
+
+        # Start via server first to get requiredWorkers, then register locally
+        effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
+        execution_id, required_workers, pre_deployed_skills = self._start_via_server(
+            agent,
+            resolved_prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            timeout=effective_timeout,
+            context=context,
+            run_id=run_id,
+        )
+
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
+
+        return AgentHandle(
+            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+        )
+
+    # ── Streaming execution ─────────────────────────────────────────
+
+    def stream(
+        self,
+        agent: Optional[Any] = None,
+        prompt: "Optional[Union[str, Any]]" = None,
+        *,
+        version: Optional[int] = None,
+        handle: Optional[AgentHandle] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> AgentStream:
+        """Execute an agent and stream events as they occur.
+
+        Can be called in three ways:
+
+        1. **New execution:** ``stream(agent, prompt)`` — starts a new
+           execution and streams events from it.
+        2. **Existing execution:** ``stream(handle=handle)`` — streams
+           events from an already-running execution.
+        3. **By name:** ``stream("agent_name", prompt)`` — starts a
+           pre-deployed agent by name.
+
+        Returns an :class:`AgentStream` — iterable (yields events), with
+        HITL convenience methods and access to the final :class:`AgentResult`.
+
+        Args:
+            agent: The agent to execute (required unless *handle* is given).
+                Can be a ``str`` agent name for pre-deployed agents.
+            prompt: The user's input message (required unless *handle* is given).
+            version: Agent version (only used when *agent* is a string).
+            handle: An existing :class:`AgentHandle` to stream from.
+            media: Optional list of media URLs (images, video, audio).
+            session_id: Optional session ID.
+            **kwargs: Additional input parameters.
+
+        Returns:
+            An :class:`AgentStream`.
+        """
+        if handle is not None:
+            event_iter = self._stream_workflow(handle.execution_id)
+            return AgentStream(
+                handle=handle,
+                event_iterator=event_iter,
+                token_fetcher=self._extract_token_usage,
+            )
+
+        if agent is None or prompt is None:
+            raise ValueError("Either (agent, prompt) or handle= must be provided")
+
+        handle = self.start(
+            agent, prompt, version=version, media=media, session_id=session_id, **kwargs
+        )
+        event_iter = self._stream_workflow(handle.execution_id)
+        return AgentStream(
+            handle=handle,
+            event_iterator=event_iter,
+            token_fetcher=self._extract_token_usage,
+        )
+
+    def _stream_workflow(self, execution_id: str) -> Iterator[AgentEvent]:
+        """Stream events for an execution, with SSE-to-polling fallback.
+
+        Tries SSE first (server-push, lower latency).  If SSE is
+        unavailable, falls back to polling.
+        """
+        if self._config.streaming_enabled:
+            try:
+                yield from self._stream_sse(execution_id)
+                return
+            except _SSEUnavailableError:
+                if not self._sse_fallback_warned:
+                    logger.info("SSE unavailable, falling back to polling-based stream")
+                    self._sse_fallback_warned = True
+
+        yield from self._stream_polling(execution_id)
+
+    def _stream_polling(self, execution_id: str) -> Iterator[AgentEvent]:
+        """Poll-based event streaming fallback.
+
+        Polls the execution status and tasks, yielding typed events for
+        new/changed tasks.  Detects HUMAN tasks (IN_PROGRESS) as WAITING
+        events for human-in-the-loop scenarios.
+        """
+        seen_task_ids: set = set()
+        seen_human_task_ids: set = set()
+        logger.info("Polling stream for execution_id=%s", execution_id)
+
+        while True:
+            try:
+                wf = self._workflow_client.get_workflow(
+                    execution_id,
+                    include_tasks=True,
+                )
+            except Exception as e:
+                logger.error("Error fetching execution status: %s", e)
+                yield AgentEvent(
+                    type=EventType.ERROR,
+                    content=str(e),
+                    execution_id=execution_id,
+                )
+                break
+
+            raw_status = getattr(wf, "status", "UNKNOWN")
+
+            # Process new/updated tasks
+            if hasattr(wf, "tasks") and wf.tasks:
+                for task in wf.tasks:
+                    task_id = getattr(task, "task_id", None)
+                    if task_id and task_id not in seen_task_ids:
+                        seen_task_ids.add(task_id)
+                        task_type = str(getattr(task, "task_type", "")).upper()
+                        task_ref = getattr(task, "reference_task_name", "")
+                        task_status = str(getattr(task, "status", "")).upper()
+                        output_data = getattr(task, "output_data", {}) or {}
+
+                        # Built-in Conductor task types (not tool workers)
+                        # LLM task -> THINKING
+                        if "LLM_CHAT_COMPLETE" in task_type:
+                            yield AgentEvent(
+                                type=EventType.THINKING,
+                                content=f"LLM processing ({task_ref})",
+                                execution_id=execution_id,
+                            )
+
+                        # Dispatch task with function -> TOOL_CALL (local compile)
+                        elif "dispatch" in task_ref.lower() and task_status == "COMPLETED":
+                            fn_name = output_data.get("function")
+                            if fn_name:
+                                yield AgentEvent(
+                                    type=EventType.TOOL_CALL,
+                                    tool_name=fn_name,
+                                    args=output_data.get("parameters"),
+                                    execution_id=execution_id,
+                                )
+                                yield AgentEvent(
+                                    type=EventType.TOOL_RESULT,
+                                    tool_name=fn_name,
+                                    result=output_data.get("result"),
+                                    execution_id=execution_id,
+                                )
+
+                        # Worker/tool task -> TOOL_CALL + TOOL_RESULT (server compile)
+                        # Server-compiled workflows use the tool function name as
+                        # the task type (e.g. "get_weather") with a "call_" ref.
+                        elif (
+                            task_ref.startswith("call_")
+                            and task_type not in self._SYSTEM_TASK_TYPES
+                            and task_status == "COMPLETED"
+                        ):
+                            fn_name = task_type.lower()
+                            raw_args = getattr(task, "input_data", None) or {}
+                            clean_args = {
+                                k: v for k, v in raw_args.items() if k != "__agentspan_ctx__"
+                            }
+                            yield AgentEvent(
+                                type=EventType.TOOL_CALL,
+                                tool_name=fn_name,
+                                args=clean_args,
+                                execution_id=execution_id,
+                            )
+                            yield AgentEvent(
+                                type=EventType.TOOL_RESULT,
+                                tool_name=fn_name,
+                                result=output_data,
+                                execution_id=execution_id,
+                            )
+
+                        # Guardrail task -> GUARDRAIL_PASS or GUARDRAIL_FAIL
+                        elif "guardrail" in task_ref.lower() and task_status == "COMPLETED":
+                            passed = output_data.get("passed")
+                            if passed is not None:
+                                g_name = output_data.get("guardrail_name", task_ref)
+                                g_message = output_data.get("message", "")
+                                if passed:
+                                    yield AgentEvent(
+                                        type=EventType.GUARDRAIL_PASS,
+                                        guardrail_name=g_name,
+                                        execution_id=execution_id,
+                                    )
+                                else:
+                                    yield AgentEvent(
+                                        type=EventType.GUARDRAIL_FAIL,
+                                        guardrail_name=g_name,
+                                        content=g_message,
+                                        execution_id=execution_id,
+                                    )
+
+                        # SubWorkflow -> HANDOFF
+                        elif "SUB_WORKFLOW" in task_type:
+                            target = _normalize_handoff_target(task_ref)
+                            yield AgentEvent(
+                                type=EventType.HANDOFF,
+                                target=target,
+                                execution_id=execution_id,
+                            )
+
+                        # Failed task -> ERROR
+                        elif task_status == "FAILED":
+                            reason = output_data.get("reason", "Task failed")
+                            yield AgentEvent(
+                                type=EventType.ERROR,
+                                content=f"Task '{task_ref}' failed: {reason}",
+                                execution_id=execution_id,
+                            )
+
+            # Detect HUMAN and PULL_WORKFLOW_MESSAGES tasks waiting for input
+            has_waiting_human = False
+            if hasattr(wf, "tasks") and wf.tasks:
+                for task in wf.tasks:
+                    task_id = getattr(task, "task_id", None)
+                    task_type = str(getattr(task, "task_type", "")).upper()
+                    task_status = str(getattr(task, "status", "")).upper()
+                    if task_type == "HUMAN" and task_status == "IN_PROGRESS":
+                        has_waiting_human = True
+                        if task_id and task_id not in seen_human_task_ids:
+                            seen_human_task_ids.add(task_id)
+                            task_ref = getattr(task, "reference_task_name", "")
+                            yield AgentEvent(
+                                type=EventType.WAITING,
+                                content=f"Waiting for human input ({task_ref})",
+                                execution_id=execution_id,
+                            )
+                    elif task_type == "PULL_WORKFLOW_MESSAGES" and task_status == "IN_PROGRESS":
+                        has_waiting_human = True
+                        if task_id and task_id not in seen_human_task_ids:
+                            seen_human_task_ids.add(task_id)
+                            task_ref = getattr(task, "reference_task_name", "")
+                            yield AgentEvent(
+                                type=EventType.WAITING,
+                                content=f"Waiting for message ({task_ref})",
+                                execution_id=execution_id,
+                            )
+
+            # Check explicit PAUSED state
+            if raw_status == "PAUSED" and not has_waiting_human:
+                yield AgentEvent(
+                    type=EventType.WAITING,
+                    content="Waiting for input...",
+                    execution_id=execution_id,
+                )
+
+            if raw_status in ("COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"):
+                output = None
+                if hasattr(wf, "output") and wf.output:
+                    output_data = wf.output
+                    if isinstance(output_data, dict):
+                        output = output_data.get("result", output_data)
+                    else:
+                        output = output_data
+
+                if raw_status == "COMPLETED":
+                    yield AgentEvent(
+                        type=EventType.DONE,
+                        output=output,
+                        execution_id=execution_id,
+                    )
+                else:
+                    reason = getattr(wf, "reason", None)
+                    error_msg = (
+                        reason if isinstance(reason, str) and reason else f"Execution {raw_status}"
+                    )
+                    yield AgentEvent(
+                        type=EventType.ERROR,
+                        content=error_msg,
+                        output=output,
+                        execution_id=execution_id,
+                    )
+                break
+
+            # Don't busy-poll while waiting for human input
+            if has_waiting_human:
+                time.sleep(2)
+            else:
+                time.sleep(0.5)
+
+    # ── Async execution ─────────────────────────────────────────────
+
+    async def run_async(
+        self,
+        agent: Any,
+        prompt: "Union[str, Any]" = None,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        """Execute an agent asynchronously (async-first implementation).
+
+        Accepts native agents, foreign framework agents, or an agent
+        name string for pre-deployed agents.
+
+        Args:
+            agent: The agent to execute, or a ``str`` agent name.
+            prompt: The user's input message.
+            version: Agent version (only used when *agent* is a string).
+            media: Optional list of media URLs (images, video, audio).
+            session_id: Optional session ID.
+            idempotency_key: Optional idempotency key.
+            on_event: Optional callback invoked for each streaming event.
+            **kwargs: Additional input parameters.
+
+        Returns:
+            An :class:`AgentResult`.
+        """
+        # Run by name
+        if isinstance(agent, str):
+            return await self._run_by_name_async(
+                agent,
+                prompt,
+                version=version,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                on_event=on_event,
+                timeout=timeout,
+                context=context,
+                **kwargs,
+            )
+
+        # Foreign framework check
+        from conductor.ai.agents.frameworks.serializer import detect_framework
+
+        framework = detect_framework(agent)
+
+        if framework is not None:
+            return await self._run_framework_async(
+                agent,
+                framework,
+                prompt,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                on_event=on_event,
+                timeout=timeout,
+                credentials=credentials,
+                context=context,
+                **kwargs,
+            )
+
+        if kwargs:
+            logger.warning("Unrecognized keyword arguments: %s", ", ".join(kwargs.keys()))
+
+        if on_event is not None:
+            return await self._run_with_events_async(
+                agent,
+                prompt,
+                on_event=on_event,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                timeout=timeout,
+                context=context,
+            )
+
+        # Session continuity: inject prior conversation into memory
+        if session_id:
+            prior_messages = self._get_session_messages(session_id, agent.name)
+            if prior_messages:
+                agent = self._inject_session_memory(agent, prior_messages)
+
+        resolved_prompt = self._resolve_prompt(prompt)
+        resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        correlation_id = str(uuid.uuid4())
+
+        logger.info("Executing agent '%s' (async)", agent.name)
+
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
+
+        # Start via server first to get requiredWorkers, then register locally
+        execution_id, required_workers, pre_deployed_skills = await self._start_via_server_async(
+            agent,
+            resolved_prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            timeout=timeout,
+            credentials=credentials,
+            context=context,
+            run_id=run_id,
+        )
+
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
+        self._register_workflow_credentials(execution_id, credentials)
+
+        effective_timeout = timeout or (
+            agent.timeout_seconds if agent.timeout_seconds > 0 else None
+        )
+        try:
+            status = await self._poll_status_until_complete_async(
+                execution_id, timeout=effective_timeout
+            )
+        finally:
+            self._clear_workflow_credentials(execution_id, credentials)
+
+        output = status.output
+        raw_status = status.status
+
+        if raw_status in ("FAILED", "TERMINATED"):
+            logger.warning("Agent '%s' execution %s", agent.name, raw_status)
+            has_output = output and not (
+                isinstance(output, dict) and all(v is None for v in output.values())
+            )
+            if not has_output and status.reason:
+                output = status.reason
+
+        # Normalize output to always be a dict
+        output = self._normalize_output(output, raw_status, status.reason)
+
+        # Fetch full execution to populate tool_calls, messages,
+        # and token_usage — these are not available from the status endpoint.
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        try:
+            loop = asyncio.get_event_loop()
+            wf = await loop.run_in_executor(
+                None,
+                lambda: self._workflow_client.get_workflow(
+                    execution_id,
+                    include_tasks=True,
+                ),
+            )
+            tool_calls = self._extract_tool_calls(wf)
+            messages = self._extract_messages(wf)
+            token_usage = self._extract_token_usage(execution_id)
+        except Exception as exc:
+            logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
+
+        logger.info("Agent '%s' completed (execution_id=%s)", agent.name, execution_id)
+        return AgentResult(
+            output=output,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            status=raw_status,
+            finish_reason=self._derive_finish_reason(raw_status, status.output),
+            error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+            sub_results=self._extract_sub_results(output),
+        )
+
+    async def start_async(
+        self,
+        agent: Any,
+        prompt: "Union[str, Any]" = None,
+        *,
+        version: Optional[int] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentHandle:
+        """Start an agent asynchronously and return a handle (async version).
+
+        Args:
+            agent: The agent to execute, or a ``str`` agent name.
+            prompt: The user's input message.
+            version: Agent version (only used when *agent* is a string).
+            media: Optional list of media URLs.
+            session_id: Optional session ID.
+            idempotency_key: Optional idempotency key.
+            **kwargs: Additional input parameters.
+
+        Returns:
+            An :class:`AgentHandle`.
+        """
+        # Run by name
+        if isinstance(agent, str):
+            return await self._start_by_name_async(
+                agent,
+                prompt,
+                version=version,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                context=context,
+                **kwargs,
+            )
+
+        from conductor.ai.agents.frameworks.serializer import detect_framework
+
+        framework = detect_framework(agent)
+        if framework is not None:
+            return await self._start_framework_async(
+                agent,
+                framework,
+                prompt,
+                media=media,
+                session_id=session_id,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+
+        resolved_prompt = self._resolve_prompt(prompt)
+        resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        correlation_id = str(uuid.uuid4())
+
+        run_id = uuid.uuid4().hex if _has_stateful_tools(agent) else None
+
+        # Start via server first to get requiredWorkers, then register locally
+        effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
+        execution_id, required_workers, pre_deployed_skills = await self._start_via_server_async(
+            agent,
+            resolved_prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            timeout=effective_timeout,
+            context=context,
+            run_id=run_id,
+        )
+
+        worker_domain = self._resolve_worker_domain(execution_id, run_id)
+
+        self._prepare_workers(agent, required_workers=required_workers, domain=worker_domain)
+        self._register_and_start_skill_workers(pre_deployed_skills, domain=worker_domain)
+
+        return AgentHandle(
+            execution_id=execution_id, runtime=self, correlation_id=correlation_id, run_id=run_id
+        )
+
+    async def stream_async(
+        self,
+        agent: Optional[Any] = None,
+        prompt: "Optional[Union[str, Any]]" = None,
+        *,
+        version: Optional[int] = None,
+        handle: Optional[AgentHandle] = None,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> AsyncAgentStream:
+        """Execute an agent and stream events asynchronously.
+
+        Can be called in three ways:
+
+        1. ``await stream_async(agent, prompt)`` — starts a new execution.
+        2. ``await stream_async(handle=handle)`` — streams from existing execution.
+        3. ``await stream_async("agent_name", prompt)`` — starts by name.
+
+        Returns an :class:`AsyncAgentStream` — async-iterable that yields
+        :class:`AgentEvent` objects.
+
+        Args:
+            agent: The agent to execute, or a ``str`` agent name.
+            prompt: The user's input message (required unless *handle* is given).
+            version: Agent version (only used when *agent* is a string).
+            handle: An existing :class:`AgentHandle` to stream from.
+            media: Optional list of media URLs.
+            session_id: Optional session ID.
+            **kwargs: Additional input parameters.
+
+        Returns:
+            An :class:`AsyncAgentStream`.
+        """
+        if handle is not None:
+            return AsyncAgentStream(handle=handle, runtime=self)
+
+        if agent is None or prompt is None:
+            raise ValueError("Either (agent, prompt) or handle= must be provided")
+
+        handle = await self.start_async(
+            agent, prompt, version=version, media=media, session_id=session_id, **kwargs
+        )
+        return AsyncAgentStream(handle=handle, runtime=self)
+
+    async def _stream_workflow_async(self, execution_id: str) -> AsyncIterator[AgentEvent]:
+        """Async version of :meth:`_stream_workflow`."""
+        if self._config.streaming_enabled:
+            try:
+                async for event in self._stream_sse_async(execution_id):
+                    yield event
+                return
+            except _SSEUnavailableError:
+                if not self._sse_fallback_warned:
+                    logger.info("SSE unavailable, falling back to async polling stream")
+                    self._sse_fallback_warned = True
+
+        async for event in self._stream_polling_async(execution_id):
+            yield event
+
+    async def _stream_sse_async(self, execution_id: str) -> AsyncIterator[AgentEvent]:
+        """Async version of :meth:`_stream_sse`."""
+        async for sse_event in self._http.stream_sse(execution_id):
+            agent_event = self._sse_to_agent_event(sse_event, execution_id)
+            if agent_event is not None:
+                yield agent_event
+                if agent_event.type in (EventType.DONE, EventType.ERROR):
+                    return
+
+    async def _stream_polling_async(self, execution_id: str) -> AsyncIterator[AgentEvent]:
+        """Async version of :meth:`_stream_polling`.
+
+        Uses ``run_in_executor`` for the sync Conductor SDK
+        ``get_workflow`` call, and ``asyncio.sleep`` for non-blocking waits.
+        """
+        seen_task_ids: set = set()
+        seen_human_task_ids: set = set()
+        logger.info("Async polling stream for execution_id=%s", execution_id)
+
+        loop = asyncio.get_event_loop()
+
+        while True:
+            try:
+                wf = await loop.run_in_executor(
+                    None,
+                    lambda: self._workflow_client.get_workflow(
+                        execution_id,
+                        include_tasks=True,
+                    ),
+                )
+            except Exception as e:
+                logger.error("Error fetching execution status: %s", e)
+                yield AgentEvent(
+                    type=EventType.ERROR,
+                    content=str(e),
+                    execution_id=execution_id,
+                )
+                break
+
+            raw_status = getattr(wf, "status", "UNKNOWN")
+
+            # Process new/updated tasks
+            if hasattr(wf, "tasks") and wf.tasks:
+                for task in wf.tasks:
+                    task_id = getattr(task, "task_id", None)
+                    if task_id and task_id not in seen_task_ids:
+                        seen_task_ids.add(task_id)
+                        task_type = str(getattr(task, "task_type", "")).upper()
+                        task_ref = getattr(task, "reference_task_name", "")
+                        task_status = str(getattr(task, "status", "")).upper()
+                        output_data = getattr(task, "output_data", {}) or {}
+
+                        if "LLM_CHAT_COMPLETE" in task_type:
+                            yield AgentEvent(
+                                type=EventType.THINKING,
+                                content=f"LLM processing ({task_ref})",
+                                execution_id=execution_id,
+                            )
+                        elif "dispatch" in task_ref.lower() and task_status == "COMPLETED":
+                            fn_name = output_data.get("function")
+                            if fn_name:
+                                yield AgentEvent(
+                                    type=EventType.TOOL_CALL,
+                                    tool_name=fn_name,
+                                    args=output_data.get("parameters"),
+                                    execution_id=execution_id,
+                                )
+                                yield AgentEvent(
+                                    type=EventType.TOOL_RESULT,
+                                    tool_name=fn_name,
+                                    result=output_data.get("result"),
+                                    execution_id=execution_id,
+                                )
+                        elif (
+                            task_ref.startswith("call_")
+                            and task_type not in self._SYSTEM_TASK_TYPES
+                            and task_status == "COMPLETED"
+                        ):
+                            fn_name = task_type.lower()
+                            raw_args = getattr(task, "input_data", None) or {}
+                            clean_args = {
+                                k: v for k, v in raw_args.items() if k != "__agentspan_ctx__"
+                            }
+                            yield AgentEvent(
+                                type=EventType.TOOL_CALL,
+                                tool_name=fn_name,
+                                args=clean_args,
+                                execution_id=execution_id,
+                            )
+                            yield AgentEvent(
+                                type=EventType.TOOL_RESULT,
+                                tool_name=fn_name,
+                                result=output_data,
+                                execution_id=execution_id,
+                            )
+                        elif "guardrail" in task_ref.lower() and task_status == "COMPLETED":
+                            passed = output_data.get("passed")
+                            if passed is not None:
+                                g_name = output_data.get("guardrail_name", task_ref)
+                                g_message = output_data.get("message", "")
+                                if passed:
+                                    yield AgentEvent(
+                                        type=EventType.GUARDRAIL_PASS,
+                                        guardrail_name=g_name,
+                                        execution_id=execution_id,
+                                    )
+                                else:
+                                    yield AgentEvent(
+                                        type=EventType.GUARDRAIL_FAIL,
+                                        guardrail_name=g_name,
+                                        content=g_message,
+                                        execution_id=execution_id,
+                                    )
+                        elif "SUB_WORKFLOW" in task_type:
+                            target = _normalize_handoff_target(task_ref)
+                            yield AgentEvent(
+                                type=EventType.HANDOFF,
+                                target=target,
+                                execution_id=execution_id,
+                            )
+                        elif task_status == "FAILED":
+                            reason = output_data.get("reason", "Task failed")
+                            yield AgentEvent(
+                                type=EventType.ERROR,
+                                content=f"Task '{task_ref}' failed: {reason}",
+                                execution_id=execution_id,
+                            )
+
+            # Detect HUMAN and PULL_WORKFLOW_MESSAGES tasks waiting for input
+            has_waiting_human = False
+            if hasattr(wf, "tasks") and wf.tasks:
+                for task in wf.tasks:
+                    task_id = getattr(task, "task_id", None)
+                    task_type = str(getattr(task, "task_type", "")).upper()
+                    task_status = str(getattr(task, "status", "")).upper()
+                    if task_type == "HUMAN" and task_status == "IN_PROGRESS":
+                        has_waiting_human = True
+                        if task_id and task_id not in seen_human_task_ids:
+                            seen_human_task_ids.add(task_id)
+                            task_ref = getattr(task, "reference_task_name", "")
+                            yield AgentEvent(
+                                type=EventType.WAITING,
+                                content=f"Waiting for human input ({task_ref})",
+                                execution_id=execution_id,
+                            )
+                    elif task_type == "PULL_WORKFLOW_MESSAGES" and task_status == "IN_PROGRESS":
+                        has_waiting_human = True
+                        if task_id and task_id not in seen_human_task_ids:
+                            seen_human_task_ids.add(task_id)
+                            task_ref = getattr(task, "reference_task_name", "")
+                            yield AgentEvent(
+                                type=EventType.WAITING,
+                                content=f"Waiting for message ({task_ref})",
+                                execution_id=execution_id,
+                            )
+
+            if raw_status == "PAUSED" and not has_waiting_human:
+                yield AgentEvent(
+                    type=EventType.WAITING,
+                    content="Waiting for input...",
+                    execution_id=execution_id,
+                )
+
+            if raw_status in ("COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"):
+                output = None
+                if hasattr(wf, "output") and wf.output:
+                    output_data = wf.output
+                    if isinstance(output_data, dict):
+                        output = output_data.get("result", output_data)
+                    else:
+                        output = output_data
+
+                if raw_status == "COMPLETED":
+                    yield AgentEvent(
+                        type=EventType.DONE,
+                        output=output,
+                        execution_id=execution_id,
+                    )
+                else:
+                    reason = getattr(wf, "reason", None)
+                    error_msg = (
+                        reason if isinstance(reason, str) and reason else f"Execution {raw_status}"
+                    )
+                    yield AgentEvent(
+                        type=EventType.ERROR,
+                        content=error_msg,
+                        output=output,
+                        execution_id=execution_id,
+                    )
+                break
+
+            if has_waiting_human:
+                await asyncio.sleep(2)
+            else:
+                await asyncio.sleep(0.5)
+
+    async def _run_framework_async(
+        self,
+        agent_obj: Any,
+        framework: str,
+        prompt: "Union[str, Any]",
+        *,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> AgentResult:
+        """Async version of :meth:`_run_framework`."""
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
+
+        raw_config, workers = serialize_agent(agent_obj)
+        agent_name = raw_config.get("name", framework + "_agent")
+        logger.info(
+            "Running %s framework agent '%s' (%d workers) (async)",
+            framework,
+            agent_name,
+            len(workers),
+        )
+
+        if workers and workers[0].func is None:
+            worker = workers[0]
+            worker.func = self._build_passthrough_func(
+                agent_obj,
+                framework,
+                worker.name,
+                credentials=credentials,
+            )
+            self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
+        else:
+            self._register_framework_workers(workers, credentials=credentials)
+
+        correlation_id = str(uuid.uuid4())
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        execution_id = await self._start_framework_via_server_async(
+            framework=framework,
+            raw_config=raw_config,
+            prompt=resolved_prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            credentials=credentials,
+            context=context,
+        )
+        self._register_workflow_credentials(execution_id, credentials)
+
+        try:
+            if on_event is not None:
+                captured_events: List[AgentEvent] = []
+                async for event in self._stream_workflow_async(execution_id):
+                    captured_events.append(event)
+                    on_event(event)
+
+                status = await self._poll_status_until_complete_async(execution_id, timeout=timeout)
+                output = status.output
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason and status.status in ("FAILED", "TERMINATED"):
+                    output = status.reason
+                output = self._normalize_output(output, status.status, status.reason)
+                token_usage = self._extract_token_usage(execution_id)
+                return AgentResult(
+                    output=output,
+                    execution_id=execution_id,
+                    correlation_id=correlation_id,
+                    status=status.status,
+                    finish_reason=self._derive_finish_reason(status.status, status.output),
+                    error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+                    token_usage=token_usage,
+                    events=captured_events,
+                    sub_results=self._extract_sub_results(output),
+                )
+
+            status = await self._poll_status_until_complete_async(execution_id, timeout=timeout)
+
+            output = status.output
+            raw_status = status.status
+
+            if raw_status in ("FAILED", "TERMINATED"):
+                logger.warning("Framework agent '%s' execution %s", agent_name, raw_status)
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason:
+                    output = status.reason
+
+            output = self._normalize_output(output, raw_status, status.reason)
+            logger.info(
+                "Framework agent '%s' completed (execution_id=%s)", agent_name, execution_id
+            )
+            token_usage = self._extract_token_usage(execution_id)
+            return AgentResult(
+                output=output,
+                execution_id=execution_id,
+                correlation_id=correlation_id,
+                status=raw_status,
+                finish_reason=self._derive_finish_reason(raw_status, status.output),
+                error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+                token_usage=token_usage,
+                sub_results=self._extract_sub_results(output),
+            )
+        finally:
+            self._clear_workflow_credentials(execution_id, credentials)
+
+    async def _start_framework_async(
+        self,
+        agent_obj: Any,
+        framework: str,
+        prompt: "Union[str, Any]",
+        *,
+        media: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> AgentHandle:
+        """Async version of :meth:`_start_framework`."""
+        from conductor.ai.agents.frameworks.serializer import serialize_agent
+
+        raw_config, workers = serialize_agent(agent_obj)
+
+        if workers and workers[0].func is None:
+            worker = workers[0]
+            worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
+            self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
+        else:
+            self._register_framework_workers(workers)
+
+        correlation_id = str(uuid.uuid4())
+        resolved_prompt = self._resolve_prompt(prompt)
+        self._validate_execution_input(resolved_prompt, media=media, context=context)
+
+        execution_id = await self._start_framework_via_server_async(
+            framework=framework,
+            raw_config=raw_config,
+            prompt=resolved_prompt,
+            media=media,
+            session_id=session_id,
+            idempotency_key=idempotency_key,
+            context=context,
+        )
+
+        return AgentHandle(execution_id=execution_id, runtime=self, correlation_id=correlation_id)
+
+    # ── Lifecycle ─────────────────────────────────────────────────────
+
+    def shutdown(self) -> None:
+        """Gracefully shut down the runtime, stopping all workers.
+
+        This method is idempotent and thread-safe — calling it multiple
+        times is safe and has no effect after the first call.
+        """
+        with self._shutdown_lock:
+            if self._is_shutdown:
+                return
+            logger.info("Shutting down AgentRuntime")
+            if self._workers_started and self._worker_manager is not None:
+                self._worker_manager.stop()
+                self._workers_started = False
+            self._is_shutdown = True
+
+    async def shutdown_async(self) -> None:
+        """Async version of :meth:`shutdown`. Also closes the HTTP client."""
+        with self._shutdown_lock:
+            if self._is_shutdown:
+                return
+            logger.info("Shutting down AgentRuntime (async)")
+            if self._workers_started and self._worker_manager is not None:
+                self._worker_manager.stop()
+                self._workers_started = False
+            if self._http is not None:
+                await self._http.close()
+            self._is_shutdown = True
+
+    # ── Status / interaction ────────────────────────────────────────
+
+    def get_status(self, execution_id: str) -> AgentStatus:
+        """Get the current status of an agent execution.
+
+        Fetches from ``/api/agent/{executionId}/status``.
+
+        Args:
+            execution_id: The execution ID.
+
+        Returns:
+            An :class:`AgentStatus`.
+        """
+        import requests as req_lib
+
+        url = self._agent_api_url(f"/{execution_id}/status")
+        resp = req_lib.get(url, headers=self._agent_api_headers(content_type=""), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        data = resp.json()
+
+        raw_status = data.get("status", "UNKNOWN")
+        is_complete = data.get("isComplete", False)
+        is_running = data.get("isRunning", False)
+        is_waiting = data.get("isWaiting", False)
+        output = data.get("output")
+        pending_tool = data.get("pendingTool")
+        reason = data.get("reasonForIncompletion")
+
+        return AgentStatus(
+            execution_id=execution_id,
+            is_complete=is_complete,
+            is_running=is_running,
+            is_waiting=is_waiting,
+            output=output,
+            status=raw_status,
+            reason=reason,
+            pending_tool=pending_tool,
+        )
+
+    def respond(self, execution_id: str, output: Any) -> None:
+        """Complete a pending human task with arbitrary output.
+
+        This is the general-purpose method for interacting with a
+        human-in-the-loop pause.  ``approve()``, ``reject()``, and
+        ``send_message()`` are convenience wrappers around this.
+
+        Posts to ``/api/agent/{executionId}/respond``.
+
+        Args:
+            execution_id: The execution ID.
+            output: Any JSON-serialisable value to pass as the task output.
+        """
+        import requests as req_lib
+
+        url = self._agent_api_url(f"/{execution_id}/respond")
+        body = output if isinstance(output, dict) else {"output": output}
+        resp = req_lib.post(url, json=body, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+        logger.info("Responded to execution %s", execution_id)
+
+    def approve(self, execution_id: str) -> None:
+        """Approve a pending human-in-the-loop task."""
+        self.respond(execution_id, {"approved": True})
+
+    def reject(self, execution_id: str, reason: str = "") -> None:
+        """Reject a pending human-in-the-loop task."""
+        self.respond(execution_id, {"approved": False, "reason": reason})
+
+    def send_message(self, execution_id: str, message: Any) -> None:
+        """Push a message into the agent's Workflow Message Queue (WMQ).
+
+        The agent must have called a ``wait_for_message`` tool (backed by a
+        ``PULL_WORKFLOW_MESSAGES`` task) for the message to be consumed.
+        *message* can be any JSON-serialisable value; plain strings are wrapped
+        automatically so the LLM receives ``{"message": value}``.
+        """
+        payload = message if isinstance(message, dict) else {"message": message}
+        self._workflow_client.send_message(execution_id, payload)
+
+    def pause(self, execution_id: str) -> None:
+        """Pause an agent execution."""
+        self._workflow_client.pause_workflow(execution_id)
+
+    def _resume_workflow(self, execution_id: str) -> None:
+        """Resume a paused Conductor workflow (internal — called by AgentHandle.resume())."""
+        self._workflow_client.resume_workflow(execution_id)
+
+    def cancel(self, execution_id: str, reason: str = "") -> None:
+        """Cancel an agent execution."""
+        self._workflow_client.terminate_workflow(workflow_id=execution_id, reason=reason)
+
+    # ── Resume (re-attach to existing execution) ─────────────────────
+
+    def _extract_domain(self, execution_id: str) -> Optional[str]:
+        """Extract the worker domain from a workflow's taskToDomain mapping.
+
+        Returns the domain UUID if the workflow uses domain-based routing
+        (stateful agents), or ``None`` for stateless agents.
+        """
+        try:
+            wf = self._workflow_client.get_workflow(execution_id, include_tasks=False)
+            task_to_domain = getattr(wf, "task_to_domain", None) or {}
+            domains = {v for v in task_to_domain.values() if v}
+            if len(domains) == 1:
+                return domains.pop()
+            if len(domains) > 1:
+                # Multiple distinct domains — pick the most common one
+                from collections import Counter
+
+                counts = Counter(v for v in task_to_domain.values() if v)
+                return counts.most_common(1)[0][0]
+            return None
+        except Exception as exc:
+            logger.debug("Could not extract domain for %s: %s", execution_id, exc)
+            return None
+
+    def resume(
+        self,
+        execution_id: str,
+        agent: Any,
+        *,
+        timeout: Optional[int] = None,
+    ) -> AgentHandle:
+        """Re-attach to an existing agent execution and re-register workers.
+
+        Fetches the workflow from the server, extracts the worker domain
+        from its ``taskToDomain`` mapping (for stateful agents), and
+        re-registers tool workers under that domain.  Returns an
+        :class:`AgentHandle` for continued interaction.
+
+        This works across process restarts: the workflow is durable on the
+        server, and the domain is derived from the server — no ``run_id``
+        needs to be persisted by the caller.
+
+        Args:
+            execution_id: The Conductor execution ID from a previous
+                :meth:`start` call.
+            agent: The same :class:`Agent` definition that was originally
+                executed.  Its tools are re-registered as workers.
+            timeout: Not used directly — reserved for future use.
+
+        Returns:
+            An :class:`AgentHandle` bound to this runtime with workers
+            polling under the correct domain.
+
+        Example — stateless::
+
+            handle = runtime.start(agent, "Analyze reports")
+            eid = handle.execution_id
+            # ... later, even in a new AgentRuntime ...
+            handle = runtime.resume(eid, agent)
+            result = handle.join(timeout=120)
+
+        Example — stateful (domain extracted automatically)::
+
+            handle = runtime.start(stateful_agent, "Run pipeline")
+            eid = handle.execution_id
+            # ... runtime closed, workers died ...
+            # In a new runtime:
+            handle = runtime.resume(eid, stateful_agent)
+            # Workers re-registered under the original domain
+            runtime.send_message(eid, {"task": "continue"})
+        """
+        domain = self._extract_domain(execution_id)
+
+        self._prepare_workers(agent, domain=domain)
+
+        return AgentHandle(
+            execution_id=execution_id,
+            runtime=self,
+            run_id=domain,
+        )
+
+    def stop(self, execution_id: str) -> None:
+        """Gracefully stop an agent execution.
+
+        Sets the ``_stop_requested`` workflow variable to ``true``.  The
+        agent's DoWhile loop checks this flag on each iteration and exits
+        when it is set.  The execution reaches ``COMPLETED`` status with
+        the last LLM output preserved.
+
+        Also sends a WMQ unblock message for agents waiting on a blocking
+        ``PULL_WORKFLOW_MESSAGES`` task.
+
+        This is deterministic — it does not depend on the LLM following
+        stop instructions in the prompt.
+
+        For immediate termination (``TERMINATED`` status), use
+        :meth:`cancel` instead.
+
+        Args:
+            execution_id: The Conductor execution ID.
+        """
+        import requests as req_lib
+
+        url = self._agent_api_url(f"/{execution_id}/stop")
+        resp = req_lib.post(url, headers=self._agent_api_headers(), timeout=30)
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+
+        # Also unblock any blocking PULL_WORKFLOW_MESSAGES wait.
+        try:
+            self._workflow_client.send_message(execution_id, {"_signal": "stop"})
+        except Exception:
+            pass  # best-effort — agent may not have a WMQ tool
+
+    def signal(self, execution_id: str, message: str) -> None:
+        """Inject a persistent signal into a running agent's context.
+
+        Sets the ``_signal_injection`` workflow variable.  The agent's
+        context injection reads this variable on each iteration and
+        prepends it to the LLM's user message as ``[SIGNALS]...[/SIGNALS]``.
+
+        The signal persists until overwritten by another ``signal()`` call.
+        To clear it, call ``signal(execution_id, "")``.
+
+        This works on **all** agents — no ``wait_for_message_tool`` needed.
+        It's a separate channel from WMQ: ``signal()`` writes to a workflow
+        variable, ``send_message()`` writes to the message queue.
+
+        Args:
+            execution_id: The Conductor execution ID.
+            message: The signal text.  Empty string clears the signal.
+        """
+        import requests as req_lib
+
+        url = self._agent_api_url(f"/{execution_id}/signal")
+        resp = req_lib.post(
+            url, json={"message": message}, headers=self._agent_api_headers(), timeout=30
+        )
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
+
+    async def resume_async(
+        self,
+        execution_id: str,
+        agent: Any,
+        *,
+        timeout: Optional[int] = None,
+    ) -> AgentHandle:
+        """Async version of :meth:`resume`.
+
+        Re-attaches to an existing agent execution, extracts the worker
+        domain from the server, and re-registers tool workers.
+
+        Args:
+            execution_id: The Conductor execution ID.
+            agent: The same :class:`Agent` definition originally executed.
+            timeout: Reserved for future use.
+
+        Returns:
+            An :class:`AgentHandle`.
+        """
+        domain = self._extract_domain(execution_id)
+
+        self._prepare_workers(agent, domain=domain)
+
+        return AgentHandle(
+            execution_id=execution_id,
+            runtime=self,
+            run_id=domain,
+        )
+
+    # ── Async status / interaction ───────────────────────────────────
+
+    async def get_status_async(self, execution_id: str) -> AgentStatus:
+        """Async version of :meth:`get_status`."""
+        data = await self._http.get_status(execution_id)
+
+        raw_status = data.get("status", "UNKNOWN")
+        is_complete = data.get("isComplete", False)
+        is_running = data.get("isRunning", False)
+        is_waiting = data.get("isWaiting", False)
+        output = data.get("output")
+        pending_tool = data.get("pendingTool")
+        reason = data.get("reasonForIncompletion")
+
+        return AgentStatus(
+            execution_id=execution_id,
+            is_complete=is_complete,
+            is_running=is_running,
+            is_waiting=is_waiting,
+            output=output,
+            status=raw_status,
+            reason=reason,
+            pending_tool=pending_tool,
+        )
+
+    async def respond_async(self, execution_id: str, output: Any) -> None:
+        """Async version of :meth:`respond`."""
+        body = output if isinstance(output, dict) else {"output": output}
+        await self._http.respond(execution_id, body)
+        logger.info("Responded to execution %s (async)", execution_id)
+
+    async def approve_async(self, execution_id: str) -> None:
+        """Async version of :meth:`approve`."""
+        await self.respond_async(execution_id, {"approved": True})
+
+    async def reject_async(self, execution_id: str, reason: str = "") -> None:
+        """Async version of :meth:`reject`."""
+        await self.respond_async(execution_id, {"approved": False, "reason": reason})
+
+    async def send_message_async(self, execution_id: str, message: Any) -> None:
+        """Async version of :meth:`send_message`."""
+        payload = message if isinstance(message, dict) else {"message": message}
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._workflow_client.send_message, execution_id, payload)
+
+    async def pause_async(self, execution_id: str) -> None:
+        """Async version of :meth:`pause`."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._workflow_client.pause_workflow, execution_id)
+
+    async def _resume_workflow_async(self, execution_id: str) -> None:
+        """Async version of :meth:`_resume_workflow` (internal — called by AgentHandle.resume_async())."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._workflow_client.resume_workflow, execution_id)
+
+    async def cancel_async(self, execution_id: str, reason: str = "") -> None:
+        """Async version of :meth:`cancel`."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: self._workflow_client.terminate_workflow(
+                workflow_id=execution_id,
+                reason=reason,
+            ),
+        )
+
+    async def stop_async(self, execution_id: str) -> None:
+        """Async version of :meth:`stop`."""
+        await self._http.stop(execution_id)
+        # Also unblock any blocking PULL_WORKFLOW_MESSAGES wait.
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, self._workflow_client.send_message, execution_id, {"_signal": "stop"}
+            )
+        except Exception:
+            pass
+
+    async def signal_async(self, execution_id: str, message: str) -> None:
+        """Async version of :meth:`signal`."""
+        await self._http.signal(execution_id, message)
+
+    # ── Session continuity helpers ────────────────────────────────────
+
+    def _get_session_messages(self, session_id: str, agent_name: str) -> List[Dict[str, Any]]:
+        """Fetch conversation messages from the most recent execution with this session_id."""
+        try:
+            import requests as req_lib
+
+            url = self._agent_api_url("/executions")
+            params = {
+                "agentName": agent_name,
+                "freeText": session_id,
+                "sort": "startTime:DESC",
+                "size": 5,
+                "status": "COMPLETED",
+            }
+            resp = req_lib.get(
+                url,
+                params=params,
+                headers=self._agent_api_headers(content_type=""),
+                timeout=10,
+            )
+            try:
+                resp.raise_for_status()
+            except req_lib.exceptions.HTTPError as exc:
+                _raise_api_error(exc, url=url)
+            executions = resp.json().get("results", [])
+
+            for execution in executions:
+                exec_id = execution.get("executionId")
+                if not exec_id:
+                    continue
+                wf = self._workflow_client.get_workflow(exec_id, include_tasks=True)
+                messages = self._extract_messages(wf)
+                if messages:
+                    return messages
+            return []
+        except Exception as e:
+            logger.debug("Could not fetch session history for %s: %s", session_id, e)
+            return []
+
+    @staticmethod
+    def _inject_session_memory(agent: Agent, prior_messages: List[Dict[str, Any]]) -> Agent:
+        """Create a shallow copy of the agent with session messages injected into memory."""
+        import copy as _copy
+
+        from conductor.ai.agents.memory import ConversationMemory
+
+        agent_copy = _copy.copy(agent)
+        if agent_copy.memory is None:
+            agent_copy.memory = ConversationMemory()
+
+        existing = list(agent_copy.memory.messages) if agent_copy.memory.messages else []
+        agent_copy.memory = ConversationMemory(
+            messages=prior_messages + existing,
+            max_messages=agent_copy.memory.max_messages if agent_copy.memory else None,
+        )
+        return agent_copy
+
+    # ── Result extraction helpers ───────────────────────────────────
+
+    @staticmethod
+    def _normalize_output(
+        output: Any, raw_status: str, reason: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Normalize output to always be a dict.
+
+        Ensures a consistent contract: ``result.output`` is always a dict,
+        whether the agent succeeded or failed.  On failure the raw
+        ``reasonForIncompletion`` string is wrapped in
+        ``{"error": ..., "status": "FAILED"}``.
+
+        The server is responsible for normalizing strategy-specific outputs
+        (e.g. parallel ``subResults``).  This method only handles the
+        dict/string/None wrapping.
+        """
+        if isinstance(output, dict):
+            # Rejection is a valid completion — keep as-is
+            if output.get("finishReason") == "rejected":
+                return output
+            return output
+        if raw_status in ("FAILED", "TERMINATED", "TIMED_OUT"):
+            return {
+                "error": str(output) if output else (reason or "Unknown error"),
+                "status": raw_status,
+            }
+        if output is None:
+            return {"result": None}
+        return {"result": output}
+
+    @staticmethod
+    def _extract_failed_task_reason(wf: Any) -> Optional[str]:
+        """Return a descriptive error from the first FAILED task in a workflow.
+
+        Combines the task reference name with its reasonForIncompletion so
+        callers can diagnose intermittent failures without manual inspection
+        of the execution history UI.
+        """
+        if not hasattr(wf, "tasks") or not wf.tasks:
+            return None
+        for task in wf.tasks:
+            status = str(getattr(task, "status", "")).upper()
+            if status == "FAILED":
+                ref = getattr(task, "reference_task_name", None) or getattr(
+                    task, "task_type", "unknown"
+                )
+                reason = getattr(task, "reason_for_incompletion", None)
+                if reason:
+                    return f"Task '{ref}' failed: {reason}"
+                return f"Task '{ref}' failed"
+        return None
+
+    @staticmethod
+    def _extract_sub_results(output: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract subResults from server-normalized output, if present."""
+        if isinstance(output, dict):
+            return output.get("subResults", {})
+        return {}
+
+    @staticmethod
+    def _derive_finish_reason(raw_status: str, output: Any) -> FinishReason:
+        """Derive a :class:`FinishReason` from execution status and output."""
+        if raw_status == "COMPLETED":
+            if isinstance(output, dict):
+                fr = output.get("finishReason")
+                if fr == "rejected":
+                    return FinishReason.REJECTED
+                if fr in ("LENGTH", "MAX_TOKENS"):
+                    return FinishReason.LENGTH
+                if fr == "tool_calls":
+                    return FinishReason.TOOL_CALLS
+            return FinishReason.STOP
+        elif raw_status == "FAILED":
+            return FinishReason.ERROR
+        elif raw_status == "TERMINATED":
+            return FinishReason.CANCELLED
+        elif raw_status == "TIMED_OUT":
+            return FinishReason.TIMEOUT
+        return FinishReason.STOP
+
+    def _extract_finish_reason(self, workflow_run: Any) -> Optional[str]:
+        """Extract finishReason from execution output, with a descriptive message for LENGTH."""
+        if hasattr(workflow_run, "output") and isinstance(workflow_run.output, dict):
+            fr = workflow_run.output.get("finishReason")
+            if fr in ("LENGTH", "MAX_TOKENS"):
+                return (
+                    "Token limit reached (finishReason=LENGTH). "
+                    "Response may be truncated. Consider increasing max_tokens or reducing prompt size."
+                )
+            return fr
+        return None
+
+    def _build_result_from_workflow(
+        self,
+        wf: Any,
+        execution_id: str,
+        *,
+        correlation_id: Optional[str] = None,
+    ) -> AgentResult:
+        """Build an :class:`AgentResult` from a finished workflow object.
+
+        Single source of truth for the "completed workflow → AgentResult"
+        conversion shared by the run-by-name path and the schedule
+        ``run_now(wait=True)`` path. ``wf`` must be a terminal workflow
+        carrying ``status``/``output`` (and ideally ``tasks`` for enrichment);
+        when ``tasks`` are absent the method fetches the full execution to
+        populate ``tool_calls``/``messages``.
+        """
+        raw_status = getattr(wf, "status", None)
+        output = self._normalize_output(
+            getattr(wf, "output", None),
+            raw_status,
+            getattr(wf, "reason_for_incompletion", None),
+        )
+
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        task_failure_reason: Optional[str] = None
+        try:
+            # Reuse the passed workflow when it already carries tasks;
+            # otherwise fetch the full execution for enrichment.
+            full = wf if getattr(wf, "tasks", None) else self._workflow_client.get_workflow(
+                execution_id, include_tasks=True
+            )
+            tool_calls = self._extract_tool_calls(full)
+            messages = self._extract_messages(full)
+            token_usage = self._extract_token_usage(execution_id)
+            if raw_status == "FAILED":
+                task_failure_reason = self._extract_failed_task_reason(full)
+        except Exception as exc:
+            logger.debug("Could not fetch execution details for %s: %s", execution_id, exc)
+
+        error_reason: Optional[str] = None
+        if raw_status in ("FAILED", "TERMINATED"):
+            error_reason = task_failure_reason or getattr(wf, "reason_for_incompletion", None)
+
+        return AgentResult(
+            output=output,
+            execution_id=execution_id,
+            correlation_id=correlation_id,
+            status=raw_status,
+            finish_reason=self._derive_finish_reason(raw_status, getattr(wf, "output", None)),
+            error=error_reason,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+            sub_results=self._extract_sub_results(output),
+        )
+
+    def _extract_output(self, workflow_run: Any, agent: Agent) -> Any:
+        """Extract the final output from an execution."""
+        import json as _json
+
+        if hasattr(workflow_run, "output") and workflow_run.output:
+            output = workflow_run.output
+            if isinstance(output, dict):
+                result = output.get("result", output)
+            else:
+                result = output
+
+            # For handoff/router agents, extract the non-null result
+            if (
+                isinstance(result, dict)
+                and agent.agents
+                and agent.strategy in ("handoff", "router")
+            ):
+                result = self._extract_handoff_result(result)
+
+            # Parse structured output if output_type is set
+            if agent.output_type is not None:
+                # Try to parse from dict
+                if isinstance(result, dict):
+                    try:
+                        return agent.output_type(**result)
+                    except Exception:
+                        pass
+                # Try to parse from JSON string
+                if isinstance(result, str):
+                    try:
+                        data = _json.loads(result)
+                        if isinstance(data, dict):
+                            return agent.output_type(**data)
+                    except Exception:
+                        pass
+            return result
+        return None
+
+    def _extract_handoff_result(self, result: Any) -> Any:
+        """Extract non-null value(s) from handoff/hybrid output dicts."""
+        if not isinstance(result, dict):
+            return result
+        non_null = {}
+        for key, val in result.items():
+            if val is not None:
+                if isinstance(val, dict):
+                    inner = self._extract_handoff_result(val)
+                    if inner is not None:
+                        non_null[key] = inner
+                else:
+                    non_null[key] = val
+        if not non_null:
+            return result
+        if len(non_null) == 1:
+            return next(iter(non_null.values()))
+        return non_null
+
+    def _extract_messages(self, workflow_run: Any) -> List[Dict[str, Any]]:
+        """Extract conversation messages from the last LLM task in the execution.
+
+        Messages are stored in LLM_CHAT_COMPLETE task input_data, not in
+        workflow variables. We take the last LLM task to get the full
+        accumulated conversation (user + assistant + tool-call turns).
+        """
+        # Backwards-compat: check variables first (populated by some paths)
+        if hasattr(workflow_run, "variables") and workflow_run.variables:
+            msgs = workflow_run.variables.get("messages")
+            if msgs:
+                return msgs
+
+        # Extract from the last LLM_CHAT_COMPLETE task's input messages
+        if not (hasattr(workflow_run, "tasks") and workflow_run.tasks):
+            return []
+
+        last_llm_msgs: List[Dict[str, Any]] = []
+        for task in workflow_run.tasks:
+            task_type = str(getattr(task, "task_type", "")).upper()
+            if task_type == "LLM_CHAT_COMPLETE":
+                input_data = getattr(task, "input_data", None) or {}
+                msgs = input_data.get("messages") if isinstance(input_data, dict) else None
+                if msgs and isinstance(msgs, list):
+                    last_llm_msgs = msgs
+        return last_llm_msgs
+
+    # System task types that are never user-defined tool calls
+    _SYSTEM_TASK_TYPES = frozenset(
+        {
+            "LLM_CHAT_COMPLETE",
+            "SWITCH",
+            "DO_WHILE",
+            "INLINE",
+            "SET_VARIABLE",
+            "FORK",
+            "FORK_JOIN_DYNAMIC",
+            "JOIN",
+            "SUB_WORKFLOW",
+            "HUMAN",
+            "PULL_WORKFLOW_MESSAGES",
+            "TERMINATE",
+            "HTTP",
+            "CALL_MCP_TOOL",
+            "LIST_MCP_TOOLS",
+            "WAIT",
+            "EVENT",
+            "DECISION",
+        }
+    )
+
+    def _extract_tool_calls(self, workflow_run: Any) -> List[Dict[str, Any]]:
+        """Extract tool call history from execution tasks.
+
+        Tool tasks are identified by their reference task name starting with
+        ``call_`` (the pattern the compiler uses for all tool invocations).
+        """
+        tool_calls: List[Dict[str, Any]] = []
+        if not (hasattr(workflow_run, "tasks") and workflow_run.tasks):
+            return tool_calls
+
+        for task in workflow_run.tasks:
+            task_type = str(getattr(task, "task_type", "")).upper()
+            ref = str(getattr(task, "reference_task_name", ""))
+
+            # Skip known system tasks
+            if task_type in self._SYSTEM_TASK_TYPES:
+                continue
+
+            # Tool invocation refs follow the pattern call_<hash>__<turn>
+            if not ref.startswith("call_"):
+                continue
+
+            input_data = dict(getattr(task, "input_data", {}) or {})
+            # Strip internal Conductor keys from the displayed args
+            for k in ("_agent_state", "method", "__humanTaskDefinition"):
+                input_data.pop(k, None)
+
+            tool_calls.append(
+                {
+                    "name": task_type.lower(),
+                    "args": input_data,
+                    "result": getattr(task, "output_data", {}),
+                }
+            )
+
+        return tool_calls
+
+    def _fetch_agent_workflow(self, execution_id: str) -> Optional[dict]:
+        """Fetch an execution with its full task list from GET /api/agent/execution/{id}."""
+        import requests
+
+        try:
+            url = self._agent_api_url(f"/execution/{execution_id}")
+            resp = requests.get(url, headers=self._agent_api_headers(), timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            return None
+
+    def _extract_token_usage(self, execution_id: str) -> Optional[TokenUsage]:
+        """Extract aggregated token usage from the full execution tree.
+
+        Calls GET /api/agent/{id} to fetch tasks, then recursively traverses
+        sub-workflows (sub-agents) via their subWorkflowId to aggregate tokens
+        from every LLM_CHAT_COMPLETE task in the tree.
+        """
+        if not execution_id:
+            return None
+        prompt, completion, total, found = self._collect_tokens_by_id(execution_id, set())
+        if not found:
+            return None
+        if total == 0 and (prompt > 0 or completion > 0):
+            total = prompt + completion
+        return TokenUsage(
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            total_tokens=total,
+        )
+
+    def _collect_tokens_by_id(self, execution_id: str, visited: set) -> tuple:
+        """Recursively collect token counts via GET /api/agent/{id}.
+
+        Returns ``(prompt, completion, total, found_any)`` tuple.
+        The server pre-computes ``tokenUsage`` for each execution level; this
+        method reads that field and recurses into SUB_WORKFLOW tasks so the
+        full agent tree is covered.
+        """
+        if execution_id in visited:
+            return 0, 0, 0, False
+        visited.add(execution_id)
+
+        data = self._fetch_agent_workflow(execution_id)
+        if not data:
+            return 0, 0, 0, False
+
+        total_prompt = 0
+        total_completion = 0
+        total_total = 0
+        found_any = False
+
+        # Use server-computed token usage for this execution level
+        token_usage = data.get("tokenUsage")
+        if token_usage:
+            p = int(token_usage.get("promptTokens", 0))
+            c = int(token_usage.get("completionTokens", 0))
+            t = int(token_usage.get("totalTokens", 0))
+            if p or c or t:
+                found_any = True
+                total_prompt += p
+                total_completion += c
+                total_total += t
+
+        # Recurse into sub-agent workflows
+        for task in data.get("tasks", []):
+            if "SUB_WORKFLOW" in str(task.get("taskType", "")).upper():
+                sub_id = task.get("subWorkflowId")
+                if sub_id and sub_id not in visited:
+                    p, c, t, f = self._collect_tokens_by_id(sub_id, visited)
+                    if f:
+                        found_any = True
+                        total_prompt += p
+                        total_completion += c
+                        total_total += t
+
+        return total_prompt, total_completion, total_total, found_any

@@ -38,10 +38,10 @@ Run (from ``sdk/python``)::
 
 import os
 
-from agentspan.agents import Agent, AgentRuntime, agent_tool
-from agentspan.agents.ocg import ocg_agent
+from conductor.ai.agents import Agent, AgentRuntime, agent_tool
+from conductor.ai.agents.ocg import ocg_agent
 
-MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "openai/gpt-4o-mini")
+MODEL = os.environ.get("AGENTSPAN_LLM_MODEL", "anthropic/claude-sonnet-4-6")
 
 # Per-tool instance binding — required: every OCG tool binds the instance
 # it talks to; there is no server-side default.

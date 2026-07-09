@@ -22,7 +22,7 @@ import time
 import pytest
 import requests
 
-from agentspan.agents import Agent, mcp_tool
+from conductor.ai.agents import Agent, mcp_tool
 
 pytestmark = [
     pytest.mark.e2e,

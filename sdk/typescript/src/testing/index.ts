@@ -1,4 +1,4 @@
-// ── Testing framework for @agentspan-ai/sdk ────────────────
+// ── Testing framework for @conductor-oss/conductor-agent-sdk ────────────────
 
 // Mock execution
 export type { MockRunOptions } from "./mock.js";

@@ -1,4 +1,4 @@
-namespace Agentspan.Examples;
+namespace Conductor.AI.Examples;
 
 internal static class Settings
 {

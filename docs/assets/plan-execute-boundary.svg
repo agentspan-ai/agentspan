@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 220" fill="none">
+
+  <!-- ── Left panel: LLM Zone ───────────────────────────────────────── -->
+  <rect x="0" y="0" width="390" height="220" rx="12" fill="#FFF7ED"/>
+  <rect x="0" y="0" width="390" height="220" rx="12" stroke="#FED7AA" stroke-width="1.5"/>
+
+  <!-- Zone label -->
+  <text x="20" y="28" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="600" fill="#C2410C" letter-spacing="0.08em" text-transform="uppercase">LLM ZONE · non-deterministic</text>
+
+  <!-- Prompt box -->
+  <rect x="20" y="44" width="110" height="36" rx="8" fill="#FEF3C7" stroke="#FDE68A" stroke-width="1.5"/>
+  <text x="75" y="57" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#92400E">User</text>
+  <text x="75" y="72" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#92400E">Prompt</text>
+
+  <!-- Arrow: Prompt → Planner -->
+  <line x1="130" y1="62" x2="158" y2="62" stroke="#F97316" stroke-width="1.5"/>
+  <polygon points="158,62 152,58 152,66" fill="#F97316"/>
+
+  <!-- Planner LLM box -->
+  <rect x="160" y="44" width="115" height="36" rx="8" fill="#FEF3C7" stroke="#FDE68A" stroke-width="1.5"/>
+  <text x="217" y="57" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#92400E">Planner</text>
+  <text x="217" y="72" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#B45309">one LLM call</text>
+
+  <!-- Arrow: Planner → JSON Plan -->
+  <line x1="275" y1="62" x2="303" y2="62" stroke="#F97316" stroke-width="1.5"/>
+  <polygon points="303,62 297,58 297,66" fill="#F97316"/>
+
+  <!-- JSON Plan box (highlighted) -->
+  <rect x="305" y="38" width="72" height="46" rx="8" fill="#F97316"/>
+  <text x="341" y="57" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="600" fill="white">JSON</text>
+  <text x="341" y="72" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="600" fill="white">Plan</text>
+
+  <!-- LLM stats -->
+  <text x="20" y="118" font-family="system-ui,sans-serif" font-size="12" fill="#C2410C">✓  One planner call only</text>
+  <text x="20" y="138" font-family="system-ui,sans-serif" font-size="12" fill="#C2410C">✓  Non-deterministic reasoning</text>
+  <text x="20" y="158" font-family="system-ui,sans-serif" font-size="12" fill="#C2410C">✓  Produces a plan as a value</text>
+  <text x="20" y="198" font-family="system-ui,sans-serif" font-size="11" fill="#D97706" font-style="italic">Static plan? Planner is skipped entirely →</text>
+
+  <!-- ── Dividing boundary ───────────────────────────────────────────── -->
+  <line x1="410" y1="10" x2="410" y2="210" stroke="#9CA3AF" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="370" y="96" width="80" height="28" rx="14" fill="#F3F4F6" stroke="#D1D5DB" stroke-width="1"/>
+  <text x="410" y="115" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="600" fill="#6B7280" letter-spacing="0.04em">BOUNDARY</text>
+
+  <!-- Arrow across boundary -->
+  <line x1="377" y1="62" x2="433" y2="62" stroke="#6366F1" stroke-width="2"/>
+  <polygon points="433,62 427,58 427,66" fill="#6366F1"/>
+
+  <!-- ── Right panel: Conductor Zone ────────────────────────────────── -->
+  <rect x="430" y="0" width="390" height="220" rx="12" fill="#EEF2FF"/>
+  <rect x="430" y="0" width="390" height="220" rx="12" stroke="#C7D2FE" stroke-width="1.5"/>
+
+  <!-- Zone label -->
+  <text x="450" y="28" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="600" fill="#4338CA" letter-spacing="0.08em">CONDUCTOR ZONE · deterministic</text>
+
+  <!-- PAC Compiler box -->
+  <rect x="450" y="44" width="100" height="36" rx="8" fill="#E0E7FF" stroke="#C7D2FE" stroke-width="1.5"/>
+  <text x="500" y="57" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#3730A3">PAC</text>
+  <text x="500" y="72" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#4F46E5">compile once</text>
+
+  <!-- Arrow -->
+  <line x1="550" y1="62" x2="578" y2="62" stroke="#4F46E5" stroke-width="1.5"/>
+  <polygon points="578,62 572,58 572,66" fill="#4F46E5"/>
+
+  <!-- Workflow execution box -->
+  <rect x="580" y="38" width="215" height="46" rx="8" fill="#4F46E5"/>
+  <!-- Steps inside -->
+  <rect x="590" y="48" width="44" height="26" rx="4" fill="#6366F1"/>
+  <text x="612" y="65" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="white">SET</text>
+
+  <line x1="634" y1="61" x2="642" y2="61" stroke="white" stroke-width="1.2"/>
+  <polygon points="642,61 638,58 638,64" fill="white"/>
+
+  <rect x="644" y="48" width="44" height="26" rx="4" fill="#6366F1"/>
+  <text x="666" y="65" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="white">FORK</text>
+
+  <line x1="688" y1="61" x2="696" y2="61" stroke="white" stroke-width="1.2"/>
+  <polygon points="696,61 692,58 692,64" fill="white"/>
+
+  <rect x="698" y="48" width="44" height="26" rx="4" fill="#6366F1"/>
+  <text x="720" y="65" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="8" fill="white">JOIN</text>
+
+  <line x1="742" y1="61" x2="750" y2="61" stroke="white" stroke-width="1.2"/>
+  <polygon points="750,61 746,58 746,64" fill="white"/>
+
+  <rect x="752" y="48" width="34" height="26" rx="4" fill="#4338CA"/>
+  <text x="769" y="61" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="7" fill="white">VALI</text>
+  <text x="769" y="72" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="7" fill="white">DATE</text>
+
+  <!-- Conductor stats -->
+  <text x="450" y="118" font-family="system-ui,sans-serif" font-size="12" fill="#4338CA">✓  No LLM in the execution path</text>
+  <text x="450" y="138" font-family="system-ui,sans-serif" font-size="12" fill="#4338CA">✓  Retries, FORK_JOIN, SWITCH — pure Conductor</text>
+  <text x="450" y="158" font-family="system-ui,sans-serif" font-size="12" fill="#4338CA">✓  Crash-safe: resumes at last step</text>
+  <text x="450" y="178" font-family="system-ui,sans-serif" font-size="12" fill="#4338CA">✓  Same plan → identical execution, always</text>
+
+</svg>

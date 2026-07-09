@@ -20,7 +20,7 @@ Requirements:
     - OPENAI_API_KEY=sk-... as environment variable
 """
 
-from agentspan.agents import Agent, AgentRuntime, LLMGuardrail, OnFail, Position
+from conductor.ai.agents import Agent, AgentRuntime, LLMGuardrail, OnFail, Position
 from settings import settings
 
 # ── LLM-based safety guardrail ───────────────────────────────────────

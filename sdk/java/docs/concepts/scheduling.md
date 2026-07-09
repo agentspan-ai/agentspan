@@ -9,7 +9,7 @@ import org.conductoross.conductor.ai.schedule.Schedule;
 
 Agent reportAgent = Agent.builder()
     .name("daily_report")
-    .model("openai/gpt-4o-mini")
+    .model("anthropic/claude-sonnet-4-6")
     .instructions("Generate a daily sales summary.")
     .build();
 

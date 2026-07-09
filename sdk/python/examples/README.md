@@ -51,10 +51,10 @@ See [63_deploy.py](63_deploy.py), [63b_serve.py](63b_serve.py), and
 
 ### 1. Install dependencies
 
-The core examples (numbered files in this directory) only need the `agentspan` SDK:
+The core examples (numbered files in this directory) only need the `conductor-agent-sdk` package:
 
 ```bash
-uv pip install agentspan
+uv pip install conductor-agent-sdk
 ```
 
 Framework-specific examples require additional packages. Install only what you need:
@@ -137,7 +137,7 @@ The `AGENTSPAN_LLM_MODEL` variable uses the `provider/model-name` format. Exampl
 
 | Provider | Model string | API key env var |
 |----------|-------------|-----------------|
-| OpenAI | `openai/gpt-4o-mini` (default) | `OPENAI_API_KEY` |
+| OpenAI | `anthropic/claude-sonnet-4-6` (default) | `OPENAI_API_KEY` |
 | Anthropic | `anthropic/claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
 | Google Gemini | `google_gemini/gemini-2.0-flash` | `GOOGLE_GEMINI_API_KEY` |
 | AWS Bedrock | `aws_bedrock/...` | AWS credentials |

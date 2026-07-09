@@ -5,10 +5,11 @@
  * All validation is algorithmic — no LLM output parsing.
  */
 
-const SERVER_URL = process.env.AGENTSPAN_SERVER_URL ?? "http://localhost:6767/api";
-const BASE_URL = SERVER_URL.replace(/\/api$/, "");
-export const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? "openai/gpt-4o-mini";
-export const MCP_TESTKIT_URL = process.env.MCP_TESTKIT_URL ?? "http://localhost:3001";
+const SERVER_URL = process.env.AGENTSPAN_SERVER_URL ?? 'http://localhost:6767/api';
+const BASE_URL = SERVER_URL.replace(/\/api$/, '');
+export const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o-mini';
+export const CLI_PATH = process.env.AGENTSPAN_CLI_PATH ?? 'agentspan';
+export const MCP_TESTKIT_URL = process.env.MCP_TESTKIT_URL ?? 'http://localhost:3001';
 export const TIMEOUT = 300_000; // 5 min per run — CI runners are slower
 
 // ── Workflow API ────────────────────────────────────────────────────────
@@ -23,21 +24,21 @@ export async function getWorkflow(executionId: string): Promise<Record<string, u
 
 export function getOutputText(result: { output: unknown }): string {
   const output = result.output as Record<string, unknown> | undefined;
-  if (!output) return "";
-  if (typeof output === "object" && "result" in output) {
+  if (!output) return '';
+  if (typeof output === 'object' && 'result' in output) {
     const results = output.result;
-    if (typeof results === "string") return results;
+    if (typeof results === 'string') return results;
     if (Array.isArray(results)) {
       return results
         .map((r: unknown) => {
-          if (typeof r === "string") return r;
-          if (typeof r === "object" && r !== null) {
+          if (typeof r === 'string') return r;
+          if (typeof r === 'object' && r !== null) {
             const obj = r as Record<string, unknown>;
             return (obj.text ?? obj.content ?? JSON.stringify(r)) as string;
           }
           return String(r);
         })
-        .join("");
+        .join('');
     }
     return String(output);
   }
@@ -45,13 +46,43 @@ export function getOutputText(result: { output: unknown }): string {
 }
 
 export function runDiagnostic(result: Record<string, unknown>): string {
-  const parts: string[] = [`status=${result.status}`, `executionId=${result.executionId}`];
+  const parts: string[] = [
+    `status=${result.status}`,
+    `executionId=${result.executionId}`,
+  ];
   const output = result.output as Record<string, unknown> | undefined;
-  if (output && typeof output === "object") {
+  if (output && typeof output === 'object') {
     parts.push(`outputKeys=${Object.keys(output)}`);
-    if ("finishReason" in output) parts.push(`finishReason=${output.finishReason}`);
+    if ('finishReason' in output) parts.push(`finishReason=${output.finishReason}`);
   }
-  return parts.join(" | ");
+  return parts.join(' | ');
+}
+
+// ── Credential helper ────────────────────────────────────────────────────
+// Writes directly to the server's secret store (PUT/DELETE /api/secrets/{name}) —
+// the same store the agentspan CLI targets, and what tools resolve at runtime.
+// Using the API keeps these tests deterministic regardless of the local CLI's
+// ambient config (~/.agentspan/config.json may point at a different/managed server).
+
+export async function credentialSet(name: string, value: string): Promise<void> {
+  const resp = await fetch(`${SERVER_URL}/secrets/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/plain' },
+    body: value,
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!resp.ok) throw new Error(`credentialSet(${name}) failed: HTTP ${resp.status}`);
+}
+
+export async function credentialDelete(name: string): Promise<void> {
+  try {
+    await fetch(`${SERVER_URL}/secrets/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    // Ignore errors during cleanup (e.g., already deleted).
+  }
 }
 
 // ── Server health check ─────────────────────────────────────────────────
@@ -72,19 +103,19 @@ export async function checkServerHealth(): Promise<boolean> {
 
 /** System task types to skip when searching for tool executions. */
 const SYSTEM_TASK_TYPES = new Set([
-  "LLM_CHAT_COMPLETE",
-  "SWITCH",
-  "DO_WHILE",
-  "INLINE",
-  "SET_VARIABLE",
-  "FORK",
-  "FORK_JOIN_DYNAMIC",
-  "JOIN",
-  "SUB_WORKFLOW",
-  "TERMINATE",
-  "WAIT",
-  "EVENT",
-  "DECISION",
+  'LLM_CHAT_COMPLETE',
+  'SWITCH',
+  'DO_WHILE',
+  'INLINE',
+  'SET_VARIABLE',
+  'FORK',
+  'FORK_JOIN_DYNAMIC',
+  'JOIN',
+  'SUB_WORKFLOW',
+  'TERMINATE',
+  'WAIT',
+  'EVENT',
+  'DECISION',
 ]);
 
 export interface TaskInfo {
@@ -111,9 +142,9 @@ export async function findToolTasks(
   const allTasks: string[] = [];
 
   for (const task of tasks) {
-    const ref = (task.referenceTaskName ?? "") as string;
-    const taskDef = (task.taskDefName ?? "") as string;
-    const taskType = (task.taskType ?? "") as string;
+    const ref = (task.referenceTaskName ?? '') as string;
+    const taskDef = (task.taskDefName ?? '') as string;
+    const taskType = (task.taskType ?? '') as string;
     const inputData = (task.inputData ?? {}) as Record<string, unknown>;
     allTasks.push(`${ref}[def=${taskDef},type=${taskType}]`);
 
@@ -129,13 +160,13 @@ export async function findToolTasks(
 
       if (match) {
         results[name] = {
-          status: (task.status ?? "") as string,
+          status: (task.status ?? '') as string,
           output: (task.outputData ?? {}) as Record<string, unknown>,
           input: inputData,
           ref,
           taskDef,
           taskType,
-          reason: (task.reasonForIncompletion ?? "") as string,
+          reason: (task.reasonForIncompletion ?? '') as string,
         };
       }
     }
@@ -162,9 +193,9 @@ export async function findToolTasksDeep(
     const tasks = (wf.tasks ?? []) as Record<string, unknown>[];
 
     for (const task of tasks) {
-      const ref = (task.referenceTaskName ?? "") as string;
-      const taskDef = (task.taskDefName ?? "") as string;
-      const taskType = (task.taskType ?? "") as string;
+      const ref = (task.referenceTaskName ?? '') as string;
+      const taskDef = (task.taskDefName ?? '') as string;
+      const taskType = (task.taskType ?? '') as string;
       const inputData = (task.inputData ?? {}) as Record<string, unknown>;
       allTasks.push(`${ref}[def=${taskDef},type=${taskType}]`);
 
@@ -177,20 +208,20 @@ export async function findToolTasksDeep(
 
         if (match) {
           results[name] = {
-            status: (task.status ?? "") as string,
+            status: (task.status ?? '') as string,
             output: (task.outputData ?? {}) as Record<string, unknown>,
             input: inputData,
             ref,
             taskDef,
             taskType,
-            reason: (task.reasonForIncompletion ?? "") as string,
+            reason: (task.reasonForIncompletion ?? '') as string,
           };
           remaining.delete(name);
         }
       }
 
       // Recurse into sub-workflows
-      if (taskType === "SUB_WORKFLOW" && remaining.size > 0) {
+      if (taskType === 'SUB_WORKFLOW' && remaining.size > 0) {
         const subId = ((task.outputData as Record<string, unknown>)?.subWorkflowId ??
           (task.inputData as Record<string, unknown>)?.subWorkflowId) as string | undefined;
         if (subId) {

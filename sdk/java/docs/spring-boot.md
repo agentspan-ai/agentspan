@@ -1,13 +1,13 @@
 # Spring Boot
 
-The `conductor-ai-sdk-spring` module provides Spring Boot auto-configuration. Add it and your `AgentRuntime` is wired automatically from `application.properties`.
+The `conductor-agent-sdk-spring` module provides Spring Boot auto-configuration. Add it and your `AgentRuntime` is wired automatically from `application.properties`.
 
 ## Dependency
 
 === "Gradle"
 
     ```groovy
-    implementation 'org.conductoross.conductor:conductor-ai-sdk-spring:0.1.0'
+    implementation 'org.conductoross.conductor:conductor-agent-sdk-spring:0.1.0'
     ```
 
 === "Maven"
@@ -15,12 +15,12 @@ The `conductor-ai-sdk-spring` module provides Spring Boot auto-configuration. Ad
     ```xml
     <dependency>
         <groupId>org.conductoross.conductor</groupId>
-        <artifactId>conductor-ai-sdk-spring</artifactId>
+        <artifactId>conductor-agent-sdk-spring</artifactId>
         <version>0.1.0</version>
     </dependency>
     ```
 
-This pulls in both `conductor-ai-sdk` and `conductor-client-spring` (which wires the `ApiClient`).
+This pulls in both `conductor-agent-sdk` and `conductor-client-spring` (which wires the `ApiClient`).
 
 ## Configuration
 
@@ -56,7 +56,7 @@ public class ChatService {
     public String answer(String question) {
         Agent agent = Agent.builder()
             .name("assistant")
-            .model("openai/gpt-4o-mini")
+            .model("anthropic/claude-sonnet-4-6")
             .instructions("You are a helpful assistant.")
             .build();
 

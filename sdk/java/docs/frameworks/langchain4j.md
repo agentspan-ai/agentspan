@@ -5,7 +5,7 @@ Use LangChain4j `@Tool`-annotated POJOs directly with Agentspan. The bridge refl
 ## Dependency
 
 ```groovy
-implementation 'org.conductoross.conductor:conductor-ai-sdk:0.1.0'
+implementation 'org.conductoross.conductor:conductor-agent-sdk:0.1.0'
 compileOnly 'dev.langchain4j:langchain4j:1.0.0'
 ```
 
@@ -35,7 +35,7 @@ public class CalculatorTools {
 // Wrap with LangChain4jAgent
 Agent agent = LangChain4jAgent.from(
     "calculator_agent",                         // agent name
-    "openai/gpt-4o-mini",                       // model
+    "anthropic/claude-sonnet-4-6",                       // model
     "You can perform math and look up prices.", // instructions
     new CalculatorTools()                       // one or more tool POJOs
 );

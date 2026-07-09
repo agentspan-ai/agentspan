@@ -55,7 +55,7 @@ public final class LangChainBridge {
 
     /**
      * Map a LangChain4j {@link ChatModel} to the {@code provider/model} string
-     * format expected by the Agentspan server (e.g. {@code openai/gpt-4o-mini}).
+     * format expected by the Agentspan server (e.g. {@code anthropic/claude-sonnet-4-6}).
      *
      * <p>The provider id is read from {@link ChatModel#provider()} and the model
      * name from {@code defaultRequestParameters().modelName()}; both are part of

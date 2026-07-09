@@ -9,7 +9,7 @@ No mocks — tests exercise real code paths.
 
 import pytest
 
-from agentspan.agents.runtime._dispatch import (
+from conductor.ai.agents.runtime._dispatch import (
     _mcp_servers,
     _tool_approval_flags,
     _tool_registry,
@@ -79,36 +79,68 @@ class TestCheckApprovalWorker:
 
 
 class TestCredentialExtraction:
-    """Per-user secrets are injected into the task input by the server at poll
-    time; the external-worker helper just reads them off input_data."""
+    """_dispatch.py extracts __agentspan_ctx__ from task input/variables."""
 
-    def test_resolve_credentials_reads_injected_map(self):
-        from agentspan.agents import resolve_credentials
+    def test_extract_token_from_input_data_dict(self):
+        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
 
-        input_data = {
-            "prompt": "hi",
-            "__resolved_credentials__": {"GITHUB_TOKEN": "ghp", "AWS_KEY": "ak"},
-        }
-        assert resolve_credentials(input_data) == {"GITHUB_TOKEN": "ghp", "AWS_KEY": "ak"}
+        class FakeTask:
+            input_data = {
+                "__agentspan_ctx__": {"execution_token": "token-from-input"},
+                "x": "hello",
+            }
+            workflow_input = {}
 
-    def test_resolve_credentials_filters_by_names(self):
-        from agentspan.agents import resolve_credentials
+        token = _extract_execution_token(FakeTask())
+        assert token == "token-from-input"
 
-        input_data = {"__resolved_credentials__": {"GITHUB_TOKEN": "ghp", "AWS_KEY": "ak"}}
-        assert resolve_credentials(input_data, ["GITHUB_TOKEN"]) == {"GITHUB_TOKEN": "ghp"}
+    def test_extract_token_from_input_data_string(self):
+        """Backwards compat: plain string is also accepted."""
+        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
 
-    def test_resolve_credentials_returns_empty_when_none_injected(self):
-        from agentspan.agents import resolve_credentials
+        class FakeTask:
+            input_data = {"__agentspan_ctx__": "token-from-input", "x": "hello"}
+            workflow_input = {}
 
-        assert resolve_credentials({"prompt": "hi"}) == {}
-        assert resolve_credentials({}) == {}
+        token = _extract_execution_token(FakeTask())
+        assert token == "token-from-input"
+
+    def test_extract_token_returns_none_when_absent(self):
+        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
+
+        class FakeTask:
+            input_data = {"x": "hello"}
+            workflow_input = {}
+
+        token = _extract_execution_token(FakeTask())
+        assert token is None
+
+    def test_extract_token_from_workflow_input_dict(self):
+        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
+
+        class FakeTask:
+            input_data = {}
+            workflow_input = {"__agentspan_ctx__": {"execution_token": "token-from-wf"}}
+
+        token = _extract_execution_token(FakeTask())
+        assert token == "token-from-wf"
+
+    def test_extract_token_empty_dict_returns_none(self):
+        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
+
+        class FakeTask:
+            input_data = {"__agentspan_ctx__": {}}
+            workflow_input = {}
+
+        token = _extract_execution_token(FakeTask())
+        assert token is None
 
 
 class TestToolDefCredentialsSurvival:
     """Verify credentials from @tool decorator survive into make_tool_worker."""
 
     def test_tool_def_credentials_accessible_via_get_tool_def(self):
-        from agentspan.agents.tool import tool, get_tool_def
+        from conductor.ai.agents.tool import tool, get_tool_def
 
         @tool(credentials=["MY_SECRET"])
         def my_tool(x: str) -> str:
@@ -119,8 +151,8 @@ class TestToolDefCredentialsSurvival:
 
     def test_make_tool_worker_with_tool_def_has_credentials(self):
         """When tool_def is passed, make_tool_worker can access credentials."""
-        from agentspan.agents.runtime._dispatch import make_tool_worker, _get_credential_names_from_tool
-        from agentspan.agents.tool import tool, get_tool_def
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker, _get_credential_names_from_tool
+        from conductor.ai.agents.tool import tool, get_tool_def
 
         @tool(credentials=["GITHUB_TOKEN", "OPENAI_API_KEY"])
         def cred_tool(x: str) -> str:
@@ -132,7 +164,7 @@ class TestToolDefCredentialsSurvival:
         assert _get_credential_names_from_tool(cred_tool) == ["GITHUB_TOKEN", "OPENAI_API_KEY"]
 
     def test_no_credentials_tool_returns_empty(self):
-        from agentspan.agents.tool import tool, get_tool_def
+        from conductor.ai.agents.tool import tool, get_tool_def
 
         @tool
         def simple_tool(x: str) -> str:
@@ -143,8 +175,8 @@ class TestToolDefCredentialsSurvival:
 
     def test_tool_worker_no_secrets_runs_directly(self):
         """Tool without credentials runs without subprocess isolation."""
-        from agentspan.agents.runtime._dispatch import make_tool_worker
-        from agentspan.agents.tool import tool, get_tool_def
+        from conductor.ai.agents.runtime._dispatch import make_tool_worker
+        from conductor.ai.agents.tool import tool, get_tool_def
         from conductor.client.http.models.task import Task
 
         @tool

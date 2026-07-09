@@ -49,6 +49,7 @@ import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ProviderValidator;
+import dev.agentspan.runtime.util.WorkflowClassifiers;
 
 import lombok.RequiredArgsConstructor;
 
@@ -393,7 +394,11 @@ public class AgentService {
 
         for (WorkflowDef def : allDefs) {
             Map<String, Object> metadata = def.getMetadata();
-            if (metadata == null || !metadata.containsKey("agent_sdk")) {
+            // A def is an agent when its derived classifier resolves to "agent": either the
+            // AgentSpan stamp (agent_sdk/agentDef) is present, or the def carries an explicit
+            // metadata.classifier=agent tag. An explicit non-agent classifier excludes a def
+            // even if it still carries a stamp.
+            if (!WorkflowClassifiers.isAgent(metadata)) {
                 continue;
             }
 
@@ -438,25 +443,58 @@ public class AgentService {
      */
     public Map<String, Object> searchAgentExecutions(
             int start, int size, String sort, String freeText, String status, String agentName, String sessionId) {
-        // Determine which workflow types to query
-        List<String> workflowNames;
-        if (agentName != null && !agentName.isEmpty()) {
-            workflowNames = List.of(agentName);
+        return searchAgentExecutions(start, size, sort, freeText, status, agentName, sessionId, null);
+    }
+
+    /**
+     * Search agent executions with optional filters.
+     *
+     * <p>When {@code classifier} is provided (e.g. {@code agent}), the search filters on the
+     * indexed execution classifier ({@code classifier IN (...)}) instead of enumerating every
+     * agent workflow name into the query. This scales past name-list limits but requires a
+     * Conductor core whose index backend supports the {@code classifier} search field; older
+     * cores silently drop the condition, so classifier filtering stays opt-in.
+     */
+    public Map<String, Object> searchAgentExecutions(
+            int start,
+            int size,
+            String sort,
+            String freeText,
+            String status,
+            String agentName,
+            String sessionId,
+            String classifier) {
+        String classifierList = classifier == null
+                ? ""
+                : Arrays.stream(classifier.split(","))
+                        .map(String::trim)
+                        .filter(c -> !c.isEmpty())
+                        .collect(Collectors.joining(","));
+        StringBuilder query;
+        if (!classifierList.isEmpty()) {
+            query = new StringBuilder("classifier IN (").append(classifierList).append(")");
+            if (agentName != null && !agentName.isEmpty()) {
+                query.append(" AND workflowType = '").append(agentName).append("'");
+            }
         } else {
-            workflowNames = listAgents().stream().map(AgentSummary::getName).collect(Collectors.toList());
-        }
+            // Legacy path: enumerate agent workflow names into the query.
+            List<String> workflowNames;
+            if (agentName != null && !agentName.isEmpty()) {
+                workflowNames = List.of(agentName);
+            } else {
+                workflowNames = listAgents().stream().map(AgentSummary::getName).collect(Collectors.toList());
+            }
 
-        if (workflowNames.isEmpty()) {
-            Map<String, Object> empty = new LinkedHashMap<>();
-            empty.put("totalHits", 0L);
-            empty.put("results", List.of());
-            return empty;
-        }
+            if (workflowNames.isEmpty()) {
+                Map<String, Object> empty = new LinkedHashMap<>();
+                empty.put("totalHits", 0L);
+                empty.put("results", List.of());
+                return empty;
+            }
 
-        // Build query string
-        String nameList = workflowNames.stream().map(n -> "'" + n + "'").collect(Collectors.joining(","));
-        StringBuilder query =
-                new StringBuilder("workflowType IN (").append(nameList).append(")");
+            String nameList = workflowNames.stream().map(n -> "'" + n + "'").collect(Collectors.joining(","));
+            query = new StringBuilder("workflowType IN (").append(nameList).append(")");
+        }
         if (status != null && !status.isEmpty()) {
             query.append(" AND status = '").append(status).append("'");
         }
@@ -1505,7 +1543,32 @@ public class AgentService {
 
     public SearchResult<WorkflowSummary> searchExecutionsRaw(
             int start, int size, String sort, String freeText, String query) {
-        return workflowService.searchWorkflows(start, size, sort, freeText, query);
+        return searchExecutionsRaw(start, size, sort, freeText, query, null);
+    }
+
+    public SearchResult<WorkflowSummary> searchExecutionsRaw(
+            int start, int size, String sort, String freeText, String query, String classifier) {
+        return workflowService.searchWorkflows(start, size, sort, freeText, withClassifierFilter(query, classifier));
+    }
+
+    /**
+     * Folds an optional classifier filter (comma-separated values, e.g. {@code agent} or
+     * {@code agent,workflow}) into the structured search query as a
+     * {@code classifier IN (...)} clause, mirroring Conductor's own search endpoints.
+     */
+    static String withClassifierFilter(String query, String classifier) {
+        if (classifier == null || classifier.isBlank()) {
+            return query;
+        }
+        String values = Arrays.stream(classifier.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.joining(","));
+        if (values.isEmpty()) {
+            return query;
+        }
+        String clause = "classifier IN (" + values + ")";
+        return (query == null || query.isBlank()) ? clause : query + " AND " + clause;
     }
 
     public WorkflowDef getAgentDefinition(String name, Integer version) {

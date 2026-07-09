@@ -11,9 +11,9 @@
 //   - AGENTSPAN_SERVER_URL=http://localhost:6767/api
 //   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
 
-using Agentspan;
-using Agentspan.Examples;
-using Agentspan.GoogleADK;
+using Conductor.AI;
+using Conductor.AI.Examples;
+using Conductor.AI.GoogleADK;
 
 const string globalInstruction =
     "You work for TechStore, a premium electronics retailer. " +

@@ -1555,7 +1555,7 @@ function _stateToResult(state: Record<string, unknown>): string {
 
 /**
  * Extract model string from an explicit option passed via run()/deploy().
- * Accepts a string ('openai/gpt-4o-mini') or an LLM object (ChatOpenAI instance).
+ * Accepts a string ('anthropic/claude-sonnet-4-6') or an LLM object (ChatOpenAI instance).
  */
 function _extractModelFromOption(model: unknown): string | null {
   if (typeof model === "string" && model.length > 0) {

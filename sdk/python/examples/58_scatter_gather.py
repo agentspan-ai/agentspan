@@ -18,7 +18,7 @@ Requirements:
     - AGENT_SECONDARY_LLM_MODEL=openai/gpt-4o in .env or environment
 """
 
-from agentspan.agents import Agent, AgentRuntime, scatter_gather, tool
+from conductor.ai.agents import Agent, AgentRuntime, scatter_gather, tool
 from settings import settings
 
 

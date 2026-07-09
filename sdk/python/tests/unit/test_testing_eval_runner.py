@@ -1,10 +1,10 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tests for agentspan.agents.testing.eval_runner."""
+"""Tests for conductor.ai.agents.testing.eval_runner."""
 
-from agentspan.agents.result import AgentEvent, AgentResult, EventType
-from agentspan.agents.testing.eval_runner import (
+from conductor.ai.agents.result import AgentEvent, AgentResult, EventType
+from conductor.ai.agents.testing.eval_runner import (
     CorrectnessEval,
     EvalCase,
     EvalCaseResult,
