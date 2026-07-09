@@ -146,6 +146,10 @@ public class AgentController {
 
     /**
      * Search agent executions with optional filters.
+     *
+     * <p>{@code classifier} (comma-separated, e.g. {@code agent}) filters on the indexed
+     * execution classifier instead of enumerating agent workflow names. Requires a Conductor
+     * core whose search index supports the classifier field.
      */
     @GetMapping("/executions")
     public Map<String, Object> searchAgentExecutions(
@@ -155,8 +159,10 @@ public class AgentController {
             @RequestParam(required = false) String freeText,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String agentName,
-            @RequestParam(required = false) String sessionId) {
-        return agentService.searchAgentExecutions(start, size, sort, freeText, status, agentName, sessionId);
+            @RequestParam(required = false) String sessionId,
+            @RequestParam(required = false) String classifier) {
+        return agentService.searchAgentExecutions(
+                start, size, sort, freeText, status, agentName, sessionId, classifier);
     }
 
     @GetMapping("/{name}")
@@ -361,15 +367,20 @@ public class AgentController {
 
     // ── Search ──────────────────────────────────────────────────────
 
-    /** Search executions (pass-through to Conductor search, used by UI). */
+    /**
+     * Search executions (pass-through to Conductor search, used by UI). An optional
+     * {@code classifier} filter (comma-separated) is folded into the query as
+     * {@code classifier IN (...)}.
+     */
     @GetMapping("/executions/search")
     public SearchResult<WorkflowSummary> searchExecutionsRaw(
             @RequestParam(defaultValue = "0") int start,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "startTime:DESC") String sort,
             @RequestParam(required = false) String freeText,
-            @RequestParam(required = false) String query) {
-        return agentService.searchExecutionsRaw(start, size, sort, freeText, query);
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String classifier) {
+        return agentService.searchExecutionsRaw(start, size, sort, freeText, query, classifier);
     }
 
     // ── Bulk operations ─────────────────────────────────────────────
