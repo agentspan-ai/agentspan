@@ -1574,6 +1574,20 @@ public class AgentService {
 
     public SearchResult<WorkflowSummary> searchExecutionsRaw(
             int start, int size, String sort, String freeText, String query) {
+        return searchExecutionsRaw(start, size, sort, freeText, query, false);
+    }
+
+    public SearchResult<WorkflowSummary> searchExecutionsRaw(
+            int start, int size, String sort, String freeText, String query, boolean topLevelOnly) {
+        if (topLevelOnly) {
+            // Top-level executions are roots (no parent). Roots store parent_workflow_id = "".
+            String topLevelFilter = "parentWorkflowId = \"\"";
+            if (query != null && !query.isBlank()) {
+                query = query + " AND " + topLevelFilter;
+            } else {
+                query = topLevelFilter;
+            }
+        }
         return workflowService.searchWorkflows(start, size, sort, freeText, query);
     }
 

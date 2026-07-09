@@ -368,8 +368,9 @@ public class AgentController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "startTime:DESC") String sort,
             @RequestParam(required = false) String freeText,
-            @RequestParam(required = false) String query) {
-        return agentService.searchExecutionsRaw(start, size, sort, freeText, query);
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false, defaultValue = "false") boolean topLevelOnly) {
+        return agentService.searchExecutionsRaw(start, size, sort, freeText, query, topLevelOnly);
     }
 
     // ── Bulk operations ─────────────────────────────────────────────
