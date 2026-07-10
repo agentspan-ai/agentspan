@@ -33,7 +33,6 @@ import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
-import dev.agentspan.runtime.util.EmbeddedMode;
 
 import okhttp3.OkHttpClient;
 
@@ -131,11 +130,6 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         // Try per-user credential resolution
         log.debug("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
-        // Embedded: native resolution is dormant; the host resolved the stamped
-        // apiKey = ${workflow.secrets.NAME} reference into the task input. Read it back.
-        if (userApiKey == null && EmbeddedMode.isEmbedded()) {
-            userApiKey = readResolvedApiKeyFromTaskInput();
-        }
         log.debug("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
         if (userApiKey != null || baseUrl != null) {
             try {
@@ -220,26 +214,6 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    /**
-     * Read the host-resolved {@code apiKey} from the current task input (embedded mode). The
-     * compiler stamped {@code apiKey = ${workflow.secrets.NAME}} and the host substitutes the
-     * plaintext before execution. An unresolved placeholder (still starting with {@code ${}) or a
-     * blank value is ignored so we fall through to env/server-wide resolution.
-     */
-    private String readResolvedApiKeyFromTaskInput() {
-        try {
-            TaskContext ctx = TaskContext.get();
-            if (ctx == null || ctx.getTask() == null) return null;
-            Object v = ctx.getTask().getInputData().get("apiKey");
-            if (v instanceof String s && !s.isBlank() && !s.startsWith("${")) {
-                return s;
-            }
-        } catch (Exception e) {
-            // ignore — fall through to other resolution paths
-        }
-        return null;
     }
 
     /**

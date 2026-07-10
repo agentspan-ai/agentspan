@@ -42,7 +42,6 @@ import com.netflix.conductor.model.WorkflowModel;
 
 import dev.agentspan.runtime.model.AgentSSEEvent;
 import dev.agentspan.runtime.service.AgentStreamRegistry;
-import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.ModelContextWindows;
 
 /**
@@ -112,11 +111,8 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         TaskModel taskModel = super.getMappedTask(taskMapperContext);
         WorkflowModel workflowModel = taskMapperContext.getWorkflowModel();
 
-        // Standalone: per-user LLM key resolution is handled by AgentspanAIModelProvider.getModel()
-        // (native store), so no inputData injection is needed. Embedded: the native store is dormant,
-        // so stamp a ${workflow.secrets.NAME} reference for the host to resolve; the provider then
-        // reads the resolved apiKey back from the task input.
-        injectCredentialReferences(taskModel);
+        // LLM credentials are the host's concern: embedded, the AI integration supplies the key
+        // (OrkesAIModelProvider); standalone, AgentspanAIModelProvider resolves it. Nothing to stamp here.
 
         try {
             ChatCompletion chatCompletion = objectMapper.convertValue(taskModel.getInputData(), ChatCompletion.class);
@@ -146,27 +142,6 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             }
         }
         return taskModel;
-    }
-
-    /**
-     * Embedded only: stamp {@code apiKey = ${workflow.secrets.<PROVIDER_KEY>}} so the host
-     * (orkes-conductor / conductor-oss) resolves the LLM credential when it binds task input.
-     * Only the required API key is stamped (optional base-url / project id are left to env/config,
-     * since a missing {@code ${workflow.secrets.X}} reference hard-fails on some hosts). Standalone
-     * stamps nothing — {@link AgentspanAIModelProvider} resolves keys via the native store.
-     */
-    private void injectCredentialReferences(TaskModel taskModel) {
-        if (!EmbeddedMode.isEmbedded()) {
-            return;
-        }
-        Object provObj = taskModel.getInputData().get("llmProvider");
-        if (!(provObj instanceof String provider) || provider.isBlank()) {
-            return;
-        }
-        String apiKeyEnv = LlmProviderEnv.apiKeyEnv(provider);
-        if (apiKeyEnv != null) {
-            taskModel.getInputData().put("apiKey", "${workflow.secrets." + apiKeyEnv + "}");
-        }
     }
 
     /**

@@ -21,9 +21,58 @@ Nothing is deleted — the native code stays intact for standalone.
   table), we ship an **interim**: the compiler stamps
   `inputParameters.__resolved_credentials__ = {NAME: "${workflow.secrets.NAME}"}` and the host
   resolves it — same delivery, but it rides in the task-input `Map` that today's clients already keep.
-- **System tasks (LLM `apiKey`, HTTP/MCP/planner headers — in-process on the host)** → the compiler
-  stamps `${workflow.secrets.NAME}` into task input; the host substitutes in memory before the call.
-  Not polled by a worker, so there's no `Task.runtimeMetadata` to read. Identical for target and interim.
+- **LLM provider keys → the host's AI integration** (not a workflow secret). The `LLM_CHAT_COMPLETE`
+  task resolves its model — and its API key — from the configured AI integration by provider name;
+  agentspan stamps nothing. See the sequence below. (We deliberately do **not** map a provider to a
+  conventionally-named workflow secret — that would duplicate and can conflict with the integration.)
+- **HTTP / MCP / planner-context headers → `${workflow.secrets.NAME}`.** These are the *user's*
+  external-API secrets (not integration-managed). The compiler rewrites a `${NAME}` placeholder in a
+  header to `${workflow.secrets.NAME}` (embedded) and the host substitutes it in memory before the
+  in-process call. Same for target and interim.
+
+### LLM provider key — via the host AI integration
+
+Embedded in Orkes, `OrkesAIModelProvider` (`@Primary`) is the active `AIModelProvider`. It resolves
+the model **per call** from the integration store, scoped to the org — the API key lives in the
+integration config and the built model client, and never touches the workflow definition or task input.
+Verified in `orkes-conductor` (`workers/.../integrations/OrkesAIModelProvider.java`,
+`ModelConfigurationProvider.java`).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant OP as Operator / UI
+    participant IS as IntegrationService (Orkes store)
+    participant TK as LLM_CHAT_COMPLETE task
+    participant LW as LLMWorkers (host)
+    participant MP as OrkesAIModelProvider (@Primary)
+    participant MC as ModelConfigurationProvider
+    participant API as Provider API (OpenAI, ...)
+
+    Note over OP,IS: setup - integration stored per org (api_key in its config)
+    OP->>IS: create AI integration (provider=openai, api_key=...)
+
+    Note over TK,API: execution - per LLM call
+    TK->>LW: LLM_CHAT_COMPLETE (llmProvider, model, integrationNames[AI_MODEL])
+    LW->>MP: getModel(input)
+    MP->>MP: orgId from taskId, integrationName from input.integrationNames[AI_MODEL]
+    MP->>IS: getIntegration(orgId, integrationName)
+    IS-->>MP: Integration.configuration (incl api_key)
+    MP->>MC: getConfiguration(type, configMap) - build AIModel with api_key (cached)
+    MC-->>MP: AIModel
+    MP-->>LW: AIModel
+    LW->>API: chatComplete(messages) using the integration key
+    API-->>LW: completion
+```
+
+Consequences:
+- **Agentspan stamps nothing on the LLM task.** `OrkesAIModelProvider` never reads an `apiKey` from
+  task input — it resolves by `(orgId, integrationName)` — so the interim `injectCredentialReferences`
+  + `LlmProviderEnv` mapping was redundant *and* bypassed. Both are removed.
+- **Standalone** (not embedded): agentspan's own `AgentspanAIModelProvider` resolves per-user keys from
+  the native store — a separate path, unchanged.
+- **Conductor-OSS** (no integration store): the OSS `AIModelProvider` serves models from startup
+  `ModelConfiguration`s — still not from workflow secrets.
 
 ## Interim worker path (enrichment) — how it actually works
 
@@ -108,9 +157,9 @@ string→string, output-empty omitted), release, and bump the SDK's client depen
   `NoOpSecretOutputMasker`. Active consumers made tolerant: `AgentspanAIModelProvider` (`ObjectProvider`
   + guards); `AgentService` / `AgentEventListener` (`@Autowired(required=false)` + null guards, so token
   minting is skipped).
-- **System tasks:** `AgentChatCompleteTaskMapper.injectCredentialReferences` + `LlmProviderEnv` stamp
-  `apiKey=${workflow.secrets.<KEY>}`; `AgentspanAIModelProvider` reads it back. HTTP/MCP/planner headers
-  already emit `${workflow.secrets.NAME}`.
+- **System tasks:** LLM keys come from the host AI integration (`OrkesAIModelProvider`) — agentspan
+  stamps nothing (the old `injectCredentialReferences` + `LlmProviderEnv` were removed). HTTP/MCP/
+  planner headers emit `${workflow.secrets.NAME}` via `ToolCompiler.rewriteCredentialPlaceholders`.
 - **Worker tools (interim):** `ToolCompiler.buildWorkerCredConfig` + `JavaScriptBuilder` enrich
   injection + `AgentCompiler.collectToolCredentials`.
 - **SDK read-path (all 4):** prefer the host map, else native token-pull; feed the existing accessor;
@@ -169,7 +218,7 @@ client dep in `sdk/java/build.gradle`, `sdk/python/pyproject.toml`, `sdk/csharp/
 | `compiler/ToolCompiler.java` | **REMOVE** `buildWorkerCredConfig()` + `setWorkerCreds` + the `workerCredJson` argument passed to `enrichToolsScript` / `enrichToolsScriptDynamic`. |
 | `util/JavaScriptBuilder.java` | **REMOVE** the `workerCredJson` param and the `if (workerCredCfg[n]) t.inputParameters.__resolved_credentials__ = …` lines in both enrich scripts. |
 | `compiler/AgentCompiler.java`, `MultiAgentCompiler.java` | **MOVE.** Drop the `tc.setWorkerCreds(...)` calls; `collectToolCredentials` now feeds `AgentService` instead of `ToolCompiler`. |
-| `ai/AgentChatCompleteTaskMapper.java`, `LlmProviderEnv.java` | **UNCHANGED** — system-task `${workflow.secrets}` path stays. |
+| LLM keys | **UNCHANGED** — already handled by the host AI integration (`OrkesAIModelProvider`); no agentspan code. HTTP/MCP/planner headers keep their `${workflow.secrets}` rewrite. |
 
 **2. SDK worker read-path — read the field instead of the input key** (native token-pull fallback
 stays in all four):
