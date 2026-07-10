@@ -1,6 +1,6 @@
 # Secret delivery toggle: native (standalone) vs host-delivered (embedded)
 
-**Date:** 2026-07-09 · **Status:** In progress · **Branch:** `feature/embedded-secret-toggle`
+**Date:** 2026-07-09 (updated 2026-07-10) · **Status:** interim shipped (PR #307); target done + validated e2e (PR #311) · **Branches:** `feature/embedded-secret-toggle` (interim), `feature/embedded-secret-taskdef-target` (target)
 
 ## Summary
 
@@ -215,7 +215,7 @@ client dep in `sdk/java/build.gradle`, `sdk/python/pyproject.toml`, `sdk/csharp/
 
 | File | Change |
 |---|---|
-| `service/AgentService.java` | **ADD.** In `registerTaskDef`, set `taskDef.setRuntimeMetadata(names)` for each worker tool, where `names = AgentCompiler.collectToolCredentials(config).get(tool)`. This is the whole target delivery on the server. |
+| `service/AgentService.java` | **ADD.** In `registerTaskDef`, set `taskDef.setRuntimeMetadata(names)` (embedded-gated). For **worker tools**, `names = AgentCompiler.collectToolCredentials(config).get(tool)` (per-tool creds, agent-level fallback). For the **non-worker user-code tasks** (guardrail / callback / stop_when / gate / instructions / router / graph node+edge), which carry no per-item creds, `names = AgentCompiler.collectAgentCredentials(config)` (the agent-level list). This is the whole target delivery on the server. <br/>*Caveat:* only the tool worker SDK wrapper reads `Task.runtimeMetadata` today, so declaring it on the non-worker defs is currently **inert** (values ride the wire but `get_secret()` inside a guardrail/callback won't resolve until those wrappers route `runtimeMetadata` into the credential context). |
 | `compiler/ToolCompiler.java` | **REMOVE** `buildWorkerCredConfig()` + `setWorkerCreds` + the `workerCredJson` argument passed to `enrichToolsScript` / `enrichToolsScriptDynamic`. |
 | `util/JavaScriptBuilder.java` | **REMOVE** the `workerCredJson` param and the `if (workerCredCfg[n]) t.inputParameters.__resolved_credentials__ = …` lines in both enrich scripts. |
 | `compiler/AgentCompiler.java`, `MultiAgentCompiler.java` | **MOVE.** Drop the `tc.setWorkerCreds(...)` calls; `collectToolCredentials` now feeds `AgentService` instead of `ToolCompiler`. |
@@ -238,14 +238,104 @@ The compiler/enrich change is a **deletion**; the real new code is one line in `
 (`setRuntimeMetadata`) plus a one-line read swap per SDK. Everything else (gating, system tasks,
 accessors, native fallback) is already in place.
 
+## Host-side resolution (embedded) — who turns declared names into values
+
+Declaring `TaskDef.runtimeMetadata` is only half the target: the **host** must resolve those names to
+values at the SIMPLE task's own poll and put them on the wire-only `Task.runtimeMetadata`. *Where*
+that resolution lives depends on how the host is built — there are two shapes, **both validated
+end-to-end** (a tool declares `credentials=["DEMO_SECRET"]`, the task completes with
+`secret_resolved: true`, and the persisted task input contains no plaintext and no
+`__resolved_credentials__`).
+
+### Shape A — AgentSpan-as-host (standalone server embeds stock conductor)
+
+The AgentSpan server embeds **published conductor `3.32.0-rc.5`** (PR #1255 landed there), so
+conductor's own `RuntimeMetadataResolver` and its `ExecutionService.poll` wiring run unmodified. The
+only missing piece is a `SecretsDAO` that reads AgentSpan's store instead of env vars:
+`AgentspanSecretsDAO` (`conductor-agentspan-server`, gated `conductor.secrets.type=agentspan`)
+implements conductor's `com.netflix.conductor.dao.SecretsDAO` over AgentSpan's encrypted
+`CredentialStoreProvider`, scoped to the system user. Selecting it also gates conductor's `env`/`noop`
+`SecretsDAO` off and re-enables the store beans (`EncryptedDbCredentialStoreProvider`,
+`MasterKeyConfig`, `CredentialDataSourceConfig`, `CredentialSchemaMigrator`) under the same flag.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as SDK worker
+    participant ES as ExecutionService.poll (stock conductor)
+    participant RR as RuntimeMetadataResolver (conductor-core)
+    participant DAO as AgentspanSecretsDAO (secrets.type agentspan)
+    participant ST as AgentSpan encrypted credential store
+
+    W->>ES: poll SIMPLE task
+    ES->>ES: taskDef declares runtimeMetadata [NAMES]
+    ES->>RR: resolve(names)
+    loop each declared name
+        RR->>DAO: getSecret(name)
+        DAO->>ST: store.get(systemUser, name)
+        ST-->>DAO: value
+        DAO-->>RR: value
+    end
+    RR-->>ES: name-to-value map
+    ES->>ES: task.setRuntimeMetadata(map) -- wire-only, never persisted
+    ES-->>W: task incl Task.runtimeMetadata
+```
+
+### Shape B — orkes-as-host (orkes vendors its own conductor core)
+
+orkes ships its own core (`oss-core`) and **excludes `org.conductoross:conductor-core`**, so
+conductor's `RuntimeMetadataResolver` and the base `ExecutionService.poll` wiring never enter the
+build — orkes inherits only the `runtimeMetadata` fields from `conductor-common`. Resolution is
+re-added on orkes' own poll path via a narrow SPI:
+
+- `RuntimeSecretResolver` (SPI, `oss-core`) — read-only `resolve(names)`.
+- `OrkesExecutionService.poll` (server) **overrides** the base poll, so the injection must live there:
+  it calls the inherited hook to set values on each polled `Task.runtimeMetadata`.
+- `OrkesRuntimeSecretResolver` (server) implements the SPI over orkes' `SecretsService`
+  (Postgres+AES / cloud provider) — org-scoped, permission-checked, decrypted.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as SDK worker
+    participant TR as TaskResource / OrkesTaskServiceImpl
+    participant OES as OrkesExecutionService.poll (override)
+    participant SPI as RuntimeSecretResolver SPI (oss-core)
+    participant IMP as OrkesRuntimeSecretResolver (server)
+    participant SS as orkes SecretsService (Postgres AES / cloud)
+
+    W->>TR: poll SIMPLE task
+    TR->>OES: poll(...)
+    OES->>OES: taskDef declares runtimeMetadata [NAMES]
+    OES->>SPI: injectRuntimeMetadata calls resolve(names)
+    SPI->>IMP: resolve(names)
+    loop each declared name
+        IMP->>SS: getSecret(name).getValue() -- org-scoped, decrypted
+        SS-->>IMP: value
+    end
+    IMP-->>SPI: name-to-value map
+    SPI-->>OES: map
+    OES->>OES: task.setRuntimeMetadata(map) -- wire-only, never persisted
+    OES-->>W: task incl Task.runtimeMetadata
+```
+
+**Same contract, two hosts.** AgentSpan-as-host reuses conductor's resolver and only supplies a
+`SecretsDAO` (~90 lines); orkes-as-host re-implements the poll wiring because its vendored core
+bypasses conductor's, plus a `SecretsService`-backed resolver. Both bind the host's *real* secret
+store — neither uses conductor's env-var default. The clean long-term fix is to upstream the narrow
+read SPI into conductor-oss so every host implements one small interface and the poll wiring stays
+upstream (tracked as future work). Design details for the orkes side live in
+`orkes-conductor` `design/RUNTIME_METADATA_SECRET_RESOLUTION_DESIGN.md`.
+
 ## Dependency
 
-AgentSpan uses no PR #1255 API, so it builds/tests against the published `conductor 3.32.0-rc.3`.
-`${workflow.secrets.NAME}` (and, in the target, `TaskDef.runtimeMetadata`) are resolved **at runtime
-by the embedded host** (`substituteSecrets` / `RuntimeMetadataResolver` / `SecretsDAO`, PR #1255) — the
-host must include PR #1255; agentspan does not build against it. (An earlier local
-`…-runtimemeta-LOCAL` pin was reverted: its conductor-side `SecretResource` shadowed agentspan's
-`SecretController` `GET /api/secrets` in standalone tests.)
+The target's server module calls `TaskDef.setRuntimeMetadata(...)`, so it builds against a conductor
+that carries PR #1255. That has now shipped in **published `conductor 3.32.0-rc.5`**, and
+`server/build.gradle` pins `conductorVersion = 3.32.0-rc.5` (replacing the earlier local
+`…-runtimemeta-LOCAL` build used during development). At runtime the embedded **host** must also run
+PR #1255 so it can resolve the declared names at poll (`RuntimeMetadataResolver` / `SecretsDAO`);
+`${workflow.secrets.NAME}` header substitution likewise resolves in the host. Standalone uses the
+native store and no PR #1255 runtime API.
 
 ## Status
 
@@ -253,5 +343,9 @@ host must include PR #1255; agentspan does not build against it. (An earlier loc
 |---|---|
 | Native mechanism gated on `agentspan.embedded` | ✅ done + tested |
 | System tasks — LLM via host AI integration; HTTP/MCP/planner headers via `${workflow.secrets}` | ✅ done |
-| Worker tools — interim `__resolved_credentials__` (server + 4 SDKs) | ✅ done + tested (CI green) |
-| Worker tools — target `TaskDef.runtimeMetadata` | ⏳ blocked on client-SDK field (table) |
+| Worker tools — interim `__resolved_credentials__` (server + 4 SDKs) | ✅ shipped on `feature/embedded-secret-toggle` (PR #307) |
+| Worker tools — target `TaskDef.runtimeMetadata` (server declare + 4 SDK reads + create-only) | ✅ done + validated e2e — agentspan PR #311 (`feature/embedded-secret-taskdef-target`) |
+| Client SDK `Task.runtimeMetadata` field (Java / Python / C# / TS) | ✅ PRs open — java-sdk#124, python-sdk#420, csharp-sdk#154, javascript-sdk#132 |
+| Host resolution — AgentSpan-as-host (`AgentspanSecretsDAO`) + orkes-as-host (SPI + `OrkesExecutionService` + `OrkesRuntimeSecretResolver`) | ✅ done + validated e2e — orkes PR #3786 |
+| conductor pin | ✅ published `3.32.0-rc.5` (PR #1255 landed) |
+| Non-worker task defs declare agent-level creds (guardrail / callback / etc.) | ⚠️ declared on the server, but **SDK-inert** until the non-worker wrappers read `Task.runtimeMetadata` |
