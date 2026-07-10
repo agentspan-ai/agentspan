@@ -250,7 +250,23 @@ public class WorkerManager {
         logger.info("Registered worker for task: {} (domain={})", taskName, domain);
     }
 
-    private void registerTaskDef(String taskName, int configuredTimeoutSeconds) {
+    /**
+     * Register the worker TaskDef create-only: create it when absent, but never overwrite one that
+     * already exists. When embedded, the host server pre-registers the worker TaskDef and declares
+     * its secret names on {@code TaskDef.runtimeMetadata} (conductor-oss PR #1255); overwriting here
+     * with a bare def (the client TaskDef model carries no runtimeMetadata) would clobber that and
+     * starve the host resolver. Standalone still gets the def created when absent. The existence
+     * check chooses correctly with no embedded flag.
+     */
+    void registerTaskDef(String taskName, int configuredTimeoutSeconds) {
+        try {
+            if (metadataClient.getTaskDef(taskName) != null) {
+                logger.debug("Task def {} already exists — leaving it untouched (create-only)", taskName);
+                return;
+            }
+        } catch (Exception lookupFailed) {
+            // Not found (or lookup errored) — fall through and create it.
+        }
         try {
             long timeout = effectiveTaskTimeout(configuredTimeoutSeconds);
             TaskDef taskDef = new TaskDef(taskName);

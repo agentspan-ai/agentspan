@@ -877,11 +877,13 @@ class AgentRuntime:
             _, workers = serialize_agent(agent)
             for w in workers:
                 wrapper = make_tool_worker(w.func, w.name)
+                # Create-only: never overwrite an existing worker TaskDef (preserves server-set
+                # TaskDef.runtimeMetadata when embedded; see ToolRegistry.register_tool_workers).
                 worker_task(
                     task_definition_name=w.name,
                     task_def=_default_task_def(w.name),
                     register_task_def=True,
-                    overwrite_task_def=True,
+                    overwrite_task_def=False,
                     lease_extend_enabled=True,
                 )(wrapper)
             if workers:
