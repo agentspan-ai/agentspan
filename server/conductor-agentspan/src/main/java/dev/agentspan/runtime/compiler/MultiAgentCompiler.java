@@ -44,7 +44,7 @@ public class MultiAgentCompiler {
      * ``${workflow.secrets.IDENTIFIER}`` so conductor's ParametersUtils
      * resolves it wire-only (via the configured SecretsDAO) at task hand-off.
      */
-    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
+    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_.]*)\\}");
 
     private final AgentCompiler agentCompiler;
 

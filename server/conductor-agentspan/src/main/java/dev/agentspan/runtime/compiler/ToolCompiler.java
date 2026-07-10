@@ -50,8 +50,14 @@ public class ToolCompiler {
         private List<String[]> toolGuardrailRefs; // [refName, isInline]
     }
 
-    /** Matches a {@code ${IDENTIFIER}} credential placeholder. */
-    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
+    /**
+     * Matches a {@code ${IDENTIFIER}} credential placeholder (dots allowed — {@code ${GCP_SVC.project_id}}
+     * addresses a JSON path inside a JSON-valued secret, which conductor's secret resolution supports).
+     */
+    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_.]*)\\}");
+
+    /** Matches the inert {@code #{NAME}} marker form (see {@link #rewriteCredentialPlaceholders}). */
+    private static final Pattern CREDENTIAL_MARKER = Pattern.compile("#\\{([A-Za-z_][A-Za-z0-9_.]*)\\}");
 
     private static Map<String, Object> escapeCredentialPlaceholders(Map<?, ?> headers) {
         Map<String, Object> escaped = new LinkedHashMap<>();
@@ -63,13 +69,39 @@ public class ToolCompiler {
     }
 
     /**
-     * Rewrite a {@code ${NAME}} credential placeholder in a header value to conductor's native
-     * secret reference {@code ${workflow.secrets.NAME}}. Conductor's {@code ParametersUtils}
-     * resolves it wire-only at task hand-off (via the configured {@code SecretsDAO} — AgentSpan's
-     * encrypted store by default); the resolved plaintext is never persisted.
+     * Rewrite a {@code ${NAME}} credential placeholder to the inert transport form {@code #{NAME}}.
+     *
+     * <p>Two-form design: header configs travel through INLINE enrich/prepare scripts (as script
+     * text or structured INLINE input), and conductor's {@code ParametersUtils} substitutes any
+     * contiguous {@code ${workflow.secrets.NAME}} in an INLINE task's input to PLAINTEXT at that
+     * task's hand-off — which would persist the secret via the script's output into the forked
+     * tasks' inputs. The {@code #{NAME}} marker is invisible to both ParametersUtils passes, so it
+     * rides safely through every hop; it is converted to the real {@code ${workflow.secrets.NAME}}
+     * reference only at final placement into a real task's {@code inputParameters} —
+     * {@link #secretRefHeaders} for statically-built tasks, and the {@code _sec()} helper inside
+     * the enrich scripts for dynamically forked tasks. There conductor defers it at binding and
+     * resolves it wire-only at the task's own hand-off.</p>
      */
     private static String rewriteCredentialPlaceholders(String value) {
-        return CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("\\${workflow.secrets.$1}");
+        return CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("#{$1}");
+    }
+
+    /**
+     * Convert {@code #{NAME}} markers in a headers map to {@code ${workflow.secrets.NAME}}
+     * references. Apply ONLY when placing headers directly into a real (non-INLINE) task's
+     * {@code inputParameters} — conductor defers the reference at input binding and resolves it
+     * wire-only at the task's own hand-off, so plaintext is never persisted.
+     */
+    private static Object secretRefHeaders(Object headers) {
+        if (!(headers instanceof Map<?, ?> m)) {
+            return headers;
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : m.entrySet()) {
+            String v = String.valueOf(e.getValue());
+            out.put(String.valueOf(e.getKey()), CREDENTIAL_MARKER.matcher(v).replaceAll("\\${workflow.secrets.$1}"));
+        }
+        return out;
     }
 
     /**
@@ -724,7 +756,8 @@ public class ToolCompiler {
 
             Map<String, Object> listInputs = new LinkedHashMap<>();
             listInputs.put("mcpServer", server.get("serverUrl"));
-            Object headers = server.get("headers");
+            // Direct task input — convert #{NAME} markers to wire-only-resolved secret refs.
+            Object headers = secretRefHeaders(server.get("headers"));
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
@@ -879,7 +912,8 @@ public class ToolCompiler {
             httpReq.put("accept", "application/json");
             httpReq.put("connectionTimeOut", 30000);
             httpReq.put("readTimeOut", 30000);
-            Object hdrs = server.get("headers");
+            // Direct task input — convert #{NAME} markers to wire-only-resolved secret refs.
+            Object hdrs = secretRefHeaders(server.get("headers"));
             if (hdrs != null && !((Map<?, ?>) hdrs).isEmpty()) {
                 httpReq.put("headers", hdrs);
             }
@@ -1037,7 +1071,8 @@ public class ToolCompiler {
 
             Map<String, Object> listInputs = new LinkedHashMap<>();
             listInputs.put("mcpServer", server.get("serverUrl"));
-            Object headers = server.get("headers");
+            // Direct task input — convert #{NAME} markers to wire-only-resolved secret refs.
+            Object headers = secretRefHeaders(server.get("headers"));
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
@@ -1083,7 +1118,8 @@ public class ToolCompiler {
             httpReq.put("accept", "application/json");
             httpReq.put("connectionTimeOut", 30000);
             httpReq.put("readTimeOut", 30000);
-            Object hdrs = server.get("headers");
+            // Direct task input — convert #{NAME} markers to wire-only-resolved secret refs.
+            Object hdrs = secretRefHeaders(server.get("headers"));
             if (hdrs != null && !((Map<?, ?>) hdrs).isEmpty()) {
                 httpReq.put("headers", hdrs);
             }

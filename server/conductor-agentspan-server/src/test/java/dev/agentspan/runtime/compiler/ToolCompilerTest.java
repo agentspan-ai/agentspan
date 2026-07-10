@@ -433,9 +433,14 @@ class ToolCompilerTest {
         assertThat(script).contains("\"url\":\"https://us.ocg.example.com\"");
         assertThat(script).contains("\"pathTemplate\":\"/api/v1/entities/{entity_id}\"");
         assertThat(script).contains("\"queryParams\":[\"depth\",\"limit\"]");
-        // ${OCG_US_KEY} rewritten to conductor's native secret reference; resolved wire-only
-        // at task hand-off via the configured SecretsDAO.
-        assertThat(script).contains("Bearer ${workflow.secrets.OCG_US_KEY}");
+        // ${OCG_US_KEY} rewritten to the inert #{OCG_US_KEY} marker in the script config. The
+        // contiguous ${workflow.secrets.NAME} literal must NEVER appear in the enrich script
+        // source: the script is the INLINE task's input, and conductor's substituteSecrets would
+        // resolve it to plaintext at the INLINE's hand-off — persisting the secret via the
+        // script's output into the forked tasks' inputs. The script converts the marker to the
+        // real reference only at dynamic-task emission.
+        assertThat(script).contains("Bearer #{OCG_US_KEY}");
+        assertThat(script).doesNotContain("${workflow.secrets.");
         // The templating machinery itself must be in the script.
         assertThat(script).contains("pathTemplate");
         assertThat(script).contains("encodeURIComponent");
