@@ -65,7 +65,10 @@ class ToolCompilerWorkerCredTest {
             Value v = ctx.eval("js", wrapped);
             Map<String, Object> outer = MAPPER.readValue(v.asString(), Map.class);
             List<Map<String, Object>> tasks = (List<Map<String, Object>>) outer.get("dynamicTasks");
-            return tasks.stream().filter(t -> toolName.equals(t.get("name"))).findFirst().orElseThrow();
+            return tasks.stream()
+                    .filter(t -> toolName.equals(t.get("name")))
+                    .findFirst()
+                    .orElseThrow();
         }
     }
 
@@ -73,7 +76,11 @@ class ToolCompilerWorkerCredTest {
     void embedded_stampsPerToolSecretReference() {
         new EmbeddedMode().setEmbedded(true);
         ToolConfig gh = worker("gh", "GITHUB_TOKEN");
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(gh)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(gh))
+                .build();
 
         String script = enrichScript(compilerFor(config), List.of(gh));
 
@@ -85,7 +92,11 @@ class ToolCompilerWorkerCredTest {
     void embedded_injectsResolvedCredentialsOntoSimpleTask() throws Exception {
         new EmbeddedMode().setEmbedded(true);
         ToolConfig gh = worker("gh", "GITHUB_TOKEN");
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(gh)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(gh))
+                .build();
 
         Map<String, Object> task = runEnrichForTool(enrichScript(compilerFor(config), List.of(gh)), "gh");
 
@@ -99,7 +110,11 @@ class ToolCompilerWorkerCredTest {
     void standalone_leavesWorkerTaskUntouched() throws Exception {
         new EmbeddedMode().setEmbedded(false);
         ToolConfig gh = worker("gh", "GITHUB_TOKEN");
-        AgentConfig config = AgentConfig.builder().name("a").model("openai/gpt-4o").tools(List.of(gh)).build();
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .tools(List.of(gh))
+                .build();
 
         String script = enrichScript(compilerFor(config), List.of(gh));
         assertThat(script).doesNotContain("__resolved_credentials__\":{\"GITHUB_TOKEN");
