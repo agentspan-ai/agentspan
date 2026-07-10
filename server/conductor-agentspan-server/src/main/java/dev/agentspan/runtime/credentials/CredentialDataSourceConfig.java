@@ -51,7 +51,7 @@ import com.zaxxer.hikari.HikariDataSource;
  * <p>PostgreSQL: uses {@code org.postgresql.Driver} with a larger pool (default 8).</p>
  */
 @Configuration
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "conductor.secrets.type", havingValue = "agentspan")
 public class CredentialDataSourceConfig {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialDataSourceConfig.class);

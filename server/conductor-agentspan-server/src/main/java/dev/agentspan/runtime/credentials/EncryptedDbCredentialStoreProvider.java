@@ -35,7 +35,7 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * <p>The master key is the 32-byte key from {@code MasterKeyConfig#credentialMasterKey()}.</p>
  */
 @Component
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "conductor.secrets.type", havingValue = "agentspan")
 public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvider {
 
     private static final Logger log = LoggerFactory.getLogger(EncryptedDbCredentialStoreProvider.class);

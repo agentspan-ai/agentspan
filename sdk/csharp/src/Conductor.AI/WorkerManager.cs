@@ -95,10 +95,9 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
 
             // Strip internal keys from the handler-visible input
             var handlerInput = inputData
-                .Where(kv => !string.Equals(kv.Key, "__agentspan_ctx__",       StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(kv.Key, "_agent_state",            StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(kv.Key, "__resolved_credentials__", StringComparison.OrdinalIgnoreCase)
-                          && !string.Equals(kv.Key, "method",                  StringComparison.OrdinalIgnoreCase))
+                .Where(kv => !string.Equals(kv.Key, "__agentspan_ctx__", StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(kv.Key, "_agent_state",      StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(kv.Key, "method",            StringComparison.OrdinalIgnoreCase))
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
             // Resolve and inject credentials via the centralized helper so the
@@ -106,9 +105,10 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
             // process-wide lock. See docs/design/secret-injection-contract.md.
             // Tier-2 (env-injection) path; tier-1 (explicit-key) lands when the
             // user-facing API exposes a `credentials` parameter to agent factories.
-            // Embedded: the host resolves ${workflow.secrets.NAME} into __resolved_credentials__
-            // at poll time. Prefer that map; otherwise fall back to the native token-pull.
-            var resolvedCredentials = ReadResolvedCredentials(inputData);
+            // Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names
+            // at poll time and delivers the values on the wire-only Task.RuntimeMetadata (never
+            // persisted). Prefer that map; otherwise fall back to the native token-pull.
+            var resolvedCredentials = ReadRuntimeMetadata(task);
             if (resolvedCredentials.Count == 0 && _credentialNames.Length > 0)
             {
                 var creds = await _http.ResolveCredentialsAsync(
@@ -221,18 +221,19 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
     }
 
     /// <summary>
-    /// Read the host-delivered <c>__resolved_credentials__</c> name→value map from task input
-    /// (embedded mode). The host resolves the stamped <c>${workflow.secrets.NAME}</c> references at
-    /// poll time. Empty when absent (standalone → the native token-pull is used instead).
+    /// Read the host-delivered secret name→value map from <c>Task.RuntimeMetadata</c> (embedded
+    /// mode). The host resolves the worker's declared <c>TaskDef.runtimeMetadata</c> names from its
+    /// secret store at poll time and injects the values on the wire only — never persisted to task
+    /// input (conductor-oss PR #1255). Empty when absent (standalone → the native token-pull).
     /// </summary>
-    private static Dictionary<string, string> ReadResolvedCredentials(Dictionary<string, JsonElement> inputData)
+    private static Dictionary<string, string> ReadRuntimeMetadata(Task task)
     {
         var result = new Dictionary<string, string>();
-        if (inputData.TryGetValue("__resolved_credentials__", out var rc) && rc.ValueKind == JsonValueKind.Object)
+        if (task?.RuntimeMetadata is { Count: > 0 } rm)
         {
-            foreach (var prop in rc.EnumerateObject())
-                if (prop.Value.ValueKind == JsonValueKind.String)
-                    result[prop.Name] = prop.Value.GetString()!;
+            foreach (var (k, v) in rm)
+                if (k is not null && v is not null)
+                    result[k] = v;
         }
         return result;
     }

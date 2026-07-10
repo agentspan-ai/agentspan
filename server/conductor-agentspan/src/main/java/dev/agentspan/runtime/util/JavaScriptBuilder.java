@@ -526,8 +526,7 @@ public class JavaScriptBuilder {
             String cliConfigJson,
             String humanConfigJson,
             String wmqConfigJson,
-            String knownToolNamesJson,
-            String workerCredJson) {
+            String knownToolNamesJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = "
                 + mcpConfigJson + ";" + "  var mediaCfg = "
                 + mediaConfigJson + ";" + "  var agentToolCfg = "
@@ -536,7 +535,6 @@ public class JavaScriptBuilder {
                 + cliConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
                 + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
-                + "  var workerCredCfg = " + workerCredJson + ";"
                 + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
@@ -697,7 +695,6 @@ public class JavaScriptBuilder {
                 + "    if (t.type === 'SIMPLE') {"
                 + "      t.inputParameters._agent_state = agentState;"
                 + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
-                + "      if (workerCredCfg[n]) { t.inputParameters.__resolved_credentials__ = workerCredCfg[n]; }"
                 + "      if (cliCfg[n]) { t.inputParameters._allowed_commands = cliCfg[n].allowedCommands; }"
                 + "    }"
                 + "    result.push(t);"
@@ -1155,8 +1152,7 @@ public class JavaScriptBuilder {
             String ragConfigJson,
             String humanConfigJson,
             String wmqConfigJson,
-            String knownToolNamesJson,
-            String workerCredJson) {
+            String knownToolNamesJson) {
         return iife("  var httpCfg = " + httpConfigJson + ";" + "  var mcpCfg = $.mcpConfig || {};"
                 + "  var apiCfg = $.apiConfig || {};"
                 + "  var mediaCfg = "
@@ -1165,7 +1161,6 @@ public class JavaScriptBuilder {
                 + ragConfigJson + ";" + "  var humanCfg = "
                 + humanConfigJson + ";" + "  var wmqCfg = "
                 + wmqConfigJson + ";" + "  var knownNames = " + knownToolNamesJson + ";"
-                + "  var workerCredCfg = " + workerCredJson + ";"
                 + "  var agentState = $.agentState || {};"
                 + "  var tcs = $.toolCalls || [];"
                 + "  var result = [];"
@@ -1352,7 +1347,6 @@ public class JavaScriptBuilder {
                 + "    if (t.type === 'SIMPLE') {"
                 + "      t.inputParameters._agent_state = agentState;"
                 + "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }"
-                + "      if (workerCredCfg[n]) { t.inputParameters.__resolved_credentials__ = workerCredCfg[n]; }"
                 + "    }"
                 + "    result.push(t);"
                 + "  }"

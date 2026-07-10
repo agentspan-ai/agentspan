@@ -550,6 +550,39 @@ describe("WorkerManager", () => {
       expect(contextAvailable).toBe(true);
     });
 
+    it("prefers host-delivered task.runtimeMetadata over the native pull (embedded)", async () => {
+      // Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names and
+      // delivers the values on the wire-only Task.runtimeMetadata. The worker must use that map and
+      // never hit the native /workers/secrets endpoint, even with no execution token present.
+      const serverUrl = "http://cred-embedded";
+      const manager = new WorkerManager(serverUrl, {}, 100);
+
+      let resolved: string | undefined;
+      manager.addWorker("rtm_task", async () => {
+        const { getCredential } = await import("../../src/credentials.js");
+        resolved = await getCredential("MY_CRED");
+        return { ok: true };
+      });
+
+      const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => "" });
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
+      await wrapped.execute({
+        taskId: "task-1",
+        workflowInstanceId: "wf-1",
+        inputData: { arg1: "value" }, // no __agentspan_ctx__ execution token
+        runtimeMetadata: { MY_CRED: "host-value" },
+      });
+
+      expect(resolved).toBe("host-value");
+      expect(
+        fetchSpy.mock.calls.some(
+          ([u]: [unknown]) => typeof u === "string" && u.includes("/workers/secrets"),
+        ),
+      ).toBe(false);
+    });
+
     it("clears credential context after handler completes", async () => {
       const manager = new WorkerManager("http://test", {}, 100);
 

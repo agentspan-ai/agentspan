@@ -212,7 +212,6 @@ export function stripInternalKeys(inputData: Record<string, unknown>): Record<st
   delete cleaned["_agent_state"];
   delete cleaned["method"];
   delete cleaned["__agentspan_ctx__"];
-  delete cleaned["__resolved_credentials__"];
   return cleaned;
 }
 
@@ -365,17 +364,15 @@ export class WorkerManager {
         cleaned["__workflowInstanceId__"] = task.workflowInstanceId;
         if (toolContext) cleaned["__toolContext__"] = toolContext;
 
-        // Credential setup. Embedded: the compiler stamps
-        // inputParameters.__resolved_credentials__ = { NAME: "${workflow.secrets.NAME}" } and the
-        // host resolves those references from its secret store at poll time. Prefer that map;
-        // otherwise fall back to the native execution-token pull (standalone). Resolution is
-        // up-front (no env mutation yet) — injection happens inside runHandler() via
-        // injectSecretsForInvocation so mutate-invoke-restore is atomic under a process lock.
-        // See docs/design/secret-injection-contract.md.
+        // Credential setup. Embedded: the worker's declared TaskDef.runtimeMetadata secret names are
+        // resolved by the host from its secret store at poll time and delivered on the wire-only
+        // Task.runtimeMetadata (never persisted). Prefer that map; otherwise fall back to the native
+        // execution-token pull (standalone). Resolution is up-front (no env mutation yet) — injection
+        // happens inside runHandler() via injectSecretsForInvocation so mutate-invoke-restore is
+        // atomic under a process lock. See docs/design/secret-injection-contract.md.
         const execToken = extractExecutionToken(inputData);
-        const hostDelivered = inputData["__resolved_credentials__"] as
-          | Record<string, string>
-          | undefined;
+        const hostDelivered = (task as { runtimeMetadata?: Record<string, string> })
+          .runtimeMetadata;
 
         let resolvedCredentials: Record<string, string> = {};
         if (hostDelivered && Object.keys(hostDelivered).length > 0) {

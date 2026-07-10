@@ -31,7 +31,7 @@ import org.springframework.stereotype.Component;
  * pre-release development builds.</p>
  */
 @Component
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "conductor.secrets.type", havingValue = "agentspan")
 public class CredentialSchemaMigrator {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialSchemaMigrator.class);

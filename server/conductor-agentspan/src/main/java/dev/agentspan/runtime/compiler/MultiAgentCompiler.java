@@ -1364,7 +1364,6 @@ public class MultiAgentCompiler {
         allTools.addAll(transferTools);
 
         ToolCompiler tc = new ToolCompiler();
-        tc.setWorkerCreds(AgentCompiler.collectToolCredentials(agent));
         boolean hasApproval = allTools.stream().anyMatch(ToolConfig::isApprovalRequired);
         List<Map<String, Object>> toolSpecs = tc.compileToolSpecs(allTools);
 
@@ -1463,7 +1462,6 @@ public class MultiAgentCompiler {
 
         // 3. LLM step with transfer tools to decide whether to transfer to a peer
         ToolCompiler tc = new ToolCompiler();
-        tc.setWorkerCreds(AgentCompiler.collectToolCredentials(agent));
         List<Map<String, Object>> transferToolSpecs = tc.compileToolSpecs(transferTools);
 
         WorkflowTask transferLlm = new WorkflowTask();
