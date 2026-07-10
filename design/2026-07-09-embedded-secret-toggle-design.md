@@ -172,7 +172,8 @@ string→string, output-empty omitted), release, and bump the SDK's client depen
 
 Net effect: **declare** secret names on the TaskDef instead of **stamping** a value-reference into
 task input; the enrich script stops touching credentials entirely, which deletes the
-JS-injection/persistence caveat above. System-task delivery (`${workflow.secrets.NAME}`) is untouched.
+JS-injection/persistence caveat above. System tasks are untouched — LLM keys stay on the host AI
+integration, HTTP/MCP/planner headers keep their `${workflow.secrets.NAME}` rewrite.
 
 ### Target sequence (`TaskDef.runtimeMetadata`)
 
@@ -251,6 +252,6 @@ host must include PR #1255; agentspan does not build against it. (An earlier loc
 | Item | State |
 |---|---|
 | Native mechanism gated on `agentspan.embedded` | ✅ done + tested |
-| System-task `${workflow.secrets}` delivery | ✅ done |
+| System tasks — LLM via host AI integration; HTTP/MCP/planner headers via `${workflow.secrets}` | ✅ done |
 | Worker tools — interim `__resolved_credentials__` (server + 4 SDKs) | ✅ done + tested (CI green) |
 | Worker tools — target `TaskDef.runtimeMetadata` | ⏳ blocked on client-SDK field (table) |
