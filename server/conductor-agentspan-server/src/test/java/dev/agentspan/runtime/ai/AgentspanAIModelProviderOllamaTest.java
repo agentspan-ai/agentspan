@@ -52,8 +52,7 @@ class AgentspanAIModelProviderOllamaTest {
         Environment env = mock(Environment.class);
         when(env.getProperty(anyString(), anyString())).thenAnswer(i -> i.getArgument(1));
 
-        provider = new AgentspanAIModelProvider(
-                List.of(), env, new OkHttpClient(), credentialService, tokenService);
+        provider = new AgentspanAIModelProvider(List.of(), env, new OkHttpClient(), credentialService, tokenService);
     }
 
     @AfterEach
@@ -70,8 +69,7 @@ class AgentspanAIModelProviderOllamaTest {
 
     private static String baseUrlOf(AIModel model) {
         assertThat(model).isInstanceOf(Ollama.class);
-        OllamaConfiguration config =
-                (OllamaConfiguration) ReflectionTestUtils.getField(model, "config");
+        OllamaConfiguration config = (OllamaConfiguration) ReflectionTestUtils.getField(model, "config");
         return config.getBaseURL();
     }
 

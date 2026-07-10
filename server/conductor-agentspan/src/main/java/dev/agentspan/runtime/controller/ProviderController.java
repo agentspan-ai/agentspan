@@ -85,8 +85,7 @@ public class ProviderController {
             if ("ollama".equals(name)) {
                 String baseUrl = modelProvider.resolveConfiguredBaseUrl("ollama");
                 if (baseUrl == null) {
-                    baseUrl = environment.getProperty(
-                            "conductor.ai.ollama.base-url", "http://localhost:11434");
+                    baseUrl = environment.getProperty("conductor.ai.ollama.base-url", "http://localhost:11434");
                 }
                 entry.put("baseUrl", baseUrl);
                 entry.put("reachable", probe(baseUrl));
@@ -99,7 +98,8 @@ public class ProviderController {
     /** Reachability from the server's own network — the fact no client can observe. */
     private boolean probe(String baseUrl) {
         try {
-            OkHttpClient client = conductorAiHttpClient.newBuilder()
+            OkHttpClient client = conductorAiHttpClient
+                    .newBuilder()
                     .connectTimeout(PROBE_TIMEOUT)
                     .readTimeout(PROBE_TIMEOUT)
                     .callTimeout(PROBE_TIMEOUT.plusSeconds(1))

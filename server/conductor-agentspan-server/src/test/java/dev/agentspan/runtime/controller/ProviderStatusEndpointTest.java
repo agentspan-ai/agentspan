@@ -71,9 +71,12 @@ class ProviderStatusEndpointTest {
     }
 
     private Map<String, JsonNode> providersByName(JsonNode body) {
-        assertThat(body.has("providers")).as("body has providers array: %s", body).isTrue();
+        assertThat(body.has("providers"))
+                .as("body has providers array: %s", body)
+                .isTrue();
         List<JsonNode> list = body.get("providers").findParents("name");
-        return list.stream().collect(java.util.stream.Collectors.toMap(n -> n.get("name").asText(), n -> n));
+        return list.stream()
+                .collect(java.util.stream.Collectors.toMap(n -> n.get("name").asText(), n -> n));
     }
 
     @Test
