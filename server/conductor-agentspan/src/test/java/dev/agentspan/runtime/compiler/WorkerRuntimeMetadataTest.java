@@ -5,12 +5,14 @@
 package dev.agentspan.runtime.compiler;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +26,8 @@ import com.netflix.conductor.dao.MetadataDAO;
 import com.netflix.conductor.service.MetadataService;
 
 import dev.agentspan.runtime.model.AgentConfig;
+import dev.agentspan.runtime.model.GuardrailConfig;
+import dev.agentspan.runtime.model.TerminationConfig;
 import dev.agentspan.runtime.model.ToolConfig;
 import dev.agentspan.runtime.service.AgentService;
 import dev.agentspan.runtime.util.EmbeddedMode;
@@ -100,6 +104,109 @@ class WorkerRuntimeMetadataTest {
         AgentConfig config = agentWith(worker("gh", "GITHUB_TOKEN", "GH_APP_ID"));
         Map<String, List<String>> creds = AgentCompiler.collectToolCredentials(config);
         assertThat(creds.get("gh")).containsExactlyInAnyOrder("GITHUB_TOKEN", "GH_APP_ID");
+    }
+
+    // ── Agent-level creds feed the non-worker user-code task defs (guardrail/callback/etc.) ──
+
+    @Test
+    void collectAgentCredentials_returnsDedupedOrdered() {
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .credentials(List.of("A", "B", "A"))
+                .build();
+        assertThat(AgentCompiler.collectAgentCredentials(config)).containsExactly("A", "B");
+    }
+
+    @Test
+    void collectAgentCredentials_emptyWhenNoneDeclared() {
+        AgentConfig config =
+                AgentConfig.builder().name("a").model("openai/gpt-4o").build();
+        assertThat(AgentCompiler.collectAgentCredentials(config)).isEmpty();
+    }
+
+    /**
+     * Wiring test: embedded, {@code collectAndRegisterTasks} must declare the agent-level creds on a
+     * custom-guardrail worker's {@link TaskDef} (user code → needs secrets), but leave the declarative
+     * {@code _termination} def empty (no user function runs there). Fails until agent-level creds are
+     * threaded into the guardrail registration site.
+     */
+    @Test
+    void embedded_declaresAgentCredsOnGuardrailButNotTermination() throws Exception {
+        new EmbeddedMode().setEmbedded(true);
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .credentials(List.of("DEMO_SECRET"))
+                .guardrails(List.of(GuardrailConfig.builder()
+                        .guardrailType("custom")
+                        .taskName("a_guard")
+                        .build()))
+                .termination(TerminationConfig.builder().build())
+                .build();
+
+        Map<String, TaskDef> defs = registerAllTaskDefs(config);
+
+        assertThat(defs.get("a_guard").getRuntimeMetadata()).containsExactly("DEMO_SECRET");
+        assertThat(defs.get("a_termination").getRuntimeMetadata()).isNullOrEmpty();
+    }
+
+    @Test
+    void standalone_leavesNonWorkerRuntimeMetadataEmpty() throws Exception {
+        new EmbeddedMode().setEmbedded(false);
+        AgentConfig config = AgentConfig.builder()
+                .name("a")
+                .model("openai/gpt-4o")
+                .credentials(List.of("DEMO_SECRET"))
+                .guardrails(List.of(GuardrailConfig.builder()
+                        .guardrailType("custom")
+                        .taskName("a_guard")
+                        .build()))
+                .build();
+
+        Map<String, TaskDef> defs = registerAllTaskDefs(config);
+
+        assertThat(defs.get("a_guard").getRuntimeMetadata()).isNullOrEmpty();
+    }
+
+    /**
+     * Drive {@link AgentService}'s private {@code registerTaskDefinitions(AgentConfig)} and return every
+     * {@link TaskDef} handed to {@code MetadataService.registerTaskDef}, keyed by task name — so a test
+     * can assert per-task-kind {@code runtimeMetadata}.
+     */
+    private static Map<String, TaskDef> registerAllTaskDefs(AgentConfig config) throws Exception {
+        MetadataDAO metadataDAO = mock(MetadataDAO.class);
+        MetadataService metadataService = mock(MetadataService.class);
+
+        AgentService service = new AgentService(
+                mock(dev.agentspan.runtime.compiler.AgentCompiler.class),
+                mock(dev.agentspan.runtime.normalizer.NormalizerRegistry.class),
+                mock(com.netflix.conductor.dao.ExecutionDAO.class),
+                metadataDAO,
+                mock(com.netflix.conductor.core.execution.WorkflowExecutor.class),
+                mock(com.netflix.conductor.service.WorkflowService.class),
+                mock(dev.agentspan.runtime.service.AgentStreamRegistry.class),
+                mock(com.netflix.conductor.service.ExecutionService.class),
+                mock(dev.agentspan.runtime.util.ProviderValidator.class));
+
+        Field msField = AgentService.class.getDeclaredField("metadataService");
+        msField.setAccessible(true);
+        msField.set(service, metadataService);
+
+        Method m = AgentService.class.getDeclaredMethod("registerTaskDefinitions", AgentConfig.class);
+        m.setAccessible(true);
+        m.invoke(service, config);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TaskDef>> captor = ArgumentCaptor.forClass(List.class);
+        verify(metadataService, atLeastOnce()).registerTaskDef(captor.capture());
+        Map<String, TaskDef> byName = new HashMap<>();
+        for (List<TaskDef> batch : captor.getAllValues()) {
+            for (TaskDef def : batch) {
+                byName.put(def.getName(), def);
+            }
+        }
+        return byName;
     }
 
     /**

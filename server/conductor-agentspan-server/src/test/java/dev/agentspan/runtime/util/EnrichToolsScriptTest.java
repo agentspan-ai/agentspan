@@ -55,7 +55,7 @@ class EnrichToolsScriptTest {
     private List<Map<String, Object>> enrichWithConfigs(
             String httpJson, String agentToolJson, String knownNamesJson, String toolCallsJson) throws Exception {
         String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, "{}", "{}", agentToolJson, "{}", "{}", "{}", "{}", knownNamesJson, "{}");
+                httpJson, "{}", "{}", agentToolJson, "{}", "{}", "{}", "{}", knownNamesJson);
         // Wrap so the script's IIFE return is captured AND we get a JSON string
         // back — Graal's Value.toString() is JS source, not JSON.
         String wrapped = "var $ = {"

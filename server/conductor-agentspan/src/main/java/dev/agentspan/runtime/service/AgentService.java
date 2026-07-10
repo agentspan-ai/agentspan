@@ -951,24 +951,29 @@ public class AgentService {
 
     @SuppressWarnings("unchecked")
     private void collectAndRegisterTasks(AgentConfig config, Set<String> registered) {
+        // Credential names declared on each SIMPLE task's TaskDef.runtimeMetadata (embedded only, gated
+        // inside registerTaskDef). Worker tools use their per-tool creds (with agent-level fallback);
+        // the other user-code task kinds (guardrail/callback/stop_when/gate/instructions/router/graph)
+        // have no per-item credential list, so they use the agent-level names. Hoisted once per config.
+        Map<String, List<String>> toolCreds = AgentCompiler.collectToolCredentials(config);
+        List<String> agentCreds = AgentCompiler.collectAgentCredentials(config);
+
         // Register dispatch task for this agent's tools
         if (config.getTools() != null) {
             for (ToolConfig tool : config.getTools()) {
                 String tt = tool.getToolType();
                 if ("worker".equals(tt) && !registered.contains(tool.getName())) {
-                    registerTaskDef(
-                            tool.getName(),
-                            AgentCompiler.collectToolCredentials(config).get(tool.getName()));
+                    registerTaskDef(tool.getName(), toolCreds.get(tool.getName()));
                     registered.add(tool.getName());
                 }
             }
         }
 
-        // Register stop_when worker
+        // Register stop_when worker (user-authored predicate → agent-level creds)
         if (config.getStopWhen() != null && config.getStopWhen().getTaskName() != null) {
             String taskName = config.getStopWhen().getTaskName();
             if (!registered.contains(taskName)) {
-                registerTaskDef(taskName);
+                registerTaskDef(taskName, agentCreds);
                 registered.add(taskName);
             }
         }
@@ -987,7 +992,7 @@ public class AgentService {
             for (GuardrailConfig g : config.getGuardrails()) {
                 if ("custom".equals(g.getGuardrailType()) && g.getTaskName() != null) {
                     if (!registered.contains(g.getTaskName())) {
-                        registerTaskDef(g.getTaskName());
+                        registerTaskDef(g.getTaskName(), agentCreds);
                         registered.add(g.getTaskName());
                     }
                 }
@@ -998,7 +1003,7 @@ public class AgentService {
         if (config.getCallbacks() != null) {
             for (CallbackConfig cb : config.getCallbacks()) {
                 if (cb.getTaskName() != null && !registered.contains(cb.getTaskName())) {
-                    registerTaskDef(cb.getTaskName());
+                    registerTaskDef(cb.getTaskName(), agentCreds);
                     registered.add(cb.getTaskName());
                 }
             }
@@ -1007,7 +1012,7 @@ public class AgentService {
         // Register callable gate workers (text_contains gates are INLINE, no registration needed)
         if (config.getGate() != null && config.getGate().get("taskName") instanceof String gateTaskName) {
             if (!registered.contains(gateTaskName)) {
-                registerTaskDef(gateTaskName);
+                registerTaskDef(gateTaskName, agentCreds);
                 registered.add(gateTaskName);
             }
         }
@@ -1017,7 +1022,7 @@ public class AgentService {
                 && instrMap.get("_worker_ref") instanceof String instrTaskName
                 && !instrTaskName.isBlank()) {
             if (!registered.contains(instrTaskName)) {
-                registerTaskDef(instrTaskName);
+                registerTaskDef(instrTaskName, agentCreds);
                 registered.add(instrTaskName);
             }
         }
@@ -1026,12 +1031,12 @@ public class AgentService {
         if (config.getRouter() instanceof Map<?, ?> routerMap
                 && routerMap.get("taskName") instanceof String routerTaskName) {
             if (!registered.contains(routerTaskName)) {
-                registerTaskDef(routerTaskName);
+                registerTaskDef(routerTaskName, agentCreds);
                 registered.add(routerTaskName);
             }
         } else if (config.getRouter() instanceof WorkerRef workerRef && workerRef.getTaskName() != null) {
             if (!registered.contains(workerRef.getTaskName())) {
-                registerTaskDef(workerRef.getTaskName());
+                registerTaskDef(workerRef.getTaskName(), agentCreds);
                 registered.add(workerRef.getTaskName());
             }
         }
@@ -1120,7 +1125,7 @@ public class AgentService {
                 for (Object nodeObj : nodes) {
                     if (nodeObj instanceof Map<?, ?> node && node.get("_worker_ref") instanceof String workerRef) {
                         if (!registered.contains(workerRef)) {
-                            registerTaskDef(workerRef);
+                            registerTaskDef(workerRef, agentCreds);
                             registered.add(workerRef);
                         }
                     }
@@ -1131,7 +1136,7 @@ public class AgentService {
                 for (Object ceObj : condEdges) {
                     if (ceObj instanceof Map<?, ?> ce && ce.get("_router_ref") instanceof String routerRef) {
                         if (!registered.contains(routerRef)) {
-                            registerTaskDef(routerRef);
+                            registerTaskDef(routerRef, agentCreds);
                             registered.add(routerRef);
                         }
                     }
