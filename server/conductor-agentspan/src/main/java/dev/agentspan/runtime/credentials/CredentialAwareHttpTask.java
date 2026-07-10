@@ -60,10 +60,12 @@ public class CredentialAwareHttpTask extends HttpTask {
         if (httpRequest instanceof Map<?, ?> reqMap && ctx != null) {
             Object headers = reqMap.get("headers");
             if (headers instanceof Map<?, ?> headerMap && containsPlaceholders(headerMap)) {
+                // A present execution token still gates resolution (auth); the resolved
+                // credential store is global, so the userId is no longer used to look up values.
                 String userId = extractUserId(ctx);
                 if (userId != null) {
                     originalHeaders = new LinkedHashMap<>((Map<String, String>) headerMap);
-                    Map<String, String> resolved = resolveHeadersForUser((Map<String, String>) headerMap, userId);
+                    Map<String, String> resolved = resolveHeaders((Map<String, String>) headerMap);
                     ((Map<String, Object>) reqMap).put("headers", resolved);
                 }
             }
@@ -83,7 +85,7 @@ public class CredentialAwareHttpTask extends HttpTask {
      * Resolve #{NAME} placeholders in header values using the credential store.
      * Package-private for testing.
      */
-    Map<String, String> resolveHeadersForUser(Map<String, String> headers, String userId) {
+    Map<String, String> resolveHeaders(Map<String, String> headers) {
         Map<String, String> result = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : headers.entrySet()) {
             String value = entry.getValue();
@@ -91,7 +93,7 @@ public class CredentialAwareHttpTask extends HttpTask {
             StringBuilder sb = new StringBuilder();
             while (m.find()) {
                 String credName = m.group(1);
-                String credValue = resolutionService.resolve(userId, credName);
+                String credValue = resolutionService.resolve(credName);
                 m.appendReplacement(sb, Matcher.quoteReplacement(credValue != null ? credValue : ""));
             }
             m.appendTail(sb);

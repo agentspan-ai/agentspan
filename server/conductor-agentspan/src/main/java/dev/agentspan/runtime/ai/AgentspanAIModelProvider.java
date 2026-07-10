@@ -32,9 +32,7 @@ import org.springframework.stereotype.Component;
 
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
-import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 import okhttp3.OkHttpClient;
 
@@ -85,26 +83,19 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     private static final Set<String> KEYLESS_PROVIDERS = Set.of("ollama");
 
     private final CredentialResolutionService resolutionService;
-    private final ExecutionTokenService tokenService;
 
     /**
-     * Spring constructor. The native credential beans are <em>optional</em>: when
-     * {@code agentspan.embedded=true} they are gated off (the host delivers secrets),
-     * so they resolve to {@code null} here and native per-user resolution is skipped.
+     * Spring constructor. The native credential resolution service is <em>optional</em>: when
+     * {@code agentspan.embedded=true} it is gated off (the host delivers secrets), so it resolves
+     * to {@code null} here and native resolution is skipped.
      */
     @Autowired
     public AgentspanAIModelProvider(
             List<ModelConfiguration<? extends AIModel>> modelConfigurations,
             Environment env,
             OkHttpClient conductorAiHttpClient,
-            ObjectProvider<CredentialResolutionService> resolutionService,
-            ObjectProvider<ExecutionTokenService> tokenService) {
-        this(
-                modelConfigurations,
-                env,
-                conductorAiHttpClient,
-                resolutionService.getIfAvailable(),
-                tokenService.getIfAvailable());
+            ObjectProvider<CredentialResolutionService> resolutionService) {
+        this(modelConfigurations, env, conductorAiHttpClient, resolutionService.getIfAvailable());
     }
 
     /** Direct constructor (used by tests, and by the Spring constructor above). */
@@ -112,12 +103,10 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             List<ModelConfiguration<? extends AIModel>> modelConfigurations,
             Environment env,
             OkHttpClient conductorAiHttpClient,
-            CredentialResolutionService resolutionService,
-            ExecutionTokenService tokenService) {
+            CredentialResolutionService resolutionService) {
         super(modelConfigurations, env);
         this.conductorAiHttpClient = conductorAiHttpClient;
         this.resolutionService = resolutionService;
-        this.tokenService = tokenService;
         log.info(
                 "AgentspanAIModelProvider initialized (native per-user credential resolution {})",
                 resolutionService != null ? "enabled" : "disabled — embedded/host-delivered");
@@ -163,62 +152,18 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Resolve a per-user API key for the given LLM provider.
+     * Resolve the stored API key for the given LLM provider from the (global) credential store.
      *
-     * <p>Uses the execution token from {@code __agentspan_ctx__} in the current
-     * task's input data (via {@code TaskContext}) to identify the user. This works
-     * across thread boundaries — unlike RequestContextHolder which is bound to
-     * the HTTP request thread.</p>
-     *
-     * @return per-user API key, or null if not found
+     * @return the API key, or null if not found
      */
     private String resolveUserApiKey(String provider) {
         if (resolutionService == null) return null; // native resolution gated off (embedded)
         String envVarName = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
         if (envVarName == null) return null;
-
-        // Try TaskContext first (works in worker threads)
-        String userId = extractUserIdFromTaskContext();
-
-        // Fall back to RequestContextHolder (works during HTTP request, e.g. compile)
-        if (userId == null) {
-            userId = RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse(null);
-        }
-
-        // Fall back to anonymous user (OSS / no-auth mode)
-        if (userId == null) {
-            userId = "00000000-0000-0000-0000-000000000000";
-        }
-
         try {
-            return resolutionService.resolve(userId, envVarName);
+            return resolutionService.resolve(envVarName);
         } catch (Exception e) {
             log.debug("Credential not found for provider '{}': {}", provider, e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Extract user ID from the execution token in the current task's input data.
-     */
-    @SuppressWarnings("unchecked")
-    private String extractUserIdFromTaskContext() {
-        if (tokenService == null) return null; // native token service gated off (embedded)
-        try {
-            TaskContext ctx = TaskContext.get();
-            if (ctx == null || ctx.getTask() == null) return null;
-
-            Object agentspanCtx = ctx.getTask().getInputData().get("__agentspan_ctx__");
-            String token = null;
-            if (agentspanCtx instanceof Map<?, ?> ctxMap) {
-                token = (String) ctxMap.get("execution_token");
-            } else if (agentspanCtx instanceof String s) {
-                token = s;
-            }
-            if (token == null) return null;
-
-            return tokenService.validate(token).userId();
-        } catch (Exception e) {
             return null;
         }
     }
@@ -248,19 +193,12 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Resolve any named credential for the current user.
+     * Resolve any named credential from the (global) credential store.
      */
     private String resolveUserCredential(String credentialName) {
         if (resolutionService == null) return null; // native resolution gated off (embedded)
-        String userId = extractUserIdFromTaskContext();
-        if (userId == null) {
-            userId = RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse(null);
-        }
-        if (userId == null) {
-            userId = "00000000-0000-0000-0000-000000000000";
-        }
         try {
-            return resolutionService.resolve(userId, credentialName);
+            return resolutionService.resolve(credentialName);
         } catch (Exception e) {
             return null;
         }

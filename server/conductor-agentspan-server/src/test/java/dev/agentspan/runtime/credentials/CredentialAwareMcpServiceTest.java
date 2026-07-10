@@ -32,8 +32,6 @@ class CredentialAwareMcpServiceTest {
     @Autowired
     private CredentialAwareMcpService mcpService;
 
-    private static final String USER_ID = "mcp-service-test-user";
-
     @BeforeEach
     void setUp() {
         storeProvider.set("MY_API_KEY", "resolved-secret-value");
@@ -45,7 +43,7 @@ class CredentialAwareMcpServiceTest {
         headers.put("Authorization", "Bearer #{MY_API_KEY}");
         headers.put("X-Static", "no-placeholder");
 
-        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers, USER_ID);
+        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers);
 
         assertThat(resolved.get("Authorization")).isEqualTo("Bearer resolved-secret-value");
         assertThat(resolved.get("X-Static")).isEqualTo("no-placeholder");
@@ -56,7 +54,7 @@ class CredentialAwareMcpServiceTest {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Authorization", "Bearer #{NONEXISTENT}");
 
-        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers, USER_ID);
+        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers);
 
         assertThat(resolved.get("Authorization")).isEqualTo("Bearer ");
     }
@@ -66,7 +64,7 @@ class CredentialAwareMcpServiceTest {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("X-Static", "value");
 
-        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers, USER_ID);
+        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers);
 
         assertThat(resolved.get("X-Static")).isEqualTo("value");
     }
@@ -78,7 +76,7 @@ class CredentialAwareMcpServiceTest {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Auth", "#{TRICKY_KEY}");
 
-        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers, USER_ID);
+        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers);
 
         assertThat(resolved.get("Auth")).isEqualTo("val$with$dollars");
     }
@@ -91,7 +89,7 @@ class CredentialAwareMcpServiceTest {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Authorization", "Basic #{USER}:#{PASS}");
 
-        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers, USER_ID);
+        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers);
 
         assertThat(resolved.get("Authorization")).isEqualTo("Basic admin:secret123");
     }
@@ -103,7 +101,7 @@ class CredentialAwareMcpServiceTest {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("X-Client-Id", "#{BLOB.auth.oauth.client_id}");
 
-        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers, USER_ID);
+        Map<String, String> resolved = mcpService.resolveHeadersForUser(headers);
 
         assertThat(resolved.get("X-Client-Id")).isEqualTo("abc123");
     }

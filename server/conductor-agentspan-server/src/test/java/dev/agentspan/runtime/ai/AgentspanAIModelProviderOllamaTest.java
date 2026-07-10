@@ -24,7 +24,6 @@ import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 import okhttp3.OkHttpClient;
 
@@ -39,7 +38,6 @@ import okhttp3.OkHttpClient;
  */
 class AgentspanAIModelProviderOllamaTest {
 
-    private static final String ANON_USER = "00000000-0000-0000-0000-000000000000";
     private static final String REMOTE_URL = "http://gpu-box:11434";
 
     private CredentialResolutionService credentialService;
@@ -48,11 +46,10 @@ class AgentspanAIModelProviderOllamaTest {
     @BeforeEach
     void setUp() {
         credentialService = mock(CredentialResolutionService.class);
-        ExecutionTokenService tokenService = mock(ExecutionTokenService.class);
         Environment env = mock(Environment.class);
         when(env.getProperty(anyString(), anyString())).thenAnswer(i -> i.getArgument(1));
 
-        provider = new AgentspanAIModelProvider(List.of(), env, new OkHttpClient(), credentialService, tokenService);
+        provider = new AgentspanAIModelProvider(List.of(), env, new OkHttpClient(), credentialService);
     }
 
     @AfterEach
@@ -75,7 +72,7 @@ class AgentspanAIModelProviderOllamaTest {
 
     @Test
     void getModel_ollama_usesCredentialStoreBaseUrl() {
-        when(credentialService.resolve(ANON_USER, "OLLAMA_BASE_URL")).thenReturn(REMOTE_URL);
+        when(credentialService.resolve("OLLAMA_BASE_URL")).thenReturn(REMOTE_URL);
 
         AIModel model = provider.getModel(ollamaInput());
 
@@ -84,7 +81,7 @@ class AgentspanAIModelProviderOllamaTest {
 
     @Test
     void getModel_ollama_usesPerAgentBaseUrlFromTaskInput() {
-        when(credentialService.resolve(anyString(), anyString())).thenReturn(null);
+        when(credentialService.resolve(anyString())).thenReturn(null);
         Task task = new Task();
         task.setStatus(Task.Status.IN_PROGRESS);
         task.setInputData(Map.of("baseUrl", "http://per-agent-host:11434"));

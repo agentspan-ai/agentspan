@@ -82,20 +82,22 @@ public class CredentialAwareMcpService extends MCPService {
             return headers;
         }
 
+        // A present execution token still gates resolution (auth); the resolved credential
+        // store is global, so the userId is no longer used to look up values.
         String userId = extractUserIdFromTaskContext();
         if (userId == null) {
-            log.warn("Cannot resolve MCP credential headers: no userId from TaskContext");
+            log.warn("Cannot resolve MCP credential headers: no execution token in TaskContext");
             return headers;
         }
 
-        return resolveHeadersForUser(headers, userId);
+        return resolveHeadersForUser(headers);
     }
 
     /**
      * Resolve #{NAME} placeholders in header values using the credential store.
      * Package-private for testing.
      */
-    Map<String, String> resolveHeadersForUser(Map<String, String> headers, String userId) {
+    Map<String, String> resolveHeadersForUser(Map<String, String> headers) {
         Map<String, String> resolved = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : headers.entrySet()) {
             String value = entry.getValue();
@@ -103,7 +105,7 @@ public class CredentialAwareMcpService extends MCPService {
             StringBuilder sb = new StringBuilder();
             while (m.find()) {
                 String credName = m.group(1);
-                String credValue = resolutionService.resolve(userId, credName);
+                String credValue = resolutionService.resolve(credName);
                 m.appendReplacement(sb, Matcher.quoteReplacement(credValue != null ? credValue : ""));
             }
             m.appendTail(sb);

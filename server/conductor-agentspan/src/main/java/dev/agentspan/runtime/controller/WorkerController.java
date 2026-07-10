@@ -118,7 +118,7 @@ public class WorkerController {
         Map<String, String> result = new LinkedHashMap<>();
         for (String name : bounded) {
             try {
-                String value = resolutionService.resolve(payload.userId(), name);
+                String value = resolutionService.resolve(name);
                 if (value != null) result.put(name, value);
             } catch (CredentialResolutionService.CredentialNotFoundException e) {
                 log.warn("Credential not found: user={}, name={}", payload.userId(), name);

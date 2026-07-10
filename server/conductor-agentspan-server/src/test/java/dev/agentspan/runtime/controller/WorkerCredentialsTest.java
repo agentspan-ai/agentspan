@@ -67,7 +67,7 @@ class WorkerCredentialsTest {
     @SuppressWarnings("unchecked")
     void resolve_validToken_returnsValues() {
         String token = tokenService.mint("u-test", "wf-1", List.of("GITHUB_TOKEN"), 3600);
-        when(resolutionService.resolve("u-test", "GITHUB_TOKEN")).thenReturn("ghp_secret");
+        when(resolutionService.resolve("GITHUB_TOKEN")).thenReturn("ghp_secret");
 
         ResolveRequest req = new ResolveRequest();
         req.setToken(token);
@@ -100,7 +100,7 @@ class WorkerCredentialsTest {
     void resolve_nameNotInDeclared_isExcluded() {
         // Token only declares GITHUB_TOKEN, but request asks for OPENAI_KEY too
         String token = tokenService.mint("u-test", "wf-1", List.of("GITHUB_TOKEN"), 3600);
-        when(resolutionService.resolve(eq("u-test"), eq("GITHUB_TOKEN"))).thenReturn("ghp_val");
+        when(resolutionService.resolve(eq("GITHUB_TOKEN"))).thenReturn("ghp_val");
 
         ResolveRequest req = new ResolveRequest();
         req.setToken(token);
@@ -117,7 +117,7 @@ class WorkerCredentialsTest {
         // is allowed because the JSONPath access doesn't expand the blast radius —
         // the tool already had the whole blob via the declared parent name.
         String token = tokenService.mint("u-test", "wf-jp", List.of("GCP_SVC"), 3600);
-        when(resolutionService.resolve("u-test", "GCP_SVC.project_id")).thenReturn("my-proj-123");
+        when(resolutionService.resolve("GCP_SVC.project_id")).thenReturn("my-proj-123");
 
         ResolveRequest req = new ResolveRequest();
         req.setToken(token);
@@ -157,7 +157,7 @@ class WorkerCredentialsTest {
     @Test
     void resolve_rateLimitExceeded_returns429() {
         String token = tokenService.mint("u-test", "wf-2", List.of("KEY_A"), 3600);
-        when(resolutionService.resolve(anyString(), anyString())).thenReturn("val");
+        when(resolutionService.resolve(anyString())).thenReturn("val");
 
         ResolveRequest req = new ResolveRequest();
         req.setToken(token);
