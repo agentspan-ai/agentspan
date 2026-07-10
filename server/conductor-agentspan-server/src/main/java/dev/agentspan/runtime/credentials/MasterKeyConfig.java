@@ -29,7 +29,7 @@ import org.springframework.context.annotation.Configuration;
  * </ul>
  */
 @Configuration
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "conductor.secrets.type", havingValue = "agentspan")
 public class MasterKeyConfig {
 
     private static final Logger log = LoggerFactory.getLogger(MasterKeyConfig.class);
