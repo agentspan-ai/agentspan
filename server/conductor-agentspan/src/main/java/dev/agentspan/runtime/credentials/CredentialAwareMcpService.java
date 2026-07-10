@@ -17,9 +17,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-import com.netflix.conductor.common.metadata.tasks.Task;
-import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
-
 import io.modelcontextprotocol.spec.McpSchema;
 import okhttp3.OkHttpClient;
 
@@ -36,10 +33,8 @@ import okhttp3.OkHttpClient;
  * This eliminates any window where credentials could leak via the execution
  * API.</p>
  *
- * <p>Uses {@link TaskContext} (set by Conductor's
- * {@code AnnotatedWorkflowSystemTask.execute()}) to read
- * {@code __agentspan_ctx__} from the task input, extract the execution token,
- * and resolve credentials for the owning user.</p>
+ * <p>Placeholders resolve via {@link CredentialResolutionService} against the global
+ * credential store.</p>
  */
 @Component
 @Primary
@@ -48,16 +43,11 @@ public class CredentialAwareMcpService extends MCPService {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialAwareMcpService.class);
     private static final Pattern PLACEHOLDER = Pattern.compile("#\\{([\\w.]+)}");
-
-    private final ExecutionTokenService tokenService;
     private final CredentialResolutionService resolutionService;
 
     public CredentialAwareMcpService(
-            OkHttpClient conductorAiHttpClient,
-            ExecutionTokenService tokenService,
-            CredentialResolutionService resolutionService) {
+            OkHttpClient conductorAiHttpClient, CredentialResolutionService resolutionService) {
         super(conductorAiHttpClient);
-        this.tokenService = tokenService;
         this.resolutionService = resolutionService;
     }
 
@@ -75,21 +65,12 @@ public class CredentialAwareMcpService extends MCPService {
     /**
      * Resolve {@code #{NAME}} placeholders in header values using the
      * credential store.  Returns the original headers unchanged if no
-     * placeholders are found or if context/token is unavailable.
+     * placeholders are found.
      */
     private Map<String, String> resolveHeaders(Map<String, String> headers) {
         if (headers == null || headers.isEmpty() || !containsPlaceholders(headers)) {
             return headers;
         }
-
-        // A present execution token still gates resolution (auth); the resolved credential
-        // store is global, so the userId is no longer used to look up values.
-        String userId = extractUserIdFromTaskContext();
-        if (userId == null) {
-            log.warn("Cannot resolve MCP credential headers: no execution token in TaskContext");
-            return headers;
-        }
-
         return resolveHeadersForUser(headers);
     }
 
@@ -112,44 +93,6 @@ public class CredentialAwareMcpService extends MCPService {
             resolved.put(entry.getKey(), sb.toString());
         }
         return resolved;
-    }
-
-    /**
-     * Extract the userId from the current {@link TaskContext} by reading
-     * {@code __agentspan_ctx__} from the task's input data.
-     */
-    @SuppressWarnings("unchecked")
-    private String extractUserIdFromTaskContext() {
-        TaskContext ctx = TaskContext.get();
-        if (ctx == null) {
-            log.debug("No TaskContext available for MCP credential resolution");
-            return null;
-        }
-
-        Task task = ctx.getTask();
-        if (task == null) return null;
-
-        Map<String, Object> inputData = task.getInputData();
-        if (inputData == null) return null;
-
-        Object agentCtx = inputData.get("__agentspan_ctx__");
-        return extractUserId(agentCtx);
-    }
-
-    private String extractUserId(Object ctx) {
-        String token = null;
-        if (ctx instanceof Map<?, ?> ctxMap) {
-            token = (String) ctxMap.get("execution_token");
-        } else if (ctx instanceof String s) {
-            token = s;
-        }
-        if (token == null) return null;
-        try {
-            return tokenService.validate(token).userId();
-        } catch (Exception e) {
-            log.warn("Failed to validate token for MCP header resolution: {}", e.getMessage());
-            return null;
-        }
     }
 
     private boolean containsPlaceholders(Map<String, String> headers) {

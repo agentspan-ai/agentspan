@@ -1061,7 +1061,6 @@ public class AgentCompiler {
         inputs.put("media", mediaRef);
         inputs.put("session_id", "${workflow.input.session_id}");
         // Forward execution token to sub-workflows for credential resolution
-        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         // Pass context to sub-workflow for pipeline state
         if (contextRef != null) {
             inputs.put("context", contextRef);
@@ -1167,7 +1166,6 @@ public class AgentCompiler {
             task.setType("SIMPLE");
 
             Map<String, Object> inputs = new LinkedHashMap<>(ptc.getArguments());
-            inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             task.setInputParameters(inputs);
 
             tasks.add(task);
@@ -1319,7 +1317,6 @@ public class AgentCompiler {
                 Map<String, Object> args = pr.arguments();
                 if (args != null && !args.isEmpty()) {
                     String summary = args.entrySet().stream()
-                            .filter(e -> !"__agentspan_ctx__".equals(e.getKey()))
                             .map(e -> e.getKey() + "=" + e.getValue())
                             .collect(Collectors.joining(", "));
                     if (!summary.isEmpty()) {
@@ -1390,7 +1387,6 @@ public class AgentCompiler {
         }
 
         // Forward execution token so per-user credential resolution works in worker threads
-        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
 
         llm.setInputParameters(inputs);
 
@@ -1910,7 +1906,6 @@ public class AgentCompiler {
             // Pass subgraph input from prep output + execution token
             Map<String, Object> subInputs = new LinkedHashMap<>();
             subInputs.put("state", "${" + prepRef + ".output.subgraph_input}");
-            subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             subTask.setInputParameters(subInputs);
             defaultTasks.add(subTask);
 
@@ -3478,15 +3473,13 @@ public class AgentCompiler {
                 "prompt", "${workflow.input.prompt}",
                 "session_id", "${workflow.input.session_id}",
                 "media", "${workflow.input.media}",
-                "cwd", "${workflow.input.cwd}",
-                "__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}")));
+                "cwd", "${workflow.input.cwd}")));
 
         WorkflowDef wf = new WorkflowDef();
         wf.setName(config.getName());
         wf.setVersion(1);
         List<String> inputs = new ArrayList<>(WORKFLOW_INPUTS);
         inputs.add("context");
-        inputs.add("__agentspan_ctx__");
         wf.setInputParameters(inputs);
         wf.setTasks(List.of(fwTask));
         // Output both result and context so sequential pipelines can merge

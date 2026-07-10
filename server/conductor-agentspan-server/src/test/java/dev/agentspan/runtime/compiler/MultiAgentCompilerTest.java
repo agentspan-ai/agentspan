@@ -1128,7 +1128,6 @@ class MultiAgentCompilerTest {
         //   1) emit an HTTP fetch task in the live branch BEFORE ctx_build
         //   2) escape ${CRED} → #{CRED} in headers (matches ToolCompiler's
         //      pipeline so credential resolution is single-source)
-        //   3) forward __agentspan_ctx__ for CredentialAwareHttpTask
         AgentConfig planner = simpleSubAgent("planner", "Write a plan");
         AgentConfig harness = AgentConfig.builder()
                 .name("pae_with_url_ctx")
@@ -1167,9 +1166,6 @@ class MultiAgentCompilerTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> headers = (Map<String, Object>) inputs.get("headers");
         assertThat(headers).containsEntry("Authorization", "Bearer #{CONFLUENCE_TOKEN}");
-
-        // Execution token forwarded for credential resolution.
-        assertThat(inputs).containsEntry("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
 
         // ctx_build INLINE comes after the fetch, referencing its
         // output.response.body via template.

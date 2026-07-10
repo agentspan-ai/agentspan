@@ -29,9 +29,6 @@ import lombok.RequiredArgsConstructor;
  * {@code SecretResourceV2}. Auth: every endpoint requires a logged-in
  * principal (the host's request filter populates the request context).</p>
  *
- * <p>The token-mediated worker fetch endpoint lives in {@link WorkerController}
- * at {@code POST /api/workers/secrets}.</p>
- *
  * <ul>
  *   <li>{@code POST   /api/secrets}              — list names ({@code List<String>})</li>
  *   <li>{@code GET    /api/secrets}              — list names user can grant access to ({@code Set<String>})</li>

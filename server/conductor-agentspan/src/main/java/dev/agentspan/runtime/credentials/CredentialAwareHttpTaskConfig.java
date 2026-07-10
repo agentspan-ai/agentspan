@@ -23,8 +23,8 @@ import com.netflix.conductor.tasks.http.providers.RestTemplateProvider;
  * library is imported into a host such as orkes-conductor). The host already provides its
  * own {@code HTTP} system task — overriding it here would collide on the {@code "HTTP"} bean
  * name and downgrade the host's task. The host is expected to port {@code #{NAME}} secret
- * resolution into its own HTTP task, guarded by the {@code __agentspan_ctx__} input. The
- * standalone OSS server leaves this property unset, so the override stays active as before.</p>
+ * resolution into its own HTTP task. The standalone OSS server leaves this property unset, so
+ * the override stays active as before.</p>
  */
 @Configuration
 @ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
@@ -35,8 +35,7 @@ public class CredentialAwareHttpTaskConfig {
     public CredentialAwareHttpTask credentialAwareHttpTask(
             RestTemplateProvider restTemplateProvider,
             ObjectMapper objectMapper,
-            ExecutionTokenService tokenService,
             CredentialResolutionService resolutionService) {
-        return new CredentialAwareHttpTask(restTemplateProvider, objectMapper, tokenService, resolutionService);
+        return new CredentialAwareHttpTask(restTemplateProvider, objectMapper, resolutionService);
     }
 }

@@ -932,9 +932,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
      * Strip internal dispatch fields from tool input before including in conversation history.
      *
      * <p>The dispatch layer injects {@code _agent_state} (accumulated agent state, can be 170+ KB)
-     * and {@code __agentspan_ctx__} (execution tokens) into tool inputs. These are internal
-     * plumbing — including them in every tool message bloats the conversation payload
-     * (170 KB × N tool calls = multi-MB overhead) and provides no value to the LLM.</p>
+     * into tool inputs. This is internal plumbing — including it in every tool message bloats the
+     * conversation payload (170 KB × N tool calls = multi-MB overhead) and provides no value to
+     * the LLM.</p>
      */
     private Map<String, Object> stripInternalFields(Map<String, Object> inputData) {
         if (inputData == null || inputData.isEmpty()) {
@@ -942,7 +942,6 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         }
         Map<String, Object> clean = new HashMap<>(inputData);
         clean.remove("_agent_state");
-        clean.remove("__agentspan_ctx__");
         clean.remove("method"); // internal dispatch method name
         return clean;
     }

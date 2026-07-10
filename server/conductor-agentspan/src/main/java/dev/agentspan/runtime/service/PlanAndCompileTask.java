@@ -640,7 +640,6 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 llmInputs.put("maxTokens", maxTokens);
                 llmInputs.put("temperature", temp);
                 llmInputs.put("jsonOutput", true);
-                llmInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
 
                 Map<String, Object> llmTask = new LinkedHashMap<>();
                 llmTask.put("name", "llm_chat_complete");
@@ -1135,7 +1134,6 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
     /** Strip ambient-injection keys before showing args to a guardrail. */
     private static Map<String, Object> stripAmbientForGuardrail(Map<String, Object> args) {
         Map<String, Object> clean = new LinkedHashMap<>(args);
-        clean.remove("__agentspan_ctx__");
         clean.remove("session_id");
         clean.remove("cwd");
         clean.remove("credentials");
@@ -1568,15 +1566,13 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
      * args cannot redirect these.
      */
     private static void injectAmbient(Map<String, Object> args) {
-        args.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         args.put("session_id", "${workflow.input.session_id}");
         args.put("cwd", "${workflow.input.cwd}");
         args.put("credentials", "${workflow.input.credentials}");
         args.put("media", "${workflow.input.media}");
     }
 
-    private static final Set<String> AMBIENT_KEYS =
-            Set.of("__agentspan_ctx__", "session_id", "cwd", "credentials", "media");
+    private static final Set<String> AMBIENT_KEYS = Set.of("session_id", "cwd", "credentials", "media");
 
     /**
      * Build the Conductor task for a single plan op, routed by the tool's
@@ -1650,7 +1646,6 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 // Ambient ctx propagates so the sub-workflow's execution token
                 // resolves the same credentials/session as the parent plan.
                 inputs.put("session_id", "${workflow.input.session_id}");
-                inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
                 task.put("inputParameters", inputs);
                 // Per-tool resilience overrides flow through cfg, matching
                 // ToolCompiler's enrichToolsScript path.
@@ -1685,7 +1680,6 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 req.put("readTimeOut", 30000);
                 Map<String, Object> inputs = new LinkedHashMap<>();
                 inputs.put("http_request", req);
-                inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
                 task.put("inputParameters", inputs);
                 task.put("retryCount", 1);
                 task.put("retryLogic", "FIXED");
@@ -1700,7 +1694,6 @@ public class PlanAndCompileTask extends WorkflowSystemTask {
                 inputs.put("method", toolName);
                 inputs.put("arguments", stripAmbient(args));
                 inputs.put("headers", cfg.getOrDefault("headers", Map.of()));
-                inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
                 task.put("inputParameters", inputs);
                 task.put("retryCount", 1);
                 task.put("retryLogic", "FIXED");
