@@ -12,157 +12,111 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/agentspan-ai/agentspan/cli/client"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
-type aiProvider struct {
-	name    string
-	envVars []string          // all must be set for the provider to be "configured"
-	warns   []providerWarning // conditional warnings (checked even if not fully configured)
-	models  []string          // example models available with this provider
+// providerReportLine is one rendered row of the AI Providers section.
+type providerReportLine struct {
+	level string // "ok" | "warn" | "fail" | "skip" | "info"
+	text  string
+	extra []string
 }
 
-type providerWarning struct {
-	condition func() bool
-	message   string
-	fix       string
+// serverProviderInfo maps the server's provider names to display names and the
+// API-key env var used only for shell/server mismatch hints.
+var serverProviderInfo = map[string]struct {
+	display string
+	envVar  string
+}{
+	"openai":      {"OpenAI", "OPENAI_API_KEY"},
+	"anthropic":   {"Anthropic", "ANTHROPIC_API_KEY"},
+	"gemini":      {"Google Gemini", "GEMINI_API_KEY"},
+	"azureopenai": {"Azure OpenAI", "AZURE_OPENAI_API_KEY"},
+	"aws_bedrock": {"AWS Bedrock", "AWS_ACCESS_KEY_ID"},
+	"mistral":     {"Mistral", "MISTRAL_API_KEY"},
+	"cohere":      {"Cohere", "COHERE_API_KEY"},
+	"grok":        {"Grok", "XAI_API_KEY"},
+	"perplexity":  {"Perplexity", "PERPLEXITY_API_KEY"},
+	"huggingface": {"Hugging Face", "HUGGINGFACE_API_KEY"},
+	"ollama":      {"Ollama", ""},
 }
 
-const ollamaDefaultURL = "http://localhost:11434"
+// buildProviderReport turns the server's provider status into display lines.
+// The client shell's env is consulted only to flag mismatches ("key set here
+// but not on the server") — never as evidence that a provider works.
+func buildProviderReport(report *client.ProviderStatusReport, getenv func(string) string) []providerReportLine {
+	if report.ManagedByHost {
+		return []providerReportLine{{
+			level: "info",
+			text:  "Provider configuration is managed by the host platform",
+		}}
+	}
 
-var aiProviders = []aiProvider{
-	{
-		name:    "OpenAI",
-		envVars: []string{"OPENAI_API_KEY"},
-		models: []string{
-			"openai/gpt-4o",
-			"openai/gpt-4o-mini",
-			"openai/o1",
-			"openai/o3-mini",
-		},
-	},
-	{
-		name:    "Anthropic",
-		envVars: []string{"ANTHROPIC_API_KEY"},
-		models: []string{
-			"anthropic/claude-opus-4-20250514",
-			"anthropic/claude-sonnet-4-20250514",
-			"anthropic/claude-3-5-sonnet-20241022",
-		},
-	},
-	{
-		name:    "Google Gemini",
-		envVars: []string{"GEMINI_API_KEY", "GOOGLE_CLOUD_PROJECT"},
-		warns: []providerWarning{
-			{
-				condition: func() bool {
-					return os.Getenv("GEMINI_API_KEY") != "" && os.Getenv("GOOGLE_CLOUD_PROJECT") == ""
+	var lines []providerReportLine
+	for _, p := range report.Providers {
+		display := p.Name
+		info, known := serverProviderInfo[p.Name]
+		if known {
+			display = info.display
+		}
+
+		if p.Name == "ollama" {
+			if p.Reachable != nil && !*p.Reachable {
+				lines = append(lines, providerReportLine{
+					level: "fail",
+					text:  fmt.Sprintf("%s — server resolved %s, unreachable from the server", display, p.BaseURL),
+					extra: []string{
+						"The URL must be reachable from the AgentSpan server, which makes the LLM calls.",
+						"Fix: agentspan credentials set OLLAMA_BASE_URL <url>  (or set OLLAMA_BASE_URL in the server environment)",
+					},
+				})
+			} else {
+				lines = append(lines, providerReportLine{
+					level: "ok",
+					text:  fmt.Sprintf("%s (%s — reachable from server)", display, p.BaseURL),
+				})
+			}
+			continue
+		}
+
+		switch {
+		case p.Configured:
+			lines = append(lines, providerReportLine{level: "ok", text: display + " — configured on server"})
+		case known && info.envVar != "" && getenv(info.envVar) != "":
+			lines = append(lines, providerReportLine{
+				level: "warn",
+				text:  fmt.Sprintf("%s — %s is set in this shell but the server is not configured", display, info.envVar),
+				extra: []string{
+					fmt.Sprintf("Fix: agentspan credentials set %s <value>  (or restart a local server from this shell)", info.envVar),
 				},
-				message: "GEMINI_API_KEY is set but GOOGLE_CLOUD_PROJECT is missing",
-				fix:     "export GOOGLE_CLOUD_PROJECT=your-gcp-project-id",
-			},
-		},
-		models: []string{
-			"google_gemini/gemini-2.0-flash",
-			"google_gemini/gemini-1.5-pro",
-			"google_gemini/gemini-1.5-flash",
-		},
-	},
-	{
-		name:    "Azure OpenAI",
-		envVars: []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"},
-		warns: []providerWarning{
-			{
-				condition: func() bool {
-					return os.Getenv("AZURE_OPENAI_API_KEY") != "" && os.Getenv("AZURE_OPENAI_ENDPOINT") == ""
-				},
-				message: "AZURE_OPENAI_API_KEY is set but AZURE_OPENAI_ENDPOINT is missing",
-				fix:     "export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com",
-			},
-			{
-				condition: func() bool {
-					return os.Getenv("AZURE_OPENAI_API_KEY") != "" && os.Getenv("AZURE_OPENAI_DEPLOYMENT") == ""
-				},
-				message: "AZURE_OPENAI_DEPLOYMENT is not set (required to route requests)",
-				fix:     "export AZURE_OPENAI_DEPLOYMENT=your-deployment-name",
-			},
-		},
-		models: []string{
-			"azure_openai/gpt-4o",
-			"azure_openai/gpt-4",
-		},
-	},
-	{
-		name:    "AWS Bedrock",
-		envVars: []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"},
-		warns: []providerWarning{
-			{
-				condition: func() bool {
-					return os.Getenv("AWS_ACCESS_KEY_ID") != "" && os.Getenv("AWS_DEFAULT_REGION") == "" && os.Getenv("AWS_REGION") == ""
-				},
-				message: "No AWS region set — defaults to us-east-1",
-				fix:     "export AWS_DEFAULT_REGION=us-east-1  # or your preferred region",
-			},
-		},
-		models: []string{
-			"aws_bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0",
-			"aws_bedrock/meta.llama3-70b-instruct-v1:0",
-			"aws_bedrock/amazon.titan-text-express-v1",
-		},
-	},
-	{
-		name:    "Mistral",
-		envVars: []string{"MISTRAL_API_KEY"},
-		models: []string{
-			"mistral/mistral-large-latest",
-			"mistral/mistral-small-latest",
-			"mistral/open-mixtral-8x7b",
-		},
-	},
-	{
-		name:    "Cohere",
-		envVars: []string{"COHERE_API_KEY"},
-		models: []string{
-			"cohere/command-r-plus",
-			"cohere/command-r",
-		},
-	},
-	{
-		name:    "Grok",
-		envVars: []string{"XAI_API_KEY"},
-		models: []string{
-			"grok/grok-3",
-			"grok/grok-3-mini",
-		},
-	},
-	{
-		name:    "Perplexity",
-		envVars: []string{"PERPLEXITY_API_KEY"},
-		models: []string{
-			"perplexity/sonar-pro",
-			"perplexity/sonar",
-		},
-	},
-	{
-		name:    "Hugging Face",
-		envVars: []string{"HUGGINGFACE_API_KEY"},
-		models: []string{
-			"hugging_face/meta-llama/Llama-3-70b-chat-hf",
-		},
-	},
-	{
-		name:    "Stability AI",
-		envVars: []string{"STABILITY_API_KEY"},
-		models: []string{
-			"stabilityai/sd3.5-large",
-			"stabilityai/stable-image-core",
-		},
-	},
+			})
+		default:
+			lines = append(lines, providerReportLine{level: "skip", text: display + " — not configured"})
+		}
+	}
+	return lines
+}
+
+// shellProviderKeys lists provider API-key env vars set in this shell (names only).
+func shellProviderKeys() []string {
+	var keys []string
+	for _, info := range serverProviderInfo {
+		if info.envVar != "" && os.Getenv(info.envVar) != "" {
+			keys = append(keys, info.envVar)
+		}
+	}
+	if os.Getenv("OLLAMA_BASE_URL") != "" {
+		keys = append(keys, "OLLAMA_BASE_URL")
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 var doctorCmd = &cobra.Command{
@@ -268,76 +222,54 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	bold.Println("AI Providers")
 	fmt.Println()
 
+	// Providers are configured on and dialed by the SERVER. Ask it; never
+	// present this shell's env as provider status.
+	cfg := getConfig()
 	configured := 0
-	for _, p := range aiProviders {
-		allSet := isProviderConfigured(p)
-
-		if allSet {
-			configured++
-			green.Printf("  ✓ %s", p.name)
-			dim.Printf("  (%s)\n", strings.Join(p.envVars, ", "))
-
-			// Check for warnings on this provider
-			for _, w := range p.warns {
-				if w.condition() {
-					yellow.Printf("    ⚠ %s\n", w.message)
-					fmt.Printf("      %s\n", w.fix)
-					issues++
-				}
+	providerStatusGap := "" // non-empty when the server's provider status is unavailable
+	report, perr := newClient(cfg).GetProviderStatus()
+	switch {
+	case perr == nil:
+		for _, l := range buildProviderReport(report, os.Getenv) {
+			switch l.level {
+			case "ok":
+				configured++
+				green.Printf("  ✓ %s\n", l.text)
+			case "warn":
+				yellow.Printf("  ⚠ %s\n", l.text)
+				issues++
+			case "fail":
+				red.Printf("  ✗ %s\n", l.text)
+				issues++
+			case "skip":
+				dim.Printf("  - %s\n", l.text)
+			case "info":
+				configured++ // host-managed counts as configured
+				dim.Printf("  %s\n", l.text)
 			}
-
-			// Print available models
-			for _, m := range p.models {
-				dim.Printf("    %s\n", m)
-			}
-		} else {
-			dim.Printf("  - %s", p.name)
-			dim.Printf("  (%s)\n", strings.Join(p.envVars, ", "))
-
-			// Only show warnings for partially configured providers — i.e. at least
-			// one required env var is set, meaning the user is trying to use this
-			// provider. Skip entirely if no vars are set (provider not opted in).
-			partiallyConfigured := false
-			for _, env := range p.envVars {
-				if os.Getenv(env) != "" {
-					partiallyConfigured = true
-					break
-				}
-			}
-			if partiallyConfigured {
-				for _, w := range p.warns {
-					if w.condition() {
-						yellow.Printf("    ⚠ %s\n", w.message)
-						fmt.Printf("      %s\n", w.fix)
-						issues++
-					}
-				}
+			for _, e := range l.extra {
+				fmt.Printf("      %s\n", e)
 			}
 		}
-	}
-
-	// Ollama — special case, no API key, check connectivity
-	ollamaURL := os.Getenv("OLLAMA_BASE_URL")
-	if ollamaURL == "" {
-		ollamaURL = ollamaDefaultURL
-	}
-	ollamaOk := checkOllama(ollamaURL)
-	if ollamaOk {
-		configured++
-		green.Printf("  ✓ Ollama")
-		dim.Printf("  (%s)\n", ollamaURL)
-		dim.Println("    ollama/llama3, ollama/mistral, ollama/phi3, ollama/codellama")
-	} else if os.Getenv("OLLAMA_BASE_URL") != "" {
-		yellow.Printf("  ⚠ Ollama  (not reachable at %s)\n", ollamaURL)
-		fmt.Println("    Check that Ollama is running at the configured URL.")
-		fmt.Printf("    OLLAMA_BASE_URL=%s\n", ollamaURL)
+	case strings.Contains(perr.Error(), "HTTP 404"):
+		// Older server without the status endpoint — be explicit that the
+		// shell env below is NOT the server's view.
+		providerStatusGap = "this server version does not report provider status"
+		dim.Println("  - Server does not report provider status (older server).")
+		if keys := shellProviderKeys(); len(keys) > 0 {
+			dim.Printf("    Keys set in this shell (may not reflect the server): %s\n", strings.Join(keys, ", "))
+		}
+	default:
+		providerStatusGap = "server not reachable"
+		yellow.Printf("  ⚠ Provider status unknown — server not reachable at %s\n", cfg.ServerURL)
+		fmt.Println("    Providers are configured on the server; doctor cannot check them from this machine.")
+		if cfg.IsLocalhost() {
+			if keys := shellProviderKeys(); len(keys) > 0 {
+				dim.Printf("    Keys set in this shell (seeded into a local server at its next start): %s\n",
+					strings.Join(keys, ", "))
+			}
+		}
 		issues++
-	} else {
-		dim.Println("  - Ollama  (not running)")
-		dim.Println("    To use a local Ollama instance:")
-		dim.Println("      Install: https://ollama.com/download")
-		dim.Println("      Default: http://localhost:11434")
-		dim.Println("      Custom:  export OLLAMA_BASE_URL=http://your-host:11434")
 	}
 
 	fmt.Println()
@@ -346,7 +278,6 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	bold.Println("Server")
 	fmt.Println()
 
-	cfg := getConfig()
 	serverAddr := cfg.ServerURL
 	serverOk := checkServer(serverAddr)
 	if serverOk {
@@ -362,19 +293,20 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	bold.Println("Summary")
 	fmt.Println()
 
-	if configured == 0 {
-		red.Println("  ✗ No AI providers configured")
+	if providerStatusGap != "" {
+		yellow.Printf("  ⚠ Provider status unknown (%s)\n", providerStatusGap)
+	} else if configured == 0 {
+		red.Println("  ✗ No AI providers configured on the server")
 		fmt.Println()
-		fmt.Println("  Set at least one provider's API key to get started:")
+		fmt.Println("  Configure at least one provider on the server:")
 		fmt.Println()
-		fmt.Println("    export OPENAI_API_KEY=sk-...")
-		fmt.Println("    export ANTHROPIC_API_KEY=sk-ant-...")
-		fmt.Println("    export GEMINI_API_KEY=AI...")
-		fmt.Println("    export GOOGLE_CLOUD_PROJECT=your-gcp-project-id")
+		fmt.Println("    agentspan credentials set OPENAI_API_KEY sk-...")
+		fmt.Println("    agentspan credentials set ANTHROPIC_API_KEY sk-ant-...")
+		fmt.Println("    # or export the variable in the server's environment before it starts")
 		fmt.Println()
 		issues++
 	} else {
-		green.Printf("  %d AI provider(s) configured\n", configured)
+		green.Printf("  %d AI provider(s) configured on the server\n", configured)
 	}
 
 	if issues == 0 {
@@ -387,15 +319,6 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\n  Docs: %s\n\n", aiModelsDocURL)
 
 	return nil
-}
-
-func isProviderConfigured(p aiProvider) bool {
-	for _, env := range p.envVars {
-		if os.Getenv(env) == "" {
-			return false
-		}
-	}
-	return true
 }
 
 // javaExe returns the java binary path, preferring $JAVA_HOME/bin/java when set.
@@ -478,16 +401,6 @@ func isPortAvailable(port string) bool {
 	}
 	ln.Close()
 	return true
-}
-
-func checkOllama(baseURL string) bool {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(baseURL)
-	if err != nil {
-		return false
-	}
-	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
 }
 
 func checkServer(baseURL string) bool {

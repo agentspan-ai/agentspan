@@ -32,6 +32,8 @@ agentspan server start
 
 **Models:** `openai/gpt-4o`, `anthropic/claude-sonnet-4-6`, `openai/gpt-4-turbo`, `openai/o1`, `openai/o1-mini`, `openai/o3-mini`
 
+**Vision (image input):** GPT-4o models accept image input (e.g. `openai/gpt-4o`, `openai/gpt-4o-mini`); support is model-dependent.
+
 **Embeddings:** `openai/text-embedding-3-small`, `openai/text-embedding-3-large`
 
 **Image generation:** `openai/dall-e-3`
@@ -46,6 +48,8 @@ agentspan server start
 
 **Models:** `anthropic/claude-opus-4-20250514`, `anthropic/claude-sonnet-4-20250514`, `anthropic/claude-3-5-sonnet-20241022`, `anthropic/claude-3-haiku-20240307`
 
+**Vision (image input):** Claude models accept image input (e.g. `anthropic/claude-3-5-sonnet-20241022`); support is model-dependent. See [conductor-oss/conductor#1238](https://github.com/conductor-oss/conductor/pull/1238).
+
 ---
 
 ### Google Gemini
@@ -56,6 +60,8 @@ agentspan server start
 | `GOOGLE_CLOUD_PROJECT` | **Required.** GCP project ID |
 
 **Models:** `google_gemini/gemini-2.0-flash`, `google_gemini/gemini-1.5-pro`, `google_gemini/gemini-1.5-flash`
+
+**Vision (image input):** Gemini models accept image input (e.g. `google_gemini/gemini-1.5-pro`); support is model-dependent. See [conductor-oss/conductor#1241](https://github.com/conductor-oss/conductor/pull/1241).
 
 **Embeddings:** `google_gemini/text-embedding-004`
 
@@ -73,6 +79,8 @@ agentspan server start
 
 **Models:** `azure_openai/gpt-4o`, `azure_openai/gpt-4`, `azure_openai/gpt-3.5-turbo`
 
+**Vision (image input):** vision-capable deployments accept image input (e.g. a `gpt-4o` deployment); support is model-dependent.
+
 ---
 
 ### AWS Bedrock
@@ -87,6 +95,8 @@ agentspan server start
 
 **Models:** `aws_bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0`, `aws_bedrock/anthropic.claude-3-haiku-20240307-v1:0`, `aws_bedrock/meta.llama3-70b-instruct-v1:0`, `aws_bedrock/amazon.titan-text-express-v1`
 
+**Vision (image input):** vision-capable models accept image input (e.g. `aws_bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0`); support is model-dependent.
+
 **Embeddings:** `aws_bedrock/amazon.titan-embed-text-v2:0`
 
 ---
@@ -98,6 +108,8 @@ agentspan server start
 | `MISTRAL_API_KEY` | API key from [console.mistral.ai](https://console.mistral.ai/) |
 
 **Models:** `mistral/mistral-large-latest`, `mistral/mistral-medium-latest`, `mistral/mistral-small-latest`, `mistral/open-mixtral-8x7b`
+
+**Vision (image input):** Pixtral models accept image input (e.g. `mistral/pixtral-12b-2409`); support is model-dependent.
 
 **Embeddings:** `mistral/mistral-embed`
 
@@ -111,6 +123,8 @@ agentspan server start
 
 **Models:** `cohere/command-r-plus`, `cohere/command-r`, `cohere/command`
 
+**Vision (image input):** vision-capable Cohere models accept image input (e.g. `cohere/command-a-vision-07-2025`); support is model-dependent. See [conductor-oss/conductor#1246](https://github.com/conductor-oss/conductor/pull/1246).
+
 **Embeddings:** `cohere/embed-english-v3.0`, `cohere/embed-multilingual-v3.0`
 
 ---
@@ -123,6 +137,8 @@ agentspan server start
 
 **Models:** `grok/grok-3`, `grok/grok-3-mini`
 
+**Vision (image input):** vision-capable Grok models accept image input; support is model-dependent. See [conductor-oss/conductor#1243](https://github.com/conductor-oss/conductor/pull/1243).
+
 ---
 
 ### Perplexity AI
@@ -133,6 +149,8 @@ agentspan server start
 
 **Models:** `perplexity/sonar-pro`, `perplexity/sonar`
 
+**Vision (image input):** vision-capable Perplexity models accept image input; support is model-dependent. See [conductor-oss/conductor#1243](https://github.com/conductor-oss/conductor/pull/1243).
+
 ---
 
 ### Hugging Face
@@ -142,6 +160,8 @@ agentspan server start
 | `HUGGINGFACE_API_KEY` | API token from [huggingface.co](https://huggingface.co/settings/tokens) |
 
 **Models:** `hugging_face/meta-llama/Llama-3-70b-chat-hf`, `hugging_face/mistralai/Mistral-7B-Instruct-v0.2`
+
+**Vision (image input):** vision-capable models (e.g. `hugging_face/meta-llama/Llama-3.2-11B-Vision-Instruct`) accept image input via Hugging Face's OpenAI-compatible router (`https://router.huggingface.co/v1`); support is model-dependent. See [conductor-oss/conductor#1245](https://github.com/conductor-oss/conductor/pull/1245).
 
 ---
 
@@ -174,6 +194,8 @@ export OLLAMA_BASE_URL=http://your-gpu-server:11434
 Install Ollama: [ollama.com/download](https://ollama.com/download)
 
 **Models:** `ollama/llama3`, `ollama/mistral`, `ollama/phi3`, `ollama/codellama`
+
+**Vision (image input):** vision-capable local models accept image input (e.g. `ollama/llava`, `ollama/llama3.2-vision`); support is model-dependent.
 
 **Embeddings:** `ollama/nomic-embed-text`
 

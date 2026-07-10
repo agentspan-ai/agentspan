@@ -6,6 +6,7 @@ package dev.agentspan.runtime.ai;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.conductoross.conductor.ai.AIModel;
 import org.conductoross.conductor.ai.AIModelProvider;
@@ -18,6 +19,7 @@ import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
 import org.conductoross.conductor.ai.providers.mistral.MistralAIConfiguration;
+import org.conductoross.conductor.ai.providers.ollama.OllamaConfiguration;
 import org.conductoross.conductor.ai.providers.openai.OpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.perplexity.PerplexityAIConfiguration;
 import org.slf4j.Logger;
@@ -76,7 +78,11 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             Map.entry("cohere", "COHERE_BASE_URL"),
             Map.entry("grok", "GROK_BASE_URL"),
             Map.entry("perplexity", "PERPLEXITY_BASE_URL"),
-            Map.entry("azureopenai", "AZURE_OPENAI_BASE_URL"));
+            Map.entry("azureopenai", "AZURE_OPENAI_BASE_URL"),
+            Map.entry("ollama", "OLLAMA_BASE_URL"));
+
+    /** Providers that need no API key; a base URL alone is enough to build a model. */
+    private static final Set<String> KEYLESS_PROVIDERS = Set.of("ollama");
 
     private final CredentialResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
@@ -131,14 +137,15 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         log.debug("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
         log.debug("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
+        boolean keyless = KEYLESS_PROVIDERS.contains(provider.toLowerCase());
         if (userApiKey != null || baseUrl != null) {
             try {
                 // If we have a base URL but no user key, try the server-wide key
-                if (userApiKey == null) {
+                if (userApiKey == null && !keyless) {
                     String envVar = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
                     userApiKey = envVar != null ? System.getenv(envVar) : null;
                 }
-                if (userApiKey != null) {
+                if (userApiKey != null || keyless) {
                     AIModel model = createModelWithKey(provider, userApiKey, baseUrl);
                     if (model != null) {
                         log.debug("Per-user AIModel created for provider '{}' baseUrl='{}'", provider, baseUrl);
@@ -229,6 +236,18 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
+     * Resolve the credential-store base URL for a provider (e.g. {@code OLLAMA_BASE_URL}
+     * for ollama), or null when none is stored. Used by the provider-status endpoint —
+     * the server-side source of truth that doctor and the UI query.
+     */
+    public String resolveConfiguredBaseUrl(String provider) {
+        String envVarName = PROVIDER_TO_BASE_URL_ENV.get(provider.toLowerCase());
+        if (envVarName == null) return null;
+        String value = resolveUserCredential(envVarName);
+        return (value != null && !value.isBlank()) ? value : null;
+    }
+
+    /**
      * Resolve any named credential for the current user.
      */
     private String resolveUserCredential(String credentialName) {
@@ -299,6 +318,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
                     case "azureopenai" -> new AzureOpenAIConfiguration(
                             apiKey, baseUrl, null, null, conductorAiHttpClient);
                     case "mistral" -> new MistralAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
+                    case "ollama" -> new OllamaConfiguration(baseUrl, null, null, conductorAiHttpClient);
                     case "cohere" -> new CohereAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
                     case "grok" -> new GrokAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
                     case "huggingface" -> {
