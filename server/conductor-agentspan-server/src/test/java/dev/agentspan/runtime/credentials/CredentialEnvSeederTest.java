@@ -228,6 +228,24 @@ class CredentialEnvSeederTest {
     }
 
     @Test
+    void seeder_seedsOllamaBaseUrl_inRealDb() throws Exception {
+        // OLLAMA_BASE_URL is the documented Ollama variable and what the
+        // provider resolves from the credential store — it must be seeded.
+        storeProvider.delete(ANONYMOUS_USER_ID, "OLLAMA_BASE_URL");
+
+        Function<String, String> envLookup = name -> "OLLAMA_BASE_URL".equals(name) ? "http://gpu-box:11434" : null;
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "OLLAMA_BASE_URL")).isEqualTo("http://gpu-box:11434");
+    }
+
+    @Test
     void seeder_storesGitHubCredentials_inRealDb() throws Exception {
         Function<String, String> envLookup = name -> switch (name) {
             case "GH_TOKEN" -> "ghp-test-gh-token";

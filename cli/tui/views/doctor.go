@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,24 +50,6 @@ type DoctorModel struct {
 	tick     int
 	sections map[string][]CheckResult
 	order    []string
-}
-
-var aiProviders = []struct {
-	Name    string
-	EnvVars []string
-	Example string
-}{
-	{"OpenAI", []string{"OPENAI_API_KEY"}, "gpt-4o"},
-	{"Anthropic", []string{"ANTHROPIC_API_KEY"}, "claude-opus-4"},
-	{"Google Gemini", []string{"GEMINI_API_KEY"}, "gemini-2.0-flash"},
-	{"Azure OpenAI", []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"}, "gpt-4o"},
-	{"AWS Bedrock", []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}, "claude-3-5-sonnet"},
-	{"Mistral", []string{"MISTRAL_API_KEY"}, "mistral-large"},
-	{"Cohere", []string{"COHERE_API_KEY"}, "command-r-plus"},
-	{"Grok", []string{"XAI_API_KEY"}, "grok-3"},
-	{"Perplexity", []string{"PERPLEXITY_API_KEY"}, "sonar-pro"},
-	{"Hugging Face", []string{"HUGGINGFACE_API_KEY"}, "llama-3.1"},
-	{"Stability AI", []string{"STABILITY_API_KEY"}, "sd3.5-large"},
 }
 
 func NewDoctor(c *client.Client) DoctorModel {
@@ -222,8 +203,6 @@ func renderCheckResult(r CheckResult) string {
 	return style.Render(line)
 }
 
-
-
 // ─── Check Commands ──────────────────────────────────────────────────────────
 
 func (m DoctorModel) runSystemChecks() tea.Cmd {
@@ -301,41 +280,67 @@ func (m DoctorModel) runProviderChecks() tea.Cmd {
 	return func() tea.Msg {
 		var results []CheckResult
 
-		for _, p := range aiProviders {
-			allSet := true
-			for _, env := range p.EnvVars {
-				if os.Getenv(env) == "" {
-					allSet = false
-					break
-				}
-			}
-			if allSet {
-				results = append(results, CheckResult{
-					p.Name, CheckPass,
-					p.EnvVars[0] + " set  →  " + p.Example,
-				})
-			} else {
-				results = append(results, CheckResult{
-					p.Name, CheckSkip,
-					"not configured  →  " + p.Example,
-				})
-			}
+		// Providers are configured on and dialed by the SERVER — ask it.
+		// This shell's env vars are not provider status.
+		report, err := m.client.GetProviderStatus()
+		if err != nil {
+			results = append(results, CheckResult{
+				"Providers", CheckWarn,
+				"status unknown — server not reachable (providers are configured on the server)",
+			})
+			return DoctorResultMsg{Section: "AI Providers", Results: results}
+		}
+		if report.ManagedByHost {
+			results = append(results, CheckResult{"Providers", CheckSkip, "managed by the host platform"})
+			return DoctorResultMsg{Section: "AI Providers", Results: results}
 		}
 
-		// Ollama
-		ollamaURL := os.Getenv("OLLAMA_BASE_URL")
-		if ollamaURL == "" {
-			ollamaURL = "http://localhost:11434"
+		for _, p := range report.Providers {
+			name := providerDisplayName(p.Name)
+			switch {
+			case p.Name == "ollama" && p.Reachable != nil && !*p.Reachable:
+				results = append(results, CheckResult{
+					name, CheckFail,
+					"server resolved " + p.BaseURL + " — unreachable from the server",
+				})
+			case p.Name == "ollama":
+				results = append(results, CheckResult{name, CheckPass, "reachable from server at " + p.BaseURL})
+			case p.Configured:
+				results = append(results, CheckResult{name, CheckPass, "configured on server"})
+			default:
+				results = append(results, CheckResult{name, CheckSkip, "not configured"})
+			}
 		}
-		hc := &http.Client{Timeout: 2 * time.Second}
-		if _, err := hc.Get(ollamaURL); err == nil {
-			results = append(results, CheckResult{"Ollama", CheckPass, "connected at " + ollamaURL})
-		} else {
-			results = append(results, CheckResult{"Ollama", CheckSkip, "not running (optional)"})
-		}
-
 		return DoctorResultMsg{Section: "AI Providers", Results: results}
 	}
+}
+
+func providerDisplayName(name string) string {
+	switch name {
+	case "openai":
+		return "OpenAI"
+	case "anthropic":
+		return "Anthropic"
+	case "gemini":
+		return "Google Gemini"
+	case "azureopenai":
+		return "Azure OpenAI"
+	case "aws_bedrock":
+		return "AWS Bedrock"
+	case "mistral":
+		return "Mistral"
+	case "cohere":
+		return "Cohere"
+	case "grok":
+		return "Grok"
+	case "perplexity":
+		return "Perplexity"
+	case "huggingface":
+		return "Hugging Face"
+	case "ollama":
+		return "Ollama"
+	}
+	return name
 }
 
 func (m DoctorModel) runServerChecks() tea.Cmd {
@@ -370,6 +375,6 @@ func min(a, b int) int {
 
 // ─── Test accessors ───────────────────────────────────────────────────────────
 
-func (m DoctorModel) Running() bool                    { return m.running }
-func (m DoctorModel) Sections() map[string][]CheckResult { return m.sections }
+func (m DoctorModel) Running() bool                           { return m.running }
+func (m DoctorModel) Sections() map[string][]CheckResult      { return m.sections }
 func (m *DoctorModel) SetSections(s map[string][]CheckResult) { m.sections = s; m.running = false }

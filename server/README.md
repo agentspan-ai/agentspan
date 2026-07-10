@@ -312,7 +312,7 @@ Providers are auto-enabled when their API key env var is set. No manual integrat
 | Perplexity | `PERPLEXITY_API_KEY` | Sonar Pro, Sonar |
 | HuggingFace | `HUGGINGFACE_API_KEY` | Llama 3, Mistral, Zephyr |
 | Stability AI | `STABILITY_API_KEY` | SD3.5-large, Stable Image Core |
-| Ollama (local) | `OLLAMA_HOST` | llama3, mistral, phi3, codellama |
+| Ollama (local) | `OLLAMA_BASE_URL` | llama3, mistral, phi3, codellama |
 
 ### Metrics
 
