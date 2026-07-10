@@ -219,7 +219,7 @@ class EnrichToolsScriptTest {
                 + "\"method\": \"GET\","
                 + "\"pathTemplate\": \"/api/v1/entities/{entity_id}\","
                 + "\"queryParams\": [\"depth\", \"limit\"],"
-                + "\"headers\": {\"Authorization\": \"Bearer #{OCG_US_KEY}\"}}}";
+                + "\"headers\": {\"Authorization\": \"Bearer ${workflow.secrets.OCG_US_KEY}\"}}}";
         String toolCalls = "[{\"name\": \"ocg_get_entity\", \"taskReferenceName\": \"call_1\","
                 + " \"inputParameters\": {\"entity_id\": \"entity_01/AB C\", \"depth\": 2}}]";
 
@@ -232,7 +232,8 @@ class EnrichToolsScriptTest {
                 (Map<String, Object>) ((Map<String, Object>) task.get("inputParameters")).get("http_request");
         assertThat(req.get("uri")).isEqualTo("https://us.ocg.example.com/api/v1/entities/entity_01%2FAB%20C?depth=2");
         assertThat(req.get("method")).isEqualTo("GET");
-        assertThat((Map<String, Object>) req.get("headers")).containsEntry("Authorization", "Bearer #{OCG_US_KEY}");
+        assertThat((Map<String, Object>) req.get("headers"))
+                .containsEntry("Authorization", "Bearer ${workflow.secrets.OCG_US_KEY}");
         // entity_id and depth were consumed; limit was never supplied.
         assertThat((Map<String, Object>) req.get("body")).isEmpty();
     }

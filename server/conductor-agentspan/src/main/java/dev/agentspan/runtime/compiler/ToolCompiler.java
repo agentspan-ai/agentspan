@@ -22,7 +22,6 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.GuardrailConfig;
 import dev.agentspan.runtime.model.ToolConfig;
-import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 
@@ -51,12 +50,6 @@ public class ToolCompiler {
         private List<String[]> toolGuardrailRefs; // [refName, isInline]
     }
 
-    /**
-     * Replace {@code ${NAME}} credential placeholders with {@code #{NAME}} in a
-     * headers map so that Conductor's {@code ParametersUtils} does not consume them.
-     * The {@code #} prefix is invisible to Conductor's expression engine and is later
-     * resolved by credential-aware task handlers.
-     */
     /** Matches a {@code ${IDENTIFIER}} credential placeholder. */
     private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
 
@@ -70,21 +63,18 @@ public class ToolCompiler {
     }
 
     /**
-     * Rewrite {@code ${NAME}} credential placeholders for the runtime that will resolve them.
-     * When embedded in a host (e.g. orkes-conductor), emit the host's native
-     * {@code ${workflow.secrets.NAME}} so the host resolves it at task-input binding. Standalone:
-     * escape to {@code #{NAME}} for AgentSpan's credential-aware HTTP/MCP task handlers.
+     * Rewrite a {@code ${NAME}} credential placeholder in a header value to conductor's native
+     * secret reference {@code ${workflow.secrets.NAME}}. Conductor's {@code ParametersUtils}
+     * resolves it wire-only at task hand-off (via the configured {@code SecretsDAO} — AgentSpan's
+     * encrypted store by default); the resolved plaintext is never persisted.
      */
     private static String rewriteCredentialPlaceholders(String value) {
-        if (EmbeddedMode.isEmbedded()) {
-            return CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("\\${workflow.secrets.$1}");
-        }
-        return value.replace("${", "#{");
+        return CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("\\${workflow.secrets.$1}");
     }
 
     /**
      * Return a copy of {@code cfg} with credential placeholders in its {@code headers}
-     * entry escaped from {@code ${NAME}} to {@code #{NAME}}.
+     * entry rewritten from {@code ${NAME}} to {@code ${workflow.secrets.NAME}}.
      */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> escapeHeadersInConfig(Map<String, Object> cfg) {
@@ -895,7 +885,6 @@ public class ToolCompiler {
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
-            // Forward execution token so CredentialAwareHttpTask can resolve #{NAME} headers
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 

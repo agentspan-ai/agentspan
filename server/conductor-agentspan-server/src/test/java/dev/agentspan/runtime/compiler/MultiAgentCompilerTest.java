@@ -1126,8 +1126,8 @@ class MultiAgentCompilerTest {
     void testPlanExecute_with_url_plannerContext_emits_http_fetch_with_escaped_credentials() {
         // plannerContext entry with a URL + credentialed headers must:
         //   1) emit an HTTP fetch task in the live branch BEFORE ctx_build
-        //   2) escape ${CRED} → #{CRED} in headers (matches ToolCompiler's
-        //      pipeline so credential resolution is single-source)
+        //   2) rewrite ${CRED} → ${workflow.secrets.CRED} in headers (matches
+        //      ToolCompiler's pipeline so credential resolution is single-source)
         AgentConfig planner = simpleSubAgent("planner", "Write a plan");
         AgentConfig harness = AgentConfig.builder()
                 .name("pae_with_url_ctx")
@@ -1162,10 +1162,10 @@ class MultiAgentCompilerTest {
         Map<String, Object> inputs = fetch.getInputParameters();
         assertThat(inputs).containsEntry("url", "https://confluence.example.com/onboarding-rules.md");
 
-        // Headers must have credential placeholder escaped.
+        // Headers must have the credential placeholder rewritten to a secret reference.
         @SuppressWarnings("unchecked")
         Map<String, Object> headers = (Map<String, Object>) inputs.get("headers");
-        assertThat(headers).containsEntry("Authorization", "Bearer #{CONFLUENCE_TOKEN}");
+        assertThat(headers).containsEntry("Authorization", "Bearer ${workflow.secrets.CONFLUENCE_TOKEN}");
 
         // ctx_build INLINE comes after the fetch, referencing its
         // output.response.body via template.
@@ -1270,12 +1270,12 @@ class MultiAgentCompilerTest {
 
     @Test
     void testPlanExecute_plannerContext_credential_escape_only_anchored_identifiers() {
-        // /dg #2: the credential escape used to be a greedy substring match
+        // /dg #2: the credential rewrite used to be a greedy substring match
         // ``replace("${","#{")``. That ate any opening brace pair, including
         // literal ``${...}`` substrings that happened to start with ``${`` but
         // weren't credentials. Anchored regex now only rewrites
-        // ``${IDENTIFIER}`` patterns to ``#{IDENTIFIER}`` — anything that
-        // doesn't look like a placeholder passes through verbatim.
+        // ``${IDENTIFIER}`` patterns to ``${workflow.secrets.IDENTIFIER}`` —
+        // anything that doesn't look like a placeholder passes through verbatim.
         AgentConfig planner = simpleSubAgent("planner", "Write a plan");
         AgentConfig harness = AgentConfig.builder()
                 .name("pae_credential_escape")
@@ -1316,11 +1316,11 @@ class MultiAgentCompilerTest {
                 (Map<String, Object>) fetch.getInputParameters().get("headers");
 
         assertThat(headers)
-                .as("anchored placeholder must be escaped to #{IDENTIFIER}")
-                .containsEntry("Authorization", "Bearer #{CONFLUENCE_TOKEN}");
+                .as("anchored placeholder rewritten to ${workflow.secrets.IDENTIFIER}")
+                .containsEntry("Authorization", "Bearer ${workflow.secrets.CONFLUENCE_TOKEN}");
         assertThat(headers)
-                .as("real placeholder escaped; un-anchored ${...} preserved")
-                .containsEntry("X-Custom", "value-with-${UNCLOSED and #{REAL_CRED}");
+                .as("real placeholder rewritten; un-anchored ${...} preserved")
+                .containsEntry("X-Custom", "value-with-${UNCLOSED and ${workflow.secrets.REAL_CRED}");
         assertThat(headers)
                 .as("literal value with no placeholder passes through unchanged")
                 .containsEntry("X-Literal", "plain-text-value");

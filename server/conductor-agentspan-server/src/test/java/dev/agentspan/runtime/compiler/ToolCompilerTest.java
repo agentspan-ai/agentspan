@@ -433,9 +433,9 @@ class ToolCompilerTest {
         assertThat(script).contains("\"url\":\"https://us.ocg.example.com\"");
         assertThat(script).contains("\"pathTemplate\":\"/api/v1/entities/{entity_id}\"");
         assertThat(script).contains("\"queryParams\":[\"depth\",\"limit\"]");
-        // Standalone mode: ${OCG_US_KEY} escaped to #{OCG_US_KEY} so
-        // Conductor's parameter binding doesn't consume it.
-        assertThat(script).contains("Bearer #{OCG_US_KEY}");
+        // ${OCG_US_KEY} rewritten to conductor's native secret reference; resolved wire-only
+        // at task hand-off via the configured SecretsDAO.
+        assertThat(script).contains("Bearer ${workflow.secrets.OCG_US_KEY}");
         // The templating machinery itself must be in the script.
         assertThat(script).contains("pathTemplate");
         assertThat(script).contains("encodeURIComponent");
