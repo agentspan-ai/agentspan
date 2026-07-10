@@ -41,7 +41,12 @@ import okhttp3.Response;
  *
  * <p>When embedded in a host (e.g. orkes-conductor) the host owns provider
  * configuration, so the endpoint reports {@code managedByHost: true} and no
- * per-provider detail (mirrors {@code ProviderValidator}'s deference).</p>
+ * per-provider detail (mirrors {@code ProviderValidator}'s deference).
+ * Delegating real per-provider status to the host via a
+ * {@code ProviderStatusSource} SPI is tracked in
+ * <a href="https://github.com/agentspan-ai/agentspan/issues/310">#310</a>;
+ * the wire contract is forward-compatible ({@code managedByHost} stays,
+ * {@code providers} fills in).</p>
  */
 @RestController
 @RequestMapping("/api/providers")
