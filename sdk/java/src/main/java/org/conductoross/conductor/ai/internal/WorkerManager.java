@@ -373,9 +373,10 @@ public class WorkerManager {
         // problem. See docs/design/secret-injection-contract.md.
         Map<String, String> resolvedSecrets = Collections.emptyMap();
         List<String> declared = taskCredentials.getOrDefault(taskName, Collections.emptyList());
-        // Embedded: the host resolves ${workflow.secrets.NAME} into __resolved_credentials__ at
-        // poll time. Prefer that map; otherwise fall back to the native token-pull (standalone).
-        Map<String, String> hostDelivered = readResolvedCredentials(inputData);
+        // Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names at
+        // poll time and delivers the values on the wire-only Task.runtimeMetadata (never persisted).
+        // Prefer that map; otherwise fall back to the native token-pull (standalone).
+        Map<String, String> hostDelivered = readRuntimeMetadata(task);
         if (!hostDelivered.isEmpty()) {
             resolvedSecrets = hostDelivered;
         } else if (!declared.isEmpty()) {
@@ -423,18 +424,19 @@ public class WorkerManager {
     }
 
     /**
-     * Read the host-delivered {@code __resolved_credentials__} name→value map from task input
-     * (embedded mode). The host resolves the stamped {@code ${workflow.secrets.NAME}} references at
-     * poll time. Returns an empty map when absent (standalone → native token-pull is used instead).
+     * Read the host-delivered secret name→value map from {@code Task.runtimeMetadata} (embedded mode).
+     * The host resolves the worker's declared {@code TaskDef.runtimeMetadata} names from its secret
+     * store at poll time and injects the values on the wire only — never persisted to task input
+     * (conductor-oss PR #1255). Returns an empty map when absent (standalone → native token-pull).
      */
-    private static Map<String, String> readResolvedCredentials(Map<String, Object> inputData) {
-        if (inputData == null) return Collections.emptyMap();
-        Object rc = inputData.get("__resolved_credentials__");
-        if (!(rc instanceof Map<?, ?> m) || m.isEmpty()) return Collections.emptyMap();
+    private static Map<String, String> readRuntimeMetadata(Task task) {
+        if (task == null) return Collections.emptyMap();
+        Map<String, String> rm = task.getRuntimeMetadata();
+        if (rm == null || rm.isEmpty()) return Collections.emptyMap();
         Map<String, String> out = new HashMap<>();
-        for (Map.Entry<?, ?> e : m.entrySet()) {
-            if (e.getKey() != null && e.getValue() instanceof String s) {
-                out.put(e.getKey().toString(), s);
+        for (Map.Entry<String, String> e : rm.entrySet()) {
+            if (e.getKey() != null && e.getValue() != null) {
+                out.put(e.getKey(), e.getValue());
             }
         }
         return out;

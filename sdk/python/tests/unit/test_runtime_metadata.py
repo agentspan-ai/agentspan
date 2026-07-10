@@ -1,6 +1,6 @@
-"""Embedded host-delivered credential path: the worker prefers
-``__resolved_credentials__`` from task input (resolved by the host from
-``${workflow.secrets.NAME}``) over the native execution-token pull.
+"""Embedded host-delivered credential path: the worker prefers the host-resolved secret values on
+``Task.runtime_metadata`` (wire-only, resolved by the host from the worker's declared
+``TaskDef.runtimeMetadata``; conductor-oss PR #1255) over the native execution-token pull.
 """
 
 from unittest.mock import patch
@@ -20,10 +20,11 @@ def _worker():
     return make_tool_worker(td.func, td.name, tool_def=td)
 
 
-def test_prefers_host_delivered_resolved_credentials():
+def test_prefers_host_delivered_runtime_metadata():
     wrapper = _worker()
     task = Task()
-    task.input_data = {"__resolved_credentials__": {"GITHUB_TOKEN": "ghp_host_resolved"}}
+    task.input_data = {}
+    task.runtime_metadata = {"GITHUB_TOKEN": "ghp_host_resolved"}
     task.workflow_instance_id = "wf"
     task.task_id = "t"
 
@@ -36,10 +37,11 @@ def test_prefers_host_delivered_resolved_credentials():
     mock_fetcher.assert_not_called()
 
 
-def test_falls_back_to_native_fetch_when_no_resolved_map():
+def test_falls_back_to_native_fetch_when_no_runtime_metadata():
     wrapper = _worker()
     task = Task()
     task.input_data = {"__agentspan_ctx__": {"execution_token": "tok"}}
+    task.runtime_metadata = None
     task.workflow_instance_id = "wf"
     task.task_id = "t"
 
