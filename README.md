@@ -132,7 +132,7 @@ agentspan doctor
 | Grok / xAI | `XAI_API_KEY` | `grok/grok-3` |
 | HuggingFace | `HUGGINGFACE_API_KEY` | `hugging_face/meta-llama/Llama-3-70b` |
 | Stability AI | `STABILITY_API_KEY` | `stabilityai/sd3.5-large` |
-| Ollama (local) | `OLLAMA_HOST` | `ollama/llama3` |
+| Ollama (local) | `OLLAMA_BASE_URL` | `ollama/llama3` |
 
 </details>
 
