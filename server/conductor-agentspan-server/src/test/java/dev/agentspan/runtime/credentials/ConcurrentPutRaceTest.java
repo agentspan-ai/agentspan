@@ -46,12 +46,12 @@ class ConcurrentPutRaceTest {
 
     @BeforeEach
     void clean() {
-        store.delete(USER, NAME);
+        store.delete(NAME);
     }
 
     @AfterEach
     void clean2() {
-        store.delete(USER, NAME);
+        store.delete(NAME);
     }
 
     @Test
@@ -63,7 +63,7 @@ class ConcurrentPutRaceTest {
             final int idx = i;
             futures[i] = CompletableFuture.runAsync(() -> {
                 try {
-                    store.set(USER, NAME, "value-" + idx);
+                    store.set(NAME, "value-" + idx);
                 } catch (Throwable t) {
                     errors.incrementAndGet();
                 }
@@ -77,12 +77,12 @@ class ConcurrentPutRaceTest {
                 .isZero();
 
         // And the value is set (last writer wins; we just assert SOME write succeeded).
-        assertThat(store.get(USER, NAME)).isNotNull();
+        assertThat(store.get(NAME)).isNotNull();
     }
 
     @Test
     void concurrentPut_existingCredential_doesNotThrow() throws Exception {
-        store.set(USER, NAME, "initial-value");
+        store.set(NAME, "initial-value");
 
         int N = 50;
         AtomicInteger errors = new AtomicInteger();
@@ -91,7 +91,7 @@ class ConcurrentPutRaceTest {
             final int idx = i;
             futures[i] = CompletableFuture.runAsync(() -> {
                 try {
-                    store.set(USER, NAME, "updated-value-" + idx);
+                    store.set(NAME, "updated-value-" + idx);
                 } catch (Throwable t) {
                     errors.incrementAndGet();
                 }
@@ -100,6 +100,6 @@ class ConcurrentPutRaceTest {
         for (var f : futures) f.get();
 
         assertThat(errors.get()).isZero();
-        assertThat(store.get(USER, NAME)).startsWith("updated-value-");
+        assertThat(store.get(NAME)).startsWith("updated-value-");
     }
 }

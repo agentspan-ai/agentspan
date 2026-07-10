@@ -21,53 +21,43 @@ import dev.agentspan.runtime.model.credentials.CredentialMeta;
 import dev.agentspan.runtime.spi.CredentialStoreProvider;
 
 /**
- * {@link AgentspanSecretsDAO} bridges conductor's global {@code SecretsDAO} to AgentSpan's per-user
- * {@link CredentialStoreProvider}, scoped to the anonymous/system user. Verifies the name→value
- * round-trip is scoped to {@code ANONYMOUS_USER_ID} (so other users' secrets are invisible) and that
- * the bean is selected only by {@code conductor.secrets.type=agentspan}.
+ * {@link AgentspanSecretsDAO} bridges conductor's global {@code SecretsDAO} to AgentSpan's
+ * (single-scope) {@link CredentialStoreProvider}. Verifies the name→value round-trip and that the
+ * bean is selected only by {@code conductor.secrets.type=agentspan}.
  */
 class AgentspanSecretsDAOTest {
 
-    private static final String ANON = "00000000-0000-0000-0000-000000000000";
-
-    /** In-memory {@link CredentialStoreProvider} keyed by (userId,name) so scope can be asserted. */
+    /** In-memory {@link CredentialStoreProvider} keyed by name (the store is global — no userId). */
     static class FakeStore implements CredentialStoreProvider {
         final Map<String, String> data = new LinkedHashMap<>();
 
-        private static String k(String u, String n) {
-            return u + "|" + n;
+        @Override
+        public String get(String name) {
+            return data.get(name);
         }
 
         @Override
-        public String get(String userId, String name) {
-            return data.get(k(userId, name));
+        public void set(String name, String value) {
+            data.put(name, value);
         }
 
         @Override
-        public void set(String userId, String name, String value) {
-            data.put(k(userId, name), value);
+        public void delete(String name) {
+            data.remove(name);
         }
 
         @Override
-        public void delete(String userId, String name) {
-            data.remove(k(userId, name));
-        }
-
-        @Override
-        public List<CredentialMeta> list(String userId) {
+        public List<CredentialMeta> list() {
             List<CredentialMeta> out = new ArrayList<>();
-            for (String key : data.keySet()) {
-                int bar = key.indexOf('|');
-                if (key.substring(0, bar).equals(userId)) {
-                    out.add(CredentialMeta.builder().name(key.substring(bar + 1)).build());
-                }
+            for (String name : data.keySet()) {
+                out.add(CredentialMeta.builder().name(name).build());
             }
             return out;
         }
     }
 
     @Test
-    void roundTrip_scopedToAnonymousUser() {
+    void roundTrip() {
         FakeStore store = new FakeStore();
         AgentspanSecretsDAO dao = new AgentspanSecretsDAO(store);
 
@@ -75,8 +65,7 @@ class AgentspanSecretsDAOTest {
         assertThat(dao.getSecret("GITHUB_TOKEN")).isNull();
 
         dao.putSecret("GITHUB_TOKEN", "ghp_x");
-        // written under the anonymous/system user — the scope conductor resolves against
-        assertThat(store.data).containsEntry(ANON + "|GITHUB_TOKEN", "ghp_x");
+        assertThat(store.data).containsEntry("GITHUB_TOKEN", "ghp_x");
         assertThat(dao.getSecret("GITHUB_TOKEN")).isEqualTo("ghp_x");
         assertThat(dao.secretExists("GITHUB_TOKEN")).isTrue();
 
@@ -86,15 +75,6 @@ class AgentspanSecretsDAOTest {
         dao.deleteSecret("GITHUB_TOKEN");
         assertThat(dao.getSecret("GITHUB_TOKEN")).isNull();
         assertThat(dao.listSecretNames()).containsExactly("SLACK_TOKEN");
-    }
-
-    @Test
-    void doesNotReadOtherUsersSecrets() {
-        FakeStore store = new FakeStore();
-        store.set("some-other-user", "GITHUB_TOKEN", "not-mine");
-        AgentspanSecretsDAO dao = new AgentspanSecretsDAO(store);
-        assertThat(dao.getSecret("GITHUB_TOKEN")).isNull();
-        assertThat(dao.listSecretNames()).isEmpty();
     }
 
     // ── gating: selected only by conductor.secrets.type=agentspan ──

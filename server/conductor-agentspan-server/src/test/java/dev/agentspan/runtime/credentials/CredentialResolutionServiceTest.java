@@ -36,7 +36,7 @@ class CredentialResolutionServiceTest {
     @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
-    private static final String USER_ID = "resolution-test-user-001";
+    private static final String USER_ID = "00000000-0000-0000-0000-000000000000";
 
     @BeforeEach
     void setUp() {
@@ -45,7 +45,7 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_directLookup_returnsStoredValue() {
-        storeProvider.set(USER_ID, "GITHUB_TOKEN", "ghp_directlookup");
+        storeProvider.set("GITHUB_TOKEN", "ghp_directlookup");
 
         String value = service.resolve(USER_ID, "GITHUB_TOKEN");
 
@@ -70,10 +70,10 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_afterDelete_returnsNull() {
-        storeProvider.set(USER_ID, "TEMP_KEY", "temp_value");
+        storeProvider.set("TEMP_KEY", "temp_value");
         assertThat(service.resolve(USER_ID, "TEMP_KEY")).isEqualTo("temp_value");
 
-        storeProvider.delete(USER_ID, "TEMP_KEY");
+        storeProvider.delete("TEMP_KEY");
         assertThat(service.resolve(USER_ID, "TEMP_KEY")).isNull();
     }
 
@@ -82,7 +82,6 @@ class CredentialResolutionServiceTest {
     @Test
     void resolve_dottedPath_extractsTopLevelField() {
         storeProvider.set(
-                USER_ID,
                 "GCP_SVC",
                 "{\"type\":\"service_account\",\"project_id\":\"my-proj-123\",\"client_email\":\"sa@x.iam\"}");
 
@@ -92,14 +91,14 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_dottedPath_extractsNestedField() {
-        storeProvider.set(USER_ID, "BLOB", "{\"auth\":{\"oauth\":{\"client_id\":\"abc123\"}}}");
+        storeProvider.set("BLOB", "{\"auth\":{\"oauth\":{\"client_id\":\"abc123\"}}}");
 
         assertThat(service.resolve(USER_ID, "BLOB.auth.oauth.client_id")).isEqualTo("abc123");
     }
 
     @Test
     void resolve_dottedPath_missingField_returnsNull() {
-        storeProvider.set(USER_ID, "JSONY", "{\"a\":\"1\",\"b\":\"2\"}");
+        storeProvider.set("JSONY", "{\"a\":\"1\",\"b\":\"2\"}");
 
         assertThat(service.resolve(USER_ID, "JSONY.does_not_exist")).isNull();
     }
@@ -112,7 +111,7 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_dottedPath_nonJsonBase_returnsNull() {
-        storeProvider.set(USER_ID, "FLAT_TOKEN", "not-a-json-value-just-text");
+        storeProvider.set("FLAT_TOKEN", "not-a-json-value-just-text");
 
         assertThat(service.resolve(USER_ID, "FLAT_TOKEN.field")).isNull();
     }
@@ -121,7 +120,7 @@ class CredentialResolutionServiceTest {
     void resolve_dottedPath_nonStringLeaf_returnsJsonRepresentation() {
         // Number/boolean/object leaves serialize to their JSON form so HTTP/MCP
         // placeholders can substitute them cleanly.
-        storeProvider.set(USER_ID, "CFG", "{\"port\":8080,\"enabled\":true,\"nested\":{\"a\":1}}");
+        storeProvider.set("CFG", "{\"port\":8080,\"enabled\":true,\"nested\":{\"a\":1}}");
 
         assertThat(service.resolve(USER_ID, "CFG.port")).isEqualTo("8080");
         assertThat(service.resolve(USER_ID, "CFG.enabled")).isEqualTo("true");
@@ -133,8 +132,8 @@ class CredentialResolutionServiceTest {
     void resolve_dottedPath_doesNotFallthroughToFullName() {
         // Even if a literal-dotted name happens to be stored, dotted resolution
         // ALWAYS treats the first segment as the base. Documented constraint.
-        storeProvider.set(USER_ID, "LITERAL.NAME", "literally_dotted_value");
-        storeProvider.set(USER_ID, "LITERAL", "{\"NAME\":\"json_value\"}");
+        storeProvider.set("LITERAL.NAME", "literally_dotted_value");
+        storeProvider.set("LITERAL", "{\"NAME\":\"json_value\"}");
 
         assertThat(service.resolve(USER_ID, "LITERAL.NAME")).isEqualTo("json_value");
     }

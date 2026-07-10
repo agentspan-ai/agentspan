@@ -32,7 +32,7 @@ class EncryptedDbCredentialStoreProviderTest {
     @Qualifier("credentialJdbc")
     private NamedParameterJdbcTemplate jdbc;
 
-    private static final String USER_ID = "store-test-user-001";
+    private static final String USER_ID = "00000000-0000-0000-0000-000000000000";
 
     @BeforeEach
     void setUp() {
@@ -41,28 +41,28 @@ class EncryptedDbCredentialStoreProviderTest {
 
     @Test
     void set_andGet_roundTripsEncryptedValue() {
-        storeProvider.set(USER_ID, "GITHUB_TOKEN", "ghp_supersecret");
-        String value = storeProvider.get(USER_ID, "GITHUB_TOKEN");
+        storeProvider.set("GITHUB_TOKEN", "ghp_supersecret");
+        String value = storeProvider.get("GITHUB_TOKEN");
         assertThat(value).isEqualTo("ghp_supersecret");
     }
 
     @Test
     void get_returnsNull_whenNotFound() {
-        assertThat(storeProvider.get(USER_ID, "DOES_NOT_EXIST")).isNull();
+        assertThat(storeProvider.get("DOES_NOT_EXIST")).isNull();
     }
 
     @Test
     void delete_removesCredential() {
-        storeProvider.set(USER_ID, "TO_DELETE", "value");
-        storeProvider.delete(USER_ID, "TO_DELETE");
-        assertThat(storeProvider.get(USER_ID, "TO_DELETE")).isNull();
+        storeProvider.set("TO_DELETE", "value");
+        storeProvider.delete("TO_DELETE");
+        assertThat(storeProvider.get("TO_DELETE")).isNull();
     }
 
     @Test
     void list_returnsPartialValues_notPlaintext() {
-        storeProvider.set(USER_ID, "OPENAI_KEY", "sk-abcdefghijklmnop");
+        storeProvider.set("OPENAI_KEY", "sk-abcdefghijklmnop");
 
-        List<CredentialMeta> list = storeProvider.list(USER_ID);
+        List<CredentialMeta> list = storeProvider.list();
 
         CredentialMeta meta = list.stream()
                 .filter(m -> m.getName().equals("OPENAI_KEY"))
@@ -78,14 +78,14 @@ class EncryptedDbCredentialStoreProviderTest {
 
     @Test
     void set_updatesExistingCredential() {
-        storeProvider.set(USER_ID, "MY_KEY", "original");
-        storeProvider.set(USER_ID, "MY_KEY", "updated");
-        assertThat(storeProvider.get(USER_ID, "MY_KEY")).isEqualTo("updated");
+        storeProvider.set("MY_KEY", "original");
+        storeProvider.set("MY_KEY", "updated");
+        assertThat(storeProvider.get("MY_KEY")).isEqualTo("updated");
     }
 
     @Test
     void encryptedValueInDb_isNotPlaintext() {
-        storeProvider.set(USER_ID, "SECRET", "plaintext_value");
+        storeProvider.set("SECRET", "plaintext_value");
 
         // Read raw bytes from DB
         byte[] raw = jdbc.queryForObject(

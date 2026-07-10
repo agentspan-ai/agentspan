@@ -41,12 +41,6 @@ public class CredentialEnvSeeder implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(CredentialEnvSeeder.class);
 
     /**
-     * User ID for the anonymous/OSS user — matches {@code AuthFilter.ANONYMOUS}.
-     * In no-auth mode all credentials are stored under this ID.
-     */
-    static final String ANONYMOUS_USER_ID = "00000000-0000-0000-0000-000000000000";
-
-    /**
      * Well-known provider environment variables to scan on startup.
      *
      * <p>Now sourced from the shared {@link KnownProviderEnvVars#NAMES} in the library so the
@@ -90,7 +84,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
 
             String existing;
             try {
-                existing = storeProvider.get(ANONYMOUS_USER_ID, name);
+                existing = storeProvider.get(name);
             } catch (Exception e) {
                 if (!(e.getCause() instanceof AEADBadTagException)) {
                     throw e; // not a key mismatch — propagate (e.g. DB connection failure)
@@ -101,8 +95,8 @@ public class CredentialEnvSeeder implements ApplicationRunner {
                         name,
                         e);
                 try {
-                    storeProvider.delete(ANONYMOUS_USER_ID, name);
-                    storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                    storeProvider.delete(name);
+                    storeProvider.set(name, value);
                     created++;
                 } catch (Exception re) {
                     log.warn("Credential '{}' could not be re-seeded — skipping", name, re);
@@ -120,7 +114,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             }
 
             try {
-                storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                storeProvider.set(name, value);
                 log.info("Credential seeded from environment: {}", name);
                 created++;
             } catch (Exception e) {

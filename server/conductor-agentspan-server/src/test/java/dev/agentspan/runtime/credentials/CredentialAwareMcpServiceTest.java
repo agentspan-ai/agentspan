@@ -36,7 +36,7 @@ class CredentialAwareMcpServiceTest {
 
     @BeforeEach
     void setUp() {
-        storeProvider.set(USER_ID, "MY_API_KEY", "resolved-secret-value");
+        storeProvider.set("MY_API_KEY", "resolved-secret-value");
     }
 
     @Test
@@ -73,7 +73,7 @@ class CredentialAwareMcpServiceTest {
 
     @Test
     void resolveHeaders_credentialValueWithDollarSign_handledSafely() {
-        storeProvider.set(USER_ID, "TRICKY_KEY", "val$with$dollars");
+        storeProvider.set("TRICKY_KEY", "val$with$dollars");
 
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Auth", "#{TRICKY_KEY}");
@@ -85,8 +85,8 @@ class CredentialAwareMcpServiceTest {
 
     @Test
     void resolveHeaders_multiplePlaceholders_inSameHeader() {
-        storeProvider.set(USER_ID, "USER", "admin");
-        storeProvider.set(USER_ID, "PASS", "secret123");
+        storeProvider.set("USER", "admin");
+        storeProvider.set("PASS", "secret123");
 
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Authorization", "Basic #{USER}:#{PASS}");
@@ -98,7 +98,7 @@ class CredentialAwareMcpServiceTest {
 
     @Test
     void resolveHeaders_dottedPathJsonExtraction() {
-        storeProvider.set(USER_ID, "BLOB", "{\"auth\":{\"oauth\":{\"client_id\":\"abc123\"}}}");
+        storeProvider.set("BLOB", "{\"auth\":{\"oauth\":{\"client_id\":\"abc123\"}}}");
 
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("X-Client-Id", "#{BLOB.auth.oauth.client_id}");

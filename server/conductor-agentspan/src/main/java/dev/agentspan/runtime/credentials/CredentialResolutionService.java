@@ -61,14 +61,14 @@ public class CredentialResolutionService {
     public String resolve(String userId, String name) {
         int dot = name.indexOf('.');
         if (dot < 0) {
-            String value = storeProvider.get(userId, name);
+            String value = storeProvider.get(name);
             if (value == null) log.debug("Credential '{}' not found for user '{}'", name, userId);
             return value;
         }
 
         String base = name.substring(0, dot);
         String path = name.substring(dot + 1);
-        String json = storeProvider.get(userId, base);
+        String json = storeProvider.get(base);
         if (json == null) {
             log.debug("Base credential '{}' for path '{}' not found for user '{}'", base, path, userId);
             return null;

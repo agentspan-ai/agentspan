@@ -52,14 +52,14 @@ class ProviderStatusEndpointTest {
 
     @BeforeEach
     void setUp() {
-        savedOllamaUrl = store.get(ANON, "OLLAMA_BASE_URL");
-        store.set(ANON, "OLLAMA_BASE_URL", UNREACHABLE_URL);
+        savedOllamaUrl = store.get("OLLAMA_BASE_URL");
+        store.set("OLLAMA_BASE_URL", UNREACHABLE_URL);
     }
 
     @AfterEach
     void cleanUp() {
-        store.delete(ANON, "OLLAMA_BASE_URL");
-        if (savedOllamaUrl != null) store.set(ANON, "OLLAMA_BASE_URL", savedOllamaUrl);
+        store.delete("OLLAMA_BASE_URL");
+        if (savedOllamaUrl != null) store.set("OLLAMA_BASE_URL", savedOllamaUrl);
     }
 
     private JsonNode getStatus() throws Exception {

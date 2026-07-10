@@ -21,21 +21,21 @@ public interface CredentialStoreProvider {
      * Retrieve the plaintext value for a credential.
      * Returns null if not found.
      */
-    String get(String userId, String name);
+    String get(String name);
 
     /**
      * Store or update a credential value (encrypted at rest by the implementation).
      */
-    void set(String userId, String name, String value);
+    void set(String name, String value);
 
     /**
      * Delete a credential. No-op if not found.
      */
-    void delete(String userId, String name);
+    void delete(String name);
 
     /**
-     * List credential metadata for a user.
+     * List credential metadata for the store.
      * Returns name + partial value + timestamps. Never returns plaintext values.
      */
-    List<CredentialMeta> list(String userId);
+    List<CredentialMeta> list();
 }

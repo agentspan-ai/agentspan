@@ -35,7 +35,7 @@ class CredentialAwareHttpTaskTest {
 
     @BeforeEach
     void setUp() {
-        storeProvider.set(USER_ID, "MY_API_KEY", "resolved-secret-value");
+        storeProvider.set("MY_API_KEY", "resolved-secret-value");
     }
 
     @Test
@@ -72,7 +72,7 @@ class CredentialAwareHttpTaskTest {
 
     @Test
     void resolveHeaders_credentialValueWithDollarSign_handledSafely() {
-        storeProvider.set(USER_ID, "TRICKY_KEY", "val$with$dollars");
+        storeProvider.set("TRICKY_KEY", "val$with$dollars");
 
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Auth", "#{TRICKY_KEY}");
@@ -84,8 +84,8 @@ class CredentialAwareHttpTaskTest {
 
     @Test
     void resolveHeaders_multiplePlaceholders_inSameHeader() {
-        storeProvider.set(USER_ID, "USER", "admin");
-        storeProvider.set(USER_ID, "PASS", "secret123");
+        storeProvider.set("USER", "admin");
+        storeProvider.set("PASS", "secret123");
 
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Authorization", "Basic #{USER}:#{PASS}");
@@ -98,7 +98,7 @@ class CredentialAwareHttpTaskTest {
     @Test
     void resolveHeaders_dottedPathJsonExtraction() {
         // Conductor-parity JSONPath: extract a field from a JSON-valued secret
-        storeProvider.set(USER_ID, "GCP_SVC", "{\"project_id\":\"my-proj-99\",\"client_email\":\"sa@x.iam\"}");
+        storeProvider.set("GCP_SVC", "{\"project_id\":\"my-proj-99\",\"client_email\":\"sa@x.iam\"}");
 
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("X-Project", "#{GCP_SVC.project_id}");
