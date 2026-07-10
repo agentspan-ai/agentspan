@@ -15,11 +15,11 @@ repositories {
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    // AgentSpan compiles/tests against the published conductor. Embedded secret delivery uses
-    // ${workflow.secrets.NAME} references resolved at runtime by the HOST conductor's
-    // ParametersUtils.substituteSecrets / SecretsDAO (conductor-oss PR #1255) — agentspan itself
-    // references no PR #1255 API, so it does not need to build against it.
-    conductorVersion   = '3.32.0-rc.3'
+    // TARGET branch: worker secrets use TaskDef.runtimeMetadata (conductor-oss PR #1255), so the
+    // server references TaskDef.setRuntimeMetadata and must build against a conductor that has it.
+    // Pinned to the local runtimemeta build (superset of 3.32.0-rc.3); revert to a published version
+    // once PR #1255 ships. (The interim on feature/embedded-secret-toggle builds against 3.32.0-rc.3.)
+    conductorVersion   = '3.32.0-rc.3-runtimemeta-LOCAL'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'
     sqliteJdbcVersion  = '3.47.0.0'

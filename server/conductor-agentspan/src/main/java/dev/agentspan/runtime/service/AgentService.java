@@ -48,6 +48,7 @@ import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
+import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ProviderValidator;
 import dev.agentspan.runtime.util.WorkflowClassifiers;
@@ -955,7 +956,9 @@ public class AgentService {
             for (ToolConfig tool : config.getTools()) {
                 String tt = tool.getToolType();
                 if ("worker".equals(tt) && !registered.contains(tool.getName())) {
-                    registerTaskDef(tool.getName());
+                    registerTaskDef(
+                            tool.getName(),
+                            AgentCompiler.collectToolCredentials(config).get(tool.getName()));
                     registered.add(tool.getName());
                 }
             }
@@ -1409,6 +1412,16 @@ public class AgentService {
     // ── Task registration ────────────────────────────────────────────
 
     private void registerTaskDef(String taskName) {
+        registerTaskDef(taskName, null);
+    }
+
+    /**
+     * Register a worker TaskDef. When embedded, {@code runtimeMetadata} declares the secret names the
+     * host must resolve at the SIMPLE task's poll and inject onto the wire-only
+     * {@code Task.runtimeMetadata} (conductor-oss PR #1255). Standalone leaves it empty — the native
+     * execution-token pull delivers secrets instead.
+     */
+    private void registerTaskDef(String taskName, List<String> runtimeMetadata) {
         TaskDef taskDef = new TaskDef();
         taskDef.setName(taskName);
         taskDef.setRetryCount(2);
@@ -1417,6 +1430,9 @@ public class AgentService {
         taskDef.setTimeoutSeconds(0);
         taskDef.setResponseTimeoutSeconds(3600);
         taskDef.setTimeoutPolicy(TaskDef.TimeoutPolicy.RETRY);
+        if (EmbeddedMode.isEmbedded() && runtimeMetadata != null && !runtimeMetadata.isEmpty()) {
+            taskDef.setRuntimeMetadata(new ArrayList<>(runtimeMetadata));
+        }
 
         try {
             TaskDef existing = metadataDAO.getTaskDef(taskName);
