@@ -340,6 +340,49 @@ public class AgentCompiler {
 
     // ── Agent with tools ────────────────────────────────────────────
 
+    /**
+     * Collect {@code toolName -> [credentialNames]} for the agent's tools: each tool's own declared
+     * credentials, falling back to the agent-level credential list. Used by {@code AgentService} to
+     * declare each worker tool's {@code TaskDef.runtimeMetadata} (embedded), so the host resolves the
+     * names at the SIMPLE task's poll and injects the values onto {@code Task.runtimeMetadata}.
+     */
+    public static Map<String, List<String>> collectToolCredentials(AgentConfig config) {
+        List<String> agentCreds = config.getCredentials() != null ? config.getCredentials() : List.of();
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                if (tool.getName() == null) continue;
+                List<String> own = new ArrayList<>();
+                if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> cl) {
+                    for (Object c : cl) {
+                        if (c instanceof String s) own.add(s);
+                    }
+                }
+                List<String> effective = own.isEmpty() ? agentCreds : own;
+                if (!effective.isEmpty()) map.put(tool.getName(), new ArrayList<>(new LinkedHashSet<>(effective)));
+            }
+        }
+        return map;
+    }
+
+    /**
+     * Collect the agent-level credential names, deduped and order-preserving. Used by
+     * {@code AgentService} to declare {@code TaskDef.runtimeMetadata} (embedded) on the non-worker
+     * SIMPLE tasks that run user-authored code — guardrails, callbacks, stop_when, gates, instructions,
+     * routers, graph node/edge workers — none of which carry their own per-item credential list, so the
+     * agent-level list is their only source. The host resolves the names at each task's poll and injects
+     * the values onto the wire-only {@code Task.runtimeMetadata}.
+     *
+     * <p><b>Note:</b> the SDK worker wrappers for these non-worker task kinds do not yet read
+     * {@code Task.runtimeMetadata} (only the tool worker does), so declaring it here is currently inert —
+     * the values ride the wire but {@code get_secret()} inside those user functions won't resolve until
+     * the SDK wrappers are taught to route {@code runtimeMetadata} into the credential context.</p>
+     */
+    public static List<String> collectAgentCredentials(AgentConfig config) {
+        if (config.getCredentials() == null || config.getCredentials().isEmpty()) return List.of();
+        return new ArrayList<>(new LinkedHashSet<>(config.getCredentials()));
+    }
+
     WorkflowDef compileWithTools(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         String llmRef = toRef(config.getName()) + "_llm";

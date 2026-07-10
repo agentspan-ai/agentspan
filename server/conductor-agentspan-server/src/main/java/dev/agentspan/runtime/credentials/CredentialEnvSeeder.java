@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import dev.agentspan.runtime.spi.CredentialStoreProvider;
@@ -34,6 +35,7 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * (Vault, AWS SM, etc.) manage their own secrets.</p>
  */
 @Component
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class CredentialEnvSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialEnvSeeder.class);

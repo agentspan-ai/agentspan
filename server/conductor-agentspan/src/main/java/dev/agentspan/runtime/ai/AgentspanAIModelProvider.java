@@ -24,6 +24,8 @@ import org.conductoross.conductor.ai.providers.openai.OpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.perplexity.PerplexityAIConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
@@ -85,6 +87,27 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     private final CredentialResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
 
+    /**
+     * Spring constructor. The native credential beans are <em>optional</em>: when
+     * {@code agentspan.embedded=true} they are gated off (the host delivers secrets),
+     * so they resolve to {@code null} here and native per-user resolution is skipped.
+     */
+    @Autowired
+    public AgentspanAIModelProvider(
+            List<ModelConfiguration<? extends AIModel>> modelConfigurations,
+            Environment env,
+            OkHttpClient conductorAiHttpClient,
+            ObjectProvider<CredentialResolutionService> resolutionService,
+            ObjectProvider<ExecutionTokenService> tokenService) {
+        this(
+                modelConfigurations,
+                env,
+                conductorAiHttpClient,
+                resolutionService.getIfAvailable(),
+                tokenService.getIfAvailable());
+    }
+
+    /** Direct constructor (used by tests, and by the Spring constructor above). */
     public AgentspanAIModelProvider(
             List<ModelConfiguration<? extends AIModel>> modelConfigurations,
             Environment env,
@@ -95,7 +118,9 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         this.conductorAiHttpClient = conductorAiHttpClient;
         this.resolutionService = resolutionService;
         this.tokenService = tokenService;
-        log.info("AgentspanAIModelProvider initialized (per-user credential resolution enabled)");
+        log.info(
+                "AgentspanAIModelProvider initialized (native per-user credential resolution {})",
+                resolutionService != null ? "enabled" : "disabled — embedded/host-delivered");
     }
 
     @Override
@@ -148,6 +173,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
      * @return per-user API key, or null if not found
      */
     private String resolveUserApiKey(String provider) {
+        if (resolutionService == null) return null; // native resolution gated off (embedded)
         String envVarName = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
         if (envVarName == null) return null;
 
@@ -177,6 +203,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
      */
     @SuppressWarnings("unchecked")
     private String extractUserIdFromTaskContext() {
+        if (tokenService == null) return null; // native token service gated off (embedded)
         try {
             TaskContext ctx = TaskContext.get();
             if (ctx == null || ctx.getTask() == null) return null;
@@ -224,6 +251,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
      * Resolve any named credential for the current user.
      */
     private String resolveUserCredential(String credentialName) {
+        if (resolutionService == null) return null; // native resolution gated off (embedded)
         String userId = extractUserIdFromTaskContext();
         if (userId == null) {
             userId = RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse(null);

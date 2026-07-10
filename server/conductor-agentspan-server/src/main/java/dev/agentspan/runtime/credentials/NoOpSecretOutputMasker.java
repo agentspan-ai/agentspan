@@ -4,6 +4,7 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import dev.agentspan.runtime.spi.SecretOutputMasker;
@@ -20,6 +21,7 @@ import dev.agentspan.runtime.spi.SecretOutputMasker;
  * containing newlines, quotes, or other JSON-escaped characters are still caught).
  */
 @Service
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class NoOpSecretOutputMasker implements SecretOutputMasker {
 
     @Override
