@@ -15,7 +15,11 @@ repositories {
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.32.0-rc.3'
+    // TARGET branch: worker secrets use TaskDef.runtimeMetadata (conductor-oss PR #1255), so the
+    // server references TaskDef.setRuntimeMetadata and must build against a conductor that has it.
+    // Pinned to the local runtimemeta build (superset of 3.32.0-rc.3); revert to a published version
+    // once PR #1255 ships. (The interim on feature/embedded-secret-toggle builds against 3.32.0-rc.3.)
+    conductorVersion   = '3.32.0-rc.5'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'
     sqliteJdbcVersion  = '3.47.0.0'

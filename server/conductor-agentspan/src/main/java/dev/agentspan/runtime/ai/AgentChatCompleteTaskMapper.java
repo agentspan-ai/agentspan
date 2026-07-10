@@ -111,8 +111,8 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         TaskModel taskModel = super.getMappedTask(taskMapperContext);
         WorkflowModel workflowModel = taskMapperContext.getWorkflowModel();
 
-        // Per-user LLM key resolution is handled by AgentspanAIModelProvider.getModel()
-        // which creates a fresh AIModel with the user's credential. No inputData injection needed.
+        // LLM credentials are the host's concern: embedded, the AI integration supplies the key
+        // (OrkesAIModelProvider); standalone, AgentspanAIModelProvider resolves it. Nothing to stamp here.
 
         try {
             ChatCompletion chatCompletion = objectMapper.convertValue(taskModel.getInputData(), ChatCompletion.class);

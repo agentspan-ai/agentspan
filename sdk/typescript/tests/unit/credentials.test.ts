@@ -304,48 +304,83 @@ describe("runWithCredentialContext", () => {
     vi.restoreAllMocks();
   });
 
-  it.each([1, 2, 3])(
-    "isolates concurrent executions (run %i)",
-    async () => {
-      // Reproduce the worker race that breaks test_suite2_tool_calling:
-      //   1. Worker A enters context, starts handler.
-      //   2. Worker B enters context, finishes, exits.
-      //   3. Worker A's handler later calls getCredential — without per-async
-      //      isolation, B's exit nulled A's context and getCredential throws.
-      // Test re-runs (1-3) to surface scheduling-dependent regressions.
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation(async (_url, init: RequestInit) => {
-          const body = JSON.parse(String(init.body));
-          // Echo the token back in the resolved value so we can verify isolation.
-          const result: Record<string, string> = {};
-          for (const n of body.names) result[n] = `${body.token}:${n}`;
-          return { ok: true, json: async () => result };
-        }),
-      );
+  it.each([1, 2, 3])("isolates concurrent executions (run %i)", async () => {
+    // Reproduce the worker race that breaks test_suite2_tool_calling:
+    //   1. Worker A enters context, starts handler.
+    //   2. Worker B enters context, finishes, exits.
+    //   3. Worker A's handler later calls getCredential — without per-async
+    //      isolation, B's exit nulled A's context and getCredential throws.
+    // Test re-runs (1-3) to surface scheduling-dependent regressions.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async (_url, init: RequestInit) => {
+        const body = JSON.parse(String(init.body));
+        // Echo the token back in the resolved value so we can verify isolation.
+        const result: Record<string, string> = {};
+        for (const n of body.names) result[n] = `${body.token}:${n}`;
+        return { ok: true, json: async () => result };
+      }),
+    );
 
-      async function workerHandler(execToken: string, delayMs: number) {
-        return runWithCredentialContext(serverUrl, headers, execToken, async () => {
-          await new Promise((r) => setTimeout(r, delayMs));
-          return getCredential("MY_KEY");
-        });
-      }
+    async function workerHandler(execToken: string, delayMs: number) {
+      return runWithCredentialContext(serverUrl, headers, execToken, async () => {
+        await new Promise((r) => setTimeout(r, delayMs));
+        return getCredential("MY_KEY");
+      });
+    }
 
-      const results = await Promise.all([
-        workerHandler("tok-A", 30),
-        workerHandler("tok-B", 5),
-        workerHandler("tok-C", 20),
-        workerHandler("tok-D", 10),
-        workerHandler("tok-E", 15),
-      ]);
+    const results = await Promise.all([
+      workerHandler("tok-A", 30),
+      workerHandler("tok-B", 5),
+      workerHandler("tok-C", 20),
+      workerHandler("tok-D", 10),
+      workerHandler("tok-E", 15),
+    ]);
 
-      expect(results).toEqual([
-        "tok-A:MY_KEY",
-        "tok-B:MY_KEY",
-        "tok-C:MY_KEY",
-        "tok-D:MY_KEY",
-        "tok-E:MY_KEY",
-      ]);
-    },
-  );
+    expect(results).toEqual([
+      "tok-A:MY_KEY",
+      "tok-B:MY_KEY",
+      "tok-C:MY_KEY",
+      "tok-D:MY_KEY",
+      "tok-E:MY_KEY",
+    ]);
+  });
+});
+
+// ── host-delivered credentials (embedded: task.runtimeMetadata) ──────────
+
+describe("getCredential with host-delivered resolved map", () => {
+  const serverUrl = "https://api.test";
+  const headers = {};
+
+  afterEach(() => {
+    clearCredentialContext();
+    vi.restoreAllMocks();
+  });
+
+  it("reads from the resolved map without pulling the endpoint", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    // Embedded shape: no execution token, values pre-resolved by the host onto the context.
+    const value = await runWithCredentialContext(
+      serverUrl,
+      headers,
+      "",
+      async () => getCredential("GITHUB_TOKEN"),
+      { GITHUB_TOKEN: "ghp_host_resolved" },
+    );
+    expect(value).toBe("ghp_host_resolved");
+    expect(fetchSpy).not.toHaveBeenCalled(); // native /workers/secrets pull is bypassed
+  });
+
+  it("throws NotFound for an undelivered secret with no token (off-host trim)", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    await expect(
+      runWithCredentialContext(serverUrl, headers, "", async () => getCredential("MISSING"), {
+        GITHUB_TOKEN: "ghp_host_resolved",
+      }),
+    ).rejects.toBeInstanceOf(CredentialNotFoundError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

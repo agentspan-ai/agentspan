@@ -105,8 +105,11 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
             // process-wide lock. See docs/design/secret-injection-contract.md.
             // Tier-2 (env-injection) path; tier-1 (explicit-key) lands when the
             // user-facing API exposes a `credentials` parameter to agent factories.
-            Dictionary<string, string> resolvedCredentials = new();
-            if (_credentialNames.Length > 0)
+            // Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names
+            // at poll time and delivers the values on the wire-only Task.RuntimeMetadata (never
+            // persisted). Prefer that map; otherwise fall back to the native token-pull.
+            var resolvedCredentials = ReadRuntimeMetadata(task);
+            if (resolvedCredentials.Count == 0 && _credentialNames.Length > 0)
             {
                 var creds = await _http.ResolveCredentialsAsync(
                     toolCtx?.ExecutionToken, _credentialNames, ct);
@@ -215,6 +218,24 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
             };
             await _taskClient.UpdateTaskAsync(taskResult);
         }
+    }
+
+    /// <summary>
+    /// Read the host-delivered secret name→value map from <c>Task.RuntimeMetadata</c> (embedded
+    /// mode). The host resolves the worker's declared <c>TaskDef.runtimeMetadata</c> names from its
+    /// secret store at poll time and injects the values on the wire only — never persisted to task
+    /// input (conductor-oss PR #1255). Empty when absent (standalone → the native token-pull).
+    /// </summary>
+    private static Dictionary<string, string> ReadRuntimeMetadata(Task task)
+    {
+        var result = new Dictionary<string, string>();
+        if (task?.RuntimeMetadata is { Count: > 0 } rm)
+        {
+            foreach (var (k, v) in rm)
+                if (k is not null && v is not null)
+                    result[k] = v;
+        }
+        return result;
     }
 
     // ── JSON bridges (Newtonsoft ↔ System.Text.Json) ──────────
