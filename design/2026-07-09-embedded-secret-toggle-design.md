@@ -31,6 +31,8 @@ Worker tools aren't static: the LLM picks them, an **INLINE "enrich" task** (Gra
 SIMPLE tasks at runtime, and a `FORK_JOIN_DYNAMIC` schedules them. The per-tool cred map is baked
 into the enrich script at compile time.
 
+### Interim sequence (`__resolved_credentials__`)
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -117,14 +119,74 @@ string→string, output-empty omitted), release, and bump the SDK's client depen
   (GraalJS-runs the enrich script), `ReadResolvedCredentialsTest` (Java), `test_resolved_credentials.py`
   (Python), TS `credentials.test.ts`.
 
-## Migration to the target (when clients expose `runtimeMetadata`)
+## The target change — main files (once clients expose `runtimeMetadata`)
 
-1. Land the field in each client (table), release, bump the SDK client versions.
-2. **Server:** set `TaskDef.runtimeMetadata=[names]` in `AgentService.registerTaskDef` (embedded-gated);
-   drop the enrich `workerCredCfg` injection. System-task stamping unchanged.
-3. **SDKs:** read `task.runtimeMetadata` instead of `inputData.__resolved_credentials__`; keep the
-   native fallback.
-4. Remove the interim once all SDKs are on the new clients.
+Net effect: **declare** secret names on the TaskDef instead of **stamping** a value-reference into
+task input; the enrich script stops touching credentials entirely, which deletes the
+JS-injection/persistence caveat above. System-task delivery (`${workflow.secrets.NAME}`) is untouched.
+
+### Target sequence (`TaskDef.runtimeMetadata`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Compiler
+    participant MD as Metadata (TaskDef)
+    participant LLM as LLM task
+    participant EN as Enrich task (INLINE)
+    participant FK as FORK_JOIN_DYNAMIC
+    participant H as Host (RuntimeMetadataResolver + secretsDAO)
+    participant W as SDK worker (SIMPLE task)
+    participant T as Tool fn
+
+    Note over C,MD: compile / register time (embedded only)
+    C->>C: collectToolCredentials(agent) - tool creds, agent-level fallback
+    C->>MD: register worker TaskDef with runtimeMetadata = [NAMES]
+    Note over LLM,T: execution time
+    LLM->>EN: toolCalls (which tools to run)
+    EN->>FK: dynamicTasks (SIMPLE tasks, NO creds in input)
+    W->>H: poll SIMPLE task
+    H->>H: resolve TaskDef.runtimeMetadata names to values (secretsDAO/env)
+    H-->>W: task, values on wire-only Task.runtimeMetadata (never persisted)
+    W->>W: read task.runtimeMetadata, set CredentialContext
+    W->>T: run tool, then get_secret(NAME) returns the value
+    T-->>W: result
+```
+
+Versus the interim: the enrich task never touches credentials, resolution happens at the SIMPLE
+task's **own poll** (not the enrich step), and the value arrives on the **wire-only**
+`Task.runtimeMetadata` — so nothing is baked into the script and no plaintext lands in persisted input.
+
+**0. Client libraries (prereq)** — add `Task.runtimeMetadata` per the table, release, and bump the
+client dep in `sdk/java/build.gradle`, `sdk/python/pyproject.toml`, `sdk/csharp/.../Conductor.AI.csproj`,
+`sdk/typescript/package.json`.
+
+**1. Server — declare, and stop stamping** (all embedded-gated on `EmbeddedMode.isEmbedded()`):
+
+| File | Change |
+|---|---|
+| `service/AgentService.java` | **ADD.** In `registerTaskDef`, set `taskDef.setRuntimeMetadata(names)` for each worker tool, where `names = AgentCompiler.collectToolCredentials(config).get(tool)`. This is the whole target delivery on the server. |
+| `compiler/ToolCompiler.java` | **REMOVE** `buildWorkerCredConfig()` + `setWorkerCreds` + the `workerCredJson` argument passed to `enrichToolsScript` / `enrichToolsScriptDynamic`. |
+| `util/JavaScriptBuilder.java` | **REMOVE** the `workerCredJson` param and the `if (workerCredCfg[n]) t.inputParameters.__resolved_credentials__ = …` lines in both enrich scripts. |
+| `compiler/AgentCompiler.java`, `MultiAgentCompiler.java` | **MOVE.** Drop the `tc.setWorkerCreds(...)` calls; `collectToolCredentials` now feeds `AgentService` instead of `ToolCompiler`. |
+| `ai/AgentChatCompleteTaskMapper.java`, `LlmProviderEnv.java` | **UNCHANGED** — system-task `${workflow.secrets}` path stays. |
+
+**2. SDK worker read-path — read the field instead of the input key** (native token-pull fallback
+stays in all four):
+
+| File | Change |
+|---|---|
+| `sdk/java/.../internal/WorkerManager.java` | `task.getRuntimeMetadata()` instead of `inputData.get("__resolved_credentials__")`. |
+| `sdk/python/.../runtime/_dispatch.py` | `task.runtime_metadata` instead of `task.input_data.pop("__resolved_credentials__")`. |
+| `sdk/csharp/.../WorkerManager.cs` | `task.RuntimeMetadata` instead of the `__resolved_credentials__` dict; drop the input-strip. |
+| `sdk/typescript/src/worker.ts` | `task.runtimeMetadata` instead of `inputData["__resolved_credentials__"]`. The `credentials.ts` accessor (reads the resolved map from the context) is unchanged. |
+
+**3. Cleanup** — once all SDKs are on the new clients, delete the interim `__resolved_credentials__`
+stamping (server) and reads (SDKs), plus `ToolCompilerWorkerCredTest`'s enrich-script assertions.
+
+The compiler/enrich change is a **deletion**; the real new code is one line in `AgentService`
+(`setRuntimeMetadata`) plus a one-line read swap per SDK. Everything else (gating, system tasks,
+accessors, native fallback) is already in place.
 
 ## Dependency
 
