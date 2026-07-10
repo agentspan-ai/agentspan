@@ -250,7 +250,23 @@ public class WorkerManager {
         logger.info("Registered worker for task: {} (domain={})", taskName, domain);
     }
 
-    private void registerTaskDef(String taskName, int configuredTimeoutSeconds) {
+    /**
+     * Register the worker TaskDef create-only: create it when absent, but never overwrite one that
+     * already exists. When embedded, the host server pre-registers the worker TaskDef and declares
+     * its secret names on {@code TaskDef.runtimeMetadata} (conductor-oss PR #1255); overwriting here
+     * with a bare def (the client TaskDef model carries no runtimeMetadata) would clobber that and
+     * starve the host resolver. Standalone still gets the def created when absent. The existence
+     * check chooses correctly with no embedded flag.
+     */
+    void registerTaskDef(String taskName, int configuredTimeoutSeconds) {
+        try {
+            if (metadataClient.getTaskDef(taskName) != null) {
+                logger.debug("Task def {} already exists — leaving it untouched (create-only)", taskName);
+                return;
+            }
+        } catch (Exception lookupFailed) {
+            // Not found (or lookup errored) — fall through and create it.
+        }
         try {
             long timeout = effectiveTaskTimeout(configuredTimeoutSeconds);
             TaskDef taskDef = new TaskDef(taskName);
@@ -373,7 +389,13 @@ public class WorkerManager {
         // problem. See docs/design/secret-injection-contract.md.
         Map<String, String> resolvedSecrets = Collections.emptyMap();
         List<String> declared = taskCredentials.getOrDefault(taskName, Collections.emptyList());
-        if (!declared.isEmpty()) {
+        // Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names at
+        // poll time and delivers the values on the wire-only Task.runtimeMetadata (never persisted).
+        // Prefer that map; otherwise fall back to the native token-pull (standalone).
+        Map<String, String> hostDelivered = readRuntimeMetadata(task);
+        if (!hostDelivered.isEmpty()) {
+            resolvedSecrets = hostDelivered;
+        } else if (!declared.isEmpty()) {
             String execToken = extractExecutionToken(inputData);
             try {
                 resolvedSecrets = credentialFetcher.fetch(execToken, declared);
@@ -415,6 +437,25 @@ public class WorkerManager {
             result.setReasonForIncompletion(e.getMessage());
         }
         return result;
+    }
+
+    /**
+     * Read the host-delivered secret name→value map from {@code Task.runtimeMetadata} (embedded mode).
+     * The host resolves the worker's declared {@code TaskDef.runtimeMetadata} names from its secret
+     * store at poll time and injects the values on the wire only — never persisted to task input
+     * (conductor-oss PR #1255). Returns an empty map when absent (standalone → native token-pull).
+     */
+    private static Map<String, String> readRuntimeMetadata(Task task) {
+        if (task == null) return Collections.emptyMap();
+        Map<String, String> rm = task.getRuntimeMetadata();
+        if (rm == null || rm.isEmpty()) return Collections.emptyMap();
+        Map<String, String> out = new HashMap<>();
+        for (Map.Entry<String, String> e : rm.entrySet()) {
+            if (e.getKey() != null && e.getValue() != null) {
+                out.put(e.getKey(), e.getValue());
+            }
+        }
+        return out;
     }
 
     /**

@@ -1,4 +1,8 @@
-import { createConductorClient, TaskManager, NonRetryableException } from "@io-orkes/conductor-javascript";
+import {
+  createConductorClient,
+  TaskManager,
+  NonRetryableException,
+} from "@io-orkes/conductor-javascript";
 import type { ConductorWorker, Task, TaskResult } from "@io-orkes/conductor-javascript";
 import type { ToolContext } from "./types.js";
 import { TerminalToolError } from "./errors.js";
@@ -259,9 +263,16 @@ export class WorkerManager {
    * Queue a worker for the given task name.
    * Replaces any existing worker with the same task name.
    */
-  addWorker(taskName: string, handler: WorkerHandler, credentials?: string[], domain?: string): void {
+  addWorker(
+    taskName: string,
+    handler: WorkerHandler,
+    credentials?: string[],
+    domain?: string,
+  ): void {
     // Track (taskName, domain) pairs — same name under different domains are distinct workers
-    const idx = this.pendingWorkers.findIndex((w) => w.taskName === taskName && w.domain === domain);
+    const idx = this.pendingWorkers.findIndex(
+      (w) => w.taskName === taskName && w.domain === domain,
+    );
     if (idx >= 0) {
       this.pendingWorkers[idx] = { taskName, handler, credentials, domain };
     } else {
@@ -336,9 +347,7 @@ export class WorkerManager {
       leaseExtendEnabled: true,
       ...(pw.domain ? { domain: pw.domain } : {}),
 
-      async execute(
-        task: Task,
-      ): Promise<Omit<TaskResult, "workflowInstanceId" | "taskId">> {
+      async execute(task: Task): Promise<Omit<TaskResult, "workflowInstanceId" | "taskId">> {
         // Circuit breaker
         if (isCircuitBreakerOpen(pw.taskName)) {
           throw new NonRetryableException(`Circuit breaker open for ${pw.taskName}`);
@@ -355,21 +364,20 @@ export class WorkerManager {
         cleaned["__workflowInstanceId__"] = task.workflowInstanceId;
         if (toolContext) cleaned["__toolContext__"] = toolContext;
 
-        // Credential setup
+        // Credential setup. Embedded: the worker's declared TaskDef.runtimeMetadata secret names are
+        // resolved by the host from its secret store at poll time and delivered on the wire-only
+        // Task.runtimeMetadata (never persisted). Prefer that map; otherwise fall back to the native
+        // execution-token pull (standalone). Resolution is up-front (no env mutation yet) — injection
+        // happens inside runHandler() via injectSecretsForInvocation so mutate-invoke-restore is
+        // atomic under a process lock. See docs/design/secret-injection-contract.md.
         const execToken = extractExecutionToken(inputData);
+        const hostDelivered = (task as { runtimeMetadata?: Record<string, string> })
+          .runtimeMetadata;
 
-        // Resolve credentials up-front (no env mutation yet). Injection happens
-        // inside runHandler() via injectSecretsForInvocation so the mutate-
-        // invoke-restore sequence is atomic under a process-wide lock.
-        // See docs/design/secret-injection-contract.md.
         let resolvedCredentials: Record<string, string> = {};
-        if (pw.credentials?.length) {
-          if (!execToken) {
-            throw new NonRetryableException(
-              `Required credentials not found: ${pw.credentials.join(", ")}. ` +
-                `No execution token available.`,
-            );
-          }
+        if (hostDelivered && Object.keys(hostDelivered).length > 0) {
+          resolvedCredentials = hostDelivered;
+        } else if (pw.credentials?.length && execToken) {
           try {
             resolvedCredentials = await resolveCredentials(
               serverUrl,
@@ -383,14 +391,13 @@ export class WorkerManager {
             );
           }
         }
+        // else: no host delivery and no execution token — proceed with empty credentials; a
+        // tool that genuinely needs a secret fails via the accessor (the intended off-host trim).
 
-        const runHandler = async (): Promise<
-          Omit<TaskResult, "workflowInstanceId" | "taskId">
-        > => {
+        const runHandler = async (): Promise<Omit<TaskResult, "workflowInstanceId" | "taskId">> => {
           try {
-            let result = await injectSecretsForInvocation(
-              resolvedCredentials,
-              () => pw.handler(cleaned),
+            let result = await injectSecretsForInvocation(resolvedCredentials, () =>
+              pw.handler(cleaned),
             );
 
             // State mutation capture
@@ -416,11 +423,17 @@ export class WorkerManager {
           }
         };
 
-        // Scope credential context per-async-call so concurrent workers do not
-        // share (and clobber) module-level state. Runs even without an exec
-        // token so handlers see a consistent context shape.
-        if (execToken) {
-          return runWithCredentialContext(serverUrl, headers, execToken, runHandler);
+        // Scope credential context per-async-call so getCredential() sees the resolved
+        // (host-delivered or pulled) values and concurrent workers do not clobber each
+        // other's module-level state.
+        if (execToken || Object.keys(resolvedCredentials).length > 0) {
+          return runWithCredentialContext(
+            serverUrl,
+            headers,
+            execToken ?? "",
+            runHandler,
+            resolvedCredentials,
+          );
         }
         return runHandler();
       },

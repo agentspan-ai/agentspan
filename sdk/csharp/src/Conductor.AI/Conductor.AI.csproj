@@ -38,6 +38,9 @@
   <ItemGroup>
     <!-- System.Text.Json and System.Threading.Channels are in-box on .NET 10 -->
     <!-- conductor-csharp brings Newtonsoft.Json + Microsoft.Extensions.Logging.Abstractions transitively -->
+    <!-- TARGET: requires a conductor-csharp release that carries Task.RuntimeMetadata (host-resolved
+         worker secrets, wire-only; conductor-oss/csharp-sdk feat/task-runtime-metadata). The field is
+         additive; repin to that release once it lands. Not built here (no dotnet in the authoring env). -->
     <PackageReference Include="conductor-csharp" Version="1.1.4" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>

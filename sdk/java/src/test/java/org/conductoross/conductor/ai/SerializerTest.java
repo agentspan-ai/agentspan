@@ -483,8 +483,10 @@ class SerializerTest {
     @Test
     @SuppressWarnings("unchecked")
     void on_condition_handoff_serialized_with_target() {
-        Agent supervisor =
-                Agent.builder().name("supervisor").model("anthropic/claude-sonnet-4-6").build();
+        Agent supervisor = Agent.builder()
+                .name("supervisor")
+                .model("anthropic/claude-sonnet-4-6")
+                .build();
         Agent worker = Agent.builder()
                 .name("worker")
                 .model("anthropic/claude-sonnet-4-6")
@@ -847,8 +849,10 @@ class SerializerTest {
         // Mirrors the Python + TS serializer tests. The wire shape MUST be
         // byte-equal across SDKs so the server compiler sees the same
         // payload regardless of language.
-        Agent planner =
-                Agent.builder().name("planner_sub").model("anthropic/claude-sonnet-4-6").build();
+        Agent planner = Agent.builder()
+                .name("planner_sub")
+                .model("anthropic/claude-sonnet-4-6")
+                .build();
         ToolDef stub = ToolDef.builder()
                 .name("stub")
                 .description("stub")
@@ -885,8 +889,10 @@ class SerializerTest {
     void planner_context_omitted_when_unset() {
         // Counterfactual: without plannerContext the field MUST NOT appear
         // on the wire. Pairs with the positive test — pins the gating.
-        Agent planner =
-                Agent.builder().name("planner_sub").model("anthropic/claude-sonnet-4-6").build();
+        Agent planner = Agent.builder()
+                .name("planner_sub")
+                .model("anthropic/claude-sonnet-4-6")
+                .build();
         ToolDef stub = ToolDef.builder()
                 .name("stub")
                 .description("stub")
@@ -907,7 +913,8 @@ class SerializerTest {
     void planner_context_rejected_on_non_plan_execute_strategy() {
         // Same guard shape as planner=/fallback= — setting plannerContext
         // on anything other than PLAN_EXECUTE is a silent bug.
-        Agent sub = Agent.builder().name("sub").model("anthropic/claude-sonnet-4-6").build();
+        Agent sub =
+                Agent.builder().name("sub").model("anthropic/claude-sonnet-4-6").build();
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Agent.builder()
                 .name("h")
                 .model("anthropic/claude-sonnet-4-6")
@@ -956,8 +963,10 @@ class SerializerTest {
 
     @Test
     void parity_fields_absent_when_unset() {
-        Agent agent =
-                Agent.builder().name("plain_agent").model("anthropic/claude-sonnet-4-6").build();
+        Agent agent = Agent.builder()
+                .name("plain_agent")
+                .model("anthropic/claude-sonnet-4-6")
+                .build();
         Map<String, Object> out = ser.serialize(agent);
         assertFalse(out.containsKey("reasoningEffort"), "reasoningEffort omitted when unset");
         assertFalse(out.containsKey("maskedFields"), "maskedFields omitted when unset");

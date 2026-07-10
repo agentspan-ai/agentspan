@@ -419,8 +419,16 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
                         credential_names = list(
                             _workflow_credentials.get(task.workflow_instance_id, [])
                         )
+            # Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names
+            # at poll time and delivers the values on the wire-only Task.runtime_metadata (never
+            # persisted). Prefer that map; otherwise fall back to the native token-pull (standalone).
+            host_delivered = getattr(task, "runtime_metadata", None)
             resolved_secrets = {}
-            if credential_names:
+            if isinstance(host_delivered, dict) and host_delivered:
+                resolved_secrets = {
+                    k: v for k, v in host_delivered.items() if isinstance(v, str)
+                }
+            elif credential_names:
                 token = _extract_execution_token(task)
                 fetcher = _get_credential_fetcher()
                 try:

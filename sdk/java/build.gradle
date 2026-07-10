@@ -14,6 +14,9 @@ java {
 }
 
 repositories {
+    // TARGET: consumes the local conductor-client build that carries Task.runtimeMetadata
+    // (conductor-oss/java-sdk feat/task-runtime-metadata). Remove once that release lands.
+    mavenLocal()
     mavenCentral()
 }
 
@@ -28,7 +31,9 @@ ext {
     // separately from the server engine (engine = 3.30.2); wire-compatible with
     // the 3.x task REST API, bundles the common DTOs, and provides native auth
     // via io.orkes.conductor.client.ApiClient (key/secret → token).
-    conductorClientVersion = '5.0.1'
+    // TARGET: 5.1.0 adds Task.runtimeMetadata (host-resolved worker secrets, wire-only).
+    // Currently a local mavenLocal build; repin to the published 5.1.0 once it releases.
+    conductorClientVersion = '5.1.0'
 }
 
 dependencies {
