@@ -13,10 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import org.conductoross.conductor.ai.AgentConfig;
-import org.conductoross.conductor.ai.exceptions.CredentialAuthException;
-import org.conductoross.conductor.ai.exceptions.CredentialNotFoundException;
-import org.conductoross.conductor.ai.exceptions.CredentialRateLimitException;
-import org.conductoross.conductor.ai.exceptions.CredentialServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,7 +85,6 @@ public class WorkerManager {
     }
 
     private final AgentConfig config;
-    private final WorkerCredentialFetcher credentialFetcher;
     private final TaskClient taskClient;
     private final MetadataClient metadataClient;
 
@@ -114,7 +109,6 @@ public class WorkerManager {
 
     public WorkerManager(AgentConfig config, ConductorClient conductorClient) {
         this.config = config;
-        this.credentialFetcher = new WorkerCredentialFetcher(conductorClient);
         this.handlers = new ConcurrentHashMap<>();
         this.taskDomains = new ConcurrentHashMap<>();
         this.taskCredentials = new ConcurrentHashMap<>();
@@ -384,34 +378,19 @@ public class WorkerManager {
         TaskResult result = new TaskResult(task);
         Map<String, Object> inputData = task.getInputData() != null ? task.getInputData() : Collections.emptyMap();
 
-        // Resolve declared secrets BEFORE invoking the handler. Credential
-        // failures are terminal so Conductor doesn't burn retries on a config
-        // problem. See docs/design/secret-injection-contract.md.
-        Map<String, String> resolvedSecrets = Collections.emptyMap();
+        // Secrets are delivered on the wire-only Task.runtimeMetadata — resolved by the
+        // conductor core at poll from the names declared on TaskDef.runtimeMetadata. That map
+        // is the ONLY delivery path; the SDK never calls a server endpoint for secrets.
+        Map<String, String> resolvedSecrets = readRuntimeMetadata(task);
         List<String> declared = taskCredentials.getOrDefault(taskName, Collections.emptyList());
-        // Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names at
-        // poll time and delivers the values on the wire-only Task.runtimeMetadata (never persisted).
-        // Prefer that map; otherwise fall back to the native token-pull (standalone).
-        Map<String, String> hostDelivered = readRuntimeMetadata(task);
-        if (!hostDelivered.isEmpty()) {
-            resolvedSecrets = hostDelivered;
-        } else if (!declared.isEmpty()) {
-            String execToken = extractExecutionToken(inputData);
-            try {
-                resolvedSecrets = credentialFetcher.fetch(execToken, declared);
-            } catch (CredentialNotFoundException
-                    | CredentialAuthException
-                    | CredentialRateLimitException
-                    | CredentialServiceException ce) {
-                logger.error(
-                        "Credential resolution failed for task {} ({}): {}",
-                        taskName,
-                        task.getTaskId(),
-                        ce.getMessage());
-                result.setStatus(TaskResult.Status.FAILED_WITH_TERMINAL_ERROR);
-                result.setReasonForIncompletion("Credential resolution failed: " + ce.getMessage());
-                return result;
-            }
+        if (!declared.isEmpty() && resolvedSecrets.isEmpty()) {
+            // Not fatal: ToolContext.getCredential throws CredentialNotFoundException only
+            // if the handler actually reads a missing name.
+            logger.warn(
+                    "Task {} declares credentials {} but none were delivered on"
+                            + " Task.runtimeMetadata — is the secret stored on the server?",
+                    taskName,
+                    declared);
         }
 
         Function<Map<String, Object>, Object> handler = handlers.get(taskName);
@@ -440,36 +419,33 @@ public class WorkerManager {
     }
 
     /**
-     * Read the host-delivered secret name→value map from {@code Task.runtimeMetadata} (embedded mode).
-     * The host resolves the worker's declared {@code TaskDef.runtimeMetadata} names from its secret
-     * store at poll time and injects the values on the wire only — never persisted to task input
-     * (conductor-oss PR #1255). Returns an empty map when absent (standalone → native token-pull).
+     * Read the host-delivered secret name→value map from {@code Task.runtimeMetadata}.
+     * The conductor core resolves the worker's declared {@code TaskDef.runtimeMetadata} names
+     * at poll time and injects the values on the wire only — never persisted to task input
+     * (conductor-oss PR #1255).
+     *
+     * <p>Read reflectively: the published conductor-client does not carry the field yet, so
+     * this compiles (and returns an empty map) against today's client and lights up
+     * automatically once conductor-oss/java-sdk ships {@code Task.getRuntimeMetadata()}.
+     * (Older clients also drop the unregistered JSON key at deserialization, so the data is
+     * unavailable there either way.)</p>
      */
     private static Map<String, String> readRuntimeMetadata(Task task) {
         if (task == null) return Collections.emptyMap();
-        Map<String, String> rm = task.getRuntimeMetadata();
-        if (rm == null || rm.isEmpty()) return Collections.emptyMap();
+        Object rm;
+        try {
+            rm = task.getClass().getMethod("getRuntimeMetadata").invoke(task);
+        } catch (ReflectiveOperationException e) {
+            return Collections.emptyMap(); // client model does not carry the field yet
+        }
+        if (!(rm instanceof Map<?, ?> map) || map.isEmpty()) return Collections.emptyMap();
         Map<String, String> out = new HashMap<>();
-        for (Map.Entry<String, String> e : rm.entrySet()) {
-            if (e.getKey() != null && e.getValue() != null) {
-                out.put(e.getKey(), e.getValue());
+        for (Map.Entry<?, ?> e : map.entrySet()) {
+            if (e.getKey() != null && e.getValue() instanceof String v) {
+                out.put(String.valueOf(e.getKey()), v);
             }
         }
         return out;
-    }
-
-    /**
-     * Pull the execution token out of {@code inputData["__agentspan_ctx__"]["execution_token"]}.
-     * Returns {@code null} if no token is present.
-     */
-    @SuppressWarnings("unchecked")
-    private static String extractExecutionToken(Map<String, Object> inputData) {
-        if (inputData == null) return null;
-        Object ctx = inputData.get("__agentspan_ctx__");
-        if (!(ctx instanceof Map<?, ?> ctxMap)) return null;
-        Object token = ctxMap.get("execution_token");
-        if (token == null) token = ctxMap.get("executionToken"); // tolerate camelCase
-        return token instanceof String s ? s : null;
     }
 
     @SuppressWarnings("unchecked")

@@ -4,7 +4,7 @@
 package org.conductoross.conductor.ai.exceptions;
 
 /**
- * Execution token rejected by {@code POST /api/workers/secrets} (HTTP 401).
+ * Credential access rejected (unauthorized).
  *
  * <p>Non-retryable. Token has expired, been revoked, or is structurally
  * invalid. Mirrors Python's {@code CredentialAuthError}.</p>

@@ -4,7 +4,7 @@
 package org.conductoross.conductor.ai.exceptions;
 
 /**
- * Rate limit hit on {@code POST /api/workers/secrets} (HTTP 429).
+ * Credential access rate limit hit.
  *
  * <p>Non-retryable from the worker's perspective — reduce resolve frequency
  * or raise the server-side limit.</p>
