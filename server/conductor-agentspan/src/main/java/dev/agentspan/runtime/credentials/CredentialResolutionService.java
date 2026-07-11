@@ -6,6 +6,7 @@ package dev.agentspan.runtime.credentials;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,6 +40,7 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * own {@code os.environ} fallback when {@code secret_strict_mode=false}.</p>
  */
 @Service
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
 public class CredentialResolutionService {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialResolutionService.class);
@@ -51,24 +53,24 @@ public class CredentialResolutionService {
     }
 
     /**
-     * Resolve a credential name for a user. Supports dotted JSONPath into JSON-valued
+     * Resolve a credential name. Supports dotted JSONPath into JSON-valued
      * secrets — see class javadoc.
      *
      * @return the value (extracted scalar or full JSON), or null if not found
      */
-    public String resolve(String userId, String name) {
+    public String resolve(String name) {
         int dot = name.indexOf('.');
         if (dot < 0) {
-            String value = storeProvider.get(userId, name);
-            if (value == null) log.debug("Credential '{}' not found for user '{}'", name, userId);
+            String value = storeProvider.get(name);
+            if (value == null) log.debug("Credential '{}' not found", name);
             return value;
         }
 
         String base = name.substring(0, dot);
         String path = name.substring(dot + 1);
-        String json = storeProvider.get(userId, base);
+        String json = storeProvider.get(base);
         if (json == null) {
-            log.debug("Base credential '{}' for path '{}' not found for user '{}'", base, path, userId);
+            log.debug("Base credential '{}' for path '{}' not found", base, path);
             return null;
         }
         return extractByDottedPath(json, path);

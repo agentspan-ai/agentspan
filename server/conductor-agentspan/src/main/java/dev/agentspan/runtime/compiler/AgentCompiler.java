@@ -340,6 +340,49 @@ public class AgentCompiler {
 
     // ── Agent with tools ────────────────────────────────────────────
 
+    /**
+     * Collect {@code toolName -> [credentialNames]} for the agent's tools: each tool's own declared
+     * credentials, falling back to the agent-level credential list. Used by {@code AgentService} to
+     * declare each worker tool's {@code TaskDef.runtimeMetadata} (embedded), so the host resolves the
+     * names at the SIMPLE task's poll and injects the values onto {@code Task.runtimeMetadata}.
+     */
+    public static Map<String, List<String>> collectToolCredentials(AgentConfig config) {
+        List<String> agentCreds = config.getCredentials() != null ? config.getCredentials() : List.of();
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        if (config.getTools() != null) {
+            for (ToolConfig tool : config.getTools()) {
+                if (tool.getName() == null) continue;
+                List<String> own = new ArrayList<>();
+                if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> cl) {
+                    for (Object c : cl) {
+                        if (c instanceof String s) own.add(s);
+                    }
+                }
+                List<String> effective = own.isEmpty() ? agentCreds : own;
+                if (!effective.isEmpty()) map.put(tool.getName(), new ArrayList<>(new LinkedHashSet<>(effective)));
+            }
+        }
+        return map;
+    }
+
+    /**
+     * Collect the agent-level credential names, deduped and order-preserving. Used by
+     * {@code AgentService} to declare {@code TaskDef.runtimeMetadata} (embedded) on the non-worker
+     * SIMPLE tasks that run user-authored code — guardrails, callbacks, stop_when, gates, instructions,
+     * routers, graph node/edge workers — none of which carry their own per-item credential list, so the
+     * agent-level list is their only source. The host resolves the names at each task's poll and injects
+     * the values onto the wire-only {@code Task.runtimeMetadata}.
+     *
+     * <p><b>Note:</b> the SDK worker wrappers for these non-worker task kinds do not yet read
+     * {@code Task.runtimeMetadata} (only the tool worker does), so declaring it here is currently inert —
+     * the values ride the wire but {@code get_secret()} inside those user functions won't resolve until
+     * the SDK wrappers are taught to route {@code runtimeMetadata} into the credential context.</p>
+     */
+    public static List<String> collectAgentCredentials(AgentConfig config) {
+        if (config.getCredentials() == null || config.getCredentials().isEmpty()) return List.of();
+        return new ArrayList<>(new LinkedHashSet<>(config.getCredentials()));
+    }
+
     WorkflowDef compileWithTools(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         String llmRef = toRef(config.getName()) + "_llm";
@@ -1018,7 +1061,6 @@ public class AgentCompiler {
         inputs.put("media", mediaRef);
         inputs.put("session_id", "${workflow.input.session_id}");
         // Forward execution token to sub-workflows for credential resolution
-        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         // Pass context to sub-workflow for pipeline state
         if (contextRef != null) {
             inputs.put("context", contextRef);
@@ -1124,7 +1166,6 @@ public class AgentCompiler {
             task.setType("SIMPLE");
 
             Map<String, Object> inputs = new LinkedHashMap<>(ptc.getArguments());
-            inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             task.setInputParameters(inputs);
 
             tasks.add(task);
@@ -1276,7 +1317,6 @@ public class AgentCompiler {
                 Map<String, Object> args = pr.arguments();
                 if (args != null && !args.isEmpty()) {
                     String summary = args.entrySet().stream()
-                            .filter(e -> !"__agentspan_ctx__".equals(e.getKey()))
                             .map(e -> e.getKey() + "=" + e.getValue())
                             .collect(Collectors.joining(", "));
                     if (!summary.isEmpty()) {
@@ -1347,7 +1387,6 @@ public class AgentCompiler {
         }
 
         // Forward execution token so per-user credential resolution works in worker threads
-        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
 
         llm.setInputParameters(inputs);
 
@@ -1867,7 +1906,6 @@ public class AgentCompiler {
             // Pass subgraph input from prep output + execution token
             Map<String, Object> subInputs = new LinkedHashMap<>();
             subInputs.put("state", "${" + prepRef + ".output.subgraph_input}");
-            subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             subTask.setInputParameters(subInputs);
             defaultTasks.add(subTask);
 
@@ -3435,15 +3473,13 @@ public class AgentCompiler {
                 "prompt", "${workflow.input.prompt}",
                 "session_id", "${workflow.input.session_id}",
                 "media", "${workflow.input.media}",
-                "cwd", "${workflow.input.cwd}",
-                "__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}")));
+                "cwd", "${workflow.input.cwd}")));
 
         WorkflowDef wf = new WorkflowDef();
         wf.setName(config.getName());
         wf.setVersion(1);
         List<String> inputs = new ArrayList<>(WORKFLOW_INPUTS);
         inputs.add("context");
-        inputs.add("__agentspan_ctx__");
         wf.setInputParameters(inputs);
         wf.setTasks(List.of(fwTask));
         // Output both result and context so sequential pipelines can merge

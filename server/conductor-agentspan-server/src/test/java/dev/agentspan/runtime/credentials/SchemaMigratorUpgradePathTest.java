@@ -67,15 +67,15 @@ class SchemaMigratorUpgradePathTest {
 
     @BeforeEach
     void setUp() {
-        store.delete(ANON, STAGE_NAME);
-        store.delete(ANON, MIGRATED_NAME);
+        store.delete(STAGE_NAME);
+        store.delete(MIGRATED_NAME);
         jdbc.getJdbcOperations().execute("DROP TABLE IF EXISTS secrets_store");
     }
 
     @AfterEach
     void cleanUp() {
-        store.delete(ANON, STAGE_NAME);
-        store.delete(ANON, MIGRATED_NAME);
+        store.delete(STAGE_NAME);
+        store.delete(MIGRATED_NAME);
         jdbc.getJdbcOperations().execute("DROP TABLE IF EXISTS secrets_store");
     }
 
@@ -83,7 +83,7 @@ class SchemaMigratorUpgradePathTest {
     void migratedRow_isReadableViaPublicApi() throws Exception {
         // 1. Encrypt a plaintext through the live store (credentials_store).
         //    This guarantees the bytes are in the format the running server reads.
-        store.set(ANON, STAGE_NAME, PLAINTEXT);
+        store.set(STAGE_NAME, PLAINTEXT);
         byte[] encryptedBytes = jdbc.queryForObject(
                 "SELECT encrypted_value FROM credentials_store WHERE user_id = :u AND name = :n",
                 Map.of("u", ANON, "n", STAGE_NAME),
@@ -112,7 +112,7 @@ class SchemaMigratorUpgradePathTest {
                         encryptedBytes,
                         "t",
                         Instant.now().toString()));
-        store.delete(ANON, STAGE_NAME); // remove the staging row
+        store.delete(STAGE_NAME); // remove the staging row
 
         // Sanity: the migrated name is NOT yet visible via the public API.
         mvc.perform(get("/api/secrets/" + MIGRATED_NAME)).andExpect(status().isNotFound());

@@ -14,28 +14,23 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.env.Environment;
 
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 import okhttp3.OkHttpClient;
 
 class AgentspanAIModelProviderTest {
 
-    private static final String ANON_USER = "00000000-0000-0000-0000-000000000000";
-
     private CredentialResolutionService credentialService;
-    private ExecutionTokenService tokenService;
     private OkHttpClient httpClient;
     private AgentspanAIModelProvider provider;
 
     @BeforeEach
     void setUp() {
         credentialService = mock(CredentialResolutionService.class);
-        tokenService = mock(ExecutionTokenService.class);
         httpClient = new OkHttpClient();
         Environment env = mock(Environment.class);
         when(env.getProperty(anyString(), anyString())).thenAnswer(i -> i.getArgument(1));
 
-        provider = new AgentspanAIModelProvider(List.of(), env, httpClient, credentialService, tokenService);
+        provider = new AgentspanAIModelProvider(List.of(), env, httpClient, credentialService);
     }
 
     @Test
@@ -46,21 +41,21 @@ class AgentspanAIModelProviderTest {
 
     @Test
     void isProviderConfigured_returnsFalse_whenNoCredential() {
-        when(credentialService.resolve(ANON_USER, "OPENAI_API_KEY")).thenReturn(null);
+        when(credentialService.resolve("OPENAI_API_KEY")).thenReturn(null);
 
         assertThat(provider.isProviderConfigured("openai")).isFalse();
     }
 
     @Test
     void isProviderConfigured_returnsTrue_whenCredentialFound() {
-        when(credentialService.resolve(ANON_USER, "OPENAI_API_KEY")).thenReturn("sk-test-key");
+        when(credentialService.resolve("OPENAI_API_KEY")).thenReturn("sk-test-key");
 
         assertThat(provider.isProviderConfigured("openai")).isTrue();
     }
 
     @Test
     void isProviderConfigured_caseInsensitive() {
-        when(credentialService.resolve(ANON_USER, "ANTHROPIC_API_KEY")).thenReturn("key");
+        when(credentialService.resolve("ANTHROPIC_API_KEY")).thenReturn("key");
 
         assertThat(provider.isProviderConfigured("Anthropic")).isTrue();
         assertThat(provider.isProviderConfigured("ANTHROPIC")).isTrue();
@@ -75,8 +70,7 @@ class AgentspanAIModelProviderTest {
 
     @Test
     void isProviderConfigured_credentialServiceThrows_returnsFalse() {
-        when(credentialService.resolve(ANON_USER, "OPENAI_API_KEY"))
-                .thenThrow(new RuntimeException("store unavailable"));
+        when(credentialService.resolve("OPENAI_API_KEY")).thenThrow(new RuntimeException("store unavailable"));
 
         assertThat(provider.isProviderConfigured("openai")).isFalse();
     }

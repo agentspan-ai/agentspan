@@ -29,9 +29,6 @@ import lombok.RequiredArgsConstructor;
  * {@code SecretResourceV2}. Auth: every endpoint requires a logged-in
  * principal (the host's request filter populates the request context).</p>
  *
- * <p>The token-mediated worker fetch endpoint lives in {@link WorkerController}
- * at {@code POST /api/workers/secrets}.</p>
- *
  * <ul>
  *   <li>{@code POST   /api/secrets}              — list names ({@code List<String>})</li>
  *   <li>{@code GET    /api/secrets}              — list names user can grant access to ({@code Set<String>})</li>
@@ -63,9 +60,8 @@ public class SecretController {
     /** POST /api/secrets — list all secret names (Conductor's primary listing endpoint). */
     @PostMapping
     public ResponseEntity<List<String>> listAllNames() {
-        List<String> names = storeProvider.list(currentUserId()).stream()
-                .map(CredentialMeta::getName)
-                .toList();
+        List<String> names =
+                storeProvider.list().stream().map(CredentialMeta::getName).toList();
         return ResponseEntity.ok(names);
     }
 
@@ -76,9 +72,8 @@ public class SecretController {
      */
     @GetMapping
     public ResponseEntity<Set<String>> listGrantable() {
-        Set<String> names = new LinkedHashSet<>(storeProvider.list(currentUserId()).stream()
-                .map(CredentialMeta::getName)
-                .toList());
+        Set<String> names = new LinkedHashSet<>(
+                storeProvider.list().stream().map(CredentialMeta::getName).toList());
         return ResponseEntity.ok(names);
     }
 
@@ -88,7 +83,7 @@ public class SecretController {
      */
     @GetMapping("/v2")
     public ResponseEntity<List<CredentialMeta>> listWithMeta() {
-        return ResponseEntity.ok(storeProvider.list(currentUserId()));
+        return ResponseEntity.ok(storeProvider.list());
     }
 
     // ── Value CRUD ────────────────────────────────────────────────────
@@ -98,7 +93,7 @@ public class SecretController {
     public ResponseEntity<String> getSecret(@PathVariable String key) {
         ResponseEntity<?> err = validateKey(key);
         if (err != null) return ResponseEntity.status(err.getStatusCode()).build();
-        String value = storeProvider.get(currentUserId(), key);
+        String value = storeProvider.get(key);
         log.info("AUDIT get-secret: userId={} key={} found={}", currentUserId(), key, value != null);
         if (value == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(value);
@@ -114,7 +109,7 @@ public class SecretController {
         if (value == null || value.isEmpty()) {
             return ResponseEntity.badRequest().body("value is required");
         }
-        storeProvider.set(currentUserId(), key, value);
+        storeProvider.set(key, value);
         log.info("AUDIT put-secret: userId={} key={}", currentUserId(), key);
         return ResponseEntity.ok().build();
     }
@@ -124,7 +119,7 @@ public class SecretController {
     public ResponseEntity<?> deleteSecret(@PathVariable String key) {
         ResponseEntity<?> err = validateKey(key);
         if (err != null) return err;
-        storeProvider.delete(currentUserId(), key);
+        storeProvider.delete(key);
         log.info("AUDIT delete-secret: userId={} key={}", currentUserId(), key);
         return ResponseEntity.ok().build();
     }
@@ -134,7 +129,7 @@ public class SecretController {
     public ResponseEntity<Boolean> exists(@PathVariable String key) {
         ResponseEntity<?> err = validateKey(key);
         if (err != null) return ResponseEntity.badRequest().build();
-        boolean present = storeProvider.get(currentUserId(), key) != null;
+        boolean present = storeProvider.get(key) != null;
         return ResponseEntity.ok(present);
     }
 

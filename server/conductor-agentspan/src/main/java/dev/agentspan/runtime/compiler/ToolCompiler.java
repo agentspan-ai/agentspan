@@ -22,7 +22,6 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.GuardrailConfig;
 import dev.agentspan.runtime.model.ToolConfig;
-import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 
@@ -52,13 +51,13 @@ public class ToolCompiler {
     }
 
     /**
-     * Replace {@code ${NAME}} credential placeholders with {@code #{NAME}} in a
-     * headers map so that Conductor's {@code ParametersUtils} does not consume them.
-     * The {@code #} prefix is invisible to Conductor's expression engine and is later
-     * resolved by credential-aware task handlers.
+     * Matches a {@code ${IDENTIFIER}} credential placeholder (dots allowed — {@code ${GCP_SVC.project_id}}
+     * addresses a JSON path inside a JSON-valued secret, which conductor's secret resolution supports).
      */
-    /** Matches a {@code ${IDENTIFIER}} credential placeholder. */
-    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
+    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_.]*)\\}");
+
+    /** Matches the inert {@code #{NAME}} marker form (see {@link #rewriteCredentialPlaceholders}). */
+    private static final Pattern CREDENTIAL_MARKER = Pattern.compile("#\\{([A-Za-z_][A-Za-z0-9_.]*)\\}");
 
     private static Map<String, Object> escapeCredentialPlaceholders(Map<?, ?> headers) {
         Map<String, Object> escaped = new LinkedHashMap<>();
@@ -70,21 +69,44 @@ public class ToolCompiler {
     }
 
     /**
-     * Rewrite {@code ${NAME}} credential placeholders for the runtime that will resolve them.
-     * When embedded in a host (e.g. orkes-conductor), emit the host's native
-     * {@code ${workflow.secrets.NAME}} so the host resolves it at task-input binding. Standalone:
-     * escape to {@code #{NAME}} for AgentSpan's credential-aware HTTP/MCP task handlers.
+     * Rewrite a {@code ${NAME}} credential placeholder to the inert transport form {@code #{NAME}}.
+     *
+     * <p>Two-form design: header configs travel through INLINE enrich/prepare scripts (as script
+     * text or structured INLINE input), and conductor's {@code ParametersUtils} substitutes any
+     * contiguous {@code ${workflow.secrets.NAME}} in an INLINE task's input to PLAINTEXT at that
+     * task's hand-off — which would persist the secret via the script's output into the forked
+     * tasks' inputs. The {@code #{NAME}} marker is invisible to both ParametersUtils passes, so it
+     * rides safely through every hop; it is converted to the real {@code ${workflow.secrets.NAME}}
+     * reference only at final placement into a real task's {@code inputParameters} —
+     * {@link #secretRefHeaders} for statically-built tasks, and the {@code _sec()} helper inside
+     * the enrich scripts for dynamically forked tasks. There conductor defers it at binding and
+     * resolves it wire-only at the task's own hand-off.</p>
      */
     private static String rewriteCredentialPlaceholders(String value) {
-        if (EmbeddedMode.isEmbedded()) {
-            return CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("\\${workflow.secrets.$1}");
+        return CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("#{$1}");
+    }
+
+    /**
+     * Convert {@code #{NAME}} markers in a headers map to {@code ${workflow.secrets.NAME}}
+     * references. Apply ONLY when placing headers directly into a real (non-INLINE) task's
+     * {@code inputParameters} — conductor defers the reference at input binding and resolves it
+     * wire-only at the task's own hand-off, so plaintext is never persisted.
+     */
+    private static Object secretRefHeaders(Object headers) {
+        if (!(headers instanceof Map<?, ?> m)) {
+            return headers;
         }
-        return value.replace("${", "#{");
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : m.entrySet()) {
+            String v = String.valueOf(e.getValue());
+            out.put(String.valueOf(e.getKey()), CREDENTIAL_MARKER.matcher(v).replaceAll("\\${workflow.secrets.$1}"));
+        }
+        return out;
     }
 
     /**
      * Return a copy of {@code cfg} with credential placeholders in its {@code headers}
-     * entry escaped from {@code ${NAME}} to {@code #{NAME}}.
+     * entry rewritten from {@code ${NAME}} to {@code ${workflow.secrets.NAME}}.
      */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> escapeHeadersInConfig(Map<String, Object> cfg) {
@@ -431,7 +453,6 @@ public class ToolCompiler {
         enrichInput.put("expression", script);
         enrichInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
-        enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
         enrichInput.put("userPrompt", "${workflow.input.prompt}");
         enrichTask.setInputParameters(enrichInput);
 
@@ -735,11 +756,11 @@ public class ToolCompiler {
 
             Map<String, Object> listInputs = new LinkedHashMap<>();
             listInputs.put("mcpServer", server.get("serverUrl"));
-            Object headers = server.get("headers");
+            // Direct task input — convert #{NAME} markers to wire-only-resolved secret refs.
+            Object headers = secretRefHeaders(server.get("headers"));
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
-            listInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -891,14 +912,13 @@ public class ToolCompiler {
             httpReq.put("accept", "application/json");
             httpReq.put("connectionTimeOut", 30000);
             httpReq.put("readTimeOut", 30000);
-            Object hdrs = server.get("headers");
+            // Direct task input — convert #{NAME} markers to wire-only-resolved secret refs.
+            Object hdrs = secretRefHeaders(server.get("headers"));
             if (hdrs != null && !((Map<?, ?>) hdrs).isEmpty()) {
                 httpReq.put("headers", hdrs);
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
-            // Forward execution token so CredentialAwareHttpTask can resolve #{NAME} headers
-            fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -1051,11 +1071,11 @@ public class ToolCompiler {
 
             Map<String, Object> listInputs = new LinkedHashMap<>();
             listInputs.put("mcpServer", server.get("serverUrl"));
-            Object headers = server.get("headers");
+            // Direct task input — convert #{NAME} markers to wire-only-resolved secret refs.
+            Object headers = secretRefHeaders(server.get("headers"));
             if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
                 listInputs.put("headers", headers);
             }
-            listInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             listTask.setInputParameters(listInputs);
             preTasks.add(listTask);
         }
@@ -1098,13 +1118,13 @@ public class ToolCompiler {
             httpReq.put("accept", "application/json");
             httpReq.put("connectionTimeOut", 30000);
             httpReq.put("readTimeOut", 30000);
-            Object hdrs = server.get("headers");
+            // Direct task input — convert #{NAME} markers to wire-only-resolved secret refs.
+            Object hdrs = secretRefHeaders(server.get("headers"));
             if (hdrs != null && !((Map<?, ?>) hdrs).isEmpty()) {
                 httpReq.put("headers", hdrs);
             }
             Map<String, Object> fetchInputs = new LinkedHashMap<>();
             fetchInputs.put("http_request", httpReq);
-            fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             fetchTask.setInputParameters(fetchInputs);
             preTasks.add(fetchTask);
 
@@ -1584,7 +1604,6 @@ public class ToolCompiler {
             enrichInput.put("apiConfig", apiConfigRef);
         }
         enrichInput.put("agentState", "${workflow.variables._agent_state}");
-        enrichInput.put("agentspanCtx", "${workflow.input.__agentspan_ctx__}");
         enrichInput.put("userPrompt", "${workflow.input.prompt}");
         enrichTask.setInputParameters(enrichInput);
 

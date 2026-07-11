@@ -18,6 +18,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,7 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * <p>The master key is the 32-byte key from {@code MasterKeyConfig#credentialMasterKey()}.</p>
  */
 @Component
+@ConditionalOnProperty(name = "conductor.secrets.type", havingValue = "agentspan")
 public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvider {
 
     private static final Logger log = LoggerFactory.getLogger(EncryptedDbCredentialStoreProvider.class);
@@ -41,6 +43,13 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
     private static final int IV_LENGTH = 12; // GCM standard nonce
     private static final int TAG_LENGTH = 128; // GCM auth tag bits
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    /**
+     * Fixed single-scope owner for all rows. The {@code credentials_store} schema keeps its
+     * {@code user_id} column (part of the (user_id, name) primary key), but the store is global —
+     * every row is written and read under this constant, so lookups are effectively by name.
+     */
+    private static final String DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000000";
 
     private final NamedParameterJdbcTemplate jdbc;
     private final byte[] masterKey;
@@ -53,24 +62,24 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
     }
 
     @Override
-    public String get(String userId, String name) {
+    public String get(String name) {
         try {
             byte[] encrypted = jdbc.queryForObject(
                     "SELECT encrypted_value FROM credentials_store " + "WHERE user_id = :uid AND name = :n",
-                    Map.of("uid", userId, "n", name),
+                    Map.of("uid", DEFAULT_USER_ID, "n", name),
                     byte[].class);
             if (encrypted == null) return null;
             return decrypt(encrypted);
         } catch (EmptyResultDataAccessException e) {
             return null;
         } catch (Exception e) {
-            log.error("Failed to decrypt credential '{}' for user '{}': {}", name, userId, e.getMessage());
+            log.error("Failed to decrypt credential '{}': {}", name, e.getMessage());
             throw new IllegalStateException("Failed to decrypt credential: " + name, e);
         }
     }
 
     @Override
-    public void set(String userId, String name, String value) {
+    public void set(String name, String value) {
         try {
             byte[] encrypted = encrypt(value);
             String now = Instant.now().toString();
@@ -84,20 +93,21 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
                             + "ON CONFLICT(user_id, name) DO UPDATE SET "
                             + "  encrypted_value = excluded.encrypted_value, "
                             + "  updated_at      = excluded.updated_at",
-                    Map.of("uid", userId, "n", name, "enc", encrypted, "now", now));
+                    Map.of("uid", DEFAULT_USER_ID, "n", name, "enc", encrypted, "now", now));
         } catch (Exception e) {
             throw new IllegalStateException("Failed to store credential: " + name, e);
         }
     }
 
     @Override
-    public void delete(String userId, String name) {
+    public void delete(String name) {
         jdbc.update(
-                "DELETE FROM credentials_store WHERE user_id = :uid AND name = :n", Map.of("uid", userId, "n", name));
+                "DELETE FROM credentials_store WHERE user_id = :uid AND name = :n",
+                Map.of("uid", DEFAULT_USER_ID, "n", name));
     }
 
     @Override
-    public List<CredentialMeta> list(String userId) {
+    public List<CredentialMeta> list() {
         // Include encrypted_value in the SELECT so we can decrypt inline — avoids
         // an N+1 query pattern. On SQLite the pool is capped at 1 connection so a
         // nested get() call inside a RowMapper would deadlock; on PostgreSQL the
@@ -105,7 +115,7 @@ public class EncryptedDbCredentialStoreProvider implements CredentialStoreProvid
         return jdbc.query(
                 "SELECT name, encrypted_value, created_at, updated_at "
                         + "FROM credentials_store WHERE user_id = :uid ORDER BY name",
-                Map.of("uid", userId),
+                Map.of("uid", DEFAULT_USER_ID),
                 (rs, row) -> {
                     String name = rs.getString("name");
                     byte[] enc = rs.getBytes("encrypted_value");

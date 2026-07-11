@@ -57,12 +57,12 @@ class CredentialMaskingIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        store.set(userId, CRED_NAME, CRED_VALUE);
+        store.set(CRED_NAME, CRED_VALUE);
     }
 
     @AfterEach
     void cleanUp() {
-        store.delete(userId, CRED_NAME);
+        store.delete(CRED_NAME);
     }
 
     // ── Advice URI coverage ─────────────────────────────────────────────
