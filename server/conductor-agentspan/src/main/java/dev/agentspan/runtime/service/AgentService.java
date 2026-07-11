@@ -47,7 +47,6 @@ import dev.agentspan.runtime.compiler.MultiAgentCompiler;
 import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
-import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ProviderValidator;
 import dev.agentspan.runtime.util.WorkflowClassifiers;
@@ -1318,10 +1317,12 @@ public class AgentService {
     }
 
     /**
-     * Register a worker TaskDef. When embedded, {@code runtimeMetadata} declares the secret names the
-     * host must resolve at the SIMPLE task's poll and inject onto the wire-only
-     * {@code Task.runtimeMetadata} (conductor-oss PR #1255). Standalone leaves it empty — the native
-     * execution-token pull delivers secrets instead.
+     * Register a worker TaskDef. {@code runtimeMetadata} declares the secret names the conductor
+     * core must resolve at the SIMPLE task's poll and inject onto the wire-only
+     * {@code Task.runtimeMetadata} (conductor-oss PR #1255). This is the only credential-delivery
+     * path for workers, in BOTH modes: embedded, the host's SecretsDAO resolves the names;
+     * standalone, the built-in conductor core resolves them via AgentspanSecretsDAO (the encrypted
+     * credential store).
      */
     private void registerTaskDef(String taskName, List<String> runtimeMetadata) {
         TaskDef taskDef = new TaskDef();
@@ -1332,7 +1333,7 @@ public class AgentService {
         taskDef.setTimeoutSeconds(0);
         taskDef.setResponseTimeoutSeconds(3600);
         taskDef.setTimeoutPolicy(TaskDef.TimeoutPolicy.RETRY);
-        if (EmbeddedMode.isEmbedded() && runtimeMetadata != null && !runtimeMetadata.isEmpty()) {
+        if (runtimeMetadata != null && !runtimeMetadata.isEmpty()) {
             taskDef.setRuntimeMetadata(new ArrayList<>(runtimeMetadata));
         }
 

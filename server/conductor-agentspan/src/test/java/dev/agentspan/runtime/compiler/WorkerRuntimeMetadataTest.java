@@ -83,7 +83,11 @@ class WorkerRuntimeMetadataTest {
         assertThat(script).doesNotContain("__resolved_credentials__");
     }
 
-    // ── AgentService declares runtimeMetadata on the worker TaskDef only when embedded ──
+    // ── AgentService declares runtimeMetadata on the worker TaskDef in BOTH modes ──
+    // runtimeMetadata is the only credential-delivery path now (the native token pull is
+    // gone): embedded, the host resolves the names at poll; standalone, the built-in
+    // conductor core resolves them via AgentspanSecretsDAO. So the declaration must not
+    // be gated on EmbeddedMode.
 
     @Test
     void embedded_stampsRuntimeMetadataOnWorkerTaskDef() throws Exception {
@@ -93,10 +97,10 @@ class WorkerRuntimeMetadataTest {
     }
 
     @Test
-    void standalone_leavesRuntimeMetadataEmpty() throws Exception {
+    void standalone_alsoStampsRuntimeMetadata() throws Exception {
         new EmbeddedMode().setEmbedded(false);
         TaskDef registered = registerWorkerTaskDef("gh", List.of("GITHUB_TOKEN"));
-        assertThat(registered.getRuntimeMetadata()).isNullOrEmpty();
+        assertThat(registered.getRuntimeMetadata()).containsExactly("GITHUB_TOKEN");
     }
 
     @Test
@@ -152,7 +156,7 @@ class WorkerRuntimeMetadataTest {
     }
 
     @Test
-    void standalone_leavesNonWorkerRuntimeMetadataEmpty() throws Exception {
+    void standalone_alsoDeclaresNonWorkerRuntimeMetadata() throws Exception {
         new EmbeddedMode().setEmbedded(false);
         AgentConfig config = AgentConfig.builder()
                 .name("a")
@@ -166,7 +170,7 @@ class WorkerRuntimeMetadataTest {
 
         Map<String, TaskDef> defs = registerAllTaskDefs(config);
 
-        assertThat(defs.get("a_guard").getRuntimeMetadata()).isNullOrEmpty();
+        assertThat(defs.get("a_guard").getRuntimeMetadata()).containsExactly("DEMO_SECRET");
     }
 
     /**
