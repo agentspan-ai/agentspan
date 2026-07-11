@@ -38,9 +38,10 @@
   <ItemGroup>
     <!-- System.Text.Json and System.Threading.Channels are in-box on .NET 10 -->
     <!-- conductor-csharp brings Newtonsoft.Json + Microsoft.Extensions.Logging.Abstractions transitively -->
-    <!-- TARGET: requires a conductor-csharp release that carries Task.RuntimeMetadata (host-resolved
-         worker secrets, wire-only; conductor-oss/csharp-sdk feat/task-runtime-metadata). The field is
-         additive; repin to that release once it lands. Not built here (no dotnet in the authoring env). -->
+    <!-- Worker secrets arrive on the wire-only Task.RuntimeMetadata. The published client does
+         not carry the property yet: WorkerPollLoop reads it reflectively and stays inert until
+         conductor-oss/csharp-sdk ships it (older clients also drop the unknown JSON member at
+         deserialization). Repin when that release lands. -->
     <PackageReference Include="conductor-csharp" Version="1.1.4" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>

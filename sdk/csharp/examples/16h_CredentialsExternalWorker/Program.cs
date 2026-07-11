@@ -8,7 +8,7 @@
 //     Credentials = ["GITHUB_TOKEN"]. In C#, external tools must be
 //     created as ToolDef objects directly (unlike local tools which use
 //     [Tool] attributes and ToolRegistry.FromInstance).
-//   - The external worker calls AgentClient.ResolveCredentialsAsync()
+//   - The external worker reads the resolved values from Task.RuntimeMetadata
 //     to fetch the plaintext credential value at runtime.
 //   - Works for workers running in separate processes, containers, or machines.
 //
@@ -83,8 +83,9 @@ result.PrintResult();
  * ── External worker side (runs in a separate process) ─────────────────
  *
  * The external worker polls Conductor for tasks named "github_lookup".
- * It uses AgentClient.ResolveCredentialsAsync() to fetch the
- * GITHUB_TOKEN value from the Agentspan server at runtime.
+ * The conductor core resolves the names declared on the worker's
+ * TaskDef.runtimeMetadata at poll time and delivers the values on the
+ * wire-only Task.runtimeMetadata — no endpoint call needed.
  *
  * Implementation sketch:
  *
@@ -102,19 +103,10 @@ result.PrintResult();
  *       var task = await taskClient.PollAsync("github_lookup", workerId: "worker-1");
  *       if (task is null) { await Task.Delay(1000); continue; }
  *
- *       // Extract the execution token injected by Agentspan into __agentspan_ctx__
- *       string? executionToken = null;
- *       if (task.InputData.TryGetValue("__agentspan_ctx__", out var ctxRaw))
- *       {
- *           var ctx = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
- *               ctxRaw.ToString()!);
- *           if (ctx?.TryGetValue("execution_token", out var tok) == true)
- *               executionToken = tok.GetString();
- *       }
- *
- *       // Resolve GITHUB_TOKEN from the server using the execution token
- *       var creds = await http.ResolveCredentialsAsync(executionToken, ["GITHUB_TOKEN"]);
- *       var token = creds.GetValueOrDefault("GITHUB_TOKEN", "");
+ *       // The poll response carries the resolved secrets on the wire-only
+ *       // runtimeMetadata field (resolved server-side from the names declared
+ *       // on the worker's TaskDef.runtimeMetadata — no endpoint call).
+ *       var token = task.RuntimeMetadata?.GetValueOrDefault("GITHUB_TOKEN") ?? "";
  *
  *       // Use the credential to call the GitHub API
  *       var username = task.InputData["username"].ToString();
