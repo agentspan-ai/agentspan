@@ -1,18 +1,18 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Local e2e proof — embedded host (Orkes Conductor) resolves secrets.
+"""Local e2e proof — the server resolves worker secrets onto Task.runtimeMetadata.
 
-Minimal: ONE worker tool + an LLM call, so a single run exercises BOTH embedded
-secret paths and the Orkes UI shows the result:
+Minimal: ONE worker tool + an LLM call, so a single run exercises both secret
+paths and the server UI shows the result:
 
-  * Worker-tool secret  -> the tool declares credentials=["DEMO_SECRET"] and reads it
-    with get_secret(). Embedded, the compiler stamps
-    inputParameters.__resolved_credentials__ = {DEMO_SECRET: "${workflow.secrets.DEMO_SECRET}"}
-    and the host resolves it at poll. The tool returns a masked confirmation.
-  * LLM apiKey secret   -> the agent makes an LLM call; embedded, the apiKey is stamped
-    ${workflow.secrets.<PROVIDER_KEY>} and resolved by the host. If the LLM step succeeds,
-    that secret resolved too.
+  * Worker-tool secret  -> the tool declares credentials=["DEMO_SECRET"]; the server
+    declares that name on the worker's TaskDef.runtimeMetadata, the conductor core
+    resolves it at the task's poll onto the wire-only Task.runtimeMetadata, and
+    get_secret() reads it. No endpoint call. The tool returns a masked confirmation.
+  * LLM apiKey secret   -> the agent makes an LLM call; the provider key comes from
+    the host AI integration (embedded) or the server's credential store (standalone).
+    If the LLM step succeeds, that secret resolved too.
 
 The tool does NO external network calls, so the task output is a clean, deterministic
 "secret_resolved: true" you can screenshot.

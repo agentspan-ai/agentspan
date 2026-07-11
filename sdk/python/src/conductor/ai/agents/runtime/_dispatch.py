@@ -11,7 +11,6 @@ for parameter type resolution.
 import inspect
 import json
 import logging
-import os
 import threading
 from dataclasses import asdict, is_dataclass
 from types import SimpleNamespace
@@ -156,49 +155,27 @@ def _coerce_value(value, annotation):
     return value
 
 
-# Lazily created credential fetcher — initialized from AgentConfig on first use
-_credential_fetcher = None
+# Secrets are delivered on the wire-only Task.runtime_metadata (resolved by the
+# conductor core at poll from the names declared on TaskDef.runtimeMetadata).
+# Register the field on the conductor-python Task model — published client
+# releases don't carry it yet and would silently drop it at deserialization.
+from conductor.ai.agents.runtime.credentials._task_compat import ensure_runtime_metadata_field
+
+ensure_runtime_metadata_field()
 
 
-def _get_credential_fetcher():
-    """Return the module-level WorkerCredentialFetcher, creating it on first call.
+def _read_runtime_metadata(task) -> dict:
+    """Return the host-resolved secret name→value map from ``Task.runtime_metadata``.
 
-    The fetcher is initialized from AgentConfig.from_env() so it picks up
-    AGENTSPAN_SERVER_URL, AGENTSPAN_API_KEY, AGENTSPAN_SECRET_STRICT_MODE.
+    This is the ONLY credential-delivery path: the conductor core resolves the
+    worker's declared ``TaskDef.runtimeMetadata`` names at poll time and delivers
+    the values on the wire-only ``Task.runtime_metadata`` (never persisted). The
+    SDK never calls a server endpoint for secrets.
     """
-    global _credential_fetcher
-    if _credential_fetcher is None:
-        from conductor.ai.agents.runtime.config import AgentConfig
-        from conductor.ai.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
-
-        config = AgentConfig.from_env()
-        _credential_fetcher = WorkerCredentialFetcher(
-            server_url=config.server_url,
-            strict_mode=config.secret_strict_mode,
-            api_key=config.api_key or config.auth_key,
-        )
-    return _credential_fetcher
-
-
-def _extract_execution_token(task) -> str | None:
-    """Extract __agentspan_ctx__.execution_token from a Conductor task.
-
-    Checks task.input_data first (most common), then task.workflow_input.
-    Returns None if not present.
-    """
-    # input_data is the primary source (set by Conductor enrichment scripts)
-    ctx = (task.input_data or {}).get("__agentspan_ctx__")
-    if isinstance(ctx, dict):
-        return ctx.get("execution_token") or None
-    if isinstance(ctx, str) and ctx:
-        return ctx
-    # Fallback: check workflow_input (set at workflow start)
-    ctx = (getattr(task, "workflow_input", None) or {}).get("__agentspan_ctx__")
-    if isinstance(ctx, dict):
-        return ctx.get("execution_token") or None
-    if isinstance(ctx, str) and ctx:
-        return ctx
-    return None
+    delivered = getattr(task, "runtime_metadata", None)
+    if not isinstance(delivered, dict):
+        return {}
+    return {k: v for k, v in delivered.items() if isinstance(v, str)}
 
 
 def _get_credential_names_from_tool(tool_func) -> list:
@@ -419,28 +396,20 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None, crede
                         credential_names = list(
                             _workflow_credentials.get(task.workflow_instance_id, [])
                         )
-            # Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names
-            # at poll time and delivers the values on the wire-only Task.runtime_metadata (never
-            # persisted). Prefer that map; otherwise fall back to the native token-pull (standalone).
-            host_delivered = getattr(task, "runtime_metadata", None)
-            resolved_secrets = {}
-            if isinstance(host_delivered, dict) and host_delivered:
-                resolved_secrets = {
-                    k: v for k, v in host_delivered.items() if isinstance(v, str)
-                }
-            elif credential_names:
-                token = _extract_execution_token(task)
-                fetcher = _get_credential_fetcher()
-                try:
-                    resolved_secrets = fetcher.fetch(token, credential_names)
-                except Exception as cred_err:
-                    # Credential errors are configuration issues — non-retryable.
-                    logger.error(
-                        "Credential resolution failed for tool '%s': %s", tool_name, cred_err
-                    )
-                    task_result.status = TaskResultStatus.FAILED_WITH_TERMINAL_ERROR
-                    task_result.reason_for_incompletion = str(cred_err)
-                    return task_result
+            # The conductor core resolves the worker's declared TaskDef.runtimeMetadata secret
+            # names at poll time and delivers the values on the wire-only Task.runtime_metadata
+            # (never persisted). That map is the only delivery path — no endpoint call.
+            resolved_secrets = _read_runtime_metadata(task)
+            missing = [n for n in credential_names if n not in resolved_secrets]
+            if missing:
+                # Not fatal here — get_secret() raises CredentialNotFoundError for any
+                # missing name only if the tool actually reads it.
+                logger.warning(
+                    "Tool '%s' declares credentials %s that were not delivered on "
+                    "Task.runtime_metadata — is the secret stored on the server?",
+                    tool_name,
+                    missing,
+                )
 
             # Map task input to function kwargs
             sig = inspect.signature(tool_func)

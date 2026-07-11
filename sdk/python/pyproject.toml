@@ -13,8 +13,9 @@ license = {text = "MIT License"}
 # fall back to source builds and fail. Bump the ceiling once those wheels exist.
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    # TARGET: requires a conductor-python release that carries Task.runtime_metadata
-    # (host-resolved worker secrets, wire-only; conductor-oss/python-sdk feat/task-runtime-metadata).
+    # Worker secrets arrive on the wire-only Task.runtime_metadata. Published releases
+    # don't carry the field yet; runtime/credentials/_task_compat.py registers it on the
+    # client model at import (drop the shim once conductor-python ships the field).
     # The field is additive; repin the floor to that release once it lands.
     "conductor-python>=1.3.11",
     "httpx>=0.24",

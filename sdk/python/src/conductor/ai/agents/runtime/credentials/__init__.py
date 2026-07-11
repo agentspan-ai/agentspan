@@ -3,8 +3,8 @@
 
 """Credential management subpackage for the Agentspan Python SDK."""
 
+from conductor.ai.agents.runtime.credentials._task_compat import ensure_runtime_metadata_field
 from conductor.ai.agents.runtime.credentials.accessor import get_secret
-from conductor.ai.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
 from conductor.ai.agents.runtime.credentials.types import (
     CredentialAuthError,
     CredentialNotFoundError,
@@ -17,6 +17,6 @@ __all__ = [
     "CredentialAuthError",
     "CredentialRateLimitError",
     "CredentialServiceError",
-    "WorkerCredentialFetcher",
+    "ensure_runtime_metadata_field",
     "get_secret",
 ]
