@@ -45,7 +45,6 @@ import com.netflix.conductor.service.WorkflowService;
 import dev.agentspan.runtime.compiler.AgentCompiler;
 import dev.agentspan.runtime.compiler.MultiAgentCompiler;
 import dev.agentspan.runtime.context.RequestContextHolder;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
 import dev.agentspan.runtime.util.ModelParser;
@@ -72,9 +71,6 @@ public class AgentService {
     private final ProviderValidator providerValidator;
 
     @Autowired(required = false)
-    private ExecutionTokenService executionTokenService;
-
-    @Autowired(required = false)
     private SkillRegistryService skillRegistryService;
 
     /**
@@ -96,30 +92,6 @@ public class AgentService {
      */
     @Autowired(required = false)
     private MetadataService metadataService;
-
-    /** Package-private constructor for testing with ExecutionTokenService */
-    AgentService(
-            AgentCompiler agentCompiler,
-            NormalizerRegistry normalizerRegistry,
-            ExecutionDAO executionDAO,
-            MetadataDAO metadataDAO,
-            WorkflowExecutor workflowExecutor,
-            WorkflowService workflowService,
-            AgentStreamRegistry streamRegistry,
-            ExecutionService executionService,
-            ProviderValidator providerValidator,
-            ExecutionTokenService executionTokenService) {
-        this.agentCompiler = agentCompiler;
-        this.normalizerRegistry = normalizerRegistry;
-        this.executionDAO = executionDAO;
-        this.metadataDAO = metadataDAO;
-        this.workflowExecutor = workflowExecutor;
-        this.workflowService = workflowService;
-        this.streamRegistry = streamRegistry;
-        this.executionService = executionService;
-        this.providerValidator = providerValidator;
-        this.executionTokenService = executionTokenService;
-    }
 
     /**
      * Compile an agent config into a WorkflowDef and return it.
@@ -323,44 +295,13 @@ public class AgentService {
         }
         input.put("cwd", cwd);
 
-        // Pre-generate the workflow id so the execution token can be minted
-        // against the same id Conductor will use. Without this the token's
-        // executionId is null, and CredentialDisclosureService.record() crashes
-        // with NPE when it tries Map.of(..., null, ...) on the not-null
-        // execution_id column. Passing this id to setWorkflowId on the start
-        // input below makes Conductor adopt it instead of generating one.
-        // Use the host's configured ID generator (time-based when embedded in orkes) so the
-        // host can derive createTime from the ID; fall back to a random UUID outside Spring.
+        // Pre-generate the workflow id and adopt it via setWorkflowId below (instead of letting
+        // Conductor mint a fresh UUID). Without a known, not-null execution id,
+        // CredentialDisclosureService.record() crashes with NPE on the not-null execution_id column.
+        // Use the host's configured ID generator (time-based when embedded in orkes) so the host can
+        // derive createTime from the ID; fall back to a random UUID outside Spring.
         String preallocatedExecutionId =
                 idGenerator != null ? idGenerator.generate() : UUID.randomUUID().toString();
-
-        // Mint execution token and embed in workflow variables for worker credential resolution
-        if (executionTokenService != null) {
-            try {
-                long timeoutSeconds = config.getTimeoutSeconds() > 0 ? config.getTimeoutSeconds() : 0;
-                List<String> declaredNames = extractDeclaredCredentials(config);
-                // Also include credentials from the start request payload
-                // (used by framework agents and run(credentials=[...]) calls)
-                Object inputCreds = input.get("credentials");
-                if (inputCreds instanceof List<?> credList) {
-                    for (Object c : credList) {
-                        if (c instanceof String s && !declaredNames.contains(s)) {
-                            declaredNames.add(s);
-                        }
-                    }
-                }
-                String currentUserId = principal;
-                if (currentUserId != null) {
-                    String token = executionTokenService.mint(
-                            currentUserId, preallocatedExecutionId, declaredNames, timeoutSeconds);
-                    Map<String, Object> agentCtx = new LinkedHashMap<>();
-                    agentCtx.put("execution_token", token);
-                    input.put("__agentspan_ctx__", agentCtx);
-                }
-            } catch (Exception e) {
-                log.warn("Failed to mint execution token: {}", e.getMessage());
-            }
-        }
 
         startReq.setInput(input);
 
@@ -897,50 +838,6 @@ public class AgentService {
     }
 
     /**
-     * Extract credential names declared in tool configs (for execution token bounding).
-     */
-    private List<String> extractDeclaredCredentials(AgentConfig config) {
-        Set<String> names = new LinkedHashSet<>();
-        collectCredentialsRecursive(config, names);
-        return new ArrayList<>(names);
-    }
-
-    private void collectCredentialsRecursive(AgentConfig config, Set<String> names) {
-        // Agent-level credentials
-        if (config.getCredentials() != null) {
-            names.addAll(config.getCredentials());
-        }
-        // Tool-level credentials
-        if (config.getTools() != null) {
-            for (ToolConfig tool : config.getTools()) {
-                if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> creds) {
-                    for (Object c : creds) {
-                        if (c instanceof String s) names.add(s);
-                    }
-                }
-                // Recurse into agent_tool nested agents
-                if ("agent_tool".equals(tool.getToolType()) && tool.getConfig() != null) {
-                    Object nested = tool.getConfig().get("agentConfig");
-                    if (nested instanceof Map<?, ?> nestedMap) {
-                        try {
-                            AgentConfig nestedConfig = new ObjectMapper().convertValue(nestedMap, AgentConfig.class);
-                            collectCredentialsRecursive(nestedConfig, names);
-                        } catch (Exception e) {
-                            // Skip if can't parse nested config
-                        }
-                    }
-                }
-            }
-        }
-        // Recurse into sub-agents (multi-agent strategies)
-        if (config.getAgents() != null) {
-            for (AgentConfig sub : config.getAgents()) {
-                collectCredentialsRecursive(sub, names);
-            }
-        }
-    }
-
-    /**
      * Walk the agent tree and register task definitions for all worker tools.
      */
     private void registerTaskDefinitions(AgentConfig config) {
@@ -950,22 +847,29 @@ public class AgentService {
 
     @SuppressWarnings("unchecked")
     private void collectAndRegisterTasks(AgentConfig config, Set<String> registered) {
+        // Credential names declared on each SIMPLE task's TaskDef.runtimeMetadata (embedded only, gated
+        // inside registerTaskDef). Worker tools use their per-tool creds (with agent-level fallback);
+        // the other user-code task kinds (guardrail/callback/stop_when/gate/instructions/router/graph)
+        // have no per-item credential list, so they use the agent-level names. Hoisted once per config.
+        Map<String, List<String>> toolCreds = AgentCompiler.collectToolCredentials(config);
+        List<String> agentCreds = AgentCompiler.collectAgentCredentials(config);
+
         // Register dispatch task for this agent's tools
         if (config.getTools() != null) {
             for (ToolConfig tool : config.getTools()) {
                 String tt = tool.getToolType();
                 if ("worker".equals(tt) && !registered.contains(tool.getName())) {
-                    registerTaskDef(tool.getName());
+                    registerTaskDef(tool.getName(), toolCreds.get(tool.getName()));
                     registered.add(tool.getName());
                 }
             }
         }
 
-        // Register stop_when worker
+        // Register stop_when worker (user-authored predicate → agent-level creds)
         if (config.getStopWhen() != null && config.getStopWhen().getTaskName() != null) {
             String taskName = config.getStopWhen().getTaskName();
             if (!registered.contains(taskName)) {
-                registerTaskDef(taskName);
+                registerTaskDef(taskName, agentCreds);
                 registered.add(taskName);
             }
         }
@@ -984,7 +888,7 @@ public class AgentService {
             for (GuardrailConfig g : config.getGuardrails()) {
                 if ("custom".equals(g.getGuardrailType()) && g.getTaskName() != null) {
                     if (!registered.contains(g.getTaskName())) {
-                        registerTaskDef(g.getTaskName());
+                        registerTaskDef(g.getTaskName(), agentCreds);
                         registered.add(g.getTaskName());
                     }
                 }
@@ -995,7 +899,7 @@ public class AgentService {
         if (config.getCallbacks() != null) {
             for (CallbackConfig cb : config.getCallbacks()) {
                 if (cb.getTaskName() != null && !registered.contains(cb.getTaskName())) {
-                    registerTaskDef(cb.getTaskName());
+                    registerTaskDef(cb.getTaskName(), agentCreds);
                     registered.add(cb.getTaskName());
                 }
             }
@@ -1004,7 +908,7 @@ public class AgentService {
         // Register callable gate workers (text_contains gates are INLINE, no registration needed)
         if (config.getGate() != null && config.getGate().get("taskName") instanceof String gateTaskName) {
             if (!registered.contains(gateTaskName)) {
-                registerTaskDef(gateTaskName);
+                registerTaskDef(gateTaskName, agentCreds);
                 registered.add(gateTaskName);
             }
         }
@@ -1014,7 +918,7 @@ public class AgentService {
                 && instrMap.get("_worker_ref") instanceof String instrTaskName
                 && !instrTaskName.isBlank()) {
             if (!registered.contains(instrTaskName)) {
-                registerTaskDef(instrTaskName);
+                registerTaskDef(instrTaskName, agentCreds);
                 registered.add(instrTaskName);
             }
         }
@@ -1023,12 +927,12 @@ public class AgentService {
         if (config.getRouter() instanceof Map<?, ?> routerMap
                 && routerMap.get("taskName") instanceof String routerTaskName) {
             if (!registered.contains(routerTaskName)) {
-                registerTaskDef(routerTaskName);
+                registerTaskDef(routerTaskName, agentCreds);
                 registered.add(routerTaskName);
             }
         } else if (config.getRouter() instanceof WorkerRef workerRef && workerRef.getTaskName() != null) {
             if (!registered.contains(workerRef.getTaskName())) {
-                registerTaskDef(workerRef.getTaskName());
+                registerTaskDef(workerRef.getTaskName(), agentCreds);
                 registered.add(workerRef.getTaskName());
             }
         }
@@ -1117,7 +1021,7 @@ public class AgentService {
                 for (Object nodeObj : nodes) {
                     if (nodeObj instanceof Map<?, ?> node && node.get("_worker_ref") instanceof String workerRef) {
                         if (!registered.contains(workerRef)) {
-                            registerTaskDef(workerRef);
+                            registerTaskDef(workerRef, agentCreds);
                             registered.add(workerRef);
                         }
                     }
@@ -1128,7 +1032,7 @@ public class AgentService {
                 for (Object ceObj : condEdges) {
                     if (ceObj instanceof Map<?, ?> ce && ce.get("_router_ref") instanceof String routerRef) {
                         if (!registered.contains(routerRef)) {
-                            registerTaskDef(routerRef);
+                            registerTaskDef(routerRef, agentCreds);
                             registered.add(routerRef);
                         }
                     }
@@ -1409,6 +1313,18 @@ public class AgentService {
     // ── Task registration ────────────────────────────────────────────
 
     private void registerTaskDef(String taskName) {
+        registerTaskDef(taskName, null);
+    }
+
+    /**
+     * Register a worker TaskDef. {@code runtimeMetadata} declares the secret names the conductor
+     * core must resolve at the SIMPLE task's poll and inject onto the wire-only
+     * {@code Task.runtimeMetadata} (conductor-oss PR #1255). This is the only credential-delivery
+     * path for workers, in BOTH modes: embedded, the host's SecretsDAO resolves the names;
+     * standalone, the built-in conductor core resolves them via AgentspanSecretsDAO (the encrypted
+     * credential store).
+     */
+    private void registerTaskDef(String taskName, List<String> runtimeMetadata) {
         TaskDef taskDef = new TaskDef();
         taskDef.setName(taskName);
         taskDef.setRetryCount(2);
@@ -1417,6 +1333,9 @@ public class AgentService {
         taskDef.setTimeoutSeconds(0);
         taskDef.setResponseTimeoutSeconds(3600);
         taskDef.setTimeoutPolicy(TaskDef.TimeoutPolicy.RETRY);
+        if (runtimeMetadata != null && !runtimeMetadata.isEmpty()) {
+            taskDef.setRuntimeMetadata(new ArrayList<>(runtimeMetadata));
+        }
 
         try {
             TaskDef existing = metadataDAO.getTaskDef(taskName);

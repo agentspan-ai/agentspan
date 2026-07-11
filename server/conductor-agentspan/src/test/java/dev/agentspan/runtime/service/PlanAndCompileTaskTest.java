@@ -713,13 +713,12 @@ class PlanAndCompileTaskTest {
                 tasks.stream().filter(t -> "SIMPLE".equals(t.get("type"))).toList();
         assertThat(simpleTasks).hasSizeGreaterThanOrEqualTo(8);
 
-        String[] keys = {"cwd", "credentials", "media", "session_id", "__agentspan_ctx__"};
+        String[] keys = {"cwd", "credentials", "media", "session_id"};
         String[] refs = {
             "${workflow.input.cwd}",
             "${workflow.input.credentials}",
             "${workflow.input.media}",
-            "${workflow.input.session_id}",
-            "${workflow.input.__agentspan_ctx__}"
+            "${workflow.input.session_id}"
         };
         for (Map<String, Object> t : simpleTasks) {
             @SuppressWarnings("unchecked")

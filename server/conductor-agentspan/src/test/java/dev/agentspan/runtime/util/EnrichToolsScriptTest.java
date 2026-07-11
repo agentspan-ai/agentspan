@@ -51,11 +51,17 @@ class EnrichToolsScriptTest {
         return enrichWithConfigs("{}", agentToolJson, knownNamesJson, toolCallsJson);
     }
 
-    @SuppressWarnings("unchecked")
     private List<Map<String, Object>> enrichWithConfigs(
             String httpJson, String agentToolJson, String knownNamesJson, String toolCallsJson) throws Exception {
+        return enrichWithHttpMcp(httpJson, "{}", agentToolJson, knownNamesJson, toolCallsJson);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> enrichWithHttpMcp(
+            String httpJson, String mcpJson, String agentToolJson, String knownNamesJson, String toolCallsJson)
+            throws Exception {
         String script = JavaScriptBuilder.enrichToolsScript(
-                httpJson, "{}", "{}", agentToolJson, "{}", "{}", "{}", "{}", knownNamesJson);
+                httpJson, mcpJson, "{}", agentToolJson, "{}", "{}", "{}", "{}", knownNamesJson);
         // Wrap so the script's IIFE return is captured AND we get a JSON string
         // back — Graal's Value.toString() is JS source, not JSON.
         String wrapped = "var $ = {"
@@ -232,7 +238,8 @@ class EnrichToolsScriptTest {
                 (Map<String, Object>) ((Map<String, Object>) task.get("inputParameters")).get("http_request");
         assertThat(req.get("uri")).isEqualTo("https://us.ocg.example.com/api/v1/entities/entity_01%2FAB%20C?depth=2");
         assertThat(req.get("method")).isEqualTo("GET");
-        assertThat((Map<String, Object>) req.get("headers")).containsEntry("Authorization", "Bearer #{OCG_US_KEY}");
+        assertThat((Map<String, Object>) req.get("headers"))
+                .containsEntry("Authorization", "Bearer ${workflow.secrets.OCG_US_KEY}");
         // entity_id and depth were consumed; limit was never supplied.
         assertThat((Map<String, Object>) req.get("body")).isEmpty();
     }
@@ -251,5 +258,77 @@ class EnrichToolsScriptTest {
                 (Map<String, Object>) ((Map<String, Object>) tasks.get(0).get("inputParameters")).get("http_request");
         assertThat(req.get("uri")).isEqualTo("https://api.weather.com");
         assertThat((Map<String, Object>) req.get("body")).containsEntry("city", "SF");
+    }
+
+    // ── Credential markers: #{NAME} in configs must be emitted as ${workflow.secrets.NAME} ──
+    // The marker form is inert to BOTH ParametersUtils passes (the general ${...} binding and
+    // substituteSecrets), so it can ride through the enrich INLINE's input without being resolved
+    // to plaintext there. The script converts it to the real secret reference only at emission
+    // into the dynamic task's inputParameters, where conductor resolves it wire-only at that
+    // task's own hand-off.
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void httpHeaderMarker_emittedAsSecretReference() throws Exception {
+        String httpCfg = "{\"weather\": {\"url\": \"https://api.weather.com\", \"method\": \"POST\","
+                + "\"headers\": {\"Authorization\": \"Bearer #{API_KEY}\"}}}";
+        String toolCalls = "[{\"name\": \"weather\", \"taskReferenceName\": \"call_1\","
+                + " \"inputParameters\": {\"city\": \"SF\"}}]";
+
+        List<Map<String, Object>> tasks = enrichWithConfigs(httpCfg, "{}", "{\"weather\": true}", toolCalls);
+
+        Map<String, Object> req =
+                (Map<String, Object>) ((Map<String, Object>) tasks.get(0).get("inputParameters")).get("http_request");
+        assertThat((Map<String, Object>) req.get("headers"))
+                .containsEntry("Authorization", "Bearer ${workflow.secrets.API_KEY}");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void dottedHeaderMarker_emittedAsSecretReferenceWithJsonPath() throws Exception {
+        String httpCfg = "{\"gcp\": {\"url\": \"https://gcp.example.com\", \"method\": \"GET\","
+                + "\"headers\": {\"X-Project\": \"#{GCP_SVC.project_id}\"}}}";
+        String toolCalls = "[{\"name\": \"gcp\", \"taskReferenceName\": \"call_1\", \"inputParameters\": {}}]";
+
+        List<Map<String, Object>> tasks = enrichWithConfigs(httpCfg, "{}", "{\"gcp\": true}", toolCalls);
+
+        Map<String, Object> req =
+                (Map<String, Object>) ((Map<String, Object>) tasks.get(0).get("inputParameters")).get("http_request");
+        assertThat((Map<String, Object>) req.get("headers"))
+                .containsEntry("X-Project", "${workflow.secrets.GCP_SVC.project_id}");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void mcpHeaderMarker_emittedAsSecretReference() throws Exception {
+        String mcpCfg = "{\"notion_search\": {\"mcpServer\": \"https://mcp.notion.com/mcp\","
+                + "\"headers\": {\"Authorization\": \"Bearer #{NOTION_KEY}\"}}}";
+        String toolCalls =
+                "[{\"name\": \"notion_search\", \"taskReferenceName\": \"call_1\", \"inputParameters\": {}}]";
+
+        List<Map<String, Object>> tasks = enrichWithHttpMcp("{}", mcpCfg, "{}", "{\"notion_search\": true}", toolCalls);
+
+        Map<String, Object> t = tasks.get(0);
+        assertThat(t.get("type")).isEqualTo("CALL_MCP_TOOL");
+        Map<String, Object> ip = (Map<String, Object>) t.get("inputParameters");
+        assertThat((Map<String, Object>) ip.get("headers"))
+                .containsEntry("Authorization", "Bearer ${workflow.secrets.NOTION_KEY}");
+    }
+
+    @Test
+    void scriptSource_neverContainsContiguousSecretReferencePattern() {
+        // The leak tripwire: if the contiguous literal '${workflow.secrets.' appears anywhere in
+        // the enrich script SOURCE (which is the INLINE task's input), conductor's
+        // substituteSecrets resolves it to plaintext at the INLINE's hand-off and the plaintext
+        // persists via the script's output into the forked tasks' inputs.
+        String httpCfg = "{\"weather\": {\"url\": \"https://api.weather.com\", \"method\": \"POST\","
+                + "\"headers\": {\"Authorization\": \"Bearer #{API_KEY}\"}}}";
+        String script = JavaScriptBuilder.enrichToolsScript(
+                httpCfg, "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{\"weather\": true}");
+        assertThat(script).doesNotContain("${workflow.secrets.");
+
+        String dynScript = JavaScriptBuilder.enrichToolsScriptDynamic(
+                httpCfg, "{}", "{}", "{}", "{}", "{}", "{\"weather\": true}");
+        assertThat(dynScript).doesNotContain("${workflow.secrets.");
     }
 }
