@@ -1,307 +1,56 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import {
-  extractExecutionToken,
-  resolveCredentials,
   getCredential,
   setCredentialContext,
   clearCredentialContext,
   runWithCredentialContext,
 } from "../../src/credentials.js";
-import {
-  CredentialNotFoundError,
-  CredentialAuthError,
-  CredentialRateLimitError,
-  CredentialServiceError,
-} from "../../src/errors.js";
+import { CredentialNotFoundError, CredentialAuthError } from "../../src/errors.js";
 
-// ── extractExecutionToken ────────────────────────────────
-
-describe("extractExecutionToken", () => {
-  it("extracts token from primary path (camelCase)", () => {
-    const input = {
-      arg1: "value",
-      __agentspan_ctx__: {
-        executionToken: "tok-primary",
-        executionId: "wf-123",
-      },
-    };
-    expect(extractExecutionToken(input)).toBe("tok-primary");
-  });
-
-  it("extracts token from primary path (snake_case)", () => {
-    const input = {
-      __agentspan_ctx__: {
-        execution_token: "tok-snake",
-      },
-    };
-    expect(extractExecutionToken(input)).toBe("tok-snake");
-  });
-
-  it("falls back to workflowInput path (camelCase)", () => {
-    const input = {
-      arg1: "value",
-      workflowInput: {
-        __agentspan_ctx__: {
-          executionToken: "tok-fallback",
-        },
-      },
-    };
-    expect(extractExecutionToken(input)).toBe("tok-fallback");
-  });
-
-  it("falls back to workflowInput path (snake_case)", () => {
-    const input = {
-      workflowInput: {
-        __agentspan_ctx__: {
-          execution_token: "tok-fallback-snake",
-        },
-      },
-    };
-    expect(extractExecutionToken(input)).toBe("tok-fallback-snake");
-  });
-
-  it("prefers primary path over fallback", () => {
-    const input = {
-      __agentspan_ctx__: {
-        executionToken: "tok-primary",
-      },
-      workflowInput: {
-        __agentspan_ctx__: {
-          executionToken: "tok-fallback",
-        },
-      },
-    };
-    expect(extractExecutionToken(input)).toBe("tok-primary");
-  });
-
-  it("returns null when no context present", () => {
-    expect(extractExecutionToken({})).toBeNull();
-    expect(extractExecutionToken({ arg1: "value" })).toBeNull();
-  });
-
-  it("returns null when context has no token", () => {
-    const input = {
-      __agentspan_ctx__: {
-        executionId: "wf-123",
-      },
-    };
-    expect(extractExecutionToken(input)).toBeNull();
-  });
-
-  it("returns null for invalid context types", () => {
-    expect(extractExecutionToken({ __agentspan_ctx__: "not-object" })).toBeNull();
-    expect(extractExecutionToken({ __agentspan_ctx__: null })).toBeNull();
-    expect(extractExecutionToken({ __agentspan_ctx__: 42 })).toBeNull();
-  });
-});
-
-// ── resolveCredentials ───────────────────────────────────
-
-describe("resolveCredentials", () => {
-  const serverUrl = "https://api.agentspan.test";
-  const headers = { Authorization: "Bearer test-key" };
-  const token = "exec-tok-123";
-
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("resolves credentials on success", async () => {
-    const mockResponse = { GITHUB_TOKEN: "ghp_secret", AWS_KEY: "aws-secret" };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      }),
-    );
-
-    const result = await resolveCredentials(serverUrl, headers, token, ["GITHUB_TOKEN", "AWS_KEY"]);
-
-    expect(result).toEqual(mockResponse);
-    expect(fetch).toHaveBeenCalledWith(`${serverUrl}/workers/secrets`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...headers,
-      },
-      body: JSON.stringify({ token, names: ["GITHUB_TOKEN", "AWS_KEY"] }),
-    });
-  });
-
-  it("sends token field (not executionToken) matching server contract", async () => {
-    const mockResponse = { MY_CRED: "val" };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => mockResponse,
-      }),
-    );
-
-    await resolveCredentials(serverUrl, headers, token, ["MY_CRED"]);
-
-    const call = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    const body = JSON.parse(call[1].body);
-    // Server expects "token", not "executionToken"
-    expect(body).toHaveProperty("token");
-    expect(body).not.toHaveProperty("executionToken");
-    expect(body.token).toBe(token);
-  });
-
-  it("throws CredentialNotFoundError on 404", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 404,
-        text: async () => JSON.stringify({ credentialName: "MISSING_KEY" }),
-      }),
-    );
-
-    await expect(resolveCredentials(serverUrl, headers, token, ["MISSING_KEY"])).rejects.toThrow(
-      CredentialNotFoundError,
-    );
-  });
-
-  it("throws CredentialAuthError on 401", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 401,
-        text: async () => "Token expired",
-      }),
-    );
-
-    await expect(resolveCredentials(serverUrl, headers, token, ["MY_CRED"])).rejects.toThrow(
-      CredentialAuthError,
-    );
-  });
-
-  it("throws CredentialRateLimitError on 429", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 429,
-        text: async () => "Rate limit exceeded",
-      }),
-    );
-
-    await expect(resolveCredentials(serverUrl, headers, token, ["MY_CRED"])).rejects.toThrow(
-      CredentialRateLimitError,
-    );
-  });
-
-  it("throws CredentialServiceError on 500", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        text: async () => "Internal server error",
-      }),
-    );
-
-    await expect(resolveCredentials(serverUrl, headers, token, ["MY_CRED"])).rejects.toThrow(
-      CredentialServiceError,
-    );
-  });
-
-  it("throws CredentialServiceError on 503", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 503,
-        text: async () => "Service unavailable",
-      }),
-    );
-
-    await expect(resolveCredentials(serverUrl, headers, token, ["MY_CRED"])).rejects.toThrow(
-      CredentialServiceError,
-    );
-  });
-
-  it("throws CredentialServiceError on network failure", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
-
-    await expect(resolveCredentials(serverUrl, headers, token, ["MY_CRED"])).rejects.toThrow(
-      CredentialServiceError,
-    );
-  });
-
-  it("throws CredentialServiceError on unexpected status", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 403,
-        text: async () => "Forbidden",
-      }),
-    );
-
-    await expect(resolveCredentials(serverUrl, headers, token, ["MY_CRED"])).rejects.toThrow(
-      CredentialServiceError,
-    );
-  });
-});
-
-// ── getCredential ────────────────────────────────────────
+// Worker secrets are delivered on the wire-only Task.runtimeMetadata (resolved by
+// the conductor core at poll). getCredential() reads exclusively from that resolved
+// map via the credential context — there is no server endpoint to pull from.
 
 describe("getCredential", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    clearCredentialContext();
-  });
-
   afterEach(() => {
     clearCredentialContext();
   });
 
   it("throws when no context is set", async () => {
-    await expect(getCredential("MY_CRED")).rejects.toThrow(CredentialAuthError);
-    await expect(getCredential("MY_CRED")).rejects.toThrow("No credential context available");
+    await expect(getCredential("ANY")).rejects.toBeInstanceOf(CredentialAuthError);
   });
 
-  it("resolves a single credential using context", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ MY_CRED: "secret-value" }),
-      }),
+  it("reads a delivered credential from the ALS context", async () => {
+    const value = await runWithCredentialContext(
+      { GITHUB_TOKEN: "ghp_host_resolved" },
+      async () => getCredential("GITHUB_TOKEN"),
     );
-
-    setCredentialContext("https://api.test", { Authorization: "Bearer tok" }, "exec-tok");
-    const value = await getCredential("MY_CRED");
-    expect(value).toBe("secret-value");
+    expect(value).toBe("ghp_host_resolved");
   });
 
-  it("throws CredentialNotFoundError when credential missing in response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({}), // Credential not in response
-      }),
-    );
+  it("reads from the fallback context set via setCredentialContext", async () => {
+    setCredentialContext({ MY_KEY: "fallback-value" });
+    expect(await getCredential("MY_KEY")).toBe("fallback-value");
+  });
 
-    setCredentialContext("https://api.test", {}, "exec-tok");
-    await expect(getCredential("MISSING")).rejects.toThrow(CredentialNotFoundError);
+  it("throws CredentialNotFoundError for an undelivered name", async () => {
+    await expect(
+      runWithCredentialContext({ GITHUB_TOKEN: "ghp_host_resolved" }, async () =>
+        getCredential("MISSING"),
+      ),
+    ).rejects.toBeInstanceOf(CredentialNotFoundError);
+  });
+
+  it("throws after the fallback context is cleared", async () => {
+    setCredentialContext({ MY_KEY: "v" });
+    clearCredentialContext();
+    await expect(getCredential("MY_KEY")).rejects.toBeInstanceOf(CredentialAuthError);
   });
 });
 
-// ── runWithCredentialContext ─────────────────────────────
-
 describe("runWithCredentialContext", () => {
-  const serverUrl = "https://api.test";
-  const headers = { Authorization: "Bearer key" };
-
   afterEach(() => {
     clearCredentialContext();
-    vi.restoreAllMocks();
   });
 
   it.each([1, 2, 3])("isolates concurrent executions (run %i)", async () => {
@@ -309,78 +58,39 @@ describe("runWithCredentialContext", () => {
     //   1. Worker A enters context, starts handler.
     //   2. Worker B enters context, finishes, exits.
     //   3. Worker A's handler later calls getCredential — without per-async
-    //      isolation, B's exit nulled A's context and getCredential throws.
+    //      isolation, B's exit would clobber A's context.
     // Test re-runs (1-3) to surface scheduling-dependent regressions.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async (_url, init: RequestInit) => {
-        const body = JSON.parse(String(init.body));
-        // Echo the token back in the resolved value so we can verify isolation.
-        const result: Record<string, string> = {};
-        for (const n of body.names) result[n] = `${body.token}:${n}`;
-        return { ok: true, json: async () => result };
-      }),
-    );
-
-    async function workerHandler(execToken: string, delayMs: number) {
-      return runWithCredentialContext(serverUrl, headers, execToken, async () => {
+    async function workerHandler(tag: string, delayMs: number) {
+      return runWithCredentialContext({ MY_KEY: `${tag}:MY_KEY` }, async () => {
         await new Promise((r) => setTimeout(r, delayMs));
         return getCredential("MY_KEY");
       });
     }
 
     const results = await Promise.all([
-      workerHandler("tok-A", 30),
-      workerHandler("tok-B", 5),
-      workerHandler("tok-C", 20),
-      workerHandler("tok-D", 10),
-      workerHandler("tok-E", 15),
+      workerHandler("res-A", 30),
+      workerHandler("res-B", 5),
+      workerHandler("res-C", 20),
+      workerHandler("res-D", 10),
+      workerHandler("res-E", 15),
     ]);
 
     expect(results).toEqual([
-      "tok-A:MY_KEY",
-      "tok-B:MY_KEY",
-      "tok-C:MY_KEY",
-      "tok-D:MY_KEY",
-      "tok-E:MY_KEY",
+      "res-A:MY_KEY",
+      "res-B:MY_KEY",
+      "res-C:MY_KEY",
+      "res-D:MY_KEY",
+      "res-E:MY_KEY",
     ]);
   });
-});
 
-// ── host-delivered credentials (embedded: task.runtimeMetadata) ──────────
-
-describe("getCredential with host-delivered resolved map", () => {
-  const serverUrl = "https://api.test";
-  const headers = {};
-
-  afterEach(() => {
-    clearCredentialContext();
-    vi.restoreAllMocks();
-  });
-
-  it("reads from the resolved map without pulling the endpoint", async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
-    // Embedded shape: no execution token, values pre-resolved by the host onto the context.
-    const value = await runWithCredentialContext(
-      serverUrl,
-      headers,
-      "",
-      async () => getCredential("GITHUB_TOKEN"),
-      { GITHUB_TOKEN: "ghp_host_resolved" },
+  it("ALS context wins over the fallback context", async () => {
+    setCredentialContext({ MY_KEY: "fallback" });
+    const value = await runWithCredentialContext({ MY_KEY: "scoped" }, async () =>
+      getCredential("MY_KEY"),
     );
-    expect(value).toBe("ghp_host_resolved");
-    expect(fetchSpy).not.toHaveBeenCalled(); // native /workers/secrets pull is bypassed
-  });
-
-  it("throws NotFound for an undelivered secret with no token (off-host trim)", async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
-    await expect(
-      runWithCredentialContext(serverUrl, headers, "", async () => getCredential("MISSING"), {
-        GITHUB_TOKEN: "ghp_host_resolved",
-      }),
-    ).rejects.toBeInstanceOf(CredentialNotFoundError);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(value).toBe("scoped");
+    // Outside the scope, the fallback is visible again.
+    expect(await getCredential("MY_KEY")).toBe("fallback");
   });
 });

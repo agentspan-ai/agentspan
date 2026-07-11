@@ -6,12 +6,7 @@ import {
 import type { ConductorWorker, Task, TaskResult } from "@io-orkes/conductor-javascript";
 import type { ToolContext } from "./types.js";
 import { TerminalToolError } from "./errors.js";
-import {
-  extractExecutionToken,
-  resolveCredentials,
-  injectSecretsForInvocation,
-  runWithCredentialContext,
-} from "./credentials.js";
+import { injectSecretsForInvocation, runWithCredentialContext } from "./credentials.js";
 
 // ── Type coercion (base spec §14.1) ─────────────────────
 
@@ -364,35 +359,25 @@ export class WorkerManager {
         cleaned["__workflowInstanceId__"] = task.workflowInstanceId;
         if (toolContext) cleaned["__toolContext__"] = toolContext;
 
-        // Credential setup. Embedded: the worker's declared TaskDef.runtimeMetadata secret names are
-        // resolved by the host from its secret store at poll time and delivered on the wire-only
-        // Task.runtimeMetadata (never persisted). Prefer that map; otherwise fall back to the native
-        // execution-token pull (standalone). Resolution is up-front (no env mutation yet) — injection
-        // happens inside runHandler() via injectSecretsForInvocation so mutate-invoke-restore is
-        // atomic under a process lock. See docs/design/secret-injection-contract.md.
-        const execToken = extractExecutionToken(inputData);
+        // Credential setup. The worker's declared TaskDef.runtimeMetadata secret names are
+        // resolved by the conductor core at poll time and delivered on the wire-only
+        // Task.runtimeMetadata (never persisted). That map is the ONLY delivery path — the
+        // SDK never calls a server endpoint for secrets. Resolution is up-front (no env
+        // mutation yet) — injection happens inside runHandler() via injectSecretsForInvocation
+        // so mutate-invoke-restore is atomic under a process lock.
+        // See docs/design/secret-injection-contract.md.
         const hostDelivered = (task as { runtimeMetadata?: Record<string, string> })
           .runtimeMetadata;
-
-        let resolvedCredentials: Record<string, string> = {};
-        if (hostDelivered && Object.keys(hostDelivered).length > 0) {
-          resolvedCredentials = hostDelivered;
-        } else if (pw.credentials?.length && execToken) {
-          try {
-            resolvedCredentials = await resolveCredentials(
-              serverUrl,
-              headers,
-              execToken,
-              pw.credentials,
-            );
-          } catch (err) {
-            throw new NonRetryableException(
-              `Credential resolution failed for ${pw.taskName}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
+        const resolvedCredentials: Record<string, string> =
+          hostDelivered && typeof hostDelivered === "object" ? hostDelivered : {};
+        if (pw.credentials?.length && Object.keys(resolvedCredentials).length === 0) {
+          // Not fatal: getCredential() throws CredentialNotFoundError only if the
+          // handler actually reads a missing name.
+          console.warn(
+            `Worker ${pw.taskName} declares credentials [${pw.credentials.join(", ")}] but none ` +
+              `were delivered on Task.runtimeMetadata — is the secret stored on the server?`,
+          );
         }
-        // else: no host delivery and no execution token — proceed with empty credentials; a
-        // tool that genuinely needs a secret fails via the accessor (the intended off-host trim).
 
         const runHandler = async (): Promise<Omit<TaskResult, "workflowInstanceId" | "taskId">> => {
           try {
@@ -424,18 +409,8 @@ export class WorkerManager {
         };
 
         // Scope credential context per-async-call so getCredential() sees the resolved
-        // (host-delivered or pulled) values and concurrent workers do not clobber each
-        // other's module-level state.
-        if (execToken || Object.keys(resolvedCredentials).length > 0) {
-          return runWithCredentialContext(
-            serverUrl,
-            headers,
-            execToken ?? "",
-            runHandler,
-            resolvedCredentials,
-          );
-        }
-        return runHandler();
+        // values and concurrent workers do not clobber each other's module-level state.
+        return runWithCredentialContext(resolvedCredentials, runHandler);
       },
     };
     return worker;

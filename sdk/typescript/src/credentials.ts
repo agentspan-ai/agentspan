@@ -1,22 +1,18 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import {
-  CredentialNotFoundError,
-  CredentialAuthError,
-  CredentialRateLimitError,
-  CredentialServiceError,
-} from "./errors.js";
+import { CredentialNotFoundError, CredentialAuthError } from "./errors.js";
 
 // ── Per-async-call credential context ────────────────────
+//
+// Worker secrets are delivered on the wire-only Task.runtimeMetadata: the
+// conductor core resolves the names declared on the worker's
+// TaskDef.runtimeMetadata at poll time and injects the plaintext values into
+// the poll response (never persisted). That map is the ONLY delivery path —
+// the SDK never calls a server endpoint for secrets.
 
 interface CredentialContext {
-  serverUrl: string;
-  headers: Record<string, string>;
-  executionToken: string;
-  // Pre-resolved name→value map. Embedded: the host resolves declared secrets at poll
-  // time and injects them onto task.runtimeMetadata; getCredential() reads them from here
-  // instead of pulling via the (dormant) execution-token endpoint.
-  resolved?: Record<string, string>;
+  /** Host-resolved name→value map read from Task.runtimeMetadata. */
+  resolved: Record<string, string>;
 }
 
 // AsyncLocalStorage scopes context per async-call chain so concurrent worker
@@ -32,17 +28,14 @@ function activeContext(): CredentialContext | null {
 }
 
 /**
- * Run `fn` with the given credential context active in AsyncLocalStorage.
+ * Run `fn` with the given resolved credentials active in AsyncLocalStorage.
  * Concurrent calls each see their own context — sibling cleanups can't clobber it.
  */
 export function runWithCredentialContext<T>(
-  serverUrl: string,
-  headers: Record<string, string>,
-  executionToken: string,
+  resolved: Record<string, string>,
   fn: () => Promise<T>,
-  resolved?: Record<string, string>,
 ): Promise<T> {
-  return _credentialStore.run({ serverUrl, headers, executionToken, resolved }, fn);
+  return _credentialStore.run({ resolved }, fn);
 }
 
 /**
@@ -53,12 +46,8 @@ export function runWithCredentialContext<T>(
  * shared module-level slot and is only consulted when no ALS context is
  * active; sibling clears can race with concurrent reads.
  */
-export function setCredentialContext(
-  serverUrl: string,
-  headers: Record<string, string>,
-  executionToken: string,
-): void {
-  _fallbackContext = { serverUrl, headers, executionToken };
+export function setCredentialContext(resolved: Record<string, string>): void {
+  _fallbackContext = { resolved };
 }
 
 /**
@@ -68,136 +57,16 @@ export function clearCredentialContext(): void {
   _fallbackContext = null;
 }
 
-// ── Execution token extraction ───────────────────────────
-
-/**
- * Extract the execution token from task input.
- *
- * Two-level fallback (base spec section 14.16):
- * 1. Primary: taskInput.__agentspan_ctx__.executionToken
- * 2. Fallback: taskInput.workflowInput?.__agentspan_ctx__.executionToken
- */
-export function extractExecutionToken(taskInput: Record<string, unknown>): string | null {
-  // Primary path
-  const ctx = taskInput.__agentspan_ctx__;
-  if (ctx != null && typeof ctx === "object") {
-    const ctxObj = ctx as Record<string, unknown>;
-    if (typeof ctxObj.executionToken === "string") {
-      return ctxObj.executionToken;
-    }
-    // Also support snake_case from wire format
-    if (typeof ctxObj.execution_token === "string") {
-      return ctxObj.execution_token;
-    }
-  }
-
-  // Fallback path: workflowInput.__agentspan_ctx__
-  const workflowInput = taskInput.workflowInput;
-  if (workflowInput != null && typeof workflowInput === "object") {
-    const wiObj = workflowInput as Record<string, unknown>;
-    const wiCtx = wiObj.__agentspan_ctx__;
-    if (wiCtx != null && typeof wiCtx === "object") {
-      const wiCtxObj = wiCtx as Record<string, unknown>;
-      if (typeof wiCtxObj.executionToken === "string") {
-        return wiCtxObj.executionToken;
-      }
-      if (typeof wiCtxObj.execution_token === "string") {
-        return wiCtxObj.execution_token;
-      }
-    }
-  }
-
-  return null;
-}
-
-// ── Credential resolution ────────────────────────────────
-
-/**
- * Resolve credentials from the server.
- *
- * POST ${serverUrl}/workers/secrets with { executionToken, names }
- *
- * Error mapping:
- * - 404 -> CredentialNotFoundError
- * - 401 -> CredentialAuthError
- * - 429 -> CredentialRateLimitError
- * - 5xx -> CredentialServiceError
- */
-export async function resolveCredentials(
-  serverUrl: string,
-  headers: Record<string, string>,
-  executionToken: string,
-  names: string[],
-): Promise<Record<string, string>> {
-  const url = `${serverUrl}/workers/secrets`;
-  let response: Response;
-
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...headers,
-      },
-      body: JSON.stringify({ token: executionToken, names }),
-    });
-  } catch (err) {
-    throw new CredentialServiceError(
-      `Failed to connect to credential service: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-
-    if (response.status === 404) {
-      // Try to extract credential name from response
-      let credName = names.join(", ");
-      try {
-        const parsed = JSON.parse(body);
-        if (parsed.name) credName = parsed.name;
-        if (parsed.credentialName) credName = parsed.credentialName;
-      } catch {
-        // Use default
-      }
-      throw new CredentialNotFoundError(credName);
-    }
-
-    if (response.status === 401) {
-      throw new CredentialAuthError(body || "Credential authentication failed");
-    }
-
-    if (response.status === 429) {
-      throw new CredentialRateLimitError(body || "Credential rate limit exceeded");
-    }
-
-    if (response.status >= 500) {
-      throw new CredentialServiceError(body || `Credential service error (${response.status})`);
-    }
-
-    // Other errors
-    throw new CredentialServiceError(`Credential resolution failed (${response.status}): ${body}`);
-  }
-
-  const data = (await response.json()) as Record<string, string>;
-
-  // Check that all requested credentials were resolved
-  const missing = names.filter((n) => data[n] == null);
-  if (missing.length > 0) {
-    throw new CredentialNotFoundError(missing.join(", "));
-  }
-
-  return data;
-}
-
 // ── getCredential ────────────────────────────────────────
 
 /**
- * Resolve a single credential by name.
+ * Resolve a single credential by name from the active context's resolved map
+ * (the values the server delivered on Task.runtimeMetadata).
  *
- * Uses the active credential context (per-async via {@link runWithCredentialContext},
- * falling back to {@link setCredentialContext} for legacy callers).
- * Throws if no context is set (i.e., not called during worker execution).
+ * Throws {@link CredentialAuthError} if no context is set (i.e., not called
+ * during worker execution) and {@link CredentialNotFoundError} if the name was
+ * not delivered — declare it in the tool's `credentials` list and store the
+ * secret on the server.
  */
 export async function getCredential(name: string): Promise<string> {
   const ctx = activeContext();
@@ -207,24 +76,10 @@ export async function getCredential(name: string): Promise<string> {
     );
   }
 
-  // Embedded / host-delivered: read from the pre-resolved map, no endpoint pull.
-  if (ctx.resolved && ctx.resolved[name] !== undefined) {
-    return ctx.resolved[name];
-  }
-
-  const { serverUrl, headers, executionToken } = ctx;
-  // No token (embedded, native endpoint dormant) and not in the resolved map → the secret
-  // was not delivered. Surface as not-found (the intended off-host trim) rather than pulling.
-  if (!executionToken) {
-    throw new CredentialNotFoundError(name);
-  }
-  const resolved = await resolveCredentials(serverUrl, headers, executionToken, [name]);
-
-  const value = resolved[name];
+  const value = ctx.resolved[name];
   if (value === undefined) {
     throw new CredentialNotFoundError(name);
   }
-
   return value;
 }
 

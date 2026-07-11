@@ -498,64 +498,13 @@ describe("WorkerManager", () => {
   // full conductor polling machinery.
 
   describe("credential context during execution", () => {
-    it("sets credential context when execution token is present", async () => {
-      const serverUrl = "http://cred-test";
-      const headers = { Authorization: "Bearer tok" };
-      const manager = new WorkerManager(serverUrl, headers, 100);
+    // Secrets are delivered on the wire-only Task.runtimeMetadata (resolved by the
+    // conductor core at poll from the worker's declared TaskDef.runtimeMetadata).
+    // getCredential() reads that map via the per-async credential context; the SDK
+    // never calls a server endpoint for secrets.
 
-      let contextAvailable = false;
-
-      manager.addWorker("cred_task", async (_input) => {
-        const { getCredential } = await import("../../src/credentials.js");
-        try {
-          await getCredential("MY_CRED");
-          contextAvailable = true;
-        } catch (err: unknown) {
-          contextAvailable = !(
-            err instanceof Error && err.message.includes("No credential context")
-          );
-        }
-        return { ok: true };
-      });
-
-      // Mock fetch for credential resolution
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation(async (url: string) => {
-          if (typeof url === "string" && url.includes("/workers/secrets")) {
-            return {
-              ok: true,
-              status: 200,
-              json: async () => ({ MY_CRED: "secret-value" }),
-            };
-          }
-          return { ok: true, status: 200, text: async () => "" };
-        }),
-      );
-
-      // Get the wrapped ConductorWorker and call execute() directly
-      const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
-      await wrapped.execute({
-        taskId: "task-1",
-        workflowInstanceId: "wf-1",
-        inputData: {
-          arg1: "value",
-          __agentspan_ctx__: {
-            executionToken: "exec-tok-123",
-            executionId: "wf-1",
-          },
-        },
-      });
-
-      expect(contextAvailable).toBe(true);
-    });
-
-    it("prefers host-delivered task.runtimeMetadata over the native pull (embedded)", async () => {
-      // Embedded: the host resolves the worker's declared TaskDef.runtimeMetadata secret names and
-      // delivers the values on the wire-only Task.runtimeMetadata. The worker must use that map and
-      // never hit the native /workers/secrets endpoint, even with no execution token present.
-      const serverUrl = "http://cred-embedded";
-      const manager = new WorkerManager(serverUrl, {}, 100);
+    it("exposes task.runtimeMetadata values via getCredential", async () => {
+      const manager = new WorkerManager("http://cred-test", {}, 100);
 
       let resolved: string | undefined;
       manager.addWorker("rtm_task", async () => {
@@ -571,11 +520,12 @@ describe("WorkerManager", () => {
       await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
-        inputData: { arg1: "value" }, // no __agentspan_ctx__ execution token
+        inputData: { arg1: "value" },
         runtimeMetadata: { MY_CRED: "host-value" },
       });
 
       expect(resolved).toBe("host-value");
+      // No secrets endpoint exists anymore — nothing may be fetched for credentials.
       expect(
         fetchSpy.mock.calls.some(
           ([u]: [unknown]) => typeof u === "string" && u.includes("/workers/secrets"),
@@ -594,11 +544,8 @@ describe("WorkerManager", () => {
       await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
-        inputData: {
-          __agentspan_ctx__: {
-            executionToken: "exec-tok-456",
-          },
-        },
+        inputData: {},
+        runtimeMetadata: { MY_CRED: "v" },
       });
 
       const { getCredential } = await import("../../src/credentials.js");
@@ -619,11 +566,8 @@ describe("WorkerManager", () => {
         wrapped.execute({
           taskId: "task-1",
           workflowInstanceId: "wf-1",
-          inputData: {
-            __agentspan_ctx__: {
-              executionToken: "exec-tok-789",
-            },
-          },
+          inputData: {},
+          runtimeMetadata: { MY_CRED: "v" },
         }),
       ).rejects.toThrow("handler boom");
 
@@ -633,59 +577,25 @@ describe("WorkerManager", () => {
     });
 
     it("isolates credential context across concurrent worker executions (regression: race in test_suite2)", async () => {
-      // Reproduces the test_suite2_tool_calling flake deterministically:
-      // The LLM emits parallel tool calls, so multiple worker.execute()
-      // run concurrently. Pre-fix, all share a single module-level
-      // credential context. Worker B's `finally`-block clear races with
-      // worker A's getCredential() call, throwing
-      // "No credential context available".
-      //
-      // We force the race by gating each handler on a barrier so all
-      // handlers are mid-flight at the same time, then have each call
-      // getCredential() and verify each got *its own* execution token's
-      // resolved value back.
-      const serverUrl = "http://cred-race";
-      const manager = new WorkerManager(serverUrl, {}, 100);
+      // Multiple worker.execute() calls run concurrently (parallel tool calls).
+      // Pre-fix, all shared a single module-level credential context — worker
+      // B's clear raced with worker A's getCredential(). Each task now carries
+      // its own runtimeMetadata; every handler must see its own value back, no
+      // crosstalk. (No handler barrier here: delivered secrets serialize handler
+      // bodies through the env-injection mutex by design; per-async ALS isolation
+      // is additionally covered in credentials.test.ts.)
+      const manager = new WorkerManager("http://cred-race", {}, 100);
 
       const NUM = 5;
-      const barrier = new Promise<void>((resolve) => {
-        let arrived = 0;
-        manager.addWorker(
-          "race_task",
-          async () => {
-            arrived++;
-            // Wait until all handlers are running concurrently.
-            if (arrived === NUM) resolve();
-            await barrierGate;
-            const { getCredential } = await import("../../src/credentials.js");
-            return { value: await getCredential("MY_CRED") };
-          },
-          undefined,
-        );
-        // Build the gate via a sentinel resolved after all arrive.
-        // The actual barrier the handlers await:
-      });
-      // Bridge: when `barrier` (all-arrived) resolves, open the gate.
-      let openGate!: () => void;
-      const barrierGate = new Promise<void>((res) => {
-        openGate = res;
-      });
-      void barrier.then(() => openGate());
-
-      // Echo the token back as the resolved value so we can detect crosstalk.
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
-          if (typeof url === "string" && url.includes("/workers/secrets")) {
-            const body = JSON.parse(String(init?.body));
-            return {
-              ok: true,
-              status: 200,
-              json: async () => ({ MY_CRED: `${body.token}:resolved` }),
-            };
-          }
-          return { ok: true, status: 200, text: async () => "" };
-        }),
+      manager.addWorker(
+        "race_task",
+        async () => {
+          // Yield a few times so submissions interleave before the read.
+          await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 10)));
+          const { getCredential } = await import("../../src/credentials.js");
+          return { value: await getCredential("MY_CRED") };
+        },
+        undefined,
       );
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -694,41 +604,42 @@ describe("WorkerManager", () => {
       const tasks = Array.from({ length: NUM }, (_, i) => ({
         taskId: `task-${i}`,
         workflowInstanceId: "wf-1",
-        inputData: {
-          __agentspan_ctx__: { executionToken: `tok-${i}` },
-        },
+        inputData: {},
+        runtimeMetadata: { MY_CRED: `res-${i}` },
       }));
 
       const results = await Promise.all(tasks.map((t) => wrapped.execute(t)));
 
-      // Each handler must see its own execution token, end to end —
-      // no nulls, no crosstalk between concurrent calls.
       for (let i = 0; i < NUM; i++) {
-        expect(results[i].outputData).toEqual({ value: `tok-${i}:resolved` });
+        expect(results[i].outputData).toEqual({ value: `res-${i}` });
       }
     });
 
-    it("does not set credential context when no execution token", async () => {
+    it("runs the handler with an empty map when nothing was delivered", async () => {
       const manager = new WorkerManager("http://test", {}, 100);
 
-      let handlerCalled = false;
-      manager.addWorker("no_token_task", async () => {
-        handlerCalled = true;
+      let insideError: unknown;
+      manager.addWorker("no_delivery_task", async () => {
+        const { getCredential } = await import("../../src/credentials.js");
+        try {
+          await getCredential("ANY");
+        } catch (err) {
+          insideError = err;
+        }
         return { ok: true };
       });
 
       const wrapped = (manager as any)._wrapWorker((manager as any).pendingWorkers[0]);
-      await wrapped.execute({
+      const result = await wrapped.execute({
         taskId: "task-1",
         workflowInstanceId: "wf-1",
-        inputData: {
-          arg1: "value",
-        },
+        inputData: { arg1: "value" },
       });
 
-      expect(handlerCalled).toBe(true);
-      const { getCredential } = await import("../../src/credentials.js");
-      await expect(getCredential("ANY")).rejects.toThrow("No credential context available");
+      expect(result.status).toBe("COMPLETED");
+      // Inside execution the context exists (empty map) — a missing name is
+      // CredentialNotFound, not a missing-context error.
+      expect(String(insideError)).toContain("ANY");
     });
   });
 });
