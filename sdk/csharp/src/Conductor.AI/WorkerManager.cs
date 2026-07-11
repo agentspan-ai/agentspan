@@ -103,15 +103,18 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
             // Resolve and inject credentials via the centralized helper so the
             // mutation + invocation + restoration is atomic under a single
             // process-wide lock. See docs/design/secret-injection-contract.md.
-            // Tier-2 (env-injection) path; tier-1 (explicit-key) lands when the
-            // user-facing API exposes a `credentials` parameter to agent factories.
-            Dictionary<string, string> resolvedCredentials = new();
-            if (_credentialNames.Length > 0)
+            // Secrets are delivered on the wire-only Task.RuntimeMetadata — resolved by the
+            // conductor core at poll from the names declared on TaskDef.runtimeMetadata. That
+            // map is the ONLY delivery path; the SDK never calls a server endpoint for secrets.
+            var resolvedCredentials = ReadRuntimeMetadata(task);
+            if (resolvedCredentials.Count == 0 && _credentialNames.Length > 0)
             {
-                var creds = await _http.ResolveCredentialsAsync(
-                    toolCtx?.ExecutionToken, _credentialNames, ct);
-                foreach (var (k, v) in creds)
-                    resolvedCredentials[k] = v;
+                // Not fatal: ToolContext.GetCredential / Secrets.Get throw
+                // CredentialNotFoundException only if the handler reads a missing name.
+                _logger.LogWarning(
+                    "Task {TaskName} declares credentials [{Names}] but none were delivered on " +
+                    "Task.RuntimeMetadata — is the secret stored on the server?",
+                    _taskName, string.Join(", ", _credentialNames));
             }
 
             // Tier-1 (explicit accessor): populate the ambient credential scope so
@@ -215,6 +218,33 @@ internal sealed class WorkerPollLoop : IAsyncDisposable
             };
             await _taskClient.UpdateTaskAsync(taskResult);
         }
+    }
+
+    /// <summary>
+    /// Read the host-delivered secret name→value map from <c>Task.RuntimeMetadata</c>. The
+    /// conductor core resolves the worker's declared <c>TaskDef.runtimeMetadata</c> names at poll
+    /// time and injects the values on the wire only — never persisted to task input
+    /// (conductor-oss PR #1255).
+    ///
+    /// <para>Read reflectively: the published conductor-csharp does not carry the property yet,
+    /// so this compiles (and returns an empty map) against today's client and lights up
+    /// automatically once conductor-oss/csharp-sdk ships <c>Task.RuntimeMetadata</c>. (Older
+    /// clients also drop the unknown JSON member at deserialization, so the data is unavailable
+    /// there either way.)</para>
+    /// </summary>
+    private static Dictionary<string, string> ReadRuntimeMetadata(Task task)
+    {
+        var result = new Dictionary<string, string>();
+        var prop = task?.GetType().GetProperty("RuntimeMetadata");
+        if (prop?.GetValue(task) is System.Collections.IDictionary rm)
+        {
+            foreach (System.Collections.DictionaryEntry e in rm)
+            {
+                if (e.Key is string k && e.Value is string v)
+                    result[k] = v;
+            }
+        }
+        return result;
     }
 
     // ── JSON bridges (Newtonsoft ↔ System.Text.Json) ──────────

@@ -185,10 +185,9 @@ def _make_fake_task(workflow_instance_id="wf-123", prompt="test prompt"):
     task = MagicMock()
     task.workflow_instance_id = workflow_instance_id
     task.task_id = "task-abc"
-    task.input_data = {
-        "prompt": prompt,
-        "__agentspan_ctx__": {"execution_token": "tok-fake"},
-    }
+    task.input_data = {"prompt": prompt}
+    # Secrets are delivered on the wire-only Task.runtime_metadata; None by default.
+    task.runtime_metadata = None
     return task
 
 
@@ -199,10 +198,6 @@ class TestLangchainWorkerCredentialInjection:
         not __import__("importlib").util.find_spec("langchain_core"),
         reason="langchain_core not installed",
     )
-
-    # _get_credential_fetcher is imported from _dispatch inside the closure,
-    # so we patch it at the source module.
-    _FETCHER_PATCH = "conductor.ai.agents.runtime._dispatch._get_credential_fetcher"
 
     def test_closure_credentials_injected_into_environ(self):
         """When credential_names are passed, the worker resolves and injects them
@@ -228,13 +223,11 @@ class TestLangchainWorkerCredentialInjection:
             credential_names=["GITHUB_TOKEN"],
         )
 
-        fake_fetcher = MagicMock()
-        fake_fetcher.fetch.return_value = {"GITHUB_TOKEN": "ghp_test123"}
-
         task = _make_fake_task()
+        # The conductor core resolved the declared names onto the wire-only map.
+        task.runtime_metadata = {"GITHUB_TOKEN": "ghp_test123"}
 
-        with patch(self._FETCHER_PATCH, return_value=fake_fetcher):
-            result = worker_fn(task)
+        result = worker_fn(task)
 
         # The executor saw the credential during invocation
         assert captured_env["GITHUB_TOKEN"] == "ghp_test123"
@@ -242,8 +235,6 @@ class TestLangchainWorkerCredentialInjection:
         assert "GITHUB_TOKEN" not in os.environ
         # Task completed successfully
         assert result.status.name == "COMPLETED"
-        # Fetcher was called with the closure credential names
-        fake_fetcher.fetch.assert_called_once_with("tok-fake", ["GITHUB_TOKEN"])
 
     def test_closure_credentials_used_even_when_workflow_registry_empty(self):
         """The closure path works even if _workflow_credentials has no entry for
@@ -276,21 +267,20 @@ class TestLangchainWorkerCredentialInjection:
             credential_names=["MY_SECRET"],
         )
 
-        fake_fetcher = MagicMock()
-        fake_fetcher.fetch.return_value = {"MY_SECRET": "s3cr3t"}
         task = _make_fake_task()
+        task.runtime_metadata = {"MY_SECRET": "s3cr3t"}
 
-        with patch(self._FETCHER_PATCH, return_value=fake_fetcher):
-            result = worker_fn(task)
+        result = worker_fn(task)
 
         # Even with empty _workflow_credentials, the closure names were used
         assert captured_env["MY_SECRET"] == "s3cr3t"
         assert "MY_SECRET" not in os.environ
         assert result.status.name == "COMPLETED"
 
-    def test_no_credentials_means_no_fetch(self):
+    def test_no_credentials_completes_without_delivery(self):
         """When credential_names is None/empty and _workflow_credentials is empty,
-        no credential fetch is attempted."""
+        the worker runs cleanly with no secrets delivered (there is no endpoint
+        to fetch from — Task.runtime_metadata is the only source)."""
         from conductor.ai.agents.frameworks.langchain import make_langchain_worker
         from conductor.ai.agents.runtime._dispatch import (
             _workflow_credentials,
@@ -315,11 +305,8 @@ class TestLangchainWorkerCredentialInjection:
 
         task = _make_fake_task()
 
-        with patch(self._FETCHER_PATCH) as mock_get_fetcher:
-            result = worker_fn(task)
+        result = worker_fn(task)
 
-        # Fetcher factory should never be called — no credentials requested
-        mock_get_fetcher.assert_not_called()
         assert result.status.name == "COMPLETED"
 
     # Full extraction path tests moved to test_credential_injection_integration.py

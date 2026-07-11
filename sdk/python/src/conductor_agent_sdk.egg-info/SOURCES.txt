@@ -52,8 +52,8 @@ src/conductor/ai/agents/runtime/server.py
 src/conductor/ai/agents/runtime/tool_registry.py
 src/conductor/ai/agents/runtime/worker_manager.py
 src/conductor/ai/agents/runtime/credentials/__init__.py
+src/conductor/ai/agents/runtime/credentials/_task_compat.py
 src/conductor/ai/agents/runtime/credentials/accessor.py
-src/conductor/ai/agents/runtime/credentials/fetcher.py
 src/conductor/ai/agents/runtime/credentials/types.py
 src/conductor/ai/agents/schedule/__init__.py
 src/conductor/ai/agents/schedule/api.py

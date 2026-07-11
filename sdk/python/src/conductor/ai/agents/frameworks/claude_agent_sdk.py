@@ -1062,8 +1062,7 @@ def _resolve_credentials(
     shared process-wide lock. See ``docs/design/secret-injection-contract.md``.
     """
     from conductor.ai.agents.runtime._dispatch import (
-        _extract_execution_token,
-        _get_credential_fetcher,
+        _read_runtime_metadata,
         _workflow_credentials,
         _workflow_credentials_lock,
     )
@@ -1073,15 +1072,13 @@ def _resolve_credentials(
         exec_id = execution_id or ""
         with _workflow_credentials_lock:
             cred_names = list(_workflow_credentials.get(exec_id, []))
-    if not cred_names:
-        return {}
-    token = _extract_execution_token(task)
-    if not token:
+    # Secrets arrive on the wire-only Task.runtime_metadata (resolved by the
+    # conductor core at poll) — the SDK never calls a server endpoint.
+    resolved = _read_runtime_metadata(task)
+    if cred_names and not resolved:
         logger.warning(
-            "No execution token in task for Claude Agent SDK worker — "
-            "credentials %s will not be injected",
+            "Credentials %s were not delivered on Task.runtime_metadata for the "
+            "Claude Agent SDK worker — is the secret stored on the server?",
             cred_names,
         )
-        return {}
-    fetcher = _get_credential_fetcher()
-    return fetcher.fetch(token, cred_names)
+    return resolved

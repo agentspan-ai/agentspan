@@ -78,64 +78,6 @@ class TestCheckApprovalWorker:
         assert result["needs_approval"] is False
 
 
-class TestCredentialExtraction:
-    """_dispatch.py extracts __agentspan_ctx__ from task input/variables."""
-
-    def test_extract_token_from_input_data_dict(self):
-        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
-
-        class FakeTask:
-            input_data = {
-                "__agentspan_ctx__": {"execution_token": "token-from-input"},
-                "x": "hello",
-            }
-            workflow_input = {}
-
-        token = _extract_execution_token(FakeTask())
-        assert token == "token-from-input"
-
-    def test_extract_token_from_input_data_string(self):
-        """Backwards compat: plain string is also accepted."""
-        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
-
-        class FakeTask:
-            input_data = {"__agentspan_ctx__": "token-from-input", "x": "hello"}
-            workflow_input = {}
-
-        token = _extract_execution_token(FakeTask())
-        assert token == "token-from-input"
-
-    def test_extract_token_returns_none_when_absent(self):
-        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
-
-        class FakeTask:
-            input_data = {"x": "hello"}
-            workflow_input = {}
-
-        token = _extract_execution_token(FakeTask())
-        assert token is None
-
-    def test_extract_token_from_workflow_input_dict(self):
-        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
-
-        class FakeTask:
-            input_data = {}
-            workflow_input = {"__agentspan_ctx__": {"execution_token": "token-from-wf"}}
-
-        token = _extract_execution_token(FakeTask())
-        assert token == "token-from-wf"
-
-    def test_extract_token_empty_dict_returns_none(self):
-        from conductor.ai.agents.runtime._dispatch import _extract_execution_token
-
-        class FakeTask:
-            input_data = {"__agentspan_ctx__": {}}
-            workflow_input = {}
-
-        token = _extract_execution_token(FakeTask())
-        assert token is None
-
-
 class TestToolDefCredentialsSurvival:
     """Verify credentials from @tool decorator survive into make_tool_worker."""
 

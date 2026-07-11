@@ -71,6 +71,13 @@ class ToolRegistry:
             if td.func is not None and td.tool_type in ("worker", "cli"):
                 guardrails = td.guardrails if td.guardrails else None
                 wrapper = make_tool_worker(td.func, td.name, guardrails=guardrails, tool_def=td)
+                # Create-only (overwrite_task_def=False): register the TaskDef if it does not exist,
+                # but never overwrite one that does. When embedded, the host server pre-registers the
+                # worker TaskDef and declares its secret names on TaskDef.runtimeMetadata (conductor-oss
+                # PR #1255); overwriting here with a bare def (the client TaskDef model carries no
+                # runtimeMetadata) would clobber that and starve the host resolver. Standalone still
+                # gets the def created when absent. No embedded flag needed — the existence check makes
+                # the right choice automatically.
                 worker_task(
                     task_definition_name=td.name,
                     task_def=_default_task_def(
@@ -80,7 +87,7 @@ class ToolRegistry:
                         retry_policy=td.retry_policy,
                     ),
                     register_task_def=True,
-                    overwrite_task_def=True,
+                    overwrite_task_def=False,
                     domain=domain if (agent_stateful or td.stateful) else None,
                     lease_extend_enabled=True,
                 )(wrapper)

@@ -145,33 +145,34 @@ from conductor.ai.agents.skill import (
 )
 
 
-def resolve_credentials(input_data: dict, names: list) -> dict:
-    """Resolve credentials from Conductor task input data.
+def resolve_credentials(task, names: list) -> dict:
+    """Read resolved credentials from a Conductor task's ``runtime_metadata``.
 
-    For external workers that need to resolve credentials from the
-    agentspan credential store. Extracts the execution token from
-    ``__agentspan_ctx__`` in the task input and calls the server.
+    For external workers that need the secrets the server resolved for this
+    task. The conductor core resolves the names declared on the worker's
+    ``TaskDef.runtimeMetadata`` at poll time and delivers the plaintext values
+    on the wire-only ``Task.runtime_metadata`` — there is no server endpoint
+    to call.
 
     Args:
-        input_data: The Conductor task's ``input_data`` dict.
-        names: Credential names to resolve.
+        task: The polled Conductor ``Task`` (or its raw JSON dict).
+        names: Credential names to return.
 
     Returns:
         Dict mapping credential name to resolved plaintext value.
+
+    Raises:
+        CredentialNotFoundError: If any requested name was not delivered.
     """
-    from conductor.ai.agents.runtime.config import AgentConfig
-    from conductor.ai.agents.runtime.credentials.fetcher import WorkerCredentialFetcher
+    delivered = getattr(task, "runtime_metadata", None)
+    if delivered is None and isinstance(task, dict):
+        delivered = task.get("runtimeMetadata") or task.get("runtime_metadata")
+    delivered = delivered if isinstance(delivered, dict) else {}
 
-    token = None
-    ctx = input_data.get("__agentspan_ctx__")
-    if isinstance(ctx, dict):
-        token = ctx.get("execution_token")
-    elif isinstance(ctx, str):
-        token = ctx
-
-    config = AgentConfig.from_env()
-    fetcher = WorkerCredentialFetcher(server_url=config.server_url)
-    return fetcher.fetch(token, names)
+    missing = [n for n in names if n not in delivered]
+    if missing:
+        raise CredentialNotFoundError(missing)
+    return {n: delivered[n] for n in names}
 
 
 # Agent discovery

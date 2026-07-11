@@ -28,7 +28,11 @@ ext {
     // separately from the server engine (engine = 3.30.2); wire-compatible with
     // the 3.x task REST API, bundles the common DTOs, and provides native auth
     // via io.orkes.conductor.client.ApiClient (key/secret → token).
-    conductorClientVersion = '5.0.1'
+    // Worker secrets arrive on the wire-only Task.runtimeMetadata. The published client
+    // does not carry the field yet (WorkerManager reads it reflectively and stays inert
+    // until conductor-oss/java-sdk ships it — the deserializer drops the unregistered
+    // JSON key, so the data is unavailable either way on older clients).
+    conductorClientVersion = '5.1.0'
 }
 
 dependencies {

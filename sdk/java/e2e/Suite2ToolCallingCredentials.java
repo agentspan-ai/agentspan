@@ -39,9 +39,9 @@ import org.junit.jupiter.api.*;
  * (set a JVM-startup env var; verify the SDK doesn't surface it via
  * {@code ctx.getCredential()}).</p>
  *
- * <p>This is the test that would catch URL drift on {@code /api/workers/secrets},
- * silent-swallow regressions in {@code WorkerCredentialFetcher}, or any
- * future "tool gets the wrong value" bug.</p>
+ * <p>This is the test that would catch drift in the {@code Task.runtimeMetadata}
+ * delivery (server-side declaration or SDK read-path), or any future
+ * "tool gets the wrong value" bug.</p>
  */
 @Tag("e2e")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
