@@ -1,0 +1,88 @@
+name: Server CI
+
+# Server-side CI: the agentspan library + server modules and the Go CLI.
+# SDK unit tests and all e2e suites live in ci-sdk.yml (SDK CI), which
+# builds its own server JAR — the two workflows are fully independent.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'cli/**'
+      - '.github/workflows/ci-server.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'cli/**'
+      - '.github/workflows/ci-server.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Java Server Tests (conductor-agentspan + conductor-agentspan-server) ──
+  server-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - name: Run server tests
+        run: ./gradlew build
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-test-reports
+          path: server/build/reports/tests/test/
+          retention-days: 7
+      - name: Server Test Report
+        uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          check_name: 'Server Tests'
+          check_title_template: '{{SUITE_NAME}} | {{TEST_NAME}} | {{CLASS_NAME}}'
+          report_paths: 'server/build/test-results/test/TEST-*.xml'
+          check_retries: true
+          fail_on_failure: true
+          detailed_summary: true
+          include_passed: false
+          flaky_summary: true
+
+  # ── Go CLI Tests ─────────────────────────────────────────────────
+  cli-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+      - name: Run CLI tests
+        run: go test ./... -count=1 -race
+
+  # ── Go CLI Tests (Windows) ───────────────────────────────────────
+  cli-tests-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+      - name: Run CLI tests
+        run: go test ./... -count=1
