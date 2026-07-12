@@ -1,7 +1,0 @@
-{
-  "external": false,
-  "maxTurns": 25,
-  "model": "anthropic/claude-sonnet-4-6",
-  "name": "greeter",
-  "timeoutSeconds": 0
-}
