@@ -717,7 +717,7 @@ We're building Agentspan in the open and would love your help.
 ### Contributing
 
 ```bash
-git clone https://github.com/agentspan-ai/agentspan.git
+git clone --recurse-submodules https://github.com/agentspan-ai/agentspan.git
 cd agentspan/sdk/python
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
