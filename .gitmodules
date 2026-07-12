@@ -1,0 +1,4 @@
+[submodule "sdk/python"]
+	path = sdk/python
+	url = https://github.com/conductor-oss/python-sdk
+	branch = main
