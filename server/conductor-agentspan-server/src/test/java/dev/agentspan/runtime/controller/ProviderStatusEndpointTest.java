@@ -22,9 +22,9 @@ import org.springframework.test.context.ActiveProfiles;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.dao.SecretsDAO;
 
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
 
 /**
  * GET /api/providers/status — the server is the source of truth for provider
@@ -46,20 +46,20 @@ class ProviderStatusEndpointTest {
     private int port;
 
     @Autowired
-    private CredentialStoreProvider store;
+    private SecretsDAO store;
 
     private String savedOllamaUrl;
 
     @BeforeEach
     void setUp() {
-        savedOllamaUrl = store.get("OLLAMA_BASE_URL");
-        store.set("OLLAMA_BASE_URL", UNREACHABLE_URL);
+        savedOllamaUrl = store.getSecret("OLLAMA_BASE_URL");
+        store.putSecret("OLLAMA_BASE_URL", UNREACHABLE_URL);
     }
 
     @AfterEach
     void cleanUp() {
-        store.delete("OLLAMA_BASE_URL");
-        if (savedOllamaUrl != null) store.set("OLLAMA_BASE_URL", savedOllamaUrl);
+        store.deleteSecret("OLLAMA_BASE_URL");
+        if (savedOllamaUrl != null) store.putSecret("OLLAMA_BASE_URL", savedOllamaUrl);
     }
 
     private JsonNode getStatus() throws Exception {

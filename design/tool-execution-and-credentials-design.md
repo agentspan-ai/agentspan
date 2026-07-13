@@ -337,7 +337,7 @@ This half reflects what the codebase does today, not historical proposals.
 - **Multi-user safe** — two users on the same server use distinct keys.
 - **Distributed-worker safe** — workers resolve per-execution credentials via a short-lived token, never see the user's session.
 - **One pipeline** — same resolution code path for LLM keys, tool credentials, HTTP/MCP headers, CLI tools, and framework passthroughs.
-- **Pluggable** — `CredentialStoreProvider` interface lets Enterprise swap in AWS SM / HashiCorp Vault / Azure KV without touching OSS code.
+- **Pluggable** — `CredentialsDAO` (extends conductor's `SecretsDAO`) lets Enterprise swap in AWS SM / HashiCorp Vault / Azure KV without touching OSS code.
 
 ## 3.1 Backend architecture
 
@@ -347,8 +347,8 @@ The server namespace is `dev.agentspan.*`. The credential implementation classes
 
 | Class | Responsibility |
 |---|---|
-| `CredentialStoreProvider` (iface, `runtime/spi`) | `get/set/delete/list` over an opaque backend |
-| `EncryptedDbCredentialStoreProvider` (server module) | OSS default — AES-256-GCM in SQLite/Postgres |
+| `CredentialsDAO` (iface, `runtime/spi`, extends conductor's `SecretsDAO`) | `getSecret/putSecret/deleteSecret/listSecretNames` + `listWithMeta` over an opaque backend |
+| `AgentspanSecretsDAO` (server module) | OSS default — AES-256-GCM in SQLite/Postgres |
 | `CredentialResolutionService` | Single authority: `(userId, name) → plaintext` — flat lookup + dotted-JSONPath |
 | `ExecutionTokenService` | Mint/validate HMAC-SHA256 execution tokens; in-memory `jti` deny-list |
 | `KnownProviderEnvVars` | The ~35 well-known provider env-var names to seed |
@@ -640,7 +640,7 @@ What this does **not** cover:
 
 | Concern | OSS | Enterprise |
 |---|:-:|:-:|
-| `CredentialStoreProvider` interface, encrypted DB store | ✓ | — |
+| `CredentialsDAO` interface, encrypted DB store | ✓ | — |
 | Env-var seeding + SDK fallback | ✓ | — |
 | Management + `/resolve` APIs | ✓ | — |
 | Execution token mint/validate (in-memory deny-list) | ✓ | — |
@@ -656,7 +656,7 @@ What this does **not** cover:
 | Org / team RBAC, credential policies | — | ✓ |
 | Durable audit store, durable token revocation | — | ✓ |
 
-Enterprise plugs in via the same `CredentialStoreProvider`, `SecretOutputMasker`, and `AuthFilter` interfaces — no OSS changes required.
+Enterprise plugs in via the same `CredentialsDAO` and `AuthFilter` interfaces — no OSS changes required.
 
 ---
 

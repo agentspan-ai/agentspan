@@ -11,8 +11,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.netflix.conductor.dao.SecretsDAO;
+
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
 
 /**
  * Integration test that verifies CredentialEnvSeeder can store credentials
@@ -26,18 +27,18 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
 class CredentialEnvSeederIntegrationTest {
 
     @Autowired
-    private CredentialStoreProvider storeProvider;
+    private SecretsDAO storeProvider;
 
     @Test
     void seeder_storesCredential_withoutForeignKeyError() {
         // The seeder runs at startup. If ANTHROPIC_API_KEY is in the env
         // (or test properties), the credential should exist.
         // At minimum, verify we can write and read back without errors.
-        storeProvider.set("INTEGRATION_TEST_KEY", "test-value-123");
-        String value = storeProvider.get("INTEGRATION_TEST_KEY");
+        storeProvider.putSecret("INTEGRATION_TEST_KEY", "test-value-123");
+        String value = storeProvider.getSecret("INTEGRATION_TEST_KEY");
         assertThat(value).isEqualTo("test-value-123");
 
         // Cleanup
-        storeProvider.delete("INTEGRATION_TEST_KEY");
+        storeProvider.deleteSecret("INTEGRATION_TEST_KEY");
     }
 }

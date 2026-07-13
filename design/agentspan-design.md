@@ -160,19 +160,15 @@ Why two and not three: the compilers emit Conductor `WorkflowDef`/`WorkflowTask`
 
 Interfaces live in `conductor-agentspan` (`dev.agentspan.runtime.spi`); they cover **Agentspan-owned data**, not execution. The library holds no impls — a host contributes one impl bean per SPI (via `@ConditionalOnMissingBean`, the same pattern orkes uses for http-task/DAOs/security). A context missing an impl **fails fast at startup** — intentional, so a missing secret store cannot silently no-op.
 
-The directory (`dev.agentspan.runtime.spi`) contains exactly five interfaces:
+The directory (`dev.agentspan.runtime.spi`) contains:
 
 | SPI (library) | OSS default (`conductor-agentspan-server`) | Enterprise (orkes) |
 |---|---|---|
-| `CredentialStoreProvider` | `EncryptedDbCredentialStoreProvider` (JDBC `credentials_store` + AES-256-GCM) | secrets manager / Vault / KMS |
-| `SecretOutputMasker` | **no-op** (payload unchanged) | disclosure-tracking masker |
+| `CredentialsDAO` (extends conductor's `SecretsDAO`) | `AgentspanSecretsDAO` (JDBC `credentials_store` + AES-256-GCM) | secrets manager / Vault / KMS |
 | `SkillPackageStore` (+ `StoredSkillPackage` value type) | `FileSystemSkillPackageStore` / `ConductorPayloadSkillPackageStore` | S3 / object store |
 | `SkillMetadataDAO` | `FileSystemSkillMetadataDAO` | DB-backed |
 
 ```java
-// OSS default returns payload unchanged; enterprise redacts disclosed secret values.
-public interface SecretOutputMasker { String mask(String executionId, String userId, String payload); }
-
 public interface SkillMetadataDAO {
     SkillDetail save(SkillDetail detail);
     List<SkillSummary> list(boolean allVersions, String ownerId);
@@ -183,7 +179,7 @@ public interface SkillMetadataDAO {
 
 **Execution tokens are not an SPI.** Worker-boundary tokens (§4.4) are minted/validated by a concrete `@Service` `ExecutionTokenService` (`dev.agentspan.runtime.credentials`) using HMAC-SHA256 over the server master key — not a pluggable interface.
 
-> Secrets resolution is a direct `(userId, name)` lookup with dotted-JSONPath into JSON-valued secrets (`GCP_SVC.project_id`) and prefix-permissive declared-name bounding — implemented in `CredentialResolutionService` over `CredentialStoreProvider`. There is **no** binding/alias store. There is **no** `UserStore`/`ApiKeyStore`: identity is the host's (orkes supplies it; OSS Conductor has none → anonymous). The library only needs the current principal (`userId`) for secret scoping, carried by `RequestContextHolder`; *who populates it* is the host's job. Full secret/credential mechanics: [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md).
+> Secrets resolution is a direct `(userId, name)` lookup with dotted-JSONPath into JSON-valued secrets (`GCP_SVC.project_id`) and prefix-permissive declared-name bounding — implemented in `CredentialResolutionService` over conductor's `SecretsDAO`. There is **no** binding/alias store. There is **no** `UserStore`/`ApiKeyStore`: identity is the host's (orkes supplies it; OSS Conductor has none → anonymous). The library only needs the current principal (`userId`) for secret scoping, carried by `RequestContextHolder`; *who populates it* is the host's job. Full secret/credential mechanics: [tool-execution-and-credentials-design.md](tool-execution-and-credentials-design.md).
 
 ### 4.3 Spring wiring
 

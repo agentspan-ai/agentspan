@@ -24,7 +24,7 @@ import org.springframework.context.annotation.Primary;
  * leaves this property unset, so the override stays active as before.</p>
  */
 @Configuration
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "true")
 public class AgentHumanTaskConfig {
 
     @Bean(TASK_TYPE_HUMAN)

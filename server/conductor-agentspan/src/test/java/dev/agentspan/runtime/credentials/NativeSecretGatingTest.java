@@ -12,7 +12,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
+import com.netflix.conductor.dao.SecretsDAO;
 
 /**
  * Verifies the native secret mechanism toggles on {@code agentspan.embedded}:
@@ -32,7 +32,7 @@ class NativeSecretGatingTest {
     static class NativeBeans {}
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withBean(CredentialStoreProvider.class, () -> mock(CredentialStoreProvider.class))
+            .withBean(SecretsDAO.class, () -> mock(SecretsDAO.class))
             .withUserConfiguration(NativeBeans.class);
 
     @Test
