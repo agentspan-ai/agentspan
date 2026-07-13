@@ -43,7 +43,6 @@ import com.netflix.conductor.service.WorkflowService;
 
 import dev.agentspan.runtime.compiler.AgentCompiler;
 import dev.agentspan.runtime.compiler.MultiAgentCompiler;
-import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
 import dev.agentspan.runtime.util.ModelParser;
@@ -240,19 +239,6 @@ public class AgentService {
         startReq.setName(def.getName());
         startReq.setVersion(def.getVersion());
         startReq.setWorkflowDef(def);
-
-        // Attribute the execution to the calling principal (the host populates the
-        // RequestContext: orkes' principal filter when embedded, the standalone AuthFilter
-        // otherwise). Security-enabled hosts key on this standard Conductor field: orkes
-        // records workflow.createdBy from it, stamps _createdBy into every scheduled task,
-        // impersonates it during decide so sub-workflows inherit attribution, and its
-        // workers' poll-time secret substitution REQUIRES it (tasks of workflows without
-        // createdBy fail to poll). Stock Conductor simply records the value.
-        String principal =
-                RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse(null);
-        if (principal != null) {
-            startReq.setCreatedBy(principal);
-        }
 
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("prompt", request.getPrompt());

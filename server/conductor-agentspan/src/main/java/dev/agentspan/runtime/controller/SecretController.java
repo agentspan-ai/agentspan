@@ -16,7 +16,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.model.credentials.CredentialMeta;
 import dev.agentspan.runtime.spi.CredentialsDAO;
 
@@ -90,7 +89,6 @@ public class SecretController {
         ResponseEntity<?> err = validateKey(key);
         if (err != null) return ResponseEntity.status(err.getStatusCode()).build();
         String value = secretsDAO.getSecret(key);
-        log.info("AUDIT get-secret: userId={} key={} found={}", currentUserId(), key, value != null);
         if (value == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(value);
     }
@@ -106,7 +104,6 @@ public class SecretController {
             return ResponseEntity.badRequest().body("value is required");
         }
         secretsDAO.putSecret(key, value);
-        log.info("AUDIT put-secret: userId={} key={}", currentUserId(), key);
         return ResponseEntity.ok().build();
     }
 
@@ -116,7 +113,6 @@ public class SecretController {
         ResponseEntity<?> err = validateKey(key);
         if (err != null) return err;
         secretsDAO.deleteSecret(key);
-        log.info("AUDIT delete-secret: userId={} key={}", currentUserId(), key);
         return ResponseEntity.ok().build();
     }
 
@@ -146,9 +142,5 @@ public class SecretController {
                     .body("key must match pattern " + KEY_PATTERN + " (alphanumeric, underscore, dash only)");
         }
         return null;
-    }
-
-    private String currentUserId() {
-        return RequestContextHolder.getRequiredUserId();
     }
 }
