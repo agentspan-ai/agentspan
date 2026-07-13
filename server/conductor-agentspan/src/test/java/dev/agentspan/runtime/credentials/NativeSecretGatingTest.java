@@ -7,12 +7,11 @@ package dev.agentspan.runtime.credentials;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import org.conductoross.conductor.dao.SecretsDAO;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-
-import com.netflix.conductor.dao.SecretsDAO;
 
 /**
  * Verifies the native secret mechanism toggles on {@code agentspan.embedded}:
