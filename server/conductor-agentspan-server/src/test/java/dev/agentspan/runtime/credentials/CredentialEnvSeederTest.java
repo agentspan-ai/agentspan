@@ -4,7 +4,6 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
 import static org.assertj.core.api.Assertions.*;
 
 import java.util.Map;
@@ -18,8 +17,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.netflix.conductor.dao.SecretsDAO;
+
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
 
 /**
  * Integration test for CredentialEnvSeeder — uses real DB, no mocks.
@@ -30,7 +30,7 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
 class CredentialEnvSeederTest {
 
     @Autowired
-    private CredentialStoreProvider storeProvider;
+    private SecretsDAO storeProvider;
 
     @Autowired
     @Qualifier("credentialJdbc")
@@ -45,14 +45,14 @@ class CredentialEnvSeederTest {
         try {
             jdbc.update(
                     "DELETE FROM credentials_store WHERE user_id = :uid AND name LIKE '\\_TEST\\_%' ESCAPE '\\'",
-                    Map.of("uid", ANONYMOUS_USER_ID));
+                    Map.of("uid", "00000000-0000-0000-0000-000000000000"));
         } catch (Exception ignored) {
             // Table may not exist yet on the first test run — safe to ignore.
         }
-        storeProvider.delete(ANONYMOUS_USER_ID, "GH_TOKEN");
-        storeProvider.delete(ANONYMOUS_USER_ID, "GITHUB_TOKEN");
-        storeProvider.delete(ANONYMOUS_USER_ID, "OPENAI_BASE_URL");
-        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_BASE_URL");
+        storeProvider.deleteSecret("GH_TOKEN");
+        storeProvider.deleteSecret("GITHUB_TOKEN");
+        storeProvider.deleteSecret("OPENAI_BASE_URL");
+        storeProvider.deleteSecret("ANTHROPIC_BASE_URL");
     }
 
     @Test
@@ -75,19 +75,19 @@ class CredentialEnvSeederTest {
         field.set(realSeeder, "built-in");
 
         // Delete existing credential first so seeder can create it
-        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        storeProvider.deleteSecret("ANTHROPIC_API_KEY");
 
         realSeeder.run(new org.springframework.boot.DefaultApplicationArguments());
 
         // Verify credential was stored in real DB
-        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        String value = storeProvider.getSecret("ANTHROPIC_API_KEY");
         assertThat(value).isEqualTo("sk-test-seeded-value");
     }
 
     @Test
     void seeder_skipsExistingCredential_inRealDb() throws Exception {
         // Store a credential first
-        storeProvider.set(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY", "original-value");
+        storeProvider.putSecret("ANTHROPIC_API_KEY", "original-value");
 
         // Try to seed with a different value
         Function<String, String> envLookup =
@@ -101,14 +101,14 @@ class CredentialEnvSeederTest {
         seeder.run(new org.springframework.boot.DefaultApplicationArguments());
 
         // Value should still be the original
-        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        String value = storeProvider.getSecret("ANTHROPIC_API_KEY");
         assertThat(value).isEqualTo("original-value");
     }
 
     @Test
     void seeder_ignoresBlankEnvVars_inRealDb() throws Exception {
         // Delete so we can detect if seeder creates it
-        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        storeProvider.deleteSecret("ANTHROPIC_API_KEY");
 
         Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "   " : null;
 
@@ -120,13 +120,13 @@ class CredentialEnvSeederTest {
         seeder.run(new org.springframework.boot.DefaultApplicationArguments());
 
         // Blank value should NOT be stored
-        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        String value = storeProvider.getSecret("ANTHROPIC_API_KEY");
         assertThat(value).isNull();
     }
 
     @Test
     void seeder_skipsWhenStoreIsNotBuiltIn() throws Exception {
-        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        storeProvider.deleteSecret("ANTHROPIC_API_KEY");
 
         Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-should-not-store" : null;
 
@@ -137,7 +137,7 @@ class CredentialEnvSeederTest {
 
         seeder.run(new org.springframework.boot.DefaultApplicationArguments());
 
-        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        String value = storeProvider.getSecret("ANTHROPIC_API_KEY");
         assertThat(value).isNull();
     }
 
@@ -145,7 +145,7 @@ class CredentialEnvSeederTest {
     void seeder_reseeds_whenDecryptionFailsDueToKeyMismatch() throws Exception {
         // Simulate a credential encrypted with an old/rotated master key by writing
         // garbage bytes directly into the DB — decryption will throw AEADBadTagException.
-        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        storeProvider.deleteSecret("ANTHROPIC_API_KEY");
         String now = java.time.Instant.now().toString();
         // 12-byte fake IV + 17 bytes of garbage ciphertext → GCM tag mismatch on decrypt
         byte[] staleBytes = new byte[29];
@@ -153,7 +153,15 @@ class CredentialEnvSeederTest {
         jdbc.update(
                 "INSERT INTO credentials_store (user_id, name, encrypted_value, created_at, updated_at) "
                         + "VALUES (:uid, :n, :enc, :now, :now)",
-                Map.of("uid", ANONYMOUS_USER_ID, "n", "ANTHROPIC_API_KEY", "enc", staleBytes, "now", now));
+                Map.of(
+                        "uid",
+                        "00000000-0000-0000-0000-000000000000",
+                        "n",
+                        "ANTHROPIC_API_KEY",
+                        "enc",
+                        staleBytes,
+                        "now",
+                        now));
 
         Function<String, String> envLookup =
                 name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-fresh-after-rotation" : null;
@@ -168,7 +176,7 @@ class CredentialEnvSeederTest {
                 .doesNotThrowAnyException();
 
         // Credential must be re-encrypted with the current key and readable
-        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        String value = storeProvider.getSecret("ANTHROPIC_API_KEY");
         assertThat(value).isEqualTo("sk-fresh-after-rotation");
     }
 
@@ -176,22 +184,27 @@ class CredentialEnvSeederTest {
     void seeder_propagates_nonDecryptionExceptions() throws Exception {
         // A non-AEADBadTagException from get() must propagate — e.g. a transient DB failure
         // should NOT silently delete a valid credential.
-        CredentialStoreProvider failingStore = new CredentialStoreProvider() {
+        SecretsDAO failingStore = new SecretsDAO() {
             @Override
-            public String get(String userId, String name) {
+            public String getSecret(String name) {
                 throw new IllegalStateException("DB connection lost", new RuntimeException("timeout"));
             }
 
             @Override
-            public void set(String userId, String name, String value) {}
+            public boolean secretExists(String name) {
+                return false;
+            }
 
             @Override
-            public void delete(String userId, String name) {}
-
-            @Override
-            public java.util.List<dev.agentspan.runtime.model.credentials.CredentialMeta> list(String userId) {
+            public java.util.List<String> listSecretNames() {
                 return java.util.List.of();
             }
+
+            @Override
+            public void putSecret(String name, String value) {}
+
+            @Override
+            public void deleteSecret(String name) {}
         };
 
         Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-value" : null;
@@ -222,9 +235,26 @@ class CredentialEnvSeederTest {
 
         seeder.run(new org.springframework.boot.DefaultApplicationArguments());
 
-        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "OPENAI_BASE_URL")).isEqualTo("https://my-proxy.org/v1");
-        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_BASE_URL"))
-                .isEqualTo("https://anthropic-proxy.internal/v1");
+        assertThat(storeProvider.getSecret("OPENAI_BASE_URL")).isEqualTo("https://my-proxy.org/v1");
+        assertThat(storeProvider.getSecret("ANTHROPIC_BASE_URL")).isEqualTo("https://anthropic-proxy.internal/v1");
+    }
+
+    @Test
+    void seeder_seedsOllamaBaseUrl_inRealDb() throws Exception {
+        // OLLAMA_BASE_URL is the documented Ollama variable and what the
+        // provider resolves from the credential store — it must be seeded.
+        storeProvider.deleteSecret("OLLAMA_BASE_URL");
+
+        Function<String, String> envLookup = name -> "OLLAMA_BASE_URL".equals(name) ? "http://gpu-box:11434" : null;
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        assertThat(storeProvider.getSecret("OLLAMA_BASE_URL")).isEqualTo("http://gpu-box:11434");
     }
 
     @Test
@@ -242,7 +272,7 @@ class CredentialEnvSeederTest {
 
         seeder.run(new org.springframework.boot.DefaultApplicationArguments());
 
-        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "GH_TOKEN")).isEqualTo("ghp-test-gh-token");
-        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "GITHUB_TOKEN")).isEqualTo("ghp-test-github-token");
+        assertThat(storeProvider.getSecret("GH_TOKEN")).isEqualTo("ghp-test-gh-token");
+        assertThat(storeProvider.getSecret("GITHUB_TOKEN")).isEqualTo("ghp-test-github-token");
     }
 }

@@ -18,34 +18,33 @@ import dev.agentspan.runtime.model.skill.SkillDetail;
  * an embedding host (e.g. orkes-conductor) supplies a durable/HA implementation (e.g. Postgres)
  * so skill listings are consistent across nodes.</p>
  *
- * <p>All operations are scoped by {@code ownerId}. Authorization (whether the caller may read a
- * given skill) is the caller's concern, not this DAO's.</p>
+ * <p>Skills are global: there is no per-caller ownership or scoping.</p>
  */
 public interface SkillMetadataDAO {
 
     /**
      * Persist a skill version's metadata (create or overwrite).
      *
-     * @param detail     metadata to store, keyed by {@code ownerId + name + version}
+     * @param detail     metadata to store, keyed by {@code name + version}
      * @param makeLatest when {@code true}, mark this version as the skill's latest
      */
     void save(SkillDetail detail, boolean makeLatest);
 
     /** Exact-version lookup. */
-    Optional<SkillDetail> find(String ownerId, String name, String version);
+    Optional<SkillDetail> find(String name, String version);
 
     /** The recorded latest version string for a skill, if any. */
-    Optional<String> latestVersion(String ownerId, String name);
+    Optional<String> latestVersion(String name);
 
     /** All recorded versions of a single skill (unordered). */
-    List<SkillDetail> listVersions(String ownerId, String name);
+    List<SkillDetail> listVersions(String name);
 
     /**
-     * All skills for an owner. When {@code allVersions} is {@code false}, returns only each
+     * All registered skills. When {@code allVersions} is {@code false}, returns only each
      * skill's latest version; when {@code true}, returns every version of every skill.
      */
-    List<SkillDetail> list(String ownerId, boolean allVersions);
+    List<SkillDetail> list(boolean allVersions);
 
     /** Remove a single version and recompute the skill's latest pointer if needed. */
-    void delete(String ownerId, String name, String version);
+    void delete(String name, String version);
 }

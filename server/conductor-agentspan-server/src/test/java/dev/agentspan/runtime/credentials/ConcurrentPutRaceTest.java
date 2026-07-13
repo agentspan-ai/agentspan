@@ -16,8 +16,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.netflix.conductor.dao.SecretsDAO;
+
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
 
 /**
  * Regression test for Bug #3 — concurrent PUT on the same (user, name) was
@@ -39,19 +40,19 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
 class ConcurrentPutRaceTest {
 
     @Autowired
-    private CredentialStoreProvider store;
+    private SecretsDAO store;
 
     private static final String USER = "race-test-user";
     private static final String NAME = "_RACE_TEST_KEY";
 
     @BeforeEach
     void clean() {
-        store.delete(USER, NAME);
+        store.deleteSecret(NAME);
     }
 
     @AfterEach
     void clean2() {
-        store.delete(USER, NAME);
+        store.deleteSecret(NAME);
     }
 
     @Test
@@ -63,7 +64,7 @@ class ConcurrentPutRaceTest {
             final int idx = i;
             futures[i] = CompletableFuture.runAsync(() -> {
                 try {
-                    store.set(USER, NAME, "value-" + idx);
+                    store.putSecret(NAME, "value-" + idx);
                 } catch (Throwable t) {
                     errors.incrementAndGet();
                 }
@@ -77,12 +78,12 @@ class ConcurrentPutRaceTest {
                 .isZero();
 
         // And the value is set (last writer wins; we just assert SOME write succeeded).
-        assertThat(store.get(USER, NAME)).isNotNull();
+        assertThat(store.getSecret(NAME)).isNotNull();
     }
 
     @Test
     void concurrentPut_existingCredential_doesNotThrow() throws Exception {
-        store.set(USER, NAME, "initial-value");
+        store.putSecret(NAME, "initial-value");
 
         int N = 50;
         AtomicInteger errors = new AtomicInteger();
@@ -91,7 +92,7 @@ class ConcurrentPutRaceTest {
             final int idx = i;
             futures[i] = CompletableFuture.runAsync(() -> {
                 try {
-                    store.set(USER, NAME, "updated-value-" + idx);
+                    store.putSecret(NAME, "updated-value-" + idx);
                 } catch (Throwable t) {
                     errors.incrementAndGet();
                 }
@@ -100,6 +101,6 @@ class ConcurrentPutRaceTest {
         for (var f : futures) f.get();
 
         assertThat(errors.get()).isZero();
-        assertThat(store.get(USER, NAME)).startsWith("updated-value-");
+        assertThat(store.getSecret(NAME)).startsWith("updated-value-");
     }
 }

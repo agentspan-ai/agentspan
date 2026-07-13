@@ -15,11 +15,12 @@ import java.util.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Loads or generates the AES-256-GCM master key used by EncryptedDbCredentialStoreProvider.
+ * Loads or generates the AES-256-GCM master key used by AgentspanSecretsDAO.
  *
  * <p>Key sourcing rules:</p>
  * <ul>
@@ -28,6 +29,7 @@ import org.springframework.context.annotation.Configuration;
  * </ul>
  */
 @Configuration
+@ConditionalOnProperty(name = "conductor.secrets.type", havingValue = "agentspan")
 public class MasterKeyConfig {
 
     private static final Logger log = LoggerFactory.getLogger(MasterKeyConfig.class);

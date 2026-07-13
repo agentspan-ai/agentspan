@@ -111,8 +111,8 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         TaskModel taskModel = super.getMappedTask(taskMapperContext);
         WorkflowModel workflowModel = taskMapperContext.getWorkflowModel();
 
-        // Per-user LLM key resolution is handled by AgentspanAIModelProvider.getModel()
-        // which creates a fresh AIModel with the user's credential. No inputData injection needed.
+        // LLM credentials are the host's concern: embedded, the AI integration supplies the key
+        // (OrkesAIModelProvider); standalone, AgentspanAIModelProvider resolves it. Nothing to stamp here.
 
         try {
             ChatCompletion chatCompletion = objectMapper.convertValue(taskModel.getInputData(), ChatCompletion.class);
@@ -932,9 +932,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
      * Strip internal dispatch fields from tool input before including in conversation history.
      *
      * <p>The dispatch layer injects {@code _agent_state} (accumulated agent state, can be 170+ KB)
-     * and {@code __agentspan_ctx__} (execution tokens) into tool inputs. These are internal
-     * plumbing — including them in every tool message bloats the conversation payload
-     * (170 KB × N tool calls = multi-MB overhead) and provides no value to the LLM.</p>
+     * into tool inputs. This is internal plumbing — including it in every tool message bloats the
+     * conversation payload (170 KB × N tool calls = multi-MB overhead) and provides no value to
+     * the LLM.</p>
      */
     private Map<String, Object> stripInternalFields(Map<String, Object> inputData) {
         if (inputData == null || inputData.isEmpty()) {
@@ -942,7 +942,6 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         }
         Map<String, Object> clean = new HashMap<>(inputData);
         clean.remove("_agent_state");
-        clean.remove("__agentspan_ctx__");
         clean.remove("method"); // internal dispatch method name
         return clean;
     }

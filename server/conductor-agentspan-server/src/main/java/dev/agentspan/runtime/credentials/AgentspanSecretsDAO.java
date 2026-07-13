@@ -1,0 +1,217 @@
+/*
+ * Copyright (c) 2025 AgentSpan
+ * Licensed under the MIT License.
+ */
+package dev.agentspan.runtime.credentials;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import dev.agentspan.runtime.model.credentials.CredentialMeta;
+import dev.agentspan.runtime.spi.CredentialsDAO;
+
+/**
+ * AES-256-GCM encrypted credential store, backing conductor's global {@link
+ * com.netflix.conductor.dao.SecretsDAO} via {@link CredentialsDAO}.
+ *
+ * <p>Active only when {@code conductor.secrets.type=agentspan} — the "agentspan-as-host" mode
+ * where the AgentSpan server embeds conductor ({@code agentspan.embedded=true}) <em>and</em> also
+ * serves as the secret-resolving host. In that mode the embedded conductor's {@code
+ * RuntimeMetadataResolver} calls {@link #getSecret(String)} at each SIMPLE task's poll to resolve
+ * the secret names a worker declared on {@code TaskDef.runtimeMetadata}, injecting the resolved
+ * values onto the wire-only {@code Task.runtimeMetadata}. Selecting this DAO ({@code
+ * havingValue="agentspan"}) gates conductor's own env-variable / noop {@code SecretsDAO}
+ * implementations off (they require {@code conductor.secrets.type} to be {@code env}/absent or
+ * {@code noop}).
+ *
+ * <p>Also the single storage backend for AgentSpan's own credential surfaces —
+ * {@code SecretController} (the Credentials UI), {@code CredentialResolutionService}, and {@code
+ * CredentialEnvSeeder} — all of which depend on {@link CredentialsDAO} / {@code SecretsDAO}
+ * directly rather than a separate storage interface.
+ *
+ * <p>Encryption format: [12-byte IV][ciphertext+16-byte GCM tag], concatenated into a single BLOB
+ * stored in {@code credentials_store.encrypted_value}. The master key is the 32-byte key from
+ * {@code MasterKeyConfig#credentialMasterKey()}.
+ */
+@Component
+@ConditionalOnProperty(name = "conductor.secrets.type", havingValue = "agentspan")
+public class AgentspanSecretsDAO implements CredentialsDAO {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentspanSecretsDAO.class);
+    private static final String ALGORITHM = "AES/GCM/NoPadding";
+    private static final int IV_LENGTH = 12; // GCM standard nonce
+    private static final int TAG_LENGTH = 128; // GCM auth tag bits
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    /**
+     * Fixed single-scope owner for all rows. The {@code credentials_store} schema keeps its
+     * {@code user_id} column (part of the (user_id, name) primary key), but the store is global —
+     * every row is written and read under this constant, so lookups are effectively by name.
+     */
+    private static final String DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000000";
+
+    private final NamedParameterJdbcTemplate jdbc;
+    private final byte[] masterKey;
+
+    public AgentspanSecretsDAO(
+            @Qualifier("credentialJdbc") NamedParameterJdbcTemplate jdbc,
+            @Qualifier("credentialMasterKey") byte[] masterKey) {
+        this.jdbc = jdbc;
+        this.masterKey = masterKey;
+        log.info("AgentspanSecretsDAO active — secrets resolve from the AgentSpan encrypted credential store");
+    }
+
+    @Override
+    public String getSecret(String name) {
+        try {
+            byte[] encrypted = jdbc.queryForObject(
+                    "SELECT encrypted_value FROM credentials_store " + "WHERE user_id = :uid AND name = :n",
+                    Map.of("uid", DEFAULT_USER_ID, "n", name),
+                    byte[].class);
+            if (encrypted == null) return null;
+            return decrypt(encrypted);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        } catch (Exception e) {
+            log.error("Failed to decrypt credential '{}': {}", name, e.getMessage());
+            throw new IllegalStateException("Failed to decrypt credential: " + name, e);
+        }
+    }
+
+    @Override
+    public boolean secretExists(String name) {
+        return getSecret(name) != null;
+    }
+
+    @Override
+    public List<String> listSecretNames() {
+        return jdbc.query(
+                "SELECT name FROM credentials_store WHERE user_id = :uid ORDER BY name",
+                Map.of("uid", DEFAULT_USER_ID),
+                (rs, row) -> rs.getString("name"));
+    }
+
+    @Override
+    public void putSecret(String name, String value) {
+        try {
+            byte[] encrypted = encrypt(value);
+            String now = Instant.now().toString();
+            // Single-statement upsert. ON CONFLICT(...) DO UPDATE is supported
+            // by SQLite 3.24+ and Postgres 9.5+; atomic on both. Replaces an
+            // earlier UPDATE-then-INSERT pattern that raced on concurrent
+            // first-write to the same (user_id, name).
+            jdbc.update(
+                    "INSERT INTO credentials_store (user_id, name, encrypted_value, created_at, updated_at) "
+                            + "VALUES (:uid, :n, :enc, :now, :now) "
+                            + "ON CONFLICT(user_id, name) DO UPDATE SET "
+                            + "  encrypted_value = excluded.encrypted_value, "
+                            + "  updated_at      = excluded.updated_at",
+                    Map.of("uid", DEFAULT_USER_ID, "n", name, "enc", encrypted, "now", now));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to store credential: " + name, e);
+        }
+    }
+
+    @Override
+    public void deleteSecret(String name) {
+        jdbc.update(
+                "DELETE FROM credentials_store WHERE user_id = :uid AND name = :n",
+                Map.of("uid", DEFAULT_USER_ID, "n", name));
+    }
+
+    @Override
+    public List<CredentialMeta> listWithMeta() {
+        // Include encrypted_value in the SELECT so we can decrypt inline — avoids
+        // an N+1 query pattern. On SQLite the pool is capped at 1 connection so a
+        // nested get() call inside a RowMapper would deadlock; on PostgreSQL the
+        // single-query approach remains more efficient regardless.
+        return jdbc.query(
+                "SELECT name, encrypted_value, created_at, updated_at "
+                        + "FROM credentials_store WHERE user_id = :uid ORDER BY name",
+                Map.of("uid", DEFAULT_USER_ID),
+                (rs, row) -> {
+                    String name = rs.getString("name");
+                    byte[] enc = rs.getBytes("encrypted_value");
+                    String partial;
+                    try {
+                        partial = toPartial(enc != null ? decrypt(enc) : null);
+                    } catch (Exception e) {
+                        partial = "????...????";
+                    }
+                    return CredentialMeta.builder()
+                            .name(name)
+                            .partial(partial)
+                            .createdAt(parseInstant(rs.getString("created_at")))
+                            .updatedAt(parseInstant(rs.getString("updated_at")))
+                            .build();
+                });
+    }
+
+    // ── Encryption ────────────────────────────────────────────────────
+
+    private byte[] encrypt(String plaintext) throws Exception {
+        byte[] iv = new byte[IV_LENGTH];
+        SECURE_RANDOM.nextBytes(iv);
+
+        SecretKeySpec keySpec = new SecretKeySpec(masterKey, "AES");
+        Cipher cipher = Cipher.getInstance(ALGORITHM);
+        cipher.init(Cipher.ENCRYPT_MODE, keySpec, new GCMParameterSpec(TAG_LENGTH, iv));
+        byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+
+        // Format: [IV 12 bytes][ciphertext+tag]
+        ByteBuffer buf = ByteBuffer.allocate(IV_LENGTH + ciphertext.length);
+        buf.put(iv);
+        buf.put(ciphertext);
+        return buf.array();
+    }
+
+    private String decrypt(byte[] data) throws Exception {
+        ByteBuffer buf = ByteBuffer.wrap(data);
+        byte[] iv = new byte[IV_LENGTH];
+        buf.get(iv);
+        byte[] ciphertext = new byte[buf.remaining()];
+        buf.get(ciphertext);
+
+        SecretKeySpec keySpec = new SecretKeySpec(masterKey, "AES");
+        Cipher cipher = Cipher.getInstance(ALGORITHM);
+        cipher.init(Cipher.DECRYPT_MODE, keySpec, new GCMParameterSpec(TAG_LENGTH, iv));
+        byte[] plaintext = cipher.doFinal(ciphertext);
+        return new String(plaintext, StandardCharsets.UTF_8);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Return first 4 + "..." + last 4 characters.
+     * Consistent with OpenAI, GitHub, AWS key display conventions.
+     */
+    static String toPartial(String value) {
+        if (value == null || value.length() < 8) return "****...****";
+        return value.substring(0, 4) + "..." + value.substring(value.length() - 4);
+    }
+
+    private Instant parseInstant(String s) {
+        if (s == null) return null;
+        try {
+            return Instant.parse(s);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+}

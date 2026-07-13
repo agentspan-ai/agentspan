@@ -15,9 +15,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
+import com.netflix.conductor.dao.SecretsDAO;
 
 /**
  * On startup, seeds the credential store from well-known LLM provider environment variables.
@@ -34,15 +35,10 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * (Vault, AWS SM, etc.) manage their own secrets.</p>
  */
 @Component
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "true")
 public class CredentialEnvSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialEnvSeeder.class);
-
-    /**
-     * User ID for the anonymous/OSS user — matches {@code AuthFilter.ANONYMOUS}.
-     * In no-auth mode all credentials are stored under this ID.
-     */
-    static final String ANONYMOUS_USER_ID = "00000000-0000-0000-0000-000000000000";
 
     /**
      * Well-known provider environment variables to scan on startup.
@@ -52,7 +48,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
      */
     static final List<String> KNOWN_ENV_VARS = KnownProviderEnvVars.NAMES;
 
-    private final CredentialStoreProvider storeProvider;
+    private final SecretsDAO secretsDAO;
     private final Function<String, String> envLookup;
 
     @Value("${agentspan.credentials.store:built-in}")
@@ -60,13 +56,13 @@ public class CredentialEnvSeeder implements ApplicationRunner {
 
     /** Production constructor — reads from the real process environment. */
     @Autowired
-    public CredentialEnvSeeder(CredentialStoreProvider storeProvider) {
-        this(storeProvider, System::getenv);
+    public CredentialEnvSeeder(SecretsDAO secretsDAO) {
+        this(secretsDAO, System::getenv);
     }
 
     /** Package-private constructor for testing — accepts a custom env lookup. */
-    CredentialEnvSeeder(CredentialStoreProvider storeProvider, Function<String, String> envLookup) {
-        this.storeProvider = storeProvider;
+    CredentialEnvSeeder(SecretsDAO secretsDAO, Function<String, String> envLookup) {
+        this.secretsDAO = secretsDAO;
         this.envLookup = envLookup;
     }
 
@@ -88,7 +84,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
 
             String existing;
             try {
-                existing = storeProvider.get(ANONYMOUS_USER_ID, name);
+                existing = secretsDAO.getSecret(name);
             } catch (Exception e) {
                 if (!(e.getCause() instanceof AEADBadTagException)) {
                     throw e; // not a key mismatch — propagate (e.g. DB connection failure)
@@ -99,8 +95,8 @@ public class CredentialEnvSeeder implements ApplicationRunner {
                         name,
                         e);
                 try {
-                    storeProvider.delete(ANONYMOUS_USER_ID, name);
-                    storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                    secretsDAO.deleteSecret(name);
+                    secretsDAO.putSecret(name, value);
                     created++;
                 } catch (Exception re) {
                     log.warn("Credential '{}' could not be re-seeded — skipping", name, re);
@@ -118,7 +114,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             }
 
             try {
-                storeProvider.set(ANONYMOUS_USER_ID, name, value);
+                secretsDAO.putSecret(name, value);
                 log.info("Credential seeded from environment: {}", name);
                 created++;
             } catch (Exception e) {

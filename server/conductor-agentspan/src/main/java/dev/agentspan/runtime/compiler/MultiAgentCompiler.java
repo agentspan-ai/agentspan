@@ -22,7 +22,6 @@ import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.service.PlanAndCompileTask;
-import dev.agentspan.runtime.util.EmbeddedMode;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ModelParser.ParsedModel;
@@ -41,12 +40,11 @@ public class MultiAgentCompiler {
      * /dg #2: anchored credential-placeholder pattern for plannerContext
      * HTTP headers. Matches ``${IDENTIFIER}`` only — leaves any other
      * ``${...}`` substring (e.g. random characters that happen to start
-     * with ``${``) untouched. Replacement rewrites to ``#{IDENTIFIER}``
-     * so Conductor's ParametersUtils doesn't consume the placeholder;
-     * the runtime credential resolver substitutes the real value at
-     * request time.
+     * with ``${``) untouched. Replacement rewrites to
+     * ``${workflow.secrets.IDENTIFIER}`` so conductor's ParametersUtils
+     * resolves it wire-only (via the configured SecretsDAO) at task hand-off.
      */
-    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}");
+    private static final Pattern CREDENTIAL_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_.]*)\\}");
 
     private final AgentCompiler agentCompiler;
 
@@ -1452,7 +1450,6 @@ public class MultiAgentCompiler {
         innerInputs.put("prompt", "${workflow.input.prompt}");
         innerInputs.put("media", "${workflow.input.media}");
         innerInputs.put("session_id", "${workflow.input.session_id}");
-        innerInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         innerTask.setInputParameters(innerInputs);
 
         // 2. Coerce inner result to string (may be array/null when last turn was tool calls)
@@ -1665,7 +1662,6 @@ public class MultiAgentCompiler {
         subInputs.put("prompt", "${workflow.input.prompt}");
         subInputs.put("media", "${workflow.input.media}");
         subInputs.put("session_id", "${workflow.input.session_id}");
-        subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         subTask.setInputParameters(subInputs);
 
         String contentRef = ref(subRef + ".output.result");
@@ -1784,7 +1780,6 @@ public class MultiAgentCompiler {
         subInputs.put("prompt", "${workflow.variables.conversation}");
         subInputs.put("media", "${workflow.input.media}");
         subInputs.put("session_id", "${workflow.input.session_id}");
-        subInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         subInputs.put("context", "${workflow.variables._agent_state}");
         task.setInputParameters(subInputs);
         caseTasks.add(task);
@@ -2251,7 +2246,6 @@ public class MultiAgentCompiler {
             // toolArgs accidentally collided on these keys, the ambient values
             // win.
             readerInputs.put("session_id", "${workflow.input.session_id}");
-            readerInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
             readerInputs.put("cwd", "${workflow.input.cwd}");
             readerInputs.put("credentials", "${workflow.input.credentials}");
             readerInputs.put("media", "${workflow.input.media}");
@@ -2509,7 +2503,6 @@ public class MultiAgentCompiler {
         Map<String, Object> execInputs = new LinkedHashMap<>();
         execInputs.put("prompt", "${workflow.input.prompt}");
         execInputs.put("session_id", "${workflow.input.session_id}");
-        execInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
         execInputs.put("context", "${workflow.variables.context}");
         // Forward execution-scoped inputs that compiled tools may need: working
         // directory (cwd) for filesystem tools, credentials map for tools that
@@ -2606,9 +2599,9 @@ public class MultiAgentCompiler {
      * <ul>
      *   <li>{@code text}: inlined verbatim — no fetch.</li>
      *   <li>{@code url}: emits a {@code PLANNER_CONTEXT_FETCH} system task
-     *       with the supplied headers (credential placeholders escaped
-     *       from {@code ${CRED}} to {@code #{CRED}} server-side; the
-     *       runtime resolver fills the value at request time). The
+     *       with the supplied headers (credential placeholders rewritten
+     *       from {@code ${CRED}} to {@code ${workflow.secrets.CRED}}, which
+     *       conductor resolves wire-only at task hand-off). The
      *       custom task adds an in-process TTL cache + {@code If-None-Match}
      *       conditional-GET on top of Conductor's HTTP task — see
      *       {@link dev.agentspan.runtime.service.PlannerContextFetchTask}.
@@ -2664,8 +2657,7 @@ public class MultiAgentCompiler {
                             throw new IllegalArgumentException("plannerContext header '" + name
                                     + "' contains CR/LF — rejected to prevent HTTP response splitting");
                         }
-                        String replacement = EmbeddedMode.isEmbedded() ? "\\${workflow.secrets.$1}" : "#{$1}";
-                        headers.put(name, CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll(replacement));
+                        headers.put(name, CREDENTIAL_PLACEHOLDER.matcher(value).replaceAll("\\${workflow.secrets.$1}"));
                     }
                 }
 
@@ -2685,9 +2677,6 @@ public class MultiAgentCompiler {
                 fetchInputs.put("required", required);
                 fetchInputs.put("maxBytes", maxBytes);
                 fetchInputs.put("ttl_seconds", ttlSeconds);
-                // Forward the execution token so credential-aware
-                // resolution at the network layer can substitute #{CRED}.
-                fetchInputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
                 fetch.setInputParameters(fetchInputs);
 
                 if (!required) {

@@ -6,23 +6,18 @@
 package dev.agentspan.runtime.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
 
-import dev.agentspan.runtime.context.RequestContext;
-import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.model.skill.SkillDetail;
 import dev.agentspan.runtime.service.skill.FileSystemSkillMetadataDAO;
 import dev.agentspan.runtime.service.skill.FileSystemSkillPackageStore;
@@ -32,13 +27,8 @@ class SkillRegistryServiceTest {
     @TempDir
     Path tempDir;
 
-    @AfterEach
-    void clearRequestContext() {
-        RequestContextHolder.clear();
-    }
-
     @Test
-    void registeredSkillsAreVisibleOnlyToOwner() throws Exception {
+    void registeredSkillsAreVisibleGlobally() throws Exception {
         SkillRegistryService service = new SkillRegistryService(
                 1024 * 1024,
                 1024 * 1024,
@@ -46,22 +36,12 @@ class SkillRegistryServiceTest {
                 100,
                 new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
                 new FileSystemSkillMetadataDAO(tempDir.toString()));
-        String skillName = "owned-skill";
+        String skillName = "shared-skill";
         String manifest = "{\"name\":\"" + skillName + "\"}";
 
-        asUser("user-a");
-        SkillDetail registered = service.register(manifest, packageFile(skillName));
+        service.register(manifest, packageFile(skillName));
 
-        assertThat(registered.getOwnerId()).isEqualTo("user-a");
         assertThat(service.get(skillName, null).getName()).isEqualTo(skillName);
-
-        asUser("user-b");
-        assertThat(service.list(false)).extracting("name").doesNotContain(skillName);
-        assertThatThrownBy(() -> service.get(skillName, null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Skill not found");
-
-        asUser("user-a");
         assertThat(service.list(false)).extracting("name").contains(skillName);
     }
 
@@ -75,7 +55,6 @@ class SkillRegistryServiceTest {
                 new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
                 new FileSystemSkillMetadataDAO(tempDir.toString()));
         String skillName = "versioned-skill";
-        asUser("user-a");
 
         service.register("{\"name\":\"" + skillName + "\",\"version\":\"v1\"}", packageFile(skillName));
         service.register("{\"name\":\"" + skillName + "\",\"version\":\"v2\"}", packageFile(skillName));
@@ -89,7 +68,7 @@ class SkillRegistryServiceTest {
     }
 
     @Test
-    void sameSkillNameUsesPerOwnerLatestAndPackageStorage() throws Exception {
+    void multipleVersionsOfASkillAreSharedGlobally() throws Exception {
         SkillRegistryService service = new SkillRegistryService(
                 1024 * 1024,
                 1024 * 1024,
@@ -99,33 +78,16 @@ class SkillRegistryServiceTest {
                 new FileSystemSkillMetadataDAO(tempDir.toString()));
         String skillName = "shared-name-skill";
 
-        asUser("user-a");
-        SkillDetail userAV1 = service.register(
-                "{\"name\":\"" + skillName + "\",\"version\":\"v1\"}", packageFile(skillName, "User A v1"));
+        SkillDetail v1 = service.register(
+                "{\"name\":\"" + skillName + "\",\"version\":\"v1\"}", packageFile(skillName, "V1 body"));
+        SkillDetail v2 = service.register(
+                "{\"name\":\"" + skillName + "\",\"version\":\"v2\"}", packageFile(skillName, "V2 body"));
 
-        asUser("user-b");
-        SkillDetail userBV2 = service.register(
-                "{\"name\":\"" + skillName + "\",\"version\":\"v2\"}", packageFile(skillName, "User B v2"));
         assertThat(service.get(skillName, null).getVersion()).isEqualTo("v2");
         assertThat(service.list(false)).extracting("version").containsExactly("v2");
-        assertThat(service.packageBytes(skillName, "v2")).isEqualTo(service.packageBytes(skillName, null));
-        byte[] userBPackage = service.packageBytes(skillName, "v2");
-
-        asUser("user-a");
-        assertThat(service.get(skillName, null).getVersion()).isEqualTo("v1");
-        assertThat(service.list(false)).extracting("version").containsExactly("v1");
-        assertThat(service.packageBytes(skillName, "v1")).isEqualTo(service.packageBytes(skillName, null));
-        assertThat(service.packageBytes(skillName, "v1")).isNotEqualTo(userBPackage);
-
-        service.delete(skillName, "v1");
-        assertThatThrownBy(() -> service.get(skillName, null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Skill not found");
-
-        asUser("user-b");
-        assertThat(service.get(skillName, null).getVersion()).isEqualTo("v2");
-        assertThat(service.packageBytes(skillName, "v2")).isNotEmpty();
-        assertThat(userAV1.getPackageFileHandleId()).isNotEqualTo(userBV2.getPackageFileHandleId());
+        assertThat(service.list(true)).extracting("version").containsExactlyInAnyOrder("v1", "v2");
+        assertThat(service.packageBytes(skillName, "v1")).isNotEqualTo(service.packageBytes(skillName, "v2"));
+        assertThat(v1.getPackageFileHandleId()).isNotEqualTo(v2.getPackageFileHandleId());
     }
 
     @Test
@@ -138,7 +100,6 @@ class SkillRegistryServiceTest {
                 100,
                 new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
                 new FileSystemSkillMetadataDAO(tempDir.toString()));
-        asUser("user-a");
 
         service.register(
                 "{\"name\":\"child-skill\",\"version\":\"v1\"}", packageFile("child-skill", "Child instructions"));
@@ -182,7 +143,6 @@ class SkillRegistryServiceTest {
                 100,
                 new FileSystemSkillPackageStore(tempDir.resolve("packages").toString()),
                 new FileSystemSkillMetadataDAO(tempDir.toString()));
-        asUser("user-a");
 
         service.register(
                 "{\"name\":\"child-skill\",\"version\":\"v1\"}", packageFile("child-skill", "Child version one"));
@@ -204,14 +164,6 @@ class SkillRegistryServiceTest {
 
         assertThat(skillRef).containsEntry("version", "v1");
         assertThat((String) child.get("skillMd")).contains("Child version one").doesNotContain("Child version two");
-    }
-
-    private static void asUser(String userId) {
-        RequestContextHolder.set(RequestContext.builder()
-                .requestId("request-" + userId)
-                .userId(userId)
-                .createdAt(Instant.now())
-                .build());
     }
 
     private static MockMultipartFile packageFile(String skillName) throws Exception {

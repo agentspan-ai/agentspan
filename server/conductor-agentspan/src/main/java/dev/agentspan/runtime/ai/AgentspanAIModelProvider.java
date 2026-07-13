@@ -6,6 +6,7 @@ package dev.agentspan.runtime.ai;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.conductoross.conductor.ai.AIModel;
 import org.conductoross.conductor.ai.AIModelProvider;
@@ -18,19 +19,20 @@ import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
 import org.conductoross.conductor.ai.providers.mistral.MistralAIConfiguration;
+import org.conductoross.conductor.ai.providers.ollama.OllamaConfiguration;
 import org.conductoross.conductor.ai.providers.openai.OpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.perplexity.PerplexityAIConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
-import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 import okhttp3.OkHttpClient;
 
@@ -74,22 +76,40 @@ public class AgentspanAIModelProvider extends AIModelProvider {
             Map.entry("cohere", "COHERE_BASE_URL"),
             Map.entry("grok", "GROK_BASE_URL"),
             Map.entry("perplexity", "PERPLEXITY_BASE_URL"),
-            Map.entry("azureopenai", "AZURE_OPENAI_BASE_URL"));
+            Map.entry("azureopenai", "AZURE_OPENAI_BASE_URL"),
+            Map.entry("ollama", "OLLAMA_BASE_URL"));
+
+    /** Providers that need no API key; a base URL alone is enough to build a model. */
+    private static final Set<String> KEYLESS_PROVIDERS = Set.of("ollama");
 
     private final CredentialResolutionService resolutionService;
-    private final ExecutionTokenService tokenService;
 
+    /**
+     * Spring constructor. The native credential resolution service is <em>optional</em>: when
+     * {@code agentspan.embedded=true} it is gated off (the host delivers secrets), so it resolves
+     * to {@code null} here and native resolution is skipped.
+     */
+    @Autowired
     public AgentspanAIModelProvider(
             List<ModelConfiguration<? extends AIModel>> modelConfigurations,
             Environment env,
             OkHttpClient conductorAiHttpClient,
-            CredentialResolutionService resolutionService,
-            ExecutionTokenService tokenService) {
+            ObjectProvider<CredentialResolutionService> resolutionService) {
+        this(modelConfigurations, env, conductorAiHttpClient, resolutionService.getIfAvailable());
+    }
+
+    /** Direct constructor (used by tests, and by the Spring constructor above). */
+    public AgentspanAIModelProvider(
+            List<ModelConfiguration<? extends AIModel>> modelConfigurations,
+            Environment env,
+            OkHttpClient conductorAiHttpClient,
+            CredentialResolutionService resolutionService) {
         super(modelConfigurations, env);
         this.conductorAiHttpClient = conductorAiHttpClient;
         this.resolutionService = resolutionService;
-        this.tokenService = tokenService;
-        log.info("AgentspanAIModelProvider initialized (per-user credential resolution enabled)");
+        log.info(
+                "AgentspanAIModelProvider initialized (native per-user credential resolution {})",
+                resolutionService != null ? "enabled" : "disabled — embedded/host-delivered");
     }
 
     @Override
@@ -106,14 +126,15 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         log.debug("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
         log.debug("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
+        boolean keyless = KEYLESS_PROVIDERS.contains(provider.toLowerCase());
         if (userApiKey != null || baseUrl != null) {
             try {
                 // If we have a base URL but no user key, try the server-wide key
-                if (userApiKey == null) {
+                if (userApiKey == null && !keyless) {
                     String envVar = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
                     userApiKey = envVar != null ? System.getenv(envVar) : null;
                 }
-                if (userApiKey != null) {
+                if (userApiKey != null || keyless) {
                     AIModel model = createModelWithKey(provider, userApiKey, baseUrl);
                     if (model != null) {
                         log.debug("Per-user AIModel created for provider '{}' baseUrl='{}'", provider, baseUrl);
@@ -131,60 +152,18 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Resolve a per-user API key for the given LLM provider.
+     * Resolve the stored API key for the given LLM provider from the (global) credential store.
      *
-     * <p>Uses the execution token from {@code __agentspan_ctx__} in the current
-     * task's input data (via {@code TaskContext}) to identify the user. This works
-     * across thread boundaries — unlike RequestContextHolder which is bound to
-     * the HTTP request thread.</p>
-     *
-     * @return per-user API key, or null if not found
+     * @return the API key, or null if not found
      */
     private String resolveUserApiKey(String provider) {
+        if (resolutionService == null) return null; // native resolution gated off (embedded)
         String envVarName = PROVIDER_TO_ENV_VAR.get(provider.toLowerCase());
         if (envVarName == null) return null;
-
-        // Try TaskContext first (works in worker threads)
-        String userId = extractUserIdFromTaskContext();
-
-        // Fall back to RequestContextHolder (works during HTTP request, e.g. compile)
-        if (userId == null) {
-            userId = RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse(null);
-        }
-
-        // Fall back to anonymous user (OSS / no-auth mode)
-        if (userId == null) {
-            userId = "00000000-0000-0000-0000-000000000000";
-        }
-
         try {
-            return resolutionService.resolve(userId, envVarName);
+            return resolutionService.resolve(envVarName);
         } catch (Exception e) {
             log.debug("Credential not found for provider '{}': {}", provider, e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Extract user ID from the execution token in the current task's input data.
-     */
-    @SuppressWarnings("unchecked")
-    private String extractUserIdFromTaskContext() {
-        try {
-            TaskContext ctx = TaskContext.get();
-            if (ctx == null || ctx.getTask() == null) return null;
-
-            Object agentspanCtx = ctx.getTask().getInputData().get("__agentspan_ctx__");
-            String token = null;
-            if (agentspanCtx instanceof Map<?, ?> ctxMap) {
-                token = (String) ctxMap.get("execution_token");
-            } else if (agentspanCtx instanceof String s) {
-                token = s;
-            }
-            if (token == null) return null;
-
-            return tokenService.validate(token).userId();
-        } catch (Exception e) {
             return null;
         }
     }
@@ -202,18 +181,24 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Resolve any named credential for the current user.
+     * Resolve the credential-store base URL for a provider (e.g. {@code OLLAMA_BASE_URL}
+     * for ollama), or null when none is stored. Used by the provider-status endpoint —
+     * the server-side source of truth that doctor and the UI query.
+     */
+    public String resolveConfiguredBaseUrl(String provider) {
+        String envVarName = PROVIDER_TO_BASE_URL_ENV.get(provider.toLowerCase());
+        if (envVarName == null) return null;
+        String value = resolveUserCredential(envVarName);
+        return (value != null && !value.isBlank()) ? value : null;
+    }
+
+    /**
+     * Resolve any named credential from the (global) credential store.
      */
     private String resolveUserCredential(String credentialName) {
-        String userId = extractUserIdFromTaskContext();
-        if (userId == null) {
-            userId = RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse(null);
-        }
-        if (userId == null) {
-            userId = "00000000-0000-0000-0000-000000000000";
-        }
+        if (resolutionService == null) return null; // native resolution gated off (embedded)
         try {
-            return resolutionService.resolve(userId, credentialName);
+            return resolutionService.resolve(credentialName);
         } catch (Exception e) {
             return null;
         }
@@ -271,6 +256,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
                     case "azureopenai" -> new AzureOpenAIConfiguration(
                             apiKey, baseUrl, null, null, conductorAiHttpClient);
                     case "mistral" -> new MistralAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
+                    case "ollama" -> new OllamaConfiguration(baseUrl, null, null, conductorAiHttpClient);
                     case "cohere" -> new CohereAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
                     case "grok" -> new GrokAIConfiguration(apiKey, baseUrl, conductorAiHttpClient);
                     case "huggingface" -> {

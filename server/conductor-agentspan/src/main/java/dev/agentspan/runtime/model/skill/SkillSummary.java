@@ -20,7 +20,6 @@ public class SkillSummary {
     private String description;
     private String checksum;
     private String status;
-    private String ownerId;
     private Long createdAt;
     private Long updatedAt;
     private Long packageSize;

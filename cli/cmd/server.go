@@ -531,6 +531,162 @@ func downloadJAR(downloadURL, destPath string) error {
 
 // --- AI provider check ---
 
+// Local-server preflight: `agentspan server start` launches the server from
+// THIS shell, so its environment genuinely is what the server (and the
+// credential env-seeder) will see. This is the one place a client-side env
+// check is the correct vantage point — doctor asks the running server instead.
+type aiProvider struct {
+	name    string
+	envVars []string          // all must be set for the provider to be "configured"
+	warns   []providerWarning // conditional warnings (checked even if not fully configured)
+	models  []string          // example models available with this provider
+}
+
+type providerWarning struct {
+	condition func() bool
+	message   string
+	fix       string
+}
+
+var aiProviders = []aiProvider{
+	{
+		name:    "OpenAI",
+		envVars: []string{"OPENAI_API_KEY"},
+		models: []string{
+			"openai/gpt-4o",
+			"openai/gpt-4o-mini",
+			"openai/o1",
+			"openai/o3-mini",
+		},
+	},
+	{
+		name:    "Anthropic",
+		envVars: []string{"ANTHROPIC_API_KEY"},
+		models: []string{
+			"anthropic/claude-opus-4-20250514",
+			"anthropic/claude-sonnet-4-20250514",
+			"anthropic/claude-3-5-sonnet-20241022",
+		},
+	},
+	{
+		name:    "Google Gemini",
+		envVars: []string{"GEMINI_API_KEY", "GOOGLE_CLOUD_PROJECT"},
+		warns: []providerWarning{
+			{
+				condition: func() bool {
+					return os.Getenv("GEMINI_API_KEY") != "" && os.Getenv("GOOGLE_CLOUD_PROJECT") == ""
+				},
+				message: "GEMINI_API_KEY is set but GOOGLE_CLOUD_PROJECT is missing",
+				fix:     "export GOOGLE_CLOUD_PROJECT=your-gcp-project-id",
+			},
+		},
+		models: []string{
+			"google_gemini/gemini-2.0-flash",
+			"google_gemini/gemini-1.5-pro",
+			"google_gemini/gemini-1.5-flash",
+		},
+	},
+	{
+		name:    "Azure OpenAI",
+		envVars: []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"},
+		warns: []providerWarning{
+			{
+				condition: func() bool {
+					return os.Getenv("AZURE_OPENAI_API_KEY") != "" && os.Getenv("AZURE_OPENAI_ENDPOINT") == ""
+				},
+				message: "AZURE_OPENAI_API_KEY is set but AZURE_OPENAI_ENDPOINT is missing",
+				fix:     "export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com",
+			},
+			{
+				condition: func() bool {
+					return os.Getenv("AZURE_OPENAI_API_KEY") != "" && os.Getenv("AZURE_OPENAI_DEPLOYMENT") == ""
+				},
+				message: "AZURE_OPENAI_DEPLOYMENT is not set (required to route requests)",
+				fix:     "export AZURE_OPENAI_DEPLOYMENT=your-deployment-name",
+			},
+		},
+		models: []string{
+			"azure_openai/gpt-4o",
+			"azure_openai/gpt-4",
+		},
+	},
+	{
+		name:    "AWS Bedrock",
+		envVars: []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"},
+		warns: []providerWarning{
+			{
+				condition: func() bool {
+					return os.Getenv("AWS_ACCESS_KEY_ID") != "" && os.Getenv("AWS_DEFAULT_REGION") == "" && os.Getenv("AWS_REGION") == ""
+				},
+				message: "No AWS region set — defaults to us-east-1",
+				fix:     "export AWS_DEFAULT_REGION=us-east-1  # or your preferred region",
+			},
+		},
+		models: []string{
+			"aws_bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0",
+			"aws_bedrock/meta.llama3-70b-instruct-v1:0",
+			"aws_bedrock/amazon.titan-text-express-v1",
+		},
+	},
+	{
+		name:    "Mistral",
+		envVars: []string{"MISTRAL_API_KEY"},
+		models: []string{
+			"mistral/mistral-large-latest",
+			"mistral/mistral-small-latest",
+			"mistral/open-mixtral-8x7b",
+		},
+	},
+	{
+		name:    "Cohere",
+		envVars: []string{"COHERE_API_KEY"},
+		models: []string{
+			"cohere/command-r-plus",
+			"cohere/command-r",
+		},
+	},
+	{
+		name:    "Grok",
+		envVars: []string{"XAI_API_KEY"},
+		models: []string{
+			"grok/grok-3",
+			"grok/grok-3-mini",
+		},
+	},
+	{
+		name:    "Perplexity",
+		envVars: []string{"PERPLEXITY_API_KEY"},
+		models: []string{
+			"perplexity/sonar-pro",
+			"perplexity/sonar",
+		},
+	},
+	{
+		name:    "Hugging Face",
+		envVars: []string{"HUGGINGFACE_API_KEY"},
+		models: []string{
+			"hugging_face/meta-llama/Llama-3-70b-chat-hf",
+		},
+	},
+	{
+		name:    "Stability AI",
+		envVars: []string{"STABILITY_API_KEY"},
+		models: []string{
+			"stabilityai/sd3.5-large",
+			"stabilityai/stable-image-core",
+		},
+	},
+}
+
+func isProviderConfigured(p aiProvider) bool {
+	for _, env := range p.envVars {
+		if os.Getenv(env) == "" {
+			return false
+		}
+	}
+	return true
+}
+
 const aiModelsDocURL = "https://github.com/agentspan-ai/agentspan/blob/main/docs/ai-models.md"
 
 func checkAIProviderKeys() {

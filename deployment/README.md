@@ -709,7 +709,7 @@ Set at least one API key. The server auto-detects and enables providers when the
 | **`COHERE_API_KEY`** | Cohere |
 | **`XAI_API_KEY`** | Grok / xAI |
 | **`PERPLEXITY_API_KEY`** | Perplexity |
-| `OLLAMA_HOST` | Ollama (e.g. `http://localhost:11434`) |
+| `OLLAMA_BASE_URL` | Ollama (e.g. `http://localhost:11434`) |
 
 ### Observability
 

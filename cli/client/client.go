@@ -298,6 +298,36 @@ type AgentSummary struct {
 	Checksum    string   `json:"checksum"`
 }
 
+// ProviderStatus is one provider's configuration state as reported by the server.
+type ProviderStatus struct {
+	Name       string `json:"name"`
+	Configured bool   `json:"configured"`
+	BaseURL    string `json:"baseUrl,omitempty"`
+	Reachable  *bool  `json:"reachable,omitempty"`
+}
+
+// ProviderStatusReport is the server's authoritative view of LLM provider
+// configuration. Providers are configured on and dialed by the server, so
+// only the server can answer what is usable.
+type ProviderStatusReport struct {
+	ManagedByHost bool             `json:"managedByHost"`
+	Providers     []ProviderStatus `json:"providers"`
+}
+
+// GetProviderStatus asks the server which LLM providers it has configured.
+func (c *Client) GetProviderStatus() (*ProviderStatusReport, error) {
+	resp, err := c.doRequest("GET", "/api/providers/status", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result ProviderStatusReport
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
 // ListAgents returns all registered agents
 func (c *Client) ListAgents() ([]AgentSummary, error) {
 	resp, err := c.doRequest("GET", "/api/agent/list", nil)

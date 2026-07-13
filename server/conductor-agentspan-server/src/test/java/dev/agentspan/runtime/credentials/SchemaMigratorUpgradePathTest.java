@@ -21,8 +21,9 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.netflix.conductor.dao.SecretsDAO;
+
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
 
 /**
  * Audit gap E — schema-migration upgrade path, full pipeline.
@@ -54,7 +55,7 @@ class SchemaMigratorUpgradePathTest {
     private CredentialSchemaMigrator migrator;
 
     @Autowired
-    private CredentialStoreProvider store;
+    private SecretsDAO store;
 
     @Autowired
     @Qualifier("credentialJdbc")
@@ -67,15 +68,15 @@ class SchemaMigratorUpgradePathTest {
 
     @BeforeEach
     void setUp() {
-        store.delete(ANON, STAGE_NAME);
-        store.delete(ANON, MIGRATED_NAME);
+        store.deleteSecret(STAGE_NAME);
+        store.deleteSecret(MIGRATED_NAME);
         jdbc.getJdbcOperations().execute("DROP TABLE IF EXISTS secrets_store");
     }
 
     @AfterEach
     void cleanUp() {
-        store.delete(ANON, STAGE_NAME);
-        store.delete(ANON, MIGRATED_NAME);
+        store.deleteSecret(STAGE_NAME);
+        store.deleteSecret(MIGRATED_NAME);
         jdbc.getJdbcOperations().execute("DROP TABLE IF EXISTS secrets_store");
     }
 
@@ -83,7 +84,7 @@ class SchemaMigratorUpgradePathTest {
     void migratedRow_isReadableViaPublicApi() throws Exception {
         // 1. Encrypt a plaintext through the live store (credentials_store).
         //    This guarantees the bytes are in the format the running server reads.
-        store.set(ANON, STAGE_NAME, PLAINTEXT);
+        store.putSecret(STAGE_NAME, PLAINTEXT);
         byte[] encryptedBytes = jdbc.queryForObject(
                 "SELECT encrypted_value FROM credentials_store WHERE user_id = :u AND name = :n",
                 Map.of("u", ANON, "n", STAGE_NAME),
@@ -112,7 +113,7 @@ class SchemaMigratorUpgradePathTest {
                         encryptedBytes,
                         "t",
                         Instant.now().toString()));
-        store.delete(ANON, STAGE_NAME); // remove the staging row
+        store.deleteSecret(STAGE_NAME); // remove the staging row
 
         // Sanity: the migrated name is NOT yet visible via the public API.
         mvc.perform(get("/api/secrets/" + MIGRATED_NAME)).andExpect(status().isNotFound());
