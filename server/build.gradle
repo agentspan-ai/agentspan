@@ -9,17 +9,15 @@ plugins {
 // Root project needs repositories too — spotless (applied here) resolves
 // the palantir-java-format artifact at the root level.
 repositories {
-    mavenCentral()
+    // mavenLocal first: a locally-published conductor-ai (same version) must win
+    // over Central so an in-place patched build is picked up.
     mavenLocal()
+    mavenCentral()
 }
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    // TARGET branch: worker secrets use TaskDef.runtimeMetadata (conductor-oss PR #1255), so the
-    // server references TaskDef.setRuntimeMetadata and must build against a conductor that has it.
-    // Pinned to the local runtimemeta build (superset of 3.32.0-rc.3); revert to a published version
-    // once PR #1255 ships. (The interim on feature/embedded-secret-toggle builds against 3.32.0-rc.3.)
-    conductorVersion   = '3.32.0-rc.5'
+    conductorVersion   = '3.32.0-rc.6'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'
     sqliteJdbcVersion  = '3.47.0.0'
@@ -46,8 +44,9 @@ subprojects {
     }
 
     repositories {
-        mavenCentral()
+        // mavenLocal first: locally-published conductor-ai patch wins over Central.
         mavenLocal()
+        mavenCentral()
     }
 
     configurations.all {

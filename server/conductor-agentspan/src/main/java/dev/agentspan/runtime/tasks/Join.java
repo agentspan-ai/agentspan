@@ -25,7 +25,7 @@ import com.netflix.conductor.model.WorkflowModel;
 import lombok.extern.slf4j.Slf4j;
 
 @Component(TASK_TYPE_JOIN)
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "true")
 @Slf4j
 public class Join extends WorkflowSystemTask {
 

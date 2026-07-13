@@ -11,8 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
+import com.netflix.conductor.dao.SecretsDAO;
 
 /**
  * Single authority for credential resolution across all call paths.
@@ -40,16 +39,16 @@ import dev.agentspan.runtime.spi.CredentialStoreProvider;
  * own {@code os.environ} fallback when {@code secret_strict_mode=false}.</p>
  */
 @Service
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "true")
 public class CredentialResolutionService {
 
     private static final Logger log = LoggerFactory.getLogger(CredentialResolutionService.class);
 
-    private final CredentialStoreProvider storeProvider;
+    private final SecretsDAO secretsDAO;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public CredentialResolutionService(CredentialStoreProvider storeProvider) {
-        this.storeProvider = storeProvider;
+    public CredentialResolutionService(SecretsDAO secretsDAO) {
+        this.secretsDAO = secretsDAO;
     }
 
     /**
@@ -61,14 +60,14 @@ public class CredentialResolutionService {
     public String resolve(String name) {
         int dot = name.indexOf('.');
         if (dot < 0) {
-            String value = storeProvider.get(name);
+            String value = secretsDAO.getSecret(name);
             if (value == null) log.debug("Credential '{}' not found", name);
             return value;
         }
 
         String base = name.substring(0, dot);
         String path = name.substring(dot + 1);
-        String json = storeProvider.get(base);
+        String json = secretsDAO.getSecret(base);
         if (json == null) {
             log.debug("Base credential '{}' for path '{}' not found", base, path);
             return null;
