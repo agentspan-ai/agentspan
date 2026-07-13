@@ -130,9 +130,20 @@ class AgentConfigSerializer:
         if agent.guardrails:
             config["guardrails"] = [self._serialize_guardrail(g) for g in agent.guardrails]
 
-        # Memory
+        # Memory (short-term conversation)
         if hasattr(agent, "memory") and agent.memory:
             config["memory"] = self._serialize_memory(agent.memory)
+
+        # Long-term (OCG-backed) memory. When present, the server-side compiler
+        # inlines retrieval (pre-loop) + distill/save/feedback (post-loop) steps
+        # so memory works on the deployed/webhook path — not just client run().
+        ltm = self._serialize_long_term_memory(agent)
+        if ltm is not None:
+            config["longTermMemory"] = ltm
+            # feedback_sink delivers the human good/bad capability links out-of-band.
+            # Emit a worker ref so the compiled path can call the Python sink worker.
+            if getattr(agent, "feedback_sink", None) is not None:
+                config["feedbackSink"] = {"taskName": f"{agent.name}_feedback_sink"}
 
         # Max tokens
         if agent.max_tokens is not None:
@@ -508,3 +519,34 @@ class AgentConfigSerializer:
         if hasattr(memory, "max_messages") and memory.max_messages:
             result["maxMessages"] = memory.max_messages
         return result
+
+    def _serialize_long_term_memory(self, agent: "Agent") -> "Any":
+        """Serialize an agent's OCG-backed semantic memory to a LongTermMemoryConfig dict.
+
+        Returns ``None`` (no-op) unless the agent has a ``semantic_memory`` whose
+        store exposes an OCG base url. Reads the OCG instance url, scope owner,
+        user and scope off the store; the credential is a SERVER-resolvable secret
+        NAME (e.g. ``OCG_PUBLIC_KEY``) — never the raw client token. The summary
+        model falls back to the agent's own model when not explicitly set.
+        """
+        sm = getattr(agent, "semantic_memory", None)
+        if sm is None:
+            return None
+        store = getattr(sm, "store", None)
+        # Only OCG-backed stores compile server-side (need a base url to call).
+        base = getattr(store, "_base", None) if store is not None else None
+        if not base:
+            return None
+
+        result: Dict[str, Any] = {
+            "ocgUrl": base,
+            "credential": getattr(store, "_credential", None) or "OCG_PUBLIC_KEY",
+            "agent": getattr(store, "_agent", None),
+            "scope": getattr(store, "_scope", None) or "agent",
+            "maxResults": getattr(sm, "max_results", None),
+            "summaryModel": getattr(agent, "memory_summary_model", None) or (agent.model or None),
+        }
+        user = getattr(store, "_user", None)
+        if user:
+            result["user"] = user
+        return {k: v for k, v in result.items() if v is not None}
