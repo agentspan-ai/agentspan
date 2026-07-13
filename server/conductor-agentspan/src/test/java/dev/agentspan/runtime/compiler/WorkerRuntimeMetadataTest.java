@@ -10,7 +10,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
@@ -191,11 +190,10 @@ class WorkerRuntimeMetadataTest {
                 mock(com.netflix.conductor.service.WorkflowService.class),
                 mock(dev.agentspan.runtime.service.AgentStreamRegistry.class),
                 mock(com.netflix.conductor.service.ExecutionService.class),
-                mock(dev.agentspan.runtime.util.ProviderValidator.class));
-
-        Field msField = AgentService.class.getDeclaredField("metadataService");
-        msField.setAccessible(true);
-        msField.set(service, metadataService);
+                mock(dev.agentspan.runtime.util.ProviderValidator.class),
+                mock(dev.agentspan.runtime.service.SkillRegistryService.class),
+                mock(com.netflix.conductor.core.utils.IDGenerator.class),
+                metadataService);
 
         Method m = AgentService.class.getDeclaredMethod("registerTaskDefinitions", AgentConfig.class);
         m.setAccessible(true);
@@ -232,11 +230,10 @@ class WorkerRuntimeMetadataTest {
                 mock(com.netflix.conductor.service.WorkflowService.class),
                 mock(dev.agentspan.runtime.service.AgentStreamRegistry.class),
                 mock(com.netflix.conductor.service.ExecutionService.class),
-                mock(dev.agentspan.runtime.util.ProviderValidator.class));
-
-        Field msField = AgentService.class.getDeclaredField("metadataService");
-        msField.setAccessible(true);
-        msField.set(service, metadataService);
+                mock(dev.agentspan.runtime.util.ProviderValidator.class),
+                mock(dev.agentspan.runtime.service.SkillRegistryService.class),
+                mock(com.netflix.conductor.core.utils.IDGenerator.class),
+                metadataService);
 
         Method m = AgentService.class.getDeclaredMethod("registerTaskDef", String.class, List.class);
         m.setAccessible(true);

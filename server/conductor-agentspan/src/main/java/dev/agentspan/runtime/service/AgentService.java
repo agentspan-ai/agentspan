@@ -15,7 +15,6 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -54,7 +53,7 @@ import dev.agentspan.runtime.util.WorkflowClassifiers;
 import lombok.RequiredArgsConstructor;
 
 @Component
-@RequiredArgsConstructor(onConstructor_ = {@Autowired})
+@RequiredArgsConstructor
 public class AgentService {
 
     private static final Logger log = LoggerFactory.getLogger(AgentService.class);
@@ -69,29 +68,9 @@ public class AgentService {
     private final AgentStreamRegistry streamRegistry;
     private final ExecutionService executionService;
     private final ProviderValidator providerValidator;
-
-    @Autowired(required = false)
-    private SkillRegistryService skillRegistryService;
-
-    /**
-     * Conductor's configured ID generator. When embedded in a host that uses time-based IDs
-     * (e.g. orkes-conductor with {@code conductor.id.generator=time_based}), pre-allocated
-     * execution IDs must be v1 time-based UUIDs — the host derives a workflow's createTime from
-     * its ID and yields 0 for non-v1 (random) UUIDs. Falls back to a random UUID when unset
-     * (standalone tests / no Spring context).
-     */
-    @Autowired(required = false)
-    private IDGenerator idGenerator;
-
-    /**
-     * Stable metadata service for task-def registration. The low-level {@code MetadataDAO}'s
-     * {@code createTaskDef}/{@code updateTaskDef} return types differ across Conductor cores
-     * (orkes' vendored oss-core returns {@code void}; 3.30.2 returns {@code TaskDef}), so calling
-     * the DAO directly throws {@code NoSuchMethodError} when embedded. {@code MetadataService}'s
-     * methods return {@code void} in all cores. Optional so the test constructor still works.
-     */
-    @Autowired(required = false)
-    private MetadataService metadataService;
+    private final SkillRegistryService skillRegistryService;
+    private final IDGenerator idGenerator;
+    private final MetadataService metadataService;
 
     /**
      * Compile an agent config into a WorkflowDef and return it.
