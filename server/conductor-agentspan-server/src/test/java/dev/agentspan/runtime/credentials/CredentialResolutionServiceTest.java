@@ -16,8 +16,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.netflix.conductor.dao.SecretsDAO;
+
 import dev.agentspan.runtime.AgentRuntime;
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
 
 /**
  * Integration test for CredentialResolutionService — real DB, real services, no mocks.
@@ -30,7 +31,7 @@ class CredentialResolutionServiceTest {
     private CredentialResolutionService service;
 
     @Autowired
-    private CredentialStoreProvider storeProvider;
+    private SecretsDAO storeProvider;
 
     @Autowired
     @Qualifier("credentialJdbc")
@@ -45,7 +46,7 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_directLookup_returnsStoredValue() {
-        storeProvider.set("GITHUB_TOKEN", "ghp_directlookup");
+        storeProvider.putSecret("GITHUB_TOKEN", "ghp_directlookup");
 
         String value = service.resolve("GITHUB_TOKEN");
 
@@ -70,10 +71,10 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_afterDelete_returnsNull() {
-        storeProvider.set("TEMP_KEY", "temp_value");
+        storeProvider.putSecret("TEMP_KEY", "temp_value");
         assertThat(service.resolve("TEMP_KEY")).isEqualTo("temp_value");
 
-        storeProvider.delete("TEMP_KEY");
+        storeProvider.deleteSecret("TEMP_KEY");
         assertThat(service.resolve("TEMP_KEY")).isNull();
     }
 
@@ -81,7 +82,7 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_dottedPath_extractsTopLevelField() {
-        storeProvider.set(
+        storeProvider.putSecret(
                 "GCP_SVC",
                 "{\"type\":\"service_account\",\"project_id\":\"my-proj-123\",\"client_email\":\"sa@x.iam\"}");
 
@@ -91,14 +92,14 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_dottedPath_extractsNestedField() {
-        storeProvider.set("BLOB", "{\"auth\":{\"oauth\":{\"client_id\":\"abc123\"}}}");
+        storeProvider.putSecret("BLOB", "{\"auth\":{\"oauth\":{\"client_id\":\"abc123\"}}}");
 
         assertThat(service.resolve("BLOB.auth.oauth.client_id")).isEqualTo("abc123");
     }
 
     @Test
     void resolve_dottedPath_missingField_returnsNull() {
-        storeProvider.set("JSONY", "{\"a\":\"1\",\"b\":\"2\"}");
+        storeProvider.putSecret("JSONY", "{\"a\":\"1\",\"b\":\"2\"}");
 
         assertThat(service.resolve("JSONY.does_not_exist")).isNull();
     }
@@ -111,7 +112,7 @@ class CredentialResolutionServiceTest {
 
     @Test
     void resolve_dottedPath_nonJsonBase_returnsNull() {
-        storeProvider.set("FLAT_TOKEN", "not-a-json-value-just-text");
+        storeProvider.putSecret("FLAT_TOKEN", "not-a-json-value-just-text");
 
         assertThat(service.resolve("FLAT_TOKEN.field")).isNull();
     }
@@ -120,7 +121,7 @@ class CredentialResolutionServiceTest {
     void resolve_dottedPath_nonStringLeaf_returnsJsonRepresentation() {
         // Number/boolean/object leaves serialize to their JSON form so HTTP/MCP
         // placeholders can substitute them cleanly.
-        storeProvider.set("CFG", "{\"port\":8080,\"enabled\":true,\"nested\":{\"a\":1}}");
+        storeProvider.putSecret("CFG", "{\"port\":8080,\"enabled\":true,\"nested\":{\"a\":1}}");
 
         assertThat(service.resolve("CFG.port")).isEqualTo("8080");
         assertThat(service.resolve("CFG.enabled")).isEqualTo("true");
@@ -132,8 +133,8 @@ class CredentialResolutionServiceTest {
     void resolve_dottedPath_doesNotFallthroughToFullName() {
         // Even if a literal-dotted name happens to be stored, dotted resolution
         // ALWAYS treats the first segment as the base. Documented constraint.
-        storeProvider.set("LITERAL.NAME", "literally_dotted_value");
-        storeProvider.set("LITERAL", "{\"NAME\":\"json_value\"}");
+        storeProvider.putSecret("LITERAL.NAME", "literally_dotted_value");
+        storeProvider.putSecret("LITERAL", "{\"NAME\":\"json_value\"}");
 
         assertThat(service.resolve("LITERAL.NAME")).isEqualTo("json_value");
     }

@@ -16,9 +16,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.model.credentials.CredentialMeta;
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
+import dev.agentspan.runtime.spi.CredentialsDAO;
 
 import lombok.RequiredArgsConstructor;
 
@@ -42,7 +41,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/secrets")
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "true")
 public class SecretController {
 
     private static final Logger log = LoggerFactory.getLogger(SecretController.class);
@@ -53,16 +52,14 @@ public class SecretController {
     static final int MAX_KEY_LENGTH = 65535;
     private static final Pattern KEY_REGEX = Pattern.compile(KEY_PATTERN);
 
-    private final CredentialStoreProvider storeProvider;
+    private final CredentialsDAO secretsDAO;
 
     // ── List ──────────────────────────────────────────────────────────
 
     /** POST /api/secrets — list all secret names (Conductor's primary listing endpoint). */
     @PostMapping
     public ResponseEntity<List<String>> listAllNames() {
-        List<String> names =
-                storeProvider.list().stream().map(CredentialMeta::getName).toList();
-        return ResponseEntity.ok(names);
+        return ResponseEntity.ok(secretsDAO.listSecretNames());
     }
 
     /**
@@ -72,9 +69,7 @@ public class SecretController {
      */
     @GetMapping
     public ResponseEntity<Set<String>> listGrantable() {
-        Set<String> names = new LinkedHashSet<>(
-                storeProvider.list().stream().map(CredentialMeta::getName).toList());
-        return ResponseEntity.ok(names);
+        return ResponseEntity.ok(new LinkedHashSet<>(secretsDAO.listSecretNames()));
     }
 
     /**
@@ -83,7 +78,7 @@ public class SecretController {
      */
     @GetMapping("/v2")
     public ResponseEntity<List<CredentialMeta>> listWithMeta() {
-        return ResponseEntity.ok(storeProvider.list());
+        return ResponseEntity.ok(secretsDAO.listWithMeta());
     }
 
     // ── Value CRUD ────────────────────────────────────────────────────
@@ -93,8 +88,7 @@ public class SecretController {
     public ResponseEntity<String> getSecret(@PathVariable String key) {
         ResponseEntity<?> err = validateKey(key);
         if (err != null) return ResponseEntity.status(err.getStatusCode()).build();
-        String value = storeProvider.get(key);
-        log.info("AUDIT get-secret: userId={} key={} found={}", currentUserId(), key, value != null);
+        String value = secretsDAO.getSecret(key);
         if (value == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(value);
     }
@@ -109,8 +103,7 @@ public class SecretController {
         if (value == null || value.isEmpty()) {
             return ResponseEntity.badRequest().body("value is required");
         }
-        storeProvider.set(key, value);
-        log.info("AUDIT put-secret: userId={} key={}", currentUserId(), key);
+        secretsDAO.putSecret(key, value);
         return ResponseEntity.ok().build();
     }
 
@@ -119,8 +112,7 @@ public class SecretController {
     public ResponseEntity<?> deleteSecret(@PathVariable String key) {
         ResponseEntity<?> err = validateKey(key);
         if (err != null) return err;
-        storeProvider.delete(key);
-        log.info("AUDIT delete-secret: userId={} key={}", currentUserId(), key);
+        secretsDAO.deleteSecret(key);
         return ResponseEntity.ok().build();
     }
 
@@ -129,8 +121,7 @@ public class SecretController {
     public ResponseEntity<Boolean> exists(@PathVariable String key) {
         ResponseEntity<?> err = validateKey(key);
         if (err != null) return ResponseEntity.badRequest().build();
-        boolean present = storeProvider.get(key) != null;
-        return ResponseEntity.ok(present);
+        return ResponseEntity.ok(secretsDAO.secretExists(key));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
@@ -151,9 +142,5 @@ public class SecretController {
                     .body("key must match pattern " + KEY_PATTERN + " (alphanumeric, underscore, dash only)");
         }
         return null;
-    }
-
-    private String currentUserId() {
-        return RequestContextHolder.getRequiredUserId();
     }
 }

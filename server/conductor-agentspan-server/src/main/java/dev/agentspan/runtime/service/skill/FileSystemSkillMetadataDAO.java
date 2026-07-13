@@ -25,11 +25,11 @@ import dev.agentspan.runtime.spi.SkillMetadataDAO;
 
 /**
  * Default {@link SkillMetadataDAO} — stores skill metadata as {@code metadata.json} files on the
- * local filesystem under {@code <storage>/owners/<ownerId>/<name>/<version>/}, with a per-skill
- * {@code latest} pointer file. This is the standalone-server default; it preserves the exact
- * on-disk layout used before the SPI extraction. Embedding hosts (e.g. orkes-conductor) supply a
- * durable/HA implementation instead (this class ships only in {@code conductor-agentspan-server},
- * so it is never on an embedding host's classpath).
+ * local filesystem under {@code <storage>/<name>/<version>/}, with a per-skill {@code latest}
+ * pointer file. This is the standalone-server default; skills are global (no per-caller
+ * scoping). Embedding hosts (e.g. orkes-conductor) supply a durable/HA implementation instead
+ * (this class ships only in {@code conductor-agentspan-server}, so it is never on an embedding
+ * host's classpath).
  */
 @Component
 public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
@@ -45,13 +45,12 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
 
     @Override
     public void save(SkillDetail detail, boolean makeLatest) {
-        Path metadataPath = metadataPath(detail.getOwnerId(), detail.getName(), detail.getVersion());
+        Path metadataPath = metadataPath(detail.getName(), detail.getVersion());
         try {
             Files.createDirectories(metadataPath.getParent());
             writeDetail(metadataPath, detail);
             if (makeLatest) {
-                Files.writeString(
-                        latestPath(detail.getOwnerId(), detail.getName()), detail.getVersion(), StandardCharsets.UTF_8);
+                Files.writeString(latestPath(detail.getName()), detail.getVersion(), StandardCharsets.UTF_8);
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to write skill metadata: " + e.getMessage(), e);
@@ -59,8 +58,8 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
     }
 
     @Override
-    public Optional<SkillDetail> find(String ownerId, String name, String version) {
-        Path metadataPath = metadataPath(ownerId, name, version);
+    public Optional<SkillDetail> find(String name, String version) {
+        Path metadataPath = metadataPath(name, version);
         if (!Files.exists(metadataPath)) {
             return Optional.empty();
         }
@@ -68,8 +67,8 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
     }
 
     @Override
-    public Optional<String> latestVersion(String ownerId, String name) {
-        Path latest = latestPath(ownerId, name);
+    public Optional<String> latestVersion(String name) {
+        Path latest = latestPath(name);
         if (!Files.exists(latest)) {
             return Optional.empty();
         }
@@ -81,8 +80,8 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
     }
 
     @Override
-    public List<SkillDetail> listVersions(String ownerId, String name) {
-        Path skillRoot = skillRoot(ownerId, name);
+    public List<SkillDetail> listVersions(String name) {
+        Path skillRoot = skillRoot(name);
         List<SkillDetail> details = new ArrayList<>();
         if (!Files.isDirectory(skillRoot)) {
             return details;
@@ -101,13 +100,12 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
     }
 
     @Override
-    public List<SkillDetail> list(String ownerId, boolean allVersions) {
-        Path ownerRoot = ownerRoot(ownerId);
+    public List<SkillDetail> list(boolean allVersions) {
         List<SkillDetail> details = new ArrayList<>();
-        if (!Files.isDirectory(ownerRoot)) {
+        if (!Files.isDirectory(storageRoot)) {
             return details;
         }
-        try (var skillDirs = Files.list(ownerRoot)) {
+        try (var skillDirs = Files.list(storageRoot)) {
             for (Path skillDir : skillDirs.filter(Files::isDirectory).toList()) {
                 if (allVersions) {
                     try (var versions = Files.list(skillDir)) {
@@ -138,8 +136,8 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
     }
 
     @Override
-    public void delete(String ownerId, String name, String version) {
-        Path dir = versionDir(ownerId, name, version);
+    public void delete(String name, String version) {
+        Path dir = versionDir(name, version);
         if (!Files.exists(dir)) {
             return;
         }
@@ -147,26 +145,26 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
             for (Path p : paths.sorted(Comparator.reverseOrder()).toList()) {
                 Files.deleteIfExists(p);
             }
-            Path latest = latestPath(ownerId, name);
+            Path latest = latestPath(name);
             if (Files.exists(latest)
                     && version.equals(
                             Files.readString(latest, StandardCharsets.UTF_8).trim())) {
-                updateLatestAfterDelete(ownerId, name);
+                updateLatestAfterDelete(name);
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to delete skill metadata: " + e.getMessage(), e);
         }
     }
 
-    private void updateLatestAfterDelete(String ownerId, String name) throws IOException {
-        Path skillRoot = skillRoot(ownerId, name);
+    private void updateLatestAfterDelete(String name) throws IOException {
+        Path skillRoot = skillRoot(name);
         if (!Files.isDirectory(skillRoot)) {
-            Files.deleteIfExists(latestPath(ownerId, name));
+            Files.deleteIfExists(latestPath(name));
             return;
         }
-        List<SkillDetail> remaining = listVersions(ownerId, name);
+        List<SkillDetail> remaining = listVersions(name);
         if (remaining.isEmpty()) {
-            Files.deleteIfExists(latestPath(ownerId, name));
+            Files.deleteIfExists(latestPath(name));
             try (var children = Files.list(skillRoot)) {
                 if (children.findAny().isEmpty()) {
                     Files.deleteIfExists(skillRoot);
@@ -176,8 +174,7 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
         }
         remaining.sort(Comparator.comparing(SkillDetail::getCreatedAt, Comparator.nullsFirst(Long::compareTo))
                 .thenComparing(SkillDetail::getVersion));
-        Files.writeString(
-                latestPath(ownerId, name), remaining.get(remaining.size() - 1).getVersion(), StandardCharsets.UTF_8);
+        Files.writeString(latestPath(name), remaining.get(remaining.size() - 1).getVersion(), StandardCharsets.UTF_8);
     }
 
     private SkillDetail readDetail(Path metadataPath) {
@@ -196,24 +193,20 @@ public class FileSystemSkillMetadataDAO implements SkillMetadataDAO {
         }
     }
 
-    private Path ownerRoot(String ownerId) {
-        return storageRoot.resolve("owners").resolve(encoded(ownerId));
+    private Path skillRoot(String name) {
+        return storageRoot.resolve(encoded(name));
     }
 
-    private Path skillRoot(String ownerId, String name) {
-        return ownerRoot(ownerId).resolve(encoded(name));
+    private Path versionDir(String name, String version) {
+        return skillRoot(name).resolve(encoded(version));
     }
 
-    private Path versionDir(String ownerId, String name, String version) {
-        return skillRoot(ownerId, name).resolve(encoded(version));
+    private Path metadataPath(String name, String version) {
+        return versionDir(name, version).resolve("metadata.json");
     }
 
-    private Path metadataPath(String ownerId, String name, String version) {
-        return versionDir(ownerId, name, version).resolve("metadata.json");
-    }
-
-    private Path latestPath(String ownerId, String name) {
-        return skillRoot(ownerId, name).resolve("latest");
+    private Path latestPath(String name) {
+        return skillRoot(name).resolve("latest");
     }
 
     private String encoded(String value) {

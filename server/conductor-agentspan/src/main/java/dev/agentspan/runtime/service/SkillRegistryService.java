@@ -41,7 +41,6 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.agentspan.runtime.context.RequestContextHolder;
 import dev.agentspan.runtime.model.skill.SkillDetail;
 import dev.agentspan.runtime.model.skill.SkillFileContent;
 import dev.agentspan.runtime.model.skill.SkillFileEntry;
@@ -121,7 +120,6 @@ public class SkillRegistryService {
 
         ParsedSkillPackage parsed = parseSkillPackage(bytes, manifest);
         String name = parsed.name();
-        String ownerId = currentUserId();
         Map<String, Object> rawConfig = parsed.rawConfig();
         String manifestName = stringValue(manifest.get("name"));
         if (manifestName != null && !manifestName.isBlank() && !manifestName.equals(name)) {
@@ -134,21 +132,19 @@ public class SkillRegistryService {
             version = checksum.substring(0, 12);
         }
         validateVersion(version);
-        pinRegisteredCrossSkillRefs(ownerId, rawConfig);
+        pinRegisteredCrossSkillRefs(rawConfig);
 
         long now = Instant.now().toEpochMilli();
-        String storageName = packageStoreName(ownerId, name);
 
-        Optional<SkillDetail> existingOpt = metadataDao.find(ownerId, name, version);
+        Optional<SkillDetail> existingOpt = metadataDao.find(name, version);
         if (existingOpt.isPresent()) {
             SkillDetail existing = existingOpt.get();
-            enforceReadable(existing);
             if (!checksum.equals(existing.getChecksum())) {
                 throw new IllegalArgumentException(
                         "Skill " + name + " version " + version + " already exists with a different checksum");
             }
             if (!packageExists(existing)) {
-                StoredSkillPackage restored = packageStore.store(storageName, version, checksum, bytes);
+                StoredSkillPackage restored = packageStore.store(name, version, checksum, bytes);
                 existing.setPackageFileHandleId(restored.handle());
                 existing.setStorageType(restored.storageType());
                 existing.setPackageSize(restored.size());
@@ -160,7 +156,7 @@ public class SkillRegistryService {
 
         StoredSkillPackage stored = null;
         try {
-            stored = packageStore.store(storageName, version, checksum, bytes);
+            stored = packageStore.store(name, version, checksum, bytes);
 
             SkillDetail detail = SkillDetail.builder()
                     .name(name)
@@ -170,7 +166,6 @@ public class SkillRegistryService {
                     .packageFileHandleId(stored.handle())
                     .storageType(stored.storageType())
                     .status("READY")
-                    .ownerId(ownerId)
                     .createdAt(now)
                     .updatedAt(now)
                     .packageSize(stored.size())
@@ -191,22 +186,18 @@ public class SkillRegistryService {
 
     public List<SkillSummary> list(boolean allVersions) {
         List<SkillSummary> summaries = new ArrayList<>();
-        for (SkillDetail detail : metadataDao.list(currentUserId(), allVersions)) {
-            if (isReadable(detail)) {
-                addSummary(summaries, detail);
-            }
+        for (SkillDetail detail : metadataDao.list(allVersions)) {
+            addSummary(summaries, detail);
         }
         summaries.sort(Comparator.comparing(SkillSummary::getName).thenComparing(SkillSummary::getVersion));
         return summaries;
     }
 
     public SkillDetail get(String name, String version) {
-        String ownerId = currentUserId();
-        String resolvedVersion = resolveVersion(ownerId, name, version);
+        String resolvedVersion = resolveVersion(name, version);
         SkillDetail detail = metadataDao
-                .find(ownerId, name, resolvedVersion)
+                .find(name, resolvedVersion)
                 .orElseThrow(() -> new IllegalArgumentException("Skill not found: " + name + "@" + resolvedVersion));
-        enforceReadable(detail);
         return detail;
     }
 
@@ -297,13 +288,11 @@ public class SkillRegistryService {
     }
 
     public synchronized void delete(String name, String version) {
-        String ownerId = currentUserId();
-        String resolvedVersion = resolveVersion(ownerId, name, version);
-        metadataDao.find(ownerId, name, resolvedVersion).ifPresent(detail -> {
-            enforceReadable(detail);
+        String resolvedVersion = resolveVersion(name, version);
+        metadataDao.find(name, resolvedVersion).ifPresent(detail -> {
             deletePackage(detail);
         });
-        metadataDao.delete(ownerId, name, resolvedVersion);
+        metadataDao.delete(name, resolvedVersion);
     }
 
     private void addSummary(List<SkillSummary> summaries, SkillDetail detail) {
@@ -314,7 +303,6 @@ public class SkillRegistryService {
                 .description(detail.getDescription())
                 .checksum(detail.getChecksum())
                 .status(detail.getStatus())
-                .ownerId(detail.getOwnerId())
                 .createdAt(detail.getCreatedAt())
                 .updatedAt(detail.getUpdatedAt())
                 .packageSize(detail.getPackageSize())
@@ -325,16 +313,16 @@ public class SkillRegistryService {
                 .build());
     }
 
-    private String resolveVersion(String ownerId, String name, String version) {
+    private String resolveVersion(String name, String version) {
         if ("latest".equals(version)) {
             version = null;
         }
         if (version != null && !version.isBlank()) {
-            if (metadataDao.find(ownerId, name, version).isPresent()) {
+            if (metadataDao.find(name, version).isPresent()) {
                 return version;
             }
             // Allow a checksum prefix in place of an exact version.
-            for (SkillDetail detail : metadataDao.listVersions(ownerId, name)) {
+            for (SkillDetail detail : metadataDao.listVersions(name)) {
                 if (detail.getChecksum() != null && detail.getChecksum().startsWith(version)) {
                     return detail.getVersion();
                 }
@@ -342,7 +330,7 @@ public class SkillRegistryService {
             return version;
         }
         return metadataDao
-                .latestVersion(ownerId, name)
+                .latestVersion(name)
                 .orElseThrow(() -> new IllegalArgumentException("Skill not found: " + name));
     }
 
@@ -661,7 +649,7 @@ public class SkillRegistryService {
         }
     }
 
-    private void pinRegisteredCrossSkillRefs(String ownerId, Map<String, Object> rawConfig) {
+    private void pinRegisteredCrossSkillRefs(Map<String, Object> rawConfig) {
         Object skillMd = rawConfig.get("skillMd");
         if (!(skillMd instanceof String md)) {
             rawConfig.put("crossSkillRefsPinned", true);
@@ -676,9 +664,9 @@ public class SkillRegistryService {
             }
             SkillDetail refDetail;
             try {
-                String refVersion = resolveVersion(ownerId, refName, null);
+                String refVersion = resolveVersion(refName, null);
                 refDetail = metadataDao
-                        .find(ownerId, refName, refVersion)
+                        .find(refName, refVersion)
                         .orElseThrow(() -> new IllegalArgumentException("Skill not found: " + refName));
             } catch (IllegalArgumentException e) {
                 continue;
@@ -832,21 +820,6 @@ public class SkillRegistryService {
         }
     }
 
-    private String currentUserId() {
-        return RequestContextHolder.get().map(ctx -> ctx.getUserId()).orElse("00000000-0000-0000-0000-000000000000");
-    }
-
-    private boolean isReadable(SkillDetail detail) {
-        String ownerId = detail.getOwnerId();
-        return ownerId == null || ownerId.isBlank() || ownerId.equals(currentUserId());
-    }
-
-    private void enforceReadable(SkillDetail detail) {
-        if (!isReadable(detail)) {
-            throw new IllegalArgumentException("Skill not found: " + detail.getName() + "@" + detail.getVersion());
-        }
-    }
-
     private String normalizeEntryName(String name) {
         String normalized = name.replace('\\', '/');
         while (normalized.startsWith("./")) {
@@ -861,10 +834,6 @@ public class SkillRegistryService {
             }
         }
         return normalized;
-    }
-
-    private String packageStoreName(String ownerId, String name) {
-        return ownerId + ":" + name;
     }
 
     private void validateSkillName(String name) {

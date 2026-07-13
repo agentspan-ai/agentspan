@@ -13,18 +13,20 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 /**
- * Registers {@link AgentHumanTask} as the primary HUMAN task implementation,
- * overriding Conductor's default {@code Human} system task.
+ * Registers {@link AgentHumanTask} as the {@code HUMAN} system task when running in
+ * embedded mode ({@code agentspan.embedded=true}).
  *
- * <p><b>Embedded mode:</b> disabled when {@code agentspan.embedded=true} (e.g. when the
- * library is imported into a host such as orkes-conductor). The host provides its own
- * (richer) HUMAN task — overriding it here would collide on the {@code HUMAN} bean name and
- * replace the host's full HITL implementation with this SSE-only shim. The host is expected
- * to emit the {@code WAITING} SSE event from its own HUMAN task. The standalone OSS server
- * leaves this property unset, so the override stays active as before.</p>
+ * <p>The {@code @Bean("HUMAN")} definition <em>overrides</em> Conductor's default
+ * {@code Human} component (enabled via {@code spring.main.allow-bean-definition-overriding=true}),
+ * so exactly one bean named {@code HUMAN} exists. This avoids the component-scan bean-name
+ * collision and the duplicate taskType key in {@code SystemTaskRegistry} that would otherwise
+ * result from having two {@code WorkflowSystemTask}s both reporting the {@code HUMAN} type.</p>
+ *
+ * <p>When {@code agentspan.embedded} is unset (the standalone OSS server), this configuration
+ * is skipped and Conductor's default {@code Human} task remains in effect.</p>
  */
 @Configuration
-@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "agentspan.embedded", havingValue = "true")
 public class AgentHumanTaskConfig {
 
     @Bean(TASK_TYPE_HUMAN)
