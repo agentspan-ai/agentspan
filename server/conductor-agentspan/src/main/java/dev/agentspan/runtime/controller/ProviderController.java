@@ -73,14 +73,8 @@ public class ProviderController {
     private final OkHttpClient conductorAiHttpClient;
     private final Environment environment;
 
-    @Value("${agentspan.embedded:false}")
-    private boolean embedded;
-
     @GetMapping("/status")
     public Map<String, Object> status() {
-        if (embedded) {
-            return Map.of("managedByHost", true, "providers", List.of());
-        }
 
         List<Map<String, Object>> providers = new ArrayList<>();
         for (String name : KNOWN_PROVIDERS) {
