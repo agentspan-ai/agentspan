@@ -83,7 +83,11 @@ public class GuardrailCompiler {
             return new ArrayList<>();
         }
 
-        String iterationRef = "${" + agentName + "_loop.iteration}";
+        // NOTE: the live loop counter lives under the DO_WHILE task's OUTPUT
+        // (Conductor exposes {input, output} per task ref), so it must be read as
+        // ${<loop>.output.iteration}. The bare ${<loop>.iteration} resolves to null
+        // mid-loop, which silently disabled every iteration-based escalation below.
+        String iterationRef = "${" + agentName + "_loop.output.iteration}";
         return compileGuardrailTasksInternal(outputGuardrails, agentName, contentRef, iterationRef);
     }
 
@@ -262,6 +266,10 @@ public class GuardrailCompiler {
         normalizeInputs.put("worker_output", "${" + workerRef + ".output}");
         normalizeInputs.put("guardrail_name", guard.getName());
         normalizeInputs.put("default_on_fail", guard.getOnFail());
+        // Wire the live loop counter + retry budget so the normalize script can escalate
+        // retry -> raise once maxRetries is exhausted (parity with regex/llm guardrails).
+        normalizeInputs.put("iteration", iterationRef);
+        normalizeInputs.put("max_retries", guard.getMaxRetries());
         normalizeTask.setInputParameters(normalizeInputs);
 
         return new GuardrailTaskResult(List.of(task, normalizeTask), refName, true);
