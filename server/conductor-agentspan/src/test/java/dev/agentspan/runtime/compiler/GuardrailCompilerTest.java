@@ -106,7 +106,11 @@ class GuardrailCompilerTest {
         // scripts use once the retry budget is exhausted.
         assertThat((String) normalize.getInputParameters().get("expression"))
                 .contains("iteration >= max_retries")
-                .contains("'raise'");
+                .contains("'raise'")
+                // fix -> raise must be conditional on there being NO fixed output, otherwise
+                // a custom `fix` guardrail with a fixedOutput would be wrongly terminated
+                // instead of applying the fix (regression guard).
+                .contains("fixedOutput === null");
     }
 
     @Test
