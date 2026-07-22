@@ -163,9 +163,10 @@ def test_channels_property_splits_and_strips():
 
 
 def test_both_channels_polled_and_replies_stay_in_their_channel(tmp_path):
+    # Distinct incidents per channel — identical ones are signature-suppressed.
     slack = MultiChannelSlack({
         "C1": [{"type": "message", "ts": "1.0", "text": ALERT}],
-        "C2": [{"type": "message", "ts": "2.0", "text": ALERT}],
+        "C2": [{"type": "message", "ts": "2.0", "text": OTHER_ALERT}],
     })
     runtime = FakeRuntime()
     handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
@@ -176,11 +177,77 @@ def test_both_channels_polled_and_replies_stay_in_their_channel(tmp_path):
 
 
 def test_same_ts_in_different_channels_is_not_cross_deduped(tmp_path):
-    # ts values are per-channel in Slack; identical ts in two channels must both run.
+    # ts values are per-channel in Slack; identical ts in two channels must both
+    # run (distinct incidents — identical ones are signature-suppressed instead).
     slack = MultiChannelSlack({
         "C1": [{"type": "message", "ts": "5.0", "text": ALERT}],
-        "C2": [{"type": "message", "ts": "5.0", "text": ALERT}],
+        "C2": [{"type": "message", "ts": "5.0", "text": OTHER_ALERT}],
     })
     runtime = FakeRuntime()
     handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
     assert handled == 2
+
+
+def test_same_incident_across_channels_is_triaged_once(tmp_path):
+    # The digest and raw channel carry the SAME incident — one triage total.
+    slack = MultiChannelSlack({
+        "C1": [{"type": "message", "ts": "1.0", "text": ALERT}],
+        "C2": [{"type": "message", "ts": "2.0", "text": ALERT_B}],
+    })
+    runtime = FakeRuntime()
+    handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
+    assert handled == 1
+    assert len(runtime.calls) == 1
+
+
+# ── signature cooldown (flapper re-triage guard) ────────────────────────
+# Live 2026-07-22: the raw channel fired the same shailesh-test-gcp TIMED_OUT
+# alert 4x in <1h (fresh exec id each time) and each got a full LLM triage.
+# Within the cooldown window, a repeated signature is marked processed but NOT
+# re-triaged and nothing is posted for it.
+
+ALERT_B = ALERT.replace("364b459a-689f-11f1-94b6-de01f12a4ed9",
+                        "aaaaaaaa-689f-11f1-94b6-de01f12a4ed9")
+OTHER_ALERT = (
+    "[CRITICAL] The health-checking has FAILED for the Acme's prod acme-prod cluster:\n"
+    "https://ah5r-prod.orkesconductor.com/execution/bbbbbbbb-689f-11f1-94b6-de01f12a4ed9"
+)
+
+
+def test_same_signature_within_cooldown_is_not_retriaged(tmp_path):
+    cfg = _cfg(tmp_path)
+    runtime = FakeRuntime()
+    first = run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]),
+                     runtime, agent=object())
+    slack2 = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}])
+    second = run_once(cfg, slack2, runtime, agent=object())
+
+    assert first == 1
+    assert second == 0          # same incident, new exec id -> suppressed
+    assert len(runtime.calls) == 1
+    assert slack2.posts == []   # no thread spam for the duplicate
+
+
+def test_different_signature_is_triaged(tmp_path):
+    cfg = _cfg(tmp_path)
+    runtime = FakeRuntime()
+    run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]), runtime, agent=object())
+    handled = run_once(cfg, FakeSlack([{"type": "message", "ts": "2.0", "text": OTHER_ALERT}]),
+                       runtime, agent=object())
+    assert handled == 1
+    assert len(runtime.calls) == 2
+
+
+def test_signature_retriaged_after_cooldown_expires(tmp_path, monkeypatch):
+    import oncall_agent.slack_app as app
+
+    cfg = _cfg(tmp_path)
+    runtime = FakeRuntime()
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(app.time, "time", lambda: clock["now"])
+    run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]), runtime, agent=object())
+    clock["now"] += app._SIGNATURE_COOLDOWN_S + 1
+    handled = run_once(cfg, FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}]),
+                       runtime, agent=object())
+    assert handled == 1
+    assert len(runtime.calls) == 2

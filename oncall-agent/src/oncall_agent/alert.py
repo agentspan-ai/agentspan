@@ -30,6 +30,34 @@ _CLUSTER_RE = re.compile(
 _DECORATION = str.maketrans("", "", "*`")
 
 
+_URL_RE = re.compile(r"<[^>]*>|https?://\S+")
+_NUMBERISH = re.compile(r"[\d.]+%?")
+_HEXISH = re.compile(r"[0-9a-f]{4,}")
+
+
+def alert_signature(text: str | None) -> str:
+    """A stable identity for the INCIDENT behind an alert message.
+
+    The raw channel fires the same incident every ~5 minutes with a fresh
+    execution id and slightly different numbers (seconds, percentages). The
+    signature is the sorted set of word tokens with URLs stripped and
+    number-ish / hex-ish tokens (uuid fragments, pod hashes) dropped — equal
+    across firings of one incident, different across clusters and alert types.
+    """
+    cleaned = _URL_RE.sub(" ", text or "")
+    words = re.split(r"[^a-z0-9.]+", cleaned.lower())
+    tokens = sorted(
+        {
+            w
+            for w in words
+            if w
+            and not _NUMBERISH.fullmatch(w)
+            and not (_HEXISH.fullmatch(w) and any(c.isdigit() for c in w))
+        }
+    )
+    return ",".join(tokens)
+
+
 def message_text(msg: dict) -> str:
     """Flatten a Slack message to plain text: top-level ``text`` plus every
     mrkdwn text inside its blocks.
