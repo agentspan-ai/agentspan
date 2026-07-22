@@ -18,6 +18,7 @@ questions to Slack/metrics rather than under-reporting it.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -74,6 +75,12 @@ class RecurrenceReport:
         }
 
 
+def _tokens(text: str) -> set[str]:
+    """Lowercase word tokens, with pure numbers dropped (they vary per firing)."""
+    words = re.split(r"[^a-z0-9.]+", text.lower())
+    return {w for w in words if w and not re.fullmatch(r"[\d.]+%?", w)}
+
+
 def summarize_recurrence(runs: list[dict], alert_signature: str) -> RecurrenceReport:
     """Classify how often ``alert_signature`` appears across recent cluster runs.
 
@@ -82,17 +89,23 @@ def summarize_recurrence(runs: list[dict], alert_signature: str) -> RecurrenceRe
             ``reason`` (the alert text / reasonForIncompletion, may be None) and
             ``start_time`` (epoch ms, may be None). Order does not matter.
         alert_signature: a short, stable phrase identifying the alert TYPE — e.g.
-            "Conductor Server CPU usage", "Redis instance is at", "has failed".
-            Matched case-insensitively as a substring; do NOT include the varying
-            numbers (percentages, pod ids), which would defeat the match.
+            "Conductor Server CPU usage", "Redis instance is at", "Pod Failed".
+
+    Matching is TOKEN-based, not substring: a run matches when every significant
+    word of the signature appears as a word in its reason, in any position.
+    Substring matching failed live (2026-07-22): the signature "Pod Failed" never
+    matched "Pod orkes-agent-…-shldc Failed" because the pod name sits between
+    the words, so a 6×/day flapper was reported as first-seen/NEW. Numbers are
+    ignored on both sides — percentages and counts vary per firing.
     """
-    sig = (alert_signature or "").strip().lower()
+    sig_tokens = _tokens(alert_signature or "")
+    sig = bool(sig_tokens)
     sample_size = len(runs)
 
     matched = [
         r
         for r in runs
-        if sig and sig in (str(r.get("reason") or "")).lower()
+        if sig and sig_tokens <= _tokens(str(r.get("reason") or ""))
     ]
     matched_count = len(matched)
     fraction = (matched_count / sample_size) if sample_size else 0.0
