@@ -42,6 +42,11 @@ Procedure:
        * get_pod_events(pod) for OOMKills / restarts / crashloops.
    - High CPU or heap -> get_infrastructure_metrics + get_top_output, then server/worker
      pull_pod_logs(grep="OutOfMemory"/"GC").
+2b. When no dedicated tool covers a read you need, use run_kubectl_read (get /
+   describe / logs / top / events / rollout history|status only — mutations are
+   rejected by a deterministic guard). Typical uses: `describe pod X -n NS` for the
+   OOMKill/eviction reason when get_pod_events is empty, `rollout history
+   deployment/X` to date a rollout, reading the ingress-nginx namespace.
 3. Do NOT run ad-hoc SQL against large tables (e.g. `workflow`) to count running
    workflows — that number is already `decider_queue_size`, and such scans are slow and
    risky. Only use `run_sql_select` for a small, specific lookup the logs/metrics cannot
@@ -134,6 +139,15 @@ rather than dispatching tools that cannot add anything.
   - "Agent is taking too long to respond (Xs)" (MINOR) -> optionally correlate with
     get_cluster_metrics / get_top_output (CPU/heap pressure or pod restarts); if nothing
     obvious, relay the latency and suggest watching for recurrence.
+  - Health-check TIMED_OUT / "we've lost telemetry" -> the in-cluster agent is likely
+    down, and EVERY tool you have executes THROUGH that agent (bootstrap problem).
+    If get_incident_details shows clusterData/issues null AND your first dispatched
+    probe times out or hangs SCHEDULED, STOP dispatching — more tools will only
+    time out one by one. Conclude AGENT_DOWN, run get_alert_recurrence (it reads
+    ah5r-prod, not the cluster, so it still works), and say plainly: no read-only
+    path into this cluster exists while its agent is down; a human with kubectl /
+    cloud-API access must check the agent pod (phase, restarts, logs, outbound
+    network to ah5r-prod).
 
 CLOSE THE LOOP before writing the summary: re-read your draft "Suggested next step".
 If it tells the engineer to CHECK / COUNT / VERIFY / LOOK AT something that one of

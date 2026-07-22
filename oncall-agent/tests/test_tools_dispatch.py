@@ -80,3 +80,19 @@ def test_download_thread_dump_dispatches_expected_command(monkeypatch):
 def test_download_thread_dump_is_in_the_toolset():
     names = {getattr(t, "__name__", None) for t in tools.ALL_TOOLS}
     assert "download_thread_dump" in names
+
+
+def test_run_kubectl_read_dispatches_guarded_command(monkeypatch):
+    fake = _install(monkeypatch)
+    tools.run_kubectl_read("exec", "kubectl get pods -n orkes")
+    command, wf, _, params = fake.calls[-1]
+    assert command == "KUBECTL_UNRESTRICTED"
+    assert wf == "kubectl_unrestricted"
+    assert params["unrestrictedCommand"] == "get pods -n orkes"  # 'kubectl' stripped
+
+
+def test_run_kubectl_read_rejects_mutations_before_dispatch(monkeypatch):
+    fake = _install(monkeypatch)
+    out = tools.run_kubectl_read("exec", "delete pod x -n orkes")
+    assert out.get("error") == "rejected_non_readonly_kubectl"
+    assert fake.calls == []  # never reached the cluster

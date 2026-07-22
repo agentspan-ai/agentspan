@@ -22,7 +22,9 @@ MUTATING_COMMANDS = [
     "ROLLBACK_DEPLOYMENT",
     "UPDATE_DEPLOYMENT_MEMORY",
     "PATCH_DEPLOYMENT",
-    "KUBECTL_UNRESTRICTED",
+    # KUBECTL_UNRESTRICTED is allowed ONLY behind the deterministic read-only
+    # guard (kubectl_guard.ensure_readonly_kubectl) — see run_kubectl_read and
+    # test_run_kubectl_read_rejects_mutations_before_dispatch.
     "ADD_EKS_ADMIN",
     "UPDATE_API_KEY",
     "BACKUP_CONDUCTOR",
@@ -46,3 +48,8 @@ def test_no_mutating_commands_wired_into_tools():
 def test_sql_tool_goes_through_the_select_guard():
     # SQL must pass ensure_select before any dispatch — never raw to the DB.
     assert "ensure_select" in _TOOLS_SRC
+
+
+def test_kubectl_tool_goes_through_the_readonly_guard():
+    # kubectl must pass ensure_readonly_kubectl before any dispatch.
+    assert "ensure_readonly_kubectl" in _TOOLS_SRC

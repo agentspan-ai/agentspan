@@ -15,6 +15,7 @@ from conductor.ai.agents import tool
 from .conductor_client import ConductorDispatcher
 from .config import Config
 from .recurrence import summarize_recurrence
+from .kubectl_guard import NotReadOnlyKubectlError, ensure_readonly_kubectl
 from .sql_guard import NotReadOnlySQLError, ensure_select
 
 _dispatcher: ConductorDispatcher | None = None
@@ -151,6 +152,37 @@ def get_pod_events(execution_id: str, pod_name: str) -> dict:
 
 
 @tool(timeout_seconds=_T)
+def run_kubectl_read(execution_id: str, command: str) -> dict:
+    """Run a READ-ONLY kubectl command inside the cluster (get / describe / logs /
+    top / events / rollout history|status / explain / auth can-i). Any mutating
+    verb (delete, apply, scale, exec, patch, rollout restart, ...) and any shell
+    metacharacter is rejected BEFORE it reaches the cluster.
+
+    Use when a dedicated tool doesn't cover the read you need — e.g.
+    `describe pod X -n NS` for the OOMKill/eviction reason, `rollout history
+    deployment/X` to date a rollout, or reading the ingress-nginx namespace.
+
+    ALWAYS pass the cluster's own namespace (-n <ns>): the in-cluster agent's
+    service account is namespace-scoped, so cluster-scope reads (-A) come back
+    Forbidden. The namespace is visible in get_pods_data output / pod events.
+
+    Args:
+        execution_id: incident execution id.
+        command: the kubectl command, without the leading "kubectl" (tolerated).
+    """
+    try:
+        safe = ensure_readonly_kubectl(command)
+    except NotReadOnlyKubectlError as exc:
+        return {"error": "rejected_non_readonly_kubectl", "detail": str(exc), "command": command}
+    return _disp().dispatch(
+        "KUBECTL_UNRESTRICTED",
+        "kubectl_unrestricted",
+        _context(execution_id),
+        {"unrestrictedCommand": safe},
+    )
+
+
+@tool(timeout_seconds=_T)
 def download_heap_dump(execution_id: str, pod_name: str) -> dict:
     """Capture a JVM heap dump from ONE pod via ah5r-prod and return where it was
     stored (``paths``) — the engineer analyzes it (Eclipse MAT) against recent changes.
@@ -259,6 +291,7 @@ ALL_TOOLS = [
     get_deployments_info,
     get_pod_events,
     get_top_output,
+    run_kubectl_read,
     download_heap_dump,
     download_thread_dump,
     pull_pod_logs,
