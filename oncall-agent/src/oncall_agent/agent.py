@@ -65,6 +65,10 @@ rather than dispatching tools that cannot add anything.
     CPU look for a hot loop / tight retry / sweeper churn). Cite the % and the pod, plus
     the GC/OOM/hot-loop evidence. (Skip the extra metrics call unless a pod name is
     missing or the numbers disagree.)
+    CPU EVIDENCE RULE: when a CPU alert's cause isn't obvious from the logs, capture a
+    thread dump yourself — download_thread_dump(execution_id, hottest pod). It is cheap
+    (jstack); include the returned dump paths in your summary so the engineer can see
+    exactly which threads are hot (sweeper churn, tight retry, deadlock).
     HEAP NEXT-STEP RULE: do NOT recommend raising -Xmx / memory limits as the default
     fix — that can mask a leak. For heap/memory alerts, CAPTURE THE DUMP YOURSELF:
     call download_heap_dump(execution_id, pod) on the ONE highest-heap pod (from
