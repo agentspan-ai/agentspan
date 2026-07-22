@@ -11,15 +11,23 @@ def summary_text(result: Any) -> str:
     The server returns the agent output as a dict
     ``{"result": <text>, "finishReason": ..., "context": ..., "rejectionReason": ...}``;
     older SDK builds exposed the text directly on ``result.output``. Accept both.
+
+    The model narrates before the summary despite instructions ("I have all the
+    data I need. Let me..."), so enforce the contract deterministically: if the
+    text contains the mandated ``*Issue*:`` header, drop everything before it.
     """
     output = getattr(result, "output", None)
+    text: str | None = None
     if isinstance(output, dict):
-        text = output.get("result")
-        if isinstance(text, str) and text.strip():
-            return text
-    if isinstance(output, str) and output.strip():
-        return output
-    return str(output if output is not None else result)
+        candidate = output.get("result")
+        if isinstance(candidate, str) and candidate.strip():
+            text = candidate
+    if text is None and isinstance(output, str) and output.strip():
+        text = output
+    if text is None:
+        return str(output if output is not None else result)
+    marker = text.find("*Issue*:")
+    return text[marker:] if marker > 0 else text
 
 
 def use_thread_workers_if_needed() -> None:
