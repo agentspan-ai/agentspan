@@ -1,0 +1,127 @@
+# On-call triage agent — ah5r-prod deployment (production Option A).
+#
+# One pod, two containers:
+#   * agentspan-server sidecar (agent loop / LLM calls), localhost:6767
+#   * poller (this repo's image): polls the Slack alert channel, triages,
+#     replies in-thread. STRICTLY read-only / advisory (dry-run).
+#
+# Before applying, create the secret (values from the team vault):
+#   kubectl -n oncall-agent create secret generic oncall-agent-secrets \
+#     --from-literal=SLACK_BOT_TOKEN=xoxb-... \
+#     --from-literal=CONDUCTOR_AUTH_KEY=... \
+#     --from-literal=CONDUCTOR_AUTH_SECRET=... \
+#     --from-literal=ANTHROPIC_API_KEY=sk-ant-...
+#
+# Kill switch: kubectl -n oncall-agent scale deploy/oncall-agent --replicas=0
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oncall-agent
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oncall-agent-state
+  namespace: oncall-agent
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oncall-agent
+  namespace: oncall-agent
+  labels:
+    app: oncall-agent
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # single writer for the dedup state; never two pollers at once
+  selector:
+    matchLabels:
+      app: oncall-agent
+  template:
+    metadata:
+      labels:
+        app: oncall-agent
+    spec:
+      containers:
+        - name: agentspan-server
+          image: agentspan/server:latest
+          ports:
+            - containerPort: 6767
+          env:
+            # The server reads the model key from its env at boot (it does NOT
+            # fall back to the credential store for a cold start).
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: oncall-agent-secrets
+                  key: ANTHROPIC_API_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 6767
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              memory: 2Gi
+        - name: poller
+          image: oncall-agent:latest  # build: docker build -f oncall-agent/Dockerfile .
+          args: ["--loop"]
+          env:
+            - name: AGENTSPAN_SERVER_URL
+              value: http://localhost:6767/api
+            - name: CONDUCTOR_SERVER_URL
+              value: https://ah5r-prod.orkesconductor.com/api
+            # Digest channel (alert-aggregator): one message per incident,
+            # edited in place with an occurrence counter — flapper dedup for
+            # free. Switch to C04C07WS2AH to poll the raw alert channel.
+            - name: SLACK_ALERT_CHANNEL
+              value: C0AU9980PCH
+            - name: ONCALL_POLL_INTERVAL
+              value: "60"
+            - name: ONCALL_DRY_RUN
+              value: "true"
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: oncall-agent-secrets
+                  key: SLACK_BOT_TOKEN
+            - name: CONDUCTOR_AUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: oncall-agent-secrets
+                  key: CONDUCTOR_AUTH_KEY
+            - name: CONDUCTOR_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oncall-agent-secrets
+                  key: CONDUCTOR_AUTH_SECRET
+            # The poller's tool-workers also make LLM-adjacent SDK calls that
+            # read this at import time on some paths; harmless to provide.
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: oncall-agent-secrets
+                  key: ANTHROPIC_API_KEY
+          volumeMounts:
+            - name: state
+              mountPath: /state
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: oncall-agent-state
