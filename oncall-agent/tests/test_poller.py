@@ -26,6 +26,23 @@ class FakeResult:
     output = "*Issue*: redis high\n*Likely root cause*: queue backlog"
 
 
+class DictOutputResult:
+    """Mirrors the real AgentRuntime result: ``.output`` is a dict with the
+    agent's text under ``result`` (seen live against the server, 2026-07-22)."""
+
+    output = {
+        "result": "*Issue*: pod failed\n*Likely root cause*: stale pod from rollout",
+        "finishReason": "COMPLETED",
+        "context": {},
+        "rejectionReason": None,
+    }
+
+
+class DictOutputRuntime:
+    def run(self, agent, prompt):
+        return DictOutputResult()
+
+
 class FakeRuntime:
     def __init__(self):
         self.calls = []
@@ -78,6 +95,19 @@ def test_dedup_across_polls(tmp_path):
     assert first == 1
     assert second == 0  # already processed -> not triaged again
     assert len(runtime.calls) == 1
+
+
+def test_dict_output_result_posts_summary_text(tmp_path):
+    """The runtime's result.output is a dict — the thread reply must carry the
+    agent's text, not a stringified dict or a 'Triage failed' error."""
+    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    handled = run_once(_cfg(tmp_path), slack, DictOutputRuntime(), agent=object())
+
+    assert handled == 1
+    assert not any("Triage failed" in p[2] for p in slack.posts)
+    summary = slack.posts[-1][2]
+    assert "Likely root cause" in summary
+    assert "finishReason" not in summary  # not a dumped dict
 
 
 def test_triage_failure_is_reported_not_raised(tmp_path):

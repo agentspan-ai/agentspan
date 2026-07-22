@@ -18,7 +18,7 @@ def triage_once(execution_id: str) -> str:
     from conductor.ai.agents import AgentRuntime
 
     from .agent import build_agent
-    from .runtime_compat import use_thread_workers_if_needed
+    from .runtime_compat import summary_text, use_thread_workers_if_needed
 
     use_thread_workers_if_needed()
     cfg = Config.from_env()
@@ -29,7 +29,7 @@ def triage_once(execution_id: str) -> str:
     )
     with AgentRuntime(server_url=cfg.agentspan_server_url) as runtime:
         result = runtime.run(agent, prompt)
-    return getattr(result, "output", None) or str(result)
+    return summary_text(result)
 
 
 def main(argv: list[str] | None = None) -> int:

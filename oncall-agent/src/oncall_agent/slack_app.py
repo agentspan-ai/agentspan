@@ -18,6 +18,7 @@ from conductor.ai.agents import AgentRuntime
 from .agent import build_agent
 from .alert import Alert, parse_alert
 from .config import Config
+from .runtime_compat import summary_text
 
 log = logging.getLogger("oncall_agent")
 _SLACK_API = "https://slack.com/api"
@@ -114,7 +115,7 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
             )
             try:
                 result = runtime.run(agent, _triage_prompt(alert))
-                summary = getattr(result, "output", None) or str(result)
+                summary = summary_text(result)
                 slack.post_reply(cfg.slack_alert_channel, ts, _header(cfg) + summary)
             except Exception as exc:  # surface into the thread, keep polling
                 log.exception("triage failed")
