@@ -89,3 +89,45 @@ def test_iso8601_start_times_are_parsed():
     assert rep.matched_count == 2
     assert rep.first_seen_ms is not None and rep.last_seen_ms is not None
     assert abs(rep.span_hours - 10.0) < 0.01  # 00:00 -> 10:00 == 10h
+
+
+# ── token matching (live miss, 2026-07-22) ──────────────────────────────
+# The collective-staging flapper fired on 100/100 recent checks with reason
+# "Pod orkes-agent-deployment-84594b48f8-shldc Failed". The agent passed the
+# signature "Pod Failed" (pod id correctly stripped per its instructions), and
+# substring matching returned NO_PRIOR_MATCH -> the triage reply called a
+# 6x/day flapper "first-seen/NEW". Signature words must match as tokens, in
+# any position, with varying numbers ignored.
+
+POD_FAILED = "*`[MAJOR]`* ... issue:\n*MAJOR:* Pod orkes-agent-deployment-84594b48f8-shldc Failed"
+
+
+def test_signature_tokens_match_across_interposed_pod_name():
+    runs = [_run(POD_FAILED, i * _H) for i in range(10)]
+    rep = summarize_recurrence(runs, "Pod Failed")
+    assert rep.verdict == "RECURRING"
+    assert rep.matched_count == 10
+    assert rep.chronic is True  # 100% >= 20%
+
+
+def test_signature_numbers_are_ignored():
+    # LLM includes the varying % despite instructions -> must still match.
+    runs = [_run(CPU % pct, i * _H) for i, pct in enumerate([96, 97, 98])]
+    rep = summarize_recurrence(runs, "Conductor Server CPU usage is at 99.7%")
+    assert rep.verdict == "RECURRING"
+    assert rep.matched_count == 3
+
+
+def test_signature_does_not_match_other_alert_types():
+    # Discriminating tokens must still discriminate: a Redis signature must not
+    # match CPU reasons even though both contain "is at".
+    runs = [_run(CPU % 97, i * _H) for i in range(10)]
+    rep = summarize_recurrence(runs, "Redis instance is at")
+    assert rep.matched_count == 0
+    assert rep.verdict == "NO_PRIOR_MATCH"
+
+
+def test_all_numbers_signature_is_no_match():
+    runs = [_run(CPU % 97, i * _H) for i in range(5)]
+    rep = summarize_recurrence(runs, "99.7%")
+    assert rep.verdict == "NO_PRIOR_MATCH"
