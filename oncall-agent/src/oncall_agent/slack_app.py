@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -16,13 +17,17 @@ import requests
 from conductor.ai.agents import AgentRuntime
 
 from .agent import build_agent
-from .alert import Alert, message_text, parse_alert
+from .alert import Alert, alert_signature, message_text, parse_alert
 from .config import Config
 from .runtime_compat import summary_text
 
 log = logging.getLogger("oncall_agent")
 _SLACK_API = "https://slack.com/api"
 _POLL_LIMIT = 20
+# One incident = one triage per window, across channels. The raw channel fires
+# the same incident every ~5 min with a fresh execution id; without this, each
+# firing got a full LLM triage (seen live: 4x shailesh-test-gcp in <1h).
+_SIGNATURE_COOLDOWN_S = int(os.environ.get("ONCALL_SIGNATURE_COOLDOWN", "3600"))
 
 
 class SlackClient:
@@ -118,6 +123,25 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             continue
         alert = parse_alert(message_text(msg))
         if alert:
+            sig = alert_signature(message_text(msg))
+            signatures = state.setdefault("signatures", {})
+            now = time.time()
+            last = signatures.get(sig)
+            if last is not None and (now - last) < _SIGNATURE_COOLDOWN_S:
+                log.info(
+                    "skip duplicate signature (triaged %.0fs ago) channel=%s exec=%s",
+                    now - last, channel, alert.execution_id,
+                )
+                processed.add(ts)
+                ch_state["processed"] = list(processed)[-500:]
+                ch_state["last_ts"] = ts
+                _save_state(state_path, state)
+                continue
+            signatures[sig] = now
+            # prune expired entries so the state file stays small
+            state["signatures"] = {
+                s: t for s, t in signatures.items() if (now - t) < _SIGNATURE_COOLDOWN_S * 4
+            }
             log.info("triage channel=%s exec=%s cluster=%s sev=%s",
                      channel, alert.execution_id, alert.cluster, alert.severity)
             slack.post_reply(

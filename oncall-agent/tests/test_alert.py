@@ -123,3 +123,33 @@ def test_digest_headline_alone_does_not_parse():
     from oncall_agent.alert import parse_alert
 
     assert parse_alert(DIGEST_MSG["text"]) is None
+
+
+# ── alert signatures (raw-channel flapper cooldown) ─────────────────────
+# The raw channel fires the same incident every ~5 min with a fresh execution
+# id. The signature must be identical across firings of one incident (exec ids,
+# uuids and numbers ignored) and different across clusters/alert types.
+
+TIMED_OUT_A1 = (
+    ":x: The health-checking for the cluster *Orkes Production (Important) - shailesh-test-gcp* has failed \n"
+    "Failure Status: `TIMED_OUT` \n"
+    "Reason: `Task poll timed out after 20 seconds. Poll timeout configured as 10 seconds. Timeout policy configured to RETRY` \n"
+    ":warning: It doesn't mean the cluster is not healthy, but *we've lost telemetry and that should be addressed urgently* \n"
+    "<https://ah5r-prod.orkesconductor.com/execution/427e9743-85e2-11f1-b58b-5614587b91fd>"
+)
+TIMED_OUT_A2 = TIMED_OUT_A1.replace(
+    "427e9743-85e2-11f1-b58b-5614587b91fd", "5b203452-85e4-11f1-a198-2ef8a3df853f"
+).replace("after 20 seconds", "after 36 seconds")
+TIMED_OUT_OTHER_CLUSTER = TIMED_OUT_A1.replace("shailesh-test-gcp", "elementor-poc")
+
+
+def test_signature_stable_across_firings_of_one_incident():
+    from oncall_agent.alert import alert_signature
+
+    assert alert_signature(TIMED_OUT_A1) == alert_signature(TIMED_OUT_A2)
+
+
+def test_signature_differs_across_clusters():
+    from oncall_agent.alert import alert_signature
+
+    assert alert_signature(TIMED_OUT_A1) != alert_signature(TIMED_OUT_OTHER_CLUSTER)
