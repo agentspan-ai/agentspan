@@ -38,6 +38,13 @@ class Config:
     # read-only regardless; this only affects messaging.
     dry_run: bool
 
+    @property
+    def slack_alert_channels(self) -> list[str]:
+        """SLACK_ALERT_CHANNEL as a list — accepts comma-separated channel ids
+        (raw alert channel + aggregator digest channel are both watched in prod)."""
+        raw = self.slack_alert_channel or ""
+        return [c.strip() for c in raw.split(",") if c.strip()]
+
     @classmethod
     def from_env(cls) -> "Config":
         _load_dotenv()

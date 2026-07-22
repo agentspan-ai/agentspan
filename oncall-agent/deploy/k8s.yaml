@@ -81,11 +81,11 @@ spec:
               value: http://localhost:6767/api
             - name: CONDUCTOR_SERVER_URL
               value: https://ah5r-prod.orkesconductor.com/api
-            # Digest channel (alert-aggregator): one message per incident,
-            # edited in place with an occurrence counter — flapper dedup for
-            # free. Switch to C04C07WS2AH to poll the raw alert channel.
+            # Comma-separated: raw alert channel + alert-aggregator digest
+            # channel (one message per incident, edited in place with an
+            # occurrence counter — flapper dedup for free).
             - name: SLACK_ALERT_CHANNEL
-              value: C0AU9980PCH
+              value: "C04C07WS2AH,C0AU9980PCH"
             - name: ONCALL_POLL_INTERVAL
               value: "60"
             - name: ONCALL_DRY_RUN

@@ -88,15 +88,26 @@ def _header(cfg: Config) -> str:
     )
 
 
-def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> int:
-    """Process new messages once. Returns the number of alerts triaged."""
-    state_path = Path(cfg.state_file)
-    state = _load_state(state_path)
-    processed = set(state.get("processed") or [])
+def _channel_state(state: dict, channel: str, cfg: Config) -> dict:
+    """Per-channel dedup state, migrating the legacy single-channel shape
+    (top-level last_ts/processed) onto the first configured channel."""
+    channels = state.setdefault("channels", {})
+    if channel not in channels:
+        legacy = {}
+        if channel == cfg.slack_alert_channels[0] and state.get("last_ts"):
+            legacy = {"last_ts": state.get("last_ts"), "processed": state.get("processed") or []}
+        channels[channel] = legacy or {"last_ts": None, "processed": []}
+    return channels[channel]
+
+
+def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
+                  channel: str, state: dict, state_path: Path) -> int:
+    ch_state = _channel_state(state, channel, cfg)
+    processed = set(ch_state.get("processed") or [])
 
     # Slack returns newest-first; process oldest-first so the window advances cleanly.
     messages = slack.read_messages(
-        cfg.slack_alert_channel, oldest=state.get("last_ts") or "0", limit=_POLL_LIMIT
+        channel, oldest=ch_state.get("last_ts") or "0", limit=_POLL_LIMIT
     )
     messages.sort(key=lambda m: float(m["ts"]))
 
@@ -107,26 +118,40 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
             continue
         alert = parse_alert(message_text(msg))
         if alert:
-            log.info("triage exec=%s cluster=%s sev=%s", alert.execution_id, alert.cluster, alert.severity)
+            log.info("triage channel=%s exec=%s cluster=%s sev=%s",
+                     channel, alert.execution_id, alert.cluster, alert.severity)
             slack.post_reply(
-                cfg.slack_alert_channel,
+                channel,
                 ts,
                 f":mag: On-call triage starting for execution `{alert.execution_id}`…",
             )
             try:
                 result = runtime.run(agent, _triage_prompt(alert))
                 summary = summary_text(result)
-                slack.post_reply(cfg.slack_alert_channel, ts, _header(cfg) + summary)
+                slack.post_reply(channel, ts, _header(cfg) + summary)
             except Exception as exc:  # surface into the thread, keep polling
                 log.exception("triage failed")
-                slack.post_reply(cfg.slack_alert_channel, ts, f":warning: Triage failed: `{exc}`")
+                slack.post_reply(channel, ts, f":warning: Triage failed: `{exc}`")
             handled += 1
 
         processed.add(ts)
-        state["processed"] = list(processed)[-500:]  # cap unbounded growth
-        state["last_ts"] = ts
+        ch_state["processed"] = list(processed)[-500:]  # cap unbounded growth
+        ch_state["last_ts"] = ts
         _save_state(state_path, state)
 
+    return handled
+
+
+def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> int:
+    """Process new messages in every configured channel once. Returns alerts triaged."""
+    state_path = Path(cfg.state_file)
+    state = _load_state(state_path)
+    handled = 0
+    for channel in cfg.slack_alert_channels:
+        try:
+            handled += _poll_channel(cfg, slack, runtime, agent, channel, state, state_path)
+        except Exception:  # one bad channel must not starve the other
+            log.exception("poll failed for channel %s", channel)
     return handled
 
 
@@ -136,16 +161,18 @@ def run(cfg: Config | None = None, loop: bool = False, interval: int | None = No
     from .runtime_compat import use_thread_workers_if_needed
 
     use_thread_workers_if_needed()
-    if not cfg.slack_alert_channel:
-        raise SystemExit("SLACK_ALERT_CHANNEL is required (the channel id to poll).")
+    if not cfg.slack_alert_channels:
+        raise SystemExit(
+            "SLACK_ALERT_CHANNEL is required (channel id to poll; comma-separate for several)."
+        )
     interval = interval or cfg.poll_interval
     slack = SlackClient(cfg.slack_bot_token)
 
     with AgentRuntime(server_url=cfg.agentspan_server_url) as runtime:
         agent = build_agent(cfg.model)
         log.info(
-            "on-call agent polling channel=%s (loop=%s, interval=%ss, dry_run=%s, model=%s)",
-            cfg.slack_alert_channel, loop, interval, cfg.dry_run, cfg.model,
+            "on-call agent polling channels=%s (loop=%s, interval=%ss, dry_run=%s, model=%s)",
+            ",".join(cfg.slack_alert_channels), loop, interval, cfg.dry_run, cfg.model,
         )
         if not loop:
             log.info("handled %d alert(s)", run_once(cfg, slack, runtime, agent))
