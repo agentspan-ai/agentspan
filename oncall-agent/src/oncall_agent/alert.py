@@ -30,6 +30,27 @@ _CLUSTER_RE = re.compile(
 _DECORATION = str.maketrans("", "", "*`")
 
 
+def message_text(msg: dict) -> str:
+    """Flatten a Slack message to plain text: top-level ``text`` plus every
+    mrkdwn text inside its blocks.
+
+    The alert-aggregator digest channel puts only a headline in ``text``; the
+    original alert (execution URL included) is quoted inside a section block,
+    and the occurrence counter lives in a context block. Both must reach the
+    parser and the triage prompt.
+    """
+    parts = [msg.get("text") or ""]
+    for block in msg.get("blocks") or []:
+        text = (block.get("text") or {}).get("text")
+        if text:
+            parts.append(text)
+        for el in block.get("elements") or []:
+            el_text = el.get("text")
+            if isinstance(el_text, str) and el_text:
+                parts.append(el_text)
+    return "\n".join(p for p in parts if p)
+
+
 @dataclass
 class Alert:
     execution_id: str
