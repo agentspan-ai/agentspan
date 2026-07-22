@@ -16,7 +16,7 @@ import requests
 from conductor.ai.agents import AgentRuntime
 
 from .agent import build_agent
-from .alert import Alert, parse_alert
+from .alert import Alert, message_text, parse_alert
 from .config import Config
 from .runtime_compat import summary_text
 
@@ -105,7 +105,7 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
         ts = msg["ts"]
         if ts in processed:
             continue
-        alert = parse_alert(msg.get("text", ""))
+        alert = parse_alert(message_text(msg))
         if alert:
             log.info("triage exec=%s cluster=%s sev=%s", alert.execution_id, alert.cluster, alert.severity)
             slack.post_reply(
