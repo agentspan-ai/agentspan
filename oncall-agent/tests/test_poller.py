@@ -28,10 +28,15 @@ class FakeResult:
 
 class DictOutputResult:
     """Mirrors the real AgentRuntime result: ``.output`` is a dict with the
-    agent's text under ``result`` (seen live against the server, 2026-07-22)."""
+    agent's text under ``result`` (seen live against the server, 2026-07-22).
+    The text often leads with narration despite instructions — the posted
+    reply must start at *Issue*:."""
 
     output = {
-        "result": "*Issue*: pod failed\n*Likely root cause*: stale pod from rollout",
+        "result": (
+            "I have all the data I need. Let me compile the summary.\n\n---\n\n"
+            "*Issue*: pod failed\n*Likely root cause*: stale pod from rollout"
+        ),
         "finishReason": "COMPLETED",
         "context": {},
         "rejectionReason": None,
@@ -108,6 +113,9 @@ def test_dict_output_result_posts_summary_text(tmp_path):
     summary = slack.posts[-1][2]
     assert "Likely root cause" in summary
     assert "finishReason" not in summary  # not a dumped dict
+    # LLM preamble before *Issue*: is stripped deterministically (seen twice live).
+    assert "all the data I need" not in summary
+    assert summary.splitlines()[1].startswith("*Issue*:")  # line 0 is the dry-run header
 
 
 def test_triage_failure_is_reported_not_raised(tmp_path):
