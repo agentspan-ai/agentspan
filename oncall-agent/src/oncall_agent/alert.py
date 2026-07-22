@@ -32,7 +32,6 @@ _DECORATION = str.maketrans("", "", "*`")
 
 _URL_RE = re.compile(r"<[^>]*>|https?://\S+")
 _NUMBERISH = re.compile(r"[\d.]+%?")
-_HEXISH = re.compile(r"[0-9a-f]{4,}")
 
 
 def alert_signature(text: str | None) -> str:
@@ -52,7 +51,10 @@ def alert_signature(text: str | None) -> str:
             for w in words
             if w
             and not _NUMBERISH.fullmatch(w)
-            and not (_HEXISH.fullmatch(w) and any(c.isdigit() for c in w))
+            # Mixed digit+letter tokens are identifiers by nature — uuid/hex
+            # fragments, ReplicaSet hashes, and k8s pod suffixes (…-65pkn vs
+            # …-pv6m5 split one incident into two signatures, seen live).
+            and not (any(c.isdigit() for c in w) and any(c.isalpha() for c in w))
         }
     )
     return ",".join(tokens)
