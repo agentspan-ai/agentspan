@@ -251,3 +251,32 @@ def test_signature_retriaged_after_cooldown_expires(tmp_path, monkeypatch):
                        runtime, agent=object())
     assert handled == 1
     assert len(runtime.calls) == 2
+
+
+def test_same_execution_id_across_channels_is_triaged_once(tmp_path):
+    # Live 2026-07-22: the raw channel's TIMED_OUT message and the digest
+    # channel's aggregated message reference the SAME execution — but their
+    # texts tokenize differently, so signature suppression missed the pair.
+    # An execution id, once triaged, must never be triaged again.
+    raw_fmt = (
+        ":x: The health-checking for the cluster *Elementor - elementor-poc* has failed \n"
+        "Failure Status: `TIMED_OUT` \n"
+        "<https://ah5r-prod.orkesconductor.com/execution/ec7eba38-689f-11f1-94b6-de01f12a4ed9>"
+    )
+    digest_fmt = (
+        ":warning: *[WARNING]* *Elementor* · `elementor-poc` — `TIMED_OUT`\n"
+        "&gt;:x: The health-checking for the cluster *Elementor - elementor-poc* has failed\n"
+        "<https://ah5r-prod.orkesconductor.com/execution/ec7eba38-689f-11f1-94b6-de01f12a4ed9|View source>\n"
+        ":repeat: *1* occurrences · Last seen: <!date^1784733716^{time}|x>"
+    )
+    from oncall_agent.alert import alert_signature
+    assert alert_signature(raw_fmt) != alert_signature(digest_fmt)  # precondition of the bug
+
+    slack = MultiChannelSlack({
+        "C1": [{"type": "message", "ts": "1.0", "text": raw_fmt}],
+        "C2": [{"type": "message", "ts": "2.0", "text": digest_fmt}],
+    })
+    runtime = FakeRuntime()
+    handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
+    assert handled == 1
+    assert len(runtime.calls) == 1

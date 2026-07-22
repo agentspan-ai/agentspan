@@ -123,14 +123,23 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             continue
         alert = parse_alert(message_text(msg))
         if alert:
+            now = time.time()
+            # An execution id, once triaged, is never triaged again — the raw
+            # channel and the digest channel carry the SAME execution in texts
+            # that tokenize differently, so the signature layer alone misses
+            # that pair (seen live 2026-07-22).
+            executions = state.setdefault("executions", {})
             sig = alert_signature(message_text(msg))
             signatures = state.setdefault("signatures", {})
-            now = time.time()
             last = signatures.get(sig)
-            if last is not None and (now - last) < _SIGNATURE_COOLDOWN_S:
+            if alert.execution_id in executions or (
+                last is not None and (now - last) < _SIGNATURE_COOLDOWN_S
+            ):
                 log.info(
-                    "skip duplicate signature (triaged %.0fs ago) channel=%s exec=%s",
-                    now - last, channel, alert.execution_id,
+                    "skip duplicate (exec_seen=%s, sig_age=%s) channel=%s exec=%s",
+                    alert.execution_id in executions,
+                    f"{now - last:.0f}s" if last is not None else "none",
+                    channel, alert.execution_id,
                 )
                 processed.add(ts)
                 ch_state["processed"] = list(processed)[-500:]
@@ -138,6 +147,11 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 _save_state(state_path, state)
                 continue
             signatures[sig] = now
+            executions[alert.execution_id] = now
+            if len(executions) > 500:  # keep the newest 500
+                state["executions"] = dict(
+                    sorted(executions.items(), key=lambda kv: kv[1])[-500:]
+                )
             # prune expired entries so the state file stays small
             state["signatures"] = {
                 s: t for s, t in signatures.items() if (now - t) < _SIGNATURE_COOLDOWN_S * 4
