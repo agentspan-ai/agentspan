@@ -2,6 +2,24 @@
 from __future__ import annotations
 
 import platform
+from typing import Any
+
+
+def summary_text(result: Any) -> str:
+    """Extract the agent's final text from an ``AgentRuntime.run`` result.
+
+    The server returns the agent output as a dict
+    ``{"result": <text>, "finishReason": ..., "context": ..., "rejectionReason": ...}``;
+    older SDK builds exposed the text directly on ``result.output``. Accept both.
+    """
+    output = getattr(result, "output", None)
+    if isinstance(output, dict):
+        text = output.get("result")
+        if isinstance(text, str) and text.strip():
+            return text
+    if isinstance(output, str) and output.strip():
+        return output
+    return str(output if output is not None else result)
 
 
 def use_thread_workers_if_needed() -> None:
