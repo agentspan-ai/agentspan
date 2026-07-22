@@ -153,3 +153,19 @@ def test_signature_differs_across_clusters():
     from oncall_agent.alert import alert_signature
 
     assert alert_signature(TIMED_OUT_A1) != alert_signature(TIMED_OUT_OTHER_CLUSTER)
+
+
+def test_signature_ignores_pod_name_suffixes():
+    # Live 2026-07-22: one-staging fired CPU-100% twice, 10 min apart, naming a
+    # DIFFERENT conductor pod each time (…-65pkn vs …-pv6m5). Same incident —
+    # k8s pod suffixes (mixed digit+letter tokens) must not split the signature.
+    from oncall_agent.alert import alert_signature
+
+    a = (":warning: *`[MAJOR]`* ... *`one-staging`* cluster with the following issue:\n"
+         "*MAJOR:* Conductor Server CPU usage is at 100.0% and exceeded the threshold "
+         "of 95.0% - orkes-conductor-deployment-867cf94585-65pkn")
+    b = a.replace("65pkn", "pv6m5")
+    assert alert_signature(a) == alert_signature(b)
+    # ...but a different alert type on the same cluster still differs
+    c = a.replace("CPU usage", "Heap usage")
+    assert alert_signature(a) != alert_signature(c)
