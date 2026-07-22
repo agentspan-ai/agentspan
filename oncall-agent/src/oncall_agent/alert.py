@@ -45,19 +45,25 @@ def alert_signature(text: str | None) -> str:
     """
     cleaned = _URL_RE.sub(" ", text or "")
     words = re.split(r"[^a-z0-9.]+", cleaned.lower())
-    tokens = sorted(
-        {
-            w
-            for w in words
-            if w
-            and not _NUMBERISH.fullmatch(w)
-            # Mixed digit+letter tokens are identifiers by nature — uuid/hex
-            # fragments, ReplicaSet hashes, and k8s pod suffixes (…-65pkn vs
-            # …-pv6m5 split one incident into two signatures, seen live).
-            and not (any(c.isdigit() for c in w) and any(c.isalpha() for c in w))
-        }
-    )
-    return ",".join(tokens)
+    tokens = set()
+    for w in words:
+        if not w or _NUMBERISH.fullmatch(w):
+            continue
+        # Mixed digit+letter tokens are identifiers by nature — uuid/hex
+        # fragments, ReplicaSet hashes, and k8s pod suffixes (…-65pkn vs
+        # …-pv6m5 split one incident into two signatures, seen live).
+        if any(c.isdigit() for c in w) and any(c.isalpha() for c in w):
+            continue
+        # k8s pod suffixes are vowel-free by design (bcdfghjkmnpqrstvwxz…), so
+        # a short vowel-less token is an identifier, not a word (…-pvxjg).
+        if 4 <= len(w) <= 6 and not set(w) & set("aeiou"):
+            continue
+        # "with the following issue:" vs "following 2 issues:" is boilerplate —
+        # the issue COUNT must not split an incident.
+        if w == "issues":
+            w = "issue"
+        tokens.add(w)
+    return ",".join(sorted(tokens))
 
 
 def message_text(msg: dict) -> str:
