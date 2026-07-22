@@ -66,3 +66,17 @@ def test_download_heap_dump_dispatches_expected_command(monkeypatch):
 def test_download_heap_dump_is_in_the_toolset():
     names = {getattr(t, "__name__", None) for t in tools.ALL_TOOLS}
     assert "download_heap_dump" in names
+
+
+def test_download_thread_dump_dispatches_expected_command(monkeypatch):
+    fake = _install(monkeypatch)
+    tools.download_thread_dump("exec", "orkes-conductor-deployment-abc-xyz")
+    command, wf, _, params = fake.calls[-1]
+    assert command == "DOWNLOAD_THREAD_DUMP"
+    assert wf == "download_thread_dump"
+    assert params["podName"] == "orkes-conductor-deployment-abc-xyz"
+
+
+def test_download_thread_dump_is_in_the_toolset():
+    names = {getattr(t, "__name__", None) for t in tools.ALL_TOOLS}
+    assert "download_thread_dump" in names

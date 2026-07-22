@@ -169,6 +169,24 @@ def download_heap_dump(execution_id: str, pod_name: str) -> dict:
 
 
 @tool(timeout_seconds=_T)
+def download_thread_dump(execution_id: str, pod_name: str) -> dict:
+    """Capture a JVM thread dump (jstack) from a pod via ah5r-prod and return where
+    it was stored (``paths``). Cheap and near-instant — the go-to evidence for CPU
+    saturation, hot loops, stuck sweeper threads, and deadlocks.
+
+    Use on the hottest pod when a CPU alert has no obvious cause in the logs;
+    the dump names the busy threads. Prefer this over a heap dump for CPU issues.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: the CPU-hot pod (from get_top_output / the alert text).
+    """
+    return _disp().dispatch(
+        "DOWNLOAD_THREAD_DUMP", "download_thread_dump", _context(execution_id), {"podName": pod_name}
+    )
+
+
+@tool(timeout_seconds=_T)
 def get_top_output(execution_id: str, pod_name: str = "") -> dict:
     """Live CPU/memory usage (kubectl top) for a pod, or all pods if pod_name is empty. Read-only.
 
@@ -242,6 +260,7 @@ ALL_TOOLS = [
     get_pod_events,
     get_top_output,
     download_heap_dump,
+    download_thread_dump,
     pull_pod_logs,
     get_ingress_info,
     run_sql_select,
