@@ -169,3 +169,23 @@ def test_signature_ignores_pod_name_suffixes():
     # ...but a different alert type on the same cluster still differs
     c = a.replace("CPU usage", "Heap usage")
     assert alert_signature(a) != alert_signature(c)
+
+
+def test_signature_stable_across_issue_count_and_letter_only_pod_suffixes():
+    # Live 2026-07-22 (orkes-prod): the same CPU condition fired as a 1-issue
+    # message naming pod …-q9h9d, then as a "following 2 issues" message adding
+    # pod …-pvxjg (an ALL-LETTER k8s suffix — the digit+letter rule misses it).
+    # k8s suffixes are vowel-free by design; issue-count wording is boilerplate.
+    from oncall_agent.alert import alert_signature
+
+    one = (":warning: *`[MAJOR]`* The health-checking has FAILED for the _Orkes's_ prod "
+           "*`orkes-prod`* cluster with the following issue:\n"
+           "*MAJOR:* Conductor Server CPU usage is at 100.0% and exceeded the threshold "
+           "of 95.0% - orkes-conductor-deployment-f749b67d5-q9h9d")
+    two = (":warning: *`[MAJOR]`* The health-checking has FAILED for the _Orkes's_ prod "
+           "*`orkes-prod`* cluster with the following 2 issues:\n"
+           "*MAJOR:* Conductor Server CPU usage is at 100.0% and exceeded the threshold "
+           "of 95.0% - orkes-conductor-deployment-f749b67d5-pvxjg\n"
+           "*MAJOR:* Conductor Server CPU usage is at 97.4% and exceeded the threshold "
+           "of 95.0% - orkes-conductor-deployment-f749b67d5-q9h9d")
+    assert alert_signature(one) == alert_signature(two)
