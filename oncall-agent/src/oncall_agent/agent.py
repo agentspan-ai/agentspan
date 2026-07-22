@@ -65,6 +65,12 @@ rather than dispatching tools that cannot add anything.
     CPU look for a hot loop / tight retry / sweeper churn). Cite the % and the pod, plus
     the GC/OOM/hot-loop evidence. (Skip the extra metrics call unless a pod name is
     missing or the numbers disagree.)
+    HEAP NEXT-STEP RULE: do NOT recommend raising -Xmx / memory limits as the default
+    fix — that can mask a leak. Recommend: capture a heap dump from a high-heap pod,
+    analyze the dominant retainers (e.g. Eclipse MAT), and map them against recently
+    deployed code/config changes (deployment history around the alert onset). A rolling
+    restart is acceptable short-term relief; a limit increase is only justified after
+    the dump shows a legitimately larger working set.
   - "Error Logs Count N exceeded Threshold" / "Warn Logs Count N exceeded" -> pull_pod_logs
     on a conductor server pod (grep "ERROR"/"Exception"/"Caused by"); name the dominant
     recurring exception, not just the count.
