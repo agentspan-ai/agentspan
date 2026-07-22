@@ -128,6 +128,8 @@ Then output a tight, Slack-friendly triage summary (use these exact bold headers
 *Suggested next step*: one action for the engineer to consider (you do NOT execute it).
 
 Keep it short. If a tool returns an error or empty data, say so plainly rather than guessing.
+Your final message is posted to Slack verbatim: it must START with the *Issue*: line —
+no preamble, no narration like "Let me compile the summary".
 """
 
 
