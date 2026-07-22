@@ -124,3 +124,63 @@ def test_triage_failure_is_reported_not_raised(tmp_path):
 
     assert handled == 1
     assert any("Triage failed" in p[2] for p in slack.posts)
+
+
+# ── multi-channel polling ────────────────────────────────────────────────
+# Production watches BOTH the raw alert channel and the aggregator digest
+# channel. SLACK_ALERT_CHANNEL accepts a comma-separated list; dedup state is
+# kept per channel.
+
+
+class MultiChannelSlack:
+    def __init__(self, by_channel):
+        self._by_channel = by_channel
+        self.posts = []  # (channel, thread_ts, text)
+
+    def read_messages(self, channel, oldest="0", limit=20):
+        return list(self._by_channel.get(channel, []))
+
+    def post_reply(self, channel, thread_ts, text):
+        self.posts.append((channel, thread_ts, text))
+
+
+def _cfg_multi(tmp_path) -> Config:
+    return Config(
+        conductor_server_url="x", conductor_key_id="x", conductor_key_secret="x",
+        slack_bot_token="xoxb", slack_alert_channel="C1,C2", poll_interval=300,
+        state_file=str(tmp_path / "state.json"),
+        agentspan_server_url="x", model="m", dry_run=True,
+    )
+
+
+def test_channels_property_splits_and_strips():
+    c = Config(
+        conductor_server_url="x", conductor_key_id="x", conductor_key_secret="x",
+        slack_bot_token="x", slack_alert_channel=" C1, C2 ", poll_interval=1,
+        state_file="s", agentspan_server_url="x", model="m", dry_run=True,
+    )
+    assert c.slack_alert_channels == ["C1", "C2"]
+
+
+def test_both_channels_polled_and_replies_stay_in_their_channel(tmp_path):
+    slack = MultiChannelSlack({
+        "C1": [{"type": "message", "ts": "1.0", "text": ALERT}],
+        "C2": [{"type": "message", "ts": "2.0", "text": ALERT}],
+    })
+    runtime = FakeRuntime()
+    handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
+
+    assert handled == 2
+    channels_posted = {p[0] for p in slack.posts}
+    assert channels_posted == {"C1", "C2"}
+
+
+def test_same_ts_in_different_channels_is_not_cross_deduped(tmp_path):
+    # ts values are per-channel in Slack; identical ts in two channels must both run.
+    slack = MultiChannelSlack({
+        "C1": [{"type": "message", "ts": "5.0", "text": ALERT}],
+        "C2": [{"type": "message", "ts": "5.0", "text": ALERT}],
+    })
+    runtime = FakeRuntime()
+    handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
+    assert handled == 2
