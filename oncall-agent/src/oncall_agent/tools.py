@@ -151,6 +151,24 @@ def get_pod_events(execution_id: str, pod_name: str) -> dict:
 
 
 @tool(timeout_seconds=_T)
+def download_heap_dump(execution_id: str, pod_name: str) -> dict:
+    """Capture a JVM heap dump from ONE pod via ah5r-prod and return where it was
+    stored (``paths``) — the engineer analyzes it (Eclipse MAT) against recent changes.
+
+    HEAVY: jmap pauses the JVM (stop-the-world) for seconds on a multi-GB heap.
+    Use ONLY when the alert itself is heap/memory pressure, on ONLY the single
+    highest-heap pod, at most once per incident. Never dump more than one pod.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: the ONE highest-heap conductor/worker pod (from get_top_output).
+    """
+    return _disp().dispatch(
+        "DOWNLOAD_HEAP_DUMP", "download_heap_dump", _context(execution_id), {"podName": pod_name}
+    )
+
+
+@tool(timeout_seconds=_T)
 def get_top_output(execution_id: str, pod_name: str = "") -> dict:
     """Live CPU/memory usage (kubectl top) for a pod, or all pods if pod_name is empty. Read-only.
 
@@ -223,6 +241,7 @@ ALL_TOOLS = [
     get_deployments_info,
     get_pod_events,
     get_top_output,
+    download_heap_dump,
     pull_pod_logs,
     get_ingress_info,
     run_sql_select,

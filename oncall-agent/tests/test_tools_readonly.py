@@ -29,7 +29,10 @@ MUTATING_COMMANDS = [
     "DEPLOY_DEBUGGER_POD",
     "DEPLOY_MCP_WORKER",
     # heavy / disruptive read commands — out of scope for advisory triage.
-    "DOWNLOAD_HEAP_DUMP",
+    # (DOWNLOAD_HEAP_DUMP was moved to the allowed set by explicit team decision,
+    # 2026-07-22: the agent captures the dump itself for heap alerts — one pod,
+    # once per incident — instead of telling the engineer to. See
+    # tools.download_heap_dump and the playbook HEAP NEXT-STEP RULE.)
     "DOWNLOAD_THREAD_DUMP",
     "DOWNLOAD_ALL_POD_LOGS",
 ]

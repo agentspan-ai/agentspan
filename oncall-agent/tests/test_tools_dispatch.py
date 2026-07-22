@@ -50,3 +50,19 @@ def test_tools_dispatch_expected_commands(monkeypatch):
 def test_get_ingress_info_is_in_the_toolset():
     names = {getattr(t, "__name__", None) for t in tools.ALL_TOOLS}
     assert "get_ingress_info" in names
+
+
+def test_download_heap_dump_dispatches_expected_command(monkeypatch):
+    # Team decision (2026-07-22): the agent captures heap dumps itself via the
+    # ah5r-prod DOWNLOAD_HEAP_DUMP command instead of telling the engineer to.
+    fake = _install(monkeypatch)
+    tools.download_heap_dump("exec", "orkes-conductor-deployment-abc-xyz")
+    command, wf, _, params = fake.calls[-1]
+    assert command == "DOWNLOAD_HEAP_DUMP"
+    assert wf == "download_heap_dump"
+    assert params["podName"] == "orkes-conductor-deployment-abc-xyz"
+
+
+def test_download_heap_dump_is_in_the_toolset():
+    names = {getattr(t, "__name__", None) for t in tools.ALL_TOOLS}
+    assert "download_heap_dump" in names
