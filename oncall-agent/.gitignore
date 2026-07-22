@@ -4,3 +4,4 @@ __pycache__/
 .env
 .pytest_cache/
 *.egg-info/
+eval-report-*.md
