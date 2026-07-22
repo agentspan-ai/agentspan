@@ -135,6 +135,16 @@ rather than dispatching tools that cannot add anything.
     get_cluster_metrics / get_top_output (CPU/heap pressure or pod restarts); if nothing
     obvious, relay the latency and suggest watching for recurrence.
 
+CLOSE THE LOOP before writing the summary: re-read your draft "Suggested next step".
+If it tells the engineer to CHECK / COUNT / VERIFY / LOOK AT something that one of
+your own read-only tools can answer (a bounded SQL SELECT, a log grep, a thread
+dump, pod/queue numbers), DO IT NOW and move the answer into Findings. The final
+next step may contain ONLY actions you cannot take yourself: remediations (delete/
+restart/scale/config), offline analysis (heap dump in MAT), or decisions needing
+business context. If a check is impossible with your tools, say exactly why (e.g.
+"RUNNING workflows live only in Redis; archive tables are empty on this cluster")
+instead of delegating it as if it were possible.
+
 Then output a tight, Slack-friendly triage summary (use these exact bold headers):
 *Issue*: the alert in one line.
 *Findings*: 2-4 bullets of concrete evidence (numbers, log snippets, pod names).
