@@ -60,3 +60,59 @@ def test_dispatch_routes_customer_tasks_to_cluster_domain():
     # command + params land in agentHandlerRequest
     assert req.input["agentHandlerRequest"]["command"] == "GET_PODS_DATA"
     assert req.input["cloudEnvironmentTag"] == "corg12-viz-stage"
+
+
+# ── transport recovery (live failure 2026-07-23) ────────────────────────
+# A transient network blip left conductor-python's client with a dead socket
+# ("Bad file descriptor") and a poisoned auth token; every retry reused the
+# broken client and the poll loop wedged for hours. The dispatcher must
+# rebuild its client and retry once on a failed call.
+
+
+class _BrokenWF:
+    def get_workflow(self, *a, **k):
+        raise OSError(9, "Bad file descriptor")
+
+    def start_workflow(self, *a, **k):
+        raise OSError(9, "Bad file descriptor")
+
+    def search(self, *a, **k):
+        raise OSError(9, "Bad file descriptor")
+
+
+class _FlakyFactory:
+    """First build returns a dead client; later builds return a healthy fake."""
+
+    def __init__(self, good):
+        self.builds = 0
+        self._good = good
+
+    def __call__(self):
+        self.builds += 1
+        return _BrokenWF() if self.builds == 1 else self._good
+
+
+def test_dispatcher_rebuilds_client_after_transport_failure():
+    good = FakeWF({"organizationId": "0123456789", "clusterName": "c1"})
+    factory = _FlakyFactory(good)
+    d = ConductorDispatcher("url", "k", "s", client_factory=factory)
+
+    ctx = d.get_context("exec-1")
+
+    assert ctx["organizationId"] == "0123456789"
+    assert factory.builds == 2  # broken client replaced exactly once
+
+
+def test_dispatcher_raises_when_rebuild_also_fails():
+    import pytest
+
+    class _AlwaysBroken:
+        builds = 0
+
+        def __call__(self):
+            self.builds += 1
+            return _BrokenWF()
+
+    d = ConductorDispatcher("url", "k", "s", client_factory=_AlwaysBroken())
+    with pytest.raises(OSError):
+        d.get_context("exec-1")
