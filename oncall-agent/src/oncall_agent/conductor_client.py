@@ -12,9 +12,10 @@ The agent-handler workflows self-bootstrap the customer-cluster JWT via their fi
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
-from typing import Any
+from typing import Any, Callable
 
 from conductor.client.configuration.configuration import Configuration
 from conductor.client.configuration.settings.authentication_settings import (
@@ -54,19 +55,50 @@ def _trim(value: Any, max_len: int = 8000) -> Any:
     return value
 
 
+log = logging.getLogger("oncall_agent")
+
+
 class ConductorDispatcher:
-    def __init__(self, server_url: str, key_id: str, key_secret: str):
-        config = Configuration(
-            server_api_url=server_url,
-            authentication_settings=AuthenticationSettings(
-                key_id=key_id, key_secret=key_secret
-            ),
-        )
-        self._wf = OrkesClients(configuration=config).get_workflow_client()
+    def __init__(
+        self,
+        server_url: str,
+        key_id: str,
+        key_secret: str,
+        client_factory: Callable[[], Any] | None = None,
+    ):
+        def _default_factory():
+            config = Configuration(
+                server_api_url=server_url,
+                authentication_settings=AuthenticationSettings(
+                    key_id=key_id, key_secret=key_secret
+                ),
+            )
+            return OrkesClients(configuration=config).get_workflow_client()
+
+        self._make_client = client_factory or _default_factory
+        self._wf = self._make_client()
+
+    def _call(self, op: Callable[[], Any]) -> Any:
+        """Run *op*; on failure rebuild the client once and retry.
+
+        A transient network blip can leave conductor-python's shared httpx
+        client with a dead socket ("Bad file descriptor") and a poisoned auth
+        token — every retry then reuses the broken client and the poll loop
+        wedges (seen live 2026-07-23, ~4h stall). A fresh client gets a fresh
+        pool and a fresh token exchange.
+        """
+        try:
+            return op()
+        except Exception as exc:
+            log.warning("conductor call failed (%s) — rebuilding client and retrying", exc)
+            self._wf = self._make_client()
+            return op()
 
     # ── reads ────────────────────────────────────────────────
     def get_execution(self, workflow_id: str) -> dict:
-        return self._summarize(self._wf.get_workflow(workflow_id, include_tasks=True))
+        return self._summarize(
+            self._call(lambda: self._wf.get_workflow(workflow_id, include_tasks=True))
+        )
 
     def get_context(self, execution_id: str) -> dict:
         """Org / cluster / cloudEnvironmentTag read off a health_check execution input.
@@ -76,7 +108,7 @@ class ConductorDispatcher:
         so derive it from the documented formula when absent:
         ``c`` + organizationId[:5] + ``-`` + clusterName.
         """
-        wf = self._wf.get_workflow(execution_id, include_tasks=False)
+        wf = self._call(lambda: self._wf.get_workflow(execution_id, include_tasks=False))
         wf_input = getattr(wf, "input", None) or {}
         org_id = wf_input.get("organizationId") or wf_input.get("customerId")
         cluster_name = wf_input.get("clusterName")
@@ -106,12 +138,12 @@ class ConductorDispatcher:
         ``size`` caps the window (default 100 ~= last 8h at the 5-min cadence);
         the search index is retention-bound to a few days regardless.
         """
-        result = self._wf.search(
+        result = self._call(lambda: self._wf.search(
             start=0,
             size=size,
             free_text=cluster_id,
             query="workflowType IN (health_check)",
-        )
+        ))
         runs: list[dict] = []
         for s in getattr(result, "results", None) or []:
             runs.append(
@@ -170,13 +202,13 @@ class ConductorDispatcher:
             correlation_id=customer_domain,
             task_to_domain=task_to_domain,
         )
-        wf_id = self._wf.start_workflow(request)
+        wf_id = self._call(lambda: self._wf.start_workflow(request))
         return self._poll(wf_id, timeout_s, poll_s)
 
     def _poll(self, wf_id: str, timeout_s: int, poll_s: int) -> dict:
         deadline = time.time() + timeout_s
         while True:
-            wf = self._wf.get_workflow(wf_id, include_tasks=True)
+            wf = self._call(lambda: self._wf.get_workflow(wf_id, include_tasks=True))
             if getattr(wf, "status", None) in _TERMINAL or time.time() >= deadline:
                 return self._summarize(wf)
             time.sleep(poll_s)
