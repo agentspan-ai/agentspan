@@ -156,6 +156,11 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             state["signatures"] = {
                 s: t for s, t in signatures.items() if (now - t) < _SIGNATURE_COOLDOWN_S * 4
             }
+            # Persist the arm BEFORE the multi-minute triage: an exception that
+            # escapes mid-triage (e.g. a failed Slack post) is absorbed by the
+            # per-channel guard and would otherwise discard the in-memory arm —
+            # later firings of the same incident then re-triage (seen live).
+            _save_state(state_path, state)
             log.info("triage channel=%s exec=%s cluster=%s sev=%s",
                      channel, alert.execution_id, alert.cluster, alert.severity)
             slack.post_reply(

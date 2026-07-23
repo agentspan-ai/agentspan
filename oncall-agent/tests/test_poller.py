@@ -280,3 +280,26 @@ def test_same_execution_id_across_channels_is_triaged_once(tmp_path):
     handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
     assert handled == 1
     assert len(runtime.calls) == 1
+
+
+def test_signature_arm_is_persisted_before_the_triage_runs(tmp_path):
+    """Live 2026-07-23: an exception escaping mid-triage (e.g. a failed Slack
+    post) was absorbed by the per-channel guard AFTER the in-memory signature/
+    execution arm but BEFORE the save — the arm was lost and later firings of
+    the same incident re-triaged. The arm must hit disk before the LLM runs."""
+    import json
+
+    cfg = _cfg(tmp_path)
+
+    class CrashingSlack(FakeSlack):
+        def post_reply(self, channel, thread_ts, text):
+            raise RuntimeError("slack hiccup")  # crashes on the ':mag:' post
+
+    runtime = FakeRuntime()
+    handled = run_once(cfg, CrashingSlack([{"type": "message", "ts": "2.0", "text": ALERT}]),
+                       runtime, agent=object())
+
+    assert handled == 0            # the triage never completed
+    state = json.loads(open(cfg.state_file).read())
+    assert state.get("signatures"), "signature arm must be persisted pre-triage"
+    assert "364b459a-689f-11f1-94b6-de01f12a4ed9" in state.get("executions", {})
