@@ -66,6 +66,28 @@ def alert_signature(text: str | None) -> str:
     return ",".join(sorted(tokens))
 
 
+_QUOTE_MARKER = "&gt;"
+
+
+def signable_text(text: str) -> str:
+    """The portion of a message that identifies the INCIDENT, for signatures.
+
+    Digest messages wrap the original alert in a headline and an occurrence
+    counter — those tokens made the digest form of an incident sign differently
+    from its raw-channel form, defeating cross-channel dedup and incident
+    memory (seen live 2026-07-24). When a Slack blockquote marker is present,
+    sign only the quoted original; raw messages pass through unchanged.
+    """
+    if _QUOTE_MARKER not in (text or ""):
+        return text or ""
+    quoted = text[text.index(_QUOTE_MARKER):]
+    # keep quoted lines and their continuation lines; strip the quote markers
+    lines = [l[len(_QUOTE_MARKER):] if l.startswith(_QUOTE_MARKER) else l
+             for l in quoted.splitlines()]
+    # drop the digest's trailing occurrence-counter line if present
+    return "\n".join(l for l in lines if "occurrences" not in l)
+
+
 def message_text(msg: dict) -> str:
     """Flatten a Slack message to plain text: top-level ``text`` plus every
     mrkdwn text inside its blocks.

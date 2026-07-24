@@ -17,7 +17,7 @@ import requests
 from conductor.ai.agents import AgentRuntime
 
 from .agent import build_agent
-from .alert import Alert, alert_signature, message_text, parse_alert
+from .alert import Alert, alert_signature, message_text, parse_alert, signable_text
 from .config import Config
 from .runtime_compat import summary_text
 
@@ -169,7 +169,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             # that tokenize differently, so the signature layer alone misses
             # that pair (seen live 2026-07-22).
             executions = state.setdefault("executions", {})
-            sig = alert_signature(message_text(msg))
+            sig = alert_signature(signable_text(message_text(msg)))
             signatures = state.setdefault("signatures", {})
             last = signatures.get(sig)
             if alert.execution_id in executions or (
