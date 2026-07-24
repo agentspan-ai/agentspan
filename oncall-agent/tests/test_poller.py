@@ -238,7 +238,10 @@ def test_different_signature_is_triaged(tmp_path):
     assert len(runtime.calls) == 2
 
 
-def test_signature_retriaged_after_cooldown_expires(tmp_path, monkeypatch):
+def test_signature_handled_after_cooldown_expires(tmp_path, monkeypatch):
+    # After cooldown expiry the firing is handled again — via incident memory
+    # (deterministic update, no second LLM run); the full re-triage cadence is
+    # covered by test_full_retriage_after_interval_includes_prior_diagnosis.
     import oncall_agent.slack_app as app
 
     cfg = _cfg(tmp_path)
@@ -247,10 +250,11 @@ def test_signature_retriaged_after_cooldown_expires(tmp_path, monkeypatch):
     monkeypatch.setattr(app.time, "time", lambda: clock["now"])
     run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]), runtime, agent=object())
     clock["now"] += app._SIGNATURE_COOLDOWN_S + 1
-    handled = run_once(cfg, FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}]),
-                       runtime, agent=object())
+    slack2 = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}])
+    handled = run_once(cfg, slack2, runtime, agent=object())
     assert handled == 1
-    assert len(runtime.calls) == 2
+    assert len(runtime.calls) == 1          # memory answered; no second LLM run
+    assert slack2.posts                      # the thread still got an update
 
 
 def test_same_execution_id_across_channels_is_triaged_once(tmp_path):
@@ -303,3 +307,71 @@ def test_signature_arm_is_persisted_before_the_triage_runs(tmp_path):
     state = json.loads(open(cfg.state_file).read())
     assert state.get("signatures"), "signature arm must be persisted pre-triage"
     assert "364b459a-689f-11f1-94b6-de01f12a4ed9" in state.get("executions", {})
+
+
+# ── incident memory (token burn on repeat firings) ──────────────────────
+# Manan's review (2026-07-24): every repeat firing of a known incident burned
+# a full LLM triage. Now: the first firing runs the full triage and its root
+# cause is remembered per signature; repeat firings within
+# ONCALL_FULL_TRIAGE_INTERVAL get a deterministic in-thread update built from
+# memory (no LLM); a full re-triage runs only after the interval expires, with
+# the prior diagnosis included in the prompt.
+
+MEMORY_RESULT = (
+    "*Issue*: CPU pinned\n*Findings*:\n- stuff\n"
+    "*Likely root cause*: sweeper timeout storm against stale peer IPs\n"
+    "*Suggested next step*: rolling restart"
+)
+
+
+class MemoryRuntime:
+    def __init__(self):
+        self.calls = []
+
+    def run(self, agent, prompt):
+        self.calls.append(prompt)
+        class _R:
+            output = {"result": MEMORY_RESULT, "finishReason": "COMPLETED",
+                      "context": {}, "rejectionReason": None}
+        return _R()
+
+
+def test_repeat_firing_within_interval_replies_from_memory_without_llm(tmp_path, monkeypatch):
+    import oncall_agent.slack_app as app
+
+    cfg = _cfg(tmp_path)
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(app.time, "time", lambda: clock["now"])
+    runtime = MemoryRuntime()
+
+    first = run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]),
+                     runtime, agent=object())
+    assert first == 1 and len(runtime.calls) == 1
+
+    clock["now"] += app._SIGNATURE_COOLDOWN_S + 1  # cooldown expired, interval not
+    slack2 = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}])
+    second = run_once(cfg, slack2, runtime, agent=object())
+
+    assert len(runtime.calls) == 1          # NO new LLM run
+    assert second == 1                       # but the firing was handled
+    update = slack2.posts[-1][2]
+    assert "sweeper timeout storm against stale peer IPs" in update  # prior diagnosis
+    assert "no new investigation" in update.lower()
+
+
+def test_full_retriage_after_interval_includes_prior_diagnosis(tmp_path, monkeypatch):
+    import oncall_agent.slack_app as app
+
+    cfg = _cfg(tmp_path)
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(app.time, "time", lambda: clock["now"])
+    runtime = MemoryRuntime()
+
+    run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]),
+             runtime, agent=object())
+    clock["now"] += app._FULL_TRIAGE_INTERVAL_S + 1
+    run_once(cfg, FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}]),
+             runtime, agent=object())
+
+    assert len(runtime.calls) == 2           # full re-triage ran
+    assert "sweeper timeout storm" in runtime.calls[1]  # prompt carries prior diagnosis
