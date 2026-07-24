@@ -28,6 +28,11 @@ _POLL_LIMIT = 20
 # the same incident every ~5 min with a fresh execution id; without this, each
 # firing got a full LLM triage (seen live: 4x shailesh-test-gcp in <1h).
 _SIGNATURE_COOLDOWN_S = int(os.environ.get("ONCALL_SIGNATURE_COOLDOWN", "3600"))
+# Incident memory: between full triages, repeat firings get a deterministic
+# in-thread update built from the remembered diagnosis — zero LLM tokens. A
+# full re-investigation runs only this often (or when the signature changes,
+# e.g. severity escalation / new issue set, which bypasses memory by design).
+_FULL_TRIAGE_INTERVAL_S = int(os.environ.get("ONCALL_FULL_TRIAGE_INTERVAL", "21600"))
 
 
 class SlackClient:
@@ -76,12 +81,47 @@ def _save_state(path: Path, state: dict) -> None:
     path.write_text(json.dumps(state, indent=2))
 
 
-def _triage_prompt(alert: Alert) -> str:
-    return (
+def _triage_prompt(alert: Alert, prior: dict | None = None) -> str:
+    prompt = (
         "A cluster health-check alert fired.\n\n"
         f"Alert text:\n{alert.raw}\n\n"
         f"The failing health_check execution id is: {alert.execution_id}\n"
-        "Investigate (read-only) and produce the triage summary."
+    )
+    if prior:
+        age_h = (time.time() - prior.get("last_full_ts", 0)) / 3600
+        prompt += (
+            f"\nPRIOR DIAGNOSIS from your last full investigation (~{age_h:.0f}h ago, "
+            f"{prior.get('firings', 1)} firings since first seen):\n{prior.get('summary', '')}\n\n"
+            "VERIFY whether this diagnosis still holds and report the DELTA (metrics "
+            "moved? new failure mode?) rather than rediscovering from scratch — keep "
+            "the investigation to the few reads that confirm or refute it.\n"
+        )
+    prompt += "Investigate (read-only) and produce the triage summary."
+    return prompt
+
+
+def _root_cause_excerpt(summary: str, limit: int = 700) -> str:
+    """The *Likely root cause* section of a triage summary, for incident memory."""
+    marker = summary.find("*Likely root cause*")
+    if marker < 0:
+        return summary[:limit]
+    end = summary.find("*Suggested next step*", marker)
+    excerpt = summary[marker : end if end > 0 else None].strip()
+    return excerpt[:limit]
+
+
+def _memory_update_text(cfg: Config, prior: dict, now: float) -> str:
+    age_h = (now - prior.get("last_full_ts", now)) / 3600
+    first_h = (now - prior.get("first_seen", now)) / 3600
+    return (
+        f"{_header(cfg)}"
+        f":brain: *Known ongoing incident* — same signature as the diagnosis from "
+        f"~{age_h:.1f}h ago ({prior.get('firings', 1)} firings over ~{first_h:.1f}h). "
+        f"Reply built from incident memory; no new investigation was run.\n\n"
+        f"{prior.get('summary', '')}\n\n"
+        f"_Next full re-investigation after "
+        f"{_FULL_TRIAGE_INTERVAL_S // 3600}h, or immediately if the alert changes "
+        f"(severity / issue set)._"
     )
 
 
@@ -161,6 +201,23 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             # per-channel guard and would otherwise discard the in-memory arm —
             # later firings of the same incident then re-triage (seen live).
             _save_state(state_path, state)
+
+            # Incident memory: a known ongoing incident gets a deterministic
+            # update from the remembered diagnosis — no LLM tokens burned.
+            incidents = state.setdefault("incidents", {})
+            prior = incidents.get(sig)
+            if prior and (now - prior.get("last_full_ts", 0)) < _FULL_TRIAGE_INTERVAL_S:
+                log.info("memory update (no LLM) channel=%s exec=%s firings=%d",
+                         channel, alert.execution_id, prior.get("firings", 0) + 1)
+                prior["firings"] = prior.get("firings", 1) + 1
+                slack.post_reply(channel, ts, _memory_update_text(cfg, prior, now))
+                handled += 1
+                processed.add(ts)
+                ch_state["processed"] = list(processed)[-500:]
+                ch_state["last_ts"] = ts
+                _save_state(state_path, state)
+                continue
+
             log.info("triage channel=%s exec=%s cluster=%s sev=%s",
                      channel, alert.execution_id, alert.cluster, alert.severity)
             slack.post_reply(
@@ -169,9 +226,19 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 f":mag: On-call triage starting for execution `{alert.execution_id}`…",
             )
             try:
-                result = runtime.run(agent, _triage_prompt(alert))
+                result = runtime.run(agent, _triage_prompt(alert, prior))
                 summary = summary_text(result)
                 slack.post_reply(channel, ts, _header(cfg) + summary)
+                incidents[sig] = {
+                    "summary": _root_cause_excerpt(summary),
+                    "last_full_ts": now,
+                    "first_seen": (prior or {}).get("first_seen", now),
+                    "firings": (prior or {}).get("firings", 0) + 1,
+                }
+                if len(incidents) > 200:  # keep the most recently investigated
+                    state["incidents"] = dict(
+                        sorted(incidents.items(), key=lambda kv: kv[1]["last_full_ts"])[-200:]
+                    )
             except Exception as exc:  # surface into the thread, keep polling
                 log.exception("triage failed")
                 slack.post_reply(channel, ts, f":warning: Triage failed: `{exc}`")
