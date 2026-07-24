@@ -189,3 +189,23 @@ def test_signature_stable_across_issue_count_and_letter_only_pod_suffixes():
            "*MAJOR:* Conductor Server CPU usage is at 97.4% and exceeded the threshold "
            "of 95.0% - orkes-conductor-deployment-f749b67d5-q9h9d")
     assert alert_signature(one) == alert_signature(two)
+
+
+def test_digest_and_raw_forms_share_a_signature():
+    # Live 2026-07-24: endpoint-dev's memory was seeded from the raw-channel
+    # form, then the digest form of the SAME incident signed differently (the
+    # aggregator adds headline/occurrence tokens) and bought a duplicate full
+    # triage. Signatures must be computed on the quoted original alert only.
+    from oncall_agent.alert import alert_signature, message_text, signable_text
+
+    raw = (
+        ":warning: *`[MAJOR]`* The health-checking has FAILED for the _At-Bay's_ "
+        "prod *`atbay-production`* cluster with the following issue:\n"
+        "*MAJOR:* Conductor Server Heap usage is at 91.2% and exceeded the threshold "
+        "of 90.0% - orkes-conductor-deployment-cf64b9448-g5czb\n"
+        "<https://ah5r-prod.orkesconductor.com/execution/933967a4-85d1-11f1-ba93-96986d0e24f0>"
+    )
+    digest_flat = message_text(DIGEST_MSG)  # same incident, digest wrapper
+    assert alert_signature(signable_text(digest_flat)) == alert_signature(signable_text(raw))
+    # and a raw message without any quote marker is passed through unchanged
+    assert signable_text(raw) == raw
