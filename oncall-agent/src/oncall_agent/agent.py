@@ -70,10 +70,17 @@ rather than dispatching tools that cannot add anything.
     CPU look for a hot loop / tight retry / sweeper churn). Cite the % and the pod, plus
     the GC/OOM/hot-loop evidence. (Skip the extra metrics call unless a pod name is
     missing or the numbers disagree.)
-    CPU EVIDENCE RULE: when a CPU alert's cause isn't obvious from the logs, capture a
-    thread dump yourself — download_thread_dump(execution_id, hottest pod). It is cheap
-    (jstack); include the returned dump paths in your summary so the engineer can see
-    exactly which threads are hot (sweeper churn, tight retry, deadlock).
+    CPU EVIDENCE RULE — an empty ERROR grep is NOT the end of the log trail. CPU
+    saturation usually logs at INFO, not ERROR: sweeper churn ("Running sweeper for
+    workflow", "DeciderService", "Task timed out after"), retry storms, S3 aborts,
+    broken pipes. When grep ERROR/Exception returns empty on a CPU alert you MUST
+    (a) pull an UNFILTERED tail (lines=300) of the hottest pod and characterise the
+    DOMINANT line pattern by volume — "290 of 300 lines are sweeper iterations" is
+    hard evidence of what the process is busy doing; and (b) grep the INFO markers
+    above. Only after that, capture a thread dump — download_thread_dump(execution_id,
+    hottest pod) — and include the dump paths so the engineer can confirm the hot
+    threads. NEVER attribute CPU to the decider backlog on the queue number alone;
+    cite the log-volume evidence or say plainly that the logs did not confirm it.
     HEAP NEXT-STEP RULE: do NOT recommend raising -Xmx / memory limits as the default
     fix — that can mask a leak. For heap/memory alerts, CAPTURE THE DUMP YOURSELF:
     call download_heap_dump(execution_id, pod) on the ONE highest-heap pod (from
