@@ -131,3 +131,18 @@ def test_all_numbers_signature_is_no_match():
     runs = [_run(CPU % 97, i * _H) for i in range(5)]
     rep = summarize_recurrence(runs, "99.7%")
     assert rep.verdict == "NO_PRIOR_MATCH"
+
+
+def test_report_carries_failing_checks_denominator():
+    # Manan's review (2026-07-24): "fired 11 of the last 100 checks (11%)"
+    # counts against ALL runs, most of which pass — the meaningful ratio is
+    # against the checks that FAILED. 85 clean + 15 failing (11 of them this
+    # signature) must report 11/15 of failures, not just 11/100 of runs.
+    runs = [_run("", i * _H) for i in range(85)]
+    runs += [_run(CPU % 97, (100 + i) * _H) for i in range(11)]
+    runs += [_run(REDIS, (200 + i) * _H) for i in range(4)]
+    rep = summarize_recurrence(runs, "Conductor Server CPU usage")
+    assert rep.failing_count == 15
+    assert rep.matched_count == 11
+    assert abs(rep.fraction_of_failing - 11 / 15) < 1e-9
+    assert "11 of the 15 failing" in rep.summary
