@@ -53,7 +53,9 @@ class RecurrenceReport:
     chronic: bool
     matched_count: int
     sample_size: int
+    failing_count: int  # runs in the window that failed with ANY alert
     fraction: float  # matched / sample_size
+    fraction_of_failing: float  # matched / failing_count — the on-call ratio
     first_seen_ms: int | None  # earliest matched start_time IN THE WINDOW
     last_seen_ms: int | None
     span_hours: float  # last_seen - first_seen, in hours
@@ -66,7 +68,9 @@ class RecurrenceReport:
             "chronic": self.chronic,
             "matchedCount": self.matched_count,
             "sampleSize": self.sample_size,
+            "failingCount": self.failing_count,
             "firedFraction": round(self.fraction, 3),
+            "fractionOfFailingChecks": round(self.fraction_of_failing, 3),
             "firstSeenMsInWindow": self.first_seen_ms,
             "lastSeenMsInWindow": self.last_seen_ms,
             "spanHours": round(self.span_hours, 1),
@@ -109,6 +113,8 @@ def summarize_recurrence(runs: list[dict], alert_signature: str) -> RecurrenceRe
     ]
     matched_count = len(matched)
     fraction = (matched_count / sample_size) if sample_size else 0.0
+    failing_count = sum(1 for r in runs if str(r.get("reason") or "").strip())
+    fraction_of_failing = (matched_count / failing_count) if failing_count else 0.0
 
     stamps = [ms for r in matched if (ms := _to_ms(r.get("start_time"))) is not None]
     first_seen = min(stamps) if stamps else None
@@ -144,8 +150,9 @@ def summarize_recurrence(runs: list[dict], alert_signature: str) -> RecurrenceRe
         kind = "CHRONIC/standing" if chronic else "recurring/intermittent"
         summary = (
             f"{kind.upper()}: fired on {matched_count} of the last {sample_size} "
-            f"health-checks ({fraction:.0%}), spanning ~{span_hours:.0f}h within the "
-            f"search window — this is NOT a fresh incident."
+            f"health-checks — and {matched_count} of the {failing_count} failing "
+            f"checks ({fraction_of_failing:.0%} of failures) — spanning "
+            f"~{span_hours:.0f}h within the search window. NOT a fresh incident."
         )
     else:
         summary = (
@@ -158,7 +165,9 @@ def summarize_recurrence(runs: list[dict], alert_signature: str) -> RecurrenceRe
         chronic=chronic,
         matched_count=matched_count,
         sample_size=sample_size,
+        failing_count=failing_count,
         fraction=fraction,
+        fraction_of_failing=fraction_of_failing,
         first_seen_ms=first_seen,
         last_seen_ms=last_seen,
         span_hours=span_hours,
