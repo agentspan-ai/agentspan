@@ -107,11 +107,20 @@ class ConductorDispatcher:
         ``prepare_agent_handler`` task), but ``sql_conductor`` reads it from the input,
         so derive it from the documented formula when absent:
         ``c`` + organizationId[:5] + ``-`` + clusterName.
+
+        ``clusterName`` is not always top-level either: some health_check schedulers
+        (all of Twilio's, seen live 2026-07-27) pass it only inside
+        ``agentHandlerRequest``. It is load-bearing — ``dispatch`` builds the agent
+        routing domain from it — so fall back to the nested copy rather than routing
+        to ``<org>#-#None``, where nothing polls and every tool comes back empty.
         """
         wf = self._call(lambda: self._wf.get_workflow(execution_id, include_tasks=False))
         wf_input = getattr(wf, "input", None) or {}
+        handler_request = wf_input.get("agentHandlerRequest") or {}
+        if not isinstance(handler_request, dict):
+            handler_request = {}
         org_id = wf_input.get("organizationId") or wf_input.get("customerId")
-        cluster_name = wf_input.get("clusterName")
+        cluster_name = wf_input.get("clusterName") or handler_request.get("clusterName")
         cloud_env_tag = wf_input.get("cloudEnvironmentTag")
         if not cloud_env_tag and org_id and cluster_name:
             cloud_env_tag = f"c{org_id[:5]}-{cluster_name}"

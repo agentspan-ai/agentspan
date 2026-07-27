@@ -62,6 +62,47 @@ def test_dispatch_routes_customer_tasks_to_cluster_domain():
     assert req.input["cloudEnvironmentTag"] == "corg12-viz-stage"
 
 
+# ── nested cluster identity (live failure 2026-07-27) ───────────────────
+# Twilio's health_check schedulers pass ONLY organizationId at the top level and
+# put the cluster under agentHandlerRequest.clusterName (Ocean's scheduler passes
+# clusterName/clusterId top-level, which is why it never showed up before).
+# Reading only the top level left clusterName None -> the routing domain became
+# "<org>#-#None", prepare_agent_handler FAILED, every tool returned nothing, and
+# the triage invented a root cause ("cluster deregistered") from the null ids.
+
+_TWILIO_INPUT = {
+    "organizationId": "3590779c-c02f-4c82-b26d-2176504fd4fa",
+    "agentHandlerRequest": {"clusterName": "twilio-non-prod-us", "command": "HEALTH_CHECK"},
+}
+
+
+def test_cluster_name_read_from_agent_handler_request():
+    ctx = _dispatcher(_TWILIO_INPUT).get_context("exec")
+    assert ctx["clusterName"] == "twilio-non-prod-us"
+    assert ctx["cloudEnvironmentTag"] == "c35907-twilio-non-prod-us"
+
+
+def test_top_level_cluster_name_wins_over_nested():
+    d = _dispatcher(
+        {
+            "organizationId": "org123",
+            "clusterName": "top-level",
+            "agentHandlerRequest": {"clusterName": "nested"},
+        }
+    )
+    assert d.get_context("exec")["clusterName"] == "top-level"
+
+
+def test_nested_cluster_name_routes_to_the_agent_domain():
+    d = _dispatcher(_TWILIO_INPUT)
+    d.dispatch("GET_PODS_DATA", "get_pods_data", d.get_context("exec"), timeout_s=1, poll_s=0)
+
+    req = d._wf.started[-1]
+    org = "3590779c-c02f-4c82-b26d-2176504fd4fa"
+    assert req.task_to_domain["*"] == f"{org}#-#twilio-non-prod-us"
+    assert "None" not in req.task_to_domain["*"]
+
+
 # ── transport recovery (live failure 2026-07-23) ────────────────────────
 # A transient network blip left conductor-python's client with a dead socket
 # ("Bad file descriptor") and a poisoned auth token; every retry reused the
