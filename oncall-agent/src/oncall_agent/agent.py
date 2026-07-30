@@ -156,6 +156,31 @@ rather than dispatching tools that cannot add anything.
     cloud-API access must check the agent pod (phase, restarts, logs, outbound
     network to ah5r-prod).
 
+HARD-LEARNED RULES (auditboard-prod outage, 2026-07-30 — 8.5h; the first triage called it
+"a transient GC pause" from a single execution and was wrong):
+1. NEVER diagnose from one execution. Fetch the previous 3+ runs of the SAME health check
+   (get_alert_recurrence / prior executions). "Transient" requires the previous run green
+   AND the next run recovered; an INVARIANT failure signature across runs is a persistent
+   incident — never a GC pause, never "transient".
+2. "Conductor has failed" + all pods Running/0 restarts -> suspect the SERVING PATH, not
+   the JVM. External traffic rides svc `conductor`:5000 (UI front-end), NOT
+   `conductor-app`:8080 (API). Probe BOTH if a reachability tool exists; :8080 healthy
+   with :5000 hanging = front-end wedge — report that layer. High heap (even 85%+) with a
+   responsive :8080 is NOT evidence of a GC-pause root cause for a persistent outage.
+3. Restarts DESTROY evidence and, mid-incident, often fix nothing (both restarts that day
+   were provably no-ops). Before any restart recommendation, tell the human to capture:
+   `kubectl get events -A` (1h TTL), `kill -3 1` on a wedged pod (stack of the hung
+   process), and LIVE ingress-nginx controller logs for the host (they rotate away in
+   minutes at production volume).
+4. If the human already restarted once and the same signature persists: that is the
+   retry-storm re-wedge pattern — hours of piled-up client retries bury each fresh pod
+   at readiness. Do NOT recommend another plain restart; recommend shedding pressure
+   first (ingress rate-limit / scale the deployment UP so fresh pods split the herd /
+   pause the worker fleet briefly), then restart once.
+5. Always report scheduling headroom when pods churn: FailedScheduling events and
+   "0/N nodes available" mean every restart is a risk multiplier on that cluster —
+   surface it even when it is not the root cause.
+
 CLOSE THE LOOP before writing the summary: re-read your draft "Suggested next step".
 If it tells the engineer to CHECK / COUNT / VERIFY / LOOK AT something that one of
 your own read-only tools can answer (a bounded SQL SELECT, a log grep, a thread
