@@ -1,7 +1,9 @@
 """Deterministic tests for the Slack poll loop — fakes for Slack + the agent runtime,
 no network and no LLM."""
+import json
 import threading
 import time
+from pathlib import Path
 
 from oncall_agent import slack_app
 from oncall_agent.config import Config
@@ -464,3 +466,52 @@ def test_deadline_passed_through_to_the_runtime(tmp_path, monkeypatch):
     slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
     run_once(_cfg(tmp_path), slack, RecordingRuntime(), agent=object())
     assert seen.get("timeout") == 77
+
+
+# ── non-COMPLETED executions ─────────────────────────────────────────────
+# runtime.run() returns normally when the execution FAILED or was TERMINATED;
+# only the .status says so. summary_text() then falls through to str(output).
+# Seen live: terminating the 59h-wedged execution by hand made the loop post
+# "{'result': None, 'finishReason': 'TOOL_CALLS', ...}" into a prod thread and
+# store it in incident memory as that incident's diagnosis.
+
+
+class TerminatedResult:
+    output = {
+        "result": None,
+        "finishReason": "TOOL_CALLS",
+        "context": {},
+        "rejectionReason": None,
+    }
+    status = "TERMINATED"
+    error = "stuck 59h - tool tasks stranded in queue"
+
+
+class TerminatedRuntime:
+    def run(self, agent, prompt, **kwargs):
+        return TerminatedResult()
+
+
+def test_terminated_execution_is_not_posted_as_a_diagnosis(tmp_path):
+    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    cfg = _cfg(tmp_path)
+    handled = run_once(cfg, slack, TerminatedRuntime(), agent=object())
+
+    assert handled == 1
+    posted = " ".join(p[2] for p in slack.posts)
+    assert "Triage failed" in posted
+    assert "TERMINATED" in posted
+    # The raw result dict must never reach the thread.
+    assert "finishReason" not in posted
+    assert "TOOL_CALLS" not in posted
+
+
+def test_terminated_execution_is_not_written_to_incident_memory(tmp_path):
+    """A poisoned memory entry outlives the incident — it is replayed as the
+    'PRIOR DIAGNOSIS' on every later firing of the same signature."""
+    cfg = _cfg(tmp_path)
+    run_once(cfg, FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}]),
+             TerminatedRuntime(), agent=object())
+
+    state = json.loads(Path(cfg.state_file).read_text())
+    assert state.get("incidents", {}) == {}

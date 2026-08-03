@@ -49,13 +49,18 @@ class TriageTimeout(Exception):
     """A single triage exceeded :data:`_TRIAGE_DEADLINE_S` wall-clock seconds."""
 
 
+class TriageIncomplete(Exception):
+    """The agent execution ended FAILED/TERMINATED — no diagnosis to report."""
+
+
 def _run_with_deadline(runtime: AgentRuntime, agent, prompt: str, deadline_s: int):
     """Run the agent, giving up after ``deadline_s`` wall-clock seconds.
 
     The call runs on a daemon thread so the poll loop can walk away from it: a
     Python thread cannot be killed, but the loop must not be held hostage by
-    one wedged execution. The orphan keeps polling until the SDK's own bound
-    trips and then exits; it holds nothing the loop needs.
+    one wedged execution. The orphan is left polling — the SDK's ``timeout`` is
+    passed down but is not a wall-clock bound, so in the worst case it never
+    exits. That is a slow leak, not a wedge: it holds nothing the loop needs.
     """
     box: dict = {}
 
@@ -74,7 +79,20 @@ def _run_with_deadline(runtime: AgentRuntime, agent, prompt: str, deadline_s: in
         raise TriageTimeout(f"triage exceeded {deadline_s}s and was abandoned")
     if "error" in box:
         raise box["error"]
-    return box["result"]
+    result = box["result"]
+    # A FAILED/TERMINATED execution is not an exception — run() returns
+    # normally and summary_text() falls through to str(output). That is how
+    # `{'result': None, 'finishReason': 'TOOL_CALLS', ...}` got posted into a
+    # prod thread and written to incident memory as a diagnosis when the
+    # 59h-wedged execution was terminated by hand. A non-COMPLETED run has no
+    # diagnosis in it; treat it as the failure it is.
+    status = getattr(result, "status", None)
+    if status is not None and status != "COMPLETED":
+        raise TriageIncomplete(
+            f"agent execution {status}"
+            + (f": {getattr(result, 'error', None)}" if getattr(result, "error", None) else "")
+        )
+    return result
 
 
 class SlackClient:
