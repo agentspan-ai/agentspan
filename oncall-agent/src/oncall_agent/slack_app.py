@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -33,6 +34,47 @@ _SIGNATURE_COOLDOWN_S = int(os.environ.get("ONCALL_SIGNATURE_COOLDOWN", "3600"))
 # full re-investigation runs only this often (or when the signature changes,
 # e.g. severity escalation / new issue set, which bypasses memory by design).
 _FULL_TRIAGE_INTERVAL_S = int(os.environ.get("ONCALL_FULL_TRIAGE_INTERVAL", "21600"))
+# Wall-clock cap on a single triage. runtime.run() blocks, so a triage that never
+# finishes wedges the whole poll loop — no alert is looked at again until the
+# process is restarted (seen live: a tool task hit its responseTimeout, was
+# re-queued, nobody polled it, and the loop sat on one incident from Sat 01:25
+# to Mon 12:48 — 59h, zero triages). The SDK's own ``timeout`` is not a
+# wall-clock bound: _poll_status_until_complete increments elapsed by 1 per
+# iteration while each iteration also does a network call, so under connection
+# churn it drifts arbitrarily far behind real time. Hence the deadline here.
+_TRIAGE_DEADLINE_S = int(os.environ.get("ONCALL_TRIAGE_DEADLINE", "1800"))
+
+
+class TriageTimeout(Exception):
+    """A single triage exceeded :data:`_TRIAGE_DEADLINE_S` wall-clock seconds."""
+
+
+def _run_with_deadline(runtime: AgentRuntime, agent, prompt: str, deadline_s: int):
+    """Run the agent, giving up after ``deadline_s`` wall-clock seconds.
+
+    The call runs on a daemon thread so the poll loop can walk away from it: a
+    Python thread cannot be killed, but the loop must not be held hostage by
+    one wedged execution. The orphan keeps polling until the SDK's own bound
+    trips and then exits; it holds nothing the loop needs.
+    """
+    box: dict = {}
+
+    def _target() -> None:
+        try:
+            box["result"] = runtime.run(agent, prompt, timeout=deadline_s)
+        except BaseException as exc:  # re-raised on the caller's thread below
+            box["error"] = exc
+
+    worker = threading.Thread(
+        target=_target, name="oncall-triage", daemon=True
+    )
+    worker.start()
+    worker.join(deadline_s)
+    if worker.is_alive():
+        raise TriageTimeout(f"triage exceeded {deadline_s}s and was abandoned")
+    if "error" in box:
+        raise box["error"]
+    return box["result"]
 
 
 class SlackClient:
@@ -226,7 +268,9 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 f":mag: On-call triage starting for execution `{alert.execution_id}`…",
             )
             try:
-                result = runtime.run(agent, _triage_prompt(alert, prior))
+                result = _run_with_deadline(
+                    runtime, agent, _triage_prompt(alert, prior), _TRIAGE_DEADLINE_S
+                )
                 summary = summary_text(result)
                 slack.post_reply(channel, ts, _header(cfg) + summary)
                 incidents[sig] = {
@@ -239,6 +283,14 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                     state["incidents"] = dict(
                         sorted(incidents.items(), key=lambda kv: kv[1]["last_full_ts"])[-200:]
                     )
+            except TriageTimeout as exc:  # abandon this incident, keep polling
+                log.error("triage timed out channel=%s exec=%s: %s",
+                          channel, alert.execution_id, exc)
+                slack.post_reply(
+                    channel, ts,
+                    f":hourglass_flowing_sand: Triage gave up after "
+                    f"{_TRIAGE_DEADLINE_S}s — `{alert.execution_id}` needs a human.",
+                )
             except Exception as exc:  # surface into the thread, keep polling
                 log.exception("triage failed")
                 slack.post_reply(channel, ts, f":warning: Triage failed: `{exc}`")

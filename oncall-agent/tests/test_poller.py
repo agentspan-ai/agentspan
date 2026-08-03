@@ -1,5 +1,9 @@
 """Deterministic tests for the Slack poll loop — fakes for Slack + the agent runtime,
 no network and no LLM."""
+import threading
+import time
+
+from oncall_agent import slack_app
 from oncall_agent.config import Config
 from oncall_agent.slack_app import run_once
 
@@ -44,7 +48,7 @@ class DictOutputResult:
 
 
 class DictOutputRuntime:
-    def run(self, agent, prompt):
+    def run(self, agent, prompt, **kwargs):
         return DictOutputResult()
 
 
@@ -52,13 +56,13 @@ class FakeRuntime:
     def __init__(self):
         self.calls = []
 
-    def run(self, agent, prompt):
+    def run(self, agent, prompt, **kwargs):
         self.calls.append(prompt)
         return FakeResult()
 
 
 class FailingRuntime:
-    def run(self, agent, prompt):
+    def run(self, agent, prompt, **kwargs):
         raise RuntimeError("dispatch boom")
 
 
@@ -328,7 +332,7 @@ class MemoryRuntime:
     def __init__(self):
         self.calls = []
 
-    def run(self, agent, prompt):
+    def run(self, agent, prompt, **kwargs):
         self.calls.append(prompt)
         class _R:
             output = {"result": MEMORY_RESULT, "finishReason": "COMPLETED",
@@ -375,3 +379,88 @@ def test_full_retriage_after_interval_includes_prior_diagnosis(tmp_path, monkeyp
 
     assert len(runtime.calls) == 2           # full re-triage ran
     assert "sweeper timeout storm" in runtime.calls[1]  # prompt carries prior diagnosis
+
+
+# ── triage deadline ──────────────────────────────────────────────────────
+# runtime.run() blocks. A triage that never returns wedges the whole poll
+# loop: no channel is read again until the process is restarted. Seen live —
+# a tool task hit its responseTimeout, was re-queued with nobody polling it,
+# and the loop sat on one incident for 59h (Sat 01:25 -> Mon 12:48) having
+# triaged nothing. The deadline exists so the loop walks away instead.
+
+
+class HangingRuntime:
+    """Blocks in run() until released — stands in for a wedged execution."""
+
+    def __init__(self):
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def run(self, agent, prompt, **kwargs):
+        self.entered.set()
+        self.release.wait(30)  # bounded so a failing test cannot hang the suite
+        return FakeResult()
+
+
+def test_hung_triage_does_not_wedge_the_loop(tmp_path, monkeypatch):
+    monkeypatch.setattr(slack_app, "_TRIAGE_DEADLINE_S", 1)
+    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    runtime = HangingRuntime()
+    try:
+        started = time.monotonic()
+        handled = run_once(_cfg(tmp_path), slack, runtime, agent=object())
+        elapsed = time.monotonic() - started
+
+        assert runtime.entered.is_set()          # we really did call into run()
+        assert elapsed < 10                      # returned on the deadline, not on release
+        assert handled == 1                      # counted, so the loop moves on
+        assert any("gave up after" in p[2] for p in slack.posts)
+        assert not any("Likely root cause" in p[2] for p in slack.posts)
+    finally:
+        runtime.release.set()
+
+
+def test_loop_keeps_triaging_after_a_timeout(tmp_path, monkeypatch):
+    """The wedged incident must not poison the next one."""
+    monkeypatch.setattr(slack_app, "_TRIAGE_DEADLINE_S", 1)
+    cfg = _cfg_multi(tmp_path)
+    hung = HangingRuntime()
+
+    class OneHangThenWork:
+        def __init__(self):
+            self.calls = []
+
+        def run(self, agent, prompt, **kwargs):
+            self.calls.append(prompt)
+            if len(self.calls) == 1:
+                return hung.run(agent, prompt)
+            return FakeResult()
+
+    slack = MultiChannelSlack({
+        "C1": [{"type": "message", "ts": "1.0", "text": ALERT}],
+        "C2": [{"type": "message", "ts": "2.0", "text": OTHER_ALERT}],
+    })
+    runtime = OneHangThenWork()
+    try:
+        handled = run_once(cfg, slack, runtime, agent=object())
+        assert handled == 2
+        assert len(runtime.calls) == 2
+        assert any("gave up after" in p[2] for p in slack.posts)      # C1 abandoned
+        assert any("Likely root cause" in p[2] for p in slack.posts)  # C2 still triaged
+    finally:
+        hung.release.set()
+
+
+def test_deadline_passed_through_to_the_runtime(tmp_path, monkeypatch):
+    """The SDK gets the bound too — so the abandoned thread eventually exits."""
+    monkeypatch.setattr(slack_app, "_TRIAGE_DEADLINE_S", 77)
+    seen = {}
+
+    class RecordingRuntime:
+        def run(self, agent, prompt, **kwargs):
+            seen.update(kwargs)
+            return FakeResult()
+
+    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    run_once(_cfg(tmp_path), slack, RecordingRuntime(), agent=object())
+    assert seen.get("timeout") == 77
