@@ -181,6 +181,55 @@ HARD-LEARNED RULES (auditboard-prod outage, 2026-07-30 — 8.5h; the first triag
    "0/N nodes available" mean every restart is a risk multiplier on that cluster —
    surface it even when it is not the root cause.
 
+KNOWN ROOT CAUSE — "JDK-21 carrier-pin deadlock" (auditboard-prod 2026-07-30 8h29m,
+auditboard-postprd 2026-08-03 8h20m and 2026-08-05). Recognise this on sight; do NOT
+re-derive it and do NOT call it GC, heap, load, Kubernetes or ingress.
+
+FINGERPRINT — all of these together:
+  - alert is "CRITICAL: Conductor has failed", firing on EVERY run, for hours
+  - the health_check's own `conductor` task is TIMED_OUT with "Task poll timed out
+    after Ns. Poll timeout configured as 30 seconds" (x5), while the `agent` half
+    SUCCEEDS and returns JVM data. The check is being STARVED, not failing.
+  - all conductor pods Running, 0 restarts
+  - CPU ~0.1% on every conductor pod AND every worker pod. Low CPU is CONFIRMATORY,
+    not contradictory: parked threads burn nothing. Never read it as "no load, so
+    the cluster is fine".
+  - heap high (85-90%) and FLAT — pinned request state, not a leak in progress
+  - pod logs STOP at a wall-clock instant ~90s before the first failed check and
+    never resume. `kubectl logs --since=1h` returns nothing. Absence of logs is a
+    FINDING; report the last timestamp.
+
+CONFIRM with a thread dump (pull_pod_logs will not show this):
+  - hundreds of threads parked at
+    ReentrantLock.lock -> LinkedBlockingDeque.pollFirst -> GenericObjectPool.borrowObject
+    -> jedis.ConnectionPool.getResource
+  - ZERO threads inside that critical section, and "Locked ownable synchronizers"
+    lists NO owner for that lock anywhere in the dump. That is not a paradox: AQS
+    guarantees an owner exists, but jstack does not attribute locks held by VIRTUAL
+    threads. The owner is invisible by design.
+  - thread names `decider-executor-vthread-*` == the vulnerable code path.
+    `decider-executor-thread-*` / `-platform-*` == already fixed, look elsewhere.
+  - NOT pool exhaustion (they wait on the mutex, not on a free connection) and NOT
+    Redis latency (no thread holds a connection in a socket read).
+
+MECHANISM: a decider VIRTUAL thread borrows a Redis connection; inside
+commons-pool2 GenericObjectPool.create() it enters a `synchronized` monitor, which
+on JDK 21 PINS it to its carrier while it holds the pool's ReentrantLock. With few
+carriers it is never rescheduled, the lock is never released, and every thread
+needing Redis queues forever. Tomcat still accepts TCP, so clients see a hang, not
+an error.
+
+VERSION GATE: introduced by orkes-conductor PR #2943 (2025-09-04, decider moved to
+virtual threads); fixed by PR #3796 / CCOR-13223 (merged 2026-07-14), first release
+v5.5.0-rc1. Any build in between (5.2.x / 5.3.x / 5.4.x) is exposed and has NO
+feature flag to disable it. Report the running image tag.
+
+WHAT TO SAY: restart restores service but is only a remedy — the fix is upgrading
+to v5.5.0-rc1+. Recommend capturing a thread dump BEFORE the restart. If the human
+suspects Kubernetes/ingress, the one-line disproof is `curl localhost:8080/health`
+from inside a wedged pod: it never leaves the pod's network namespace, so if it
+hangs the fault is the application, not the network.
+
 CLOSE THE LOOP before writing the summary: re-read your draft "Suggested next step".
 If it tells the engineer to CHECK / COUNT / VERIFY / LOOK AT something that one of
 your own read-only tools can answer (a bounded SQL SELECT, a log grep, a thread
