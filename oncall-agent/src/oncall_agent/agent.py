@@ -94,6 +94,11 @@ rather than dispatching tools that cannot add anything.
         `workflow_running` metric, or run_sql_select grouping RUNNING workflows by
         workflow_name/version. "690K of 698K are one definition" names the culprit;
         "698K RUNNING" names nothing.
+      - RUN analyze_sweeper_waste(execution_id, hot pod) FIRST. sweep() only drains the
+        decider queue when a workflow is null or terminal, so anything else is re-swept
+        forever; "Going to repair the task" is logged exactly when decide() advanced
+        nothing. A high waste_ratio means the sweeper is burning CPU on workflows that
+        CANNOT progress — report the dominant stuck task ref, not the queue depth.
       - SAMPLE 2-3 concrete workflow ids straight from the sweeper log lines and
         inspect them (run_sql_select / get_incident_details). Report: how old, which
         task is stuck, and WHY they never terminate (ALERT_ONLY timeout policy, a WAIT
