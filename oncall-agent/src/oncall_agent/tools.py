@@ -418,6 +418,63 @@ def analyze_sweeper_waste(execution_id: str, pod_name: str, lines: int = 300) ->
     return out
 
 
+
+def _sql_rows(execution_id: str, sql: str) -> list[dict]:
+    """run_sql_select, unwrapped to plain rows. The handler double-encodes: the
+    `result` field is itself a JSON string."""
+    import json as _json
+    r = run_sql_select.__wrapped__(execution_id, sql) if hasattr(run_sql_select, "__wrapped__") \
+        else run_sql_select(execution_id, sql)
+    out = r.get("output") if isinstance(r, dict) else None
+    res = (out or {}).get("result") if isinstance(out, dict) else out
+    if isinstance(res, str):
+        try:
+            res = _json.loads(res).get("result", res)
+        except Exception:
+            return []
+    return res if isinstance(res, list) else []
+
+
+@tool(timeout_seconds=_T)
+def get_running_backlog_buckets(execution_id: str, top: int = 8) -> dict:
+    """WHICH workflow definitions make up the RUNNING backlog, and how old they are.
+
+    Use this instead of ever quoting a bare RUNNING count. "16,555 RUNNING" is not
+    actionable; "two definitions are 93% of it, both starting 17 March" is.
+
+    Queries the workflow_archive_shard_* tables directly — the parent workflow_archive
+    returns nothing (it does not route). Small fleets are read exactly; large ones are
+    hash-distributed and uniform, so one shard is sampled and scaled, flagged as
+    ESTIMATED. Also surfaces the overall failure rate, which is its own finding.
+
+    Args:
+        execution_id: incident execution id.
+        top: how many definitions to report.
+    """
+    from .running_backlog import plan_shard_query, build_backlog_report
+    # Two small queries, not one big one: one-staging has 301 shards and listing them
+    # all exceeds the ~8KB result cap, which silently comes back empty.
+    counted = _sql_rows(execution_id, """SELECT count(*) AS shard_count FROM pg_stat_user_tables
+        WHERE relname LIKE 'workflow_archive_shard%' AND n_live_tup > 0""")
+    fleet = int(counted[0].get("shard_count") or 0) if counted else 0
+    shards = _sql_rows(execution_id, """SELECT relname, n_live_tup FROM pg_stat_user_tables
+        WHERE relname LIKE 'workflow_archive_shard%' AND n_live_tup > 0
+        ORDER BY n_live_tup DESC LIMIT 4""")
+    plan = plan_shard_query(shards, total_populated=fleet or None)
+    if plan["mode"] == "none":
+        return {"error": "no_populated_archive_shards",
+                "hint": "RUNNING state may be Redis-only on this cluster"}
+    union = " UNION ALL ".join(f"SELECT status, workflow_name, created_on FROM {t}"
+                               for t in plan["shards"])
+    status_rows = _sql_rows(execution_id,
+        f"SELECT status, count(*) AS n FROM ({union}) x GROUP BY status ORDER BY n DESC")
+    bucket_rows = _sql_rows(execution_id,
+        f"""SELECT workflow_name, count(*) AS running, min(created_on) AS oldest
+            FROM ({union}) x WHERE status='RUNNING'
+            GROUP BY workflow_name ORDER BY running DESC LIMIT {int(top)}""")
+    return build_backlog_report(plan, status_rows, bucket_rows, top=top)
+
+
 ALL_TOOLS = [
     get_incident_details,
     get_alert_recurrence,
@@ -432,6 +489,7 @@ ALL_TOOLS = [
     download_thread_dump,
     get_thread_summary,
     analyze_sweeper_waste,
+    get_running_backlog_buckets,
     pull_pod_logs,
     get_ingress_info,
     run_sql_select,
