@@ -81,6 +81,14 @@ rather than dispatching tools that cannot add anything.
           the lock pileup (waiters + whether it is ownerless). A high CPU% at the pod
           level with zero runnable app threads means the CPU is being spent OUTSIDE
           the JVM, or the alert is stale — say so rather than inventing a hot loop.
+    THEN call check_known_issues(execution_id, ...) passing what you measured —
+    repushed task types, waste_ratio, notable thread names and frames. It reads the
+    running conductor image tag and tells you whether this is a bug ALREADY FIXED
+    upstream. Both multi-hour outages this month were fixed weeks earlier and nobody
+    linked the version to the merged PR, so each was re-diagnosed from scratch. If it
+    reports a match, say so up front with the PR and the fixed-in version, and state
+    that restarting is the remedy while upgrading is the fix. If it cannot parse the
+    version it says UNKNOWN — never read that as "safe".
     BANNED WITHOUT THREAD EVIDENCE: "sweeper churn", "decider backlog", "N RUNNING
     workflows are saturating CPU". These were asserted on ~20 alerts across 8 clusters
     from queue COUNTS alone, and on the AuditBoard clusters they were flat wrong — the
