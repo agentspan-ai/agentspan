@@ -475,6 +475,47 @@ def get_running_backlog_buckets(execution_id: str, top: int = 8) -> dict:
     return build_backlog_report(plan, status_rows, bucket_rows, top=top)
 
 
+
+@tool(timeout_seconds=_T)
+def check_known_issues(execution_id: str, repushed_task_types: str = "",
+                       waste_ratio: float = -1.0, thread_names: str = "",
+                       frames: str = "") -> dict:
+    """Is this a bug we already fixed upstream? Reads the running conductor image tag and
+    matches it against known issues plus the symptoms you have already measured.
+
+    Call this on ANY cpu/heap/'Conductor has failed' alert, after get_thread_summary and
+    analyze_sweeper_waste, passing what they found. Both multi-hour outages this month
+    were fixed upstream weeks earlier — nobody linked the version to the merged PR, so
+    each was re-diagnosed from scratch. This closes that loop without a human.
+
+    Version parsing fails CLOSED: branch-style tags exist in this fleet and are reported
+    as UNKNOWN rather than assumed safe.
+
+    Args:
+        execution_id: incident execution id.
+        repushed_task_types: comma-separated task types being re-pushed (WAIT, HUMAN, ...),
+            from the `queue_message_repushed` metric or the sweeper repair lines.
+        waste_ratio: analyze_sweeper_waste()["waste_ratio"], or -1 if unknown.
+        thread_names: comma-separated notable thread names from the dump.
+        frames: comma-separated notable stack frames from the dump.
+    """
+    from .known_issues import match_known_issues
+    img = run_kubectl_read.__wrapped__(execution_id,
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}") \
+        if hasattr(run_kubectl_read, "__wrapped__") else run_kubectl_read(execution_id,
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}")
+    out = img.get("output") if isinstance(img, dict) else None
+    tag = str((out.get("result") if isinstance(out, dict) else out) or "").strip()
+    split = lambda v: {x.strip() for x in v.split(",") if x.strip()}
+    return match_known_issues(
+        tag or None,
+        repushed_task_types=split(repushed_task_types) or None,
+        waste_ratio=None if waste_ratio < 0 else waste_ratio,
+        thread_names=split(thread_names) or None,
+        frames=split(frames) or None,
+    )
+
+
 ALL_TOOLS = [
     get_incident_details,
     get_alert_recurrence,
@@ -490,6 +531,7 @@ ALL_TOOLS = [
     get_thread_summary,
     analyze_sweeper_waste,
     get_running_backlog_buckets,
+    check_known_issues,
     pull_pod_logs,
     get_ingress_info,
     run_sql_select,

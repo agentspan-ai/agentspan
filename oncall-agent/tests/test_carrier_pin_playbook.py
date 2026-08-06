@@ -84,3 +84,10 @@ def test_thread_summary_tool_is_registered():
     from oncall_agent.tools import ALL_TOOLS
     names = {getattr(t, "__name__", getattr(t, "name", "")) for t in ALL_TOOLS}
     assert "get_thread_summary" in names, "the tool must be callable, not just documented"
+
+
+def test_playbook_routes_to_known_issue_matching():
+    """A bug already fixed upstream must be recognised without a human spotting it."""
+    assert "check_known_issues" in I
+    assert "already fixed" in I
+    assert "never read that as" in I, "UNKNOWN version must not be treated as safe"
