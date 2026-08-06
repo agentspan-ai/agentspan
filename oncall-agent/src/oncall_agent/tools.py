@@ -387,6 +387,37 @@ def run_sql_select(execution_id: str, query: str) -> dict:
     )
 
 
+
+@tool(timeout_seconds=_T)
+def analyze_sweeper_waste(execution_id: str, pod_name: str, lines: int = 300) -> dict:
+    """Is the sweeper doing NECESSARY work, or re-sweeping workflows that can never
+    advance? Call this whenever the sweeper shows up as a hot frame — a backlog COUNT
+    alone never answers it.
+
+    OrkesWorkflowSweeper.sweep() drains the decider queue only when a workflow is null
+    or terminal; everything else is swept again forever. When decide() changes nothing
+    it logs "Going to repair the task ..." and bumps `queue_message_repushed`. This
+    counts those against "Running sweeper for workflow" and names the stuck tasks.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: a conductor pod (from get_pods_data).
+        lines: log window size; larger sees more but costs more.
+    """
+    import json as _json
+    from .sweeper_waste import summarize_sweeper_waste
+    raw = pull_pod_logs.__wrapped__(execution_id, pod_name, grep="OrkesWorkflowSweeper", lines=lines) \
+        if hasattr(pull_pod_logs, "__wrapped__") else pull_pod_logs(execution_id, pod_name,
+                                                                    grep="OrkesWorkflowSweeper",
+                                                                    lines=lines)
+    out = summarize_sweeper_waste(_json.dumps(raw, default=str).replace("\\n", "\n"))
+    out["pod"] = pod_name
+    out["window_lines"] = lines
+    out["caveat"] = ("counts come from one grepped window; if wasted_sweeps is 0 but the "
+                     "sweeper is hot, widen `lines` before concluding the work is genuine.")
+    return out
+
+
 ALL_TOOLS = [
     get_incident_details,
     get_alert_recurrence,
@@ -400,6 +431,7 @@ ALL_TOOLS = [
     download_heap_dump,
     download_thread_dump,
     get_thread_summary,
+    analyze_sweeper_waste,
     pull_pod_logs,
     get_ingress_info,
     run_sql_select,
