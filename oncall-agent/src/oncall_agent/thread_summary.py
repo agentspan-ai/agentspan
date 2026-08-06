@@ -16,8 +16,20 @@ import re
 from collections import Counter
 
 _THREAD_START = re.compile(r'^"([^"]+)"')
+# `jcmd Thread.dump_to_file -format=plain` uses `#<id> "<name>"` and carries NO
+# `Thread.State:` line — but it DOES include virtual threads, which jstack omits. So we
+# accept both formats and, when the state is absent, infer it from the top frame: a
+# thread parked in Unsafe.park/Object.wait/sleep is not running; anything else is.
+_THREAD_START_PLAIN = re.compile(r'^#\d+\s+"([^"]+)"')
+_PARKED_TOPS = (
+    "java.base/jdk.internal.misc.Unsafe.park",
+    "java.base/java.lang.Object.wait",
+    "java.base/java.lang.Thread.sleep",
+    "java.base/java.lang.VirtualThread.park",
+    "java.base/java.lang.ref.Reference.waitForReferencePendingList",
+)
 _STATE = re.compile(r"java\.lang\.Thread\.State: ([A-Z_]+)")
-_FRAME = re.compile(r"^\s+at ([\w.$/]+)")
+_FRAME = re.compile(r"^\s+(?:at )?([\w.$/]+\([^)]*\))")
 _PARKING_ON = re.compile(r"- parking to wait for\s+<(0x[0-9a-f]+)>")
 _WAITING_ON = re.compile(r"- waiting (?:to lock|on)\s+<(0x[0-9a-f]+)>")
 _OWNED = re.compile(r"^\s+- <(0x[0-9a-f]+)>")
@@ -78,7 +90,7 @@ def summarize_thread_dump(text: str, top: int = 6) -> dict:
     in_locked = False
 
     for line in text.splitlines():
-        m = _THREAD_START.match(line)
+        m = _THREAD_START.match(line) or _THREAD_START_PLAIN.match(line)
         if m:
             if cur:
                 threads.append(cur)
@@ -108,6 +120,11 @@ def summarize_thread_dump(text: str, top: int = 6) -> dict:
             cur["frames"].append(f.group(1))
     if cur:
         threads.append(cur)
+
+    for t in threads:
+        if t["state"] is None:  # plain format — infer from the top frame
+            top_frame = t["frames"][0] if t["frames"] else ""
+            t["state"] = "WAITING" if top_frame.startswith(_PARKED_TOPS) else "RUNNABLE"
 
     states = Counter(t["state"] for t in threads if t["state"])
 

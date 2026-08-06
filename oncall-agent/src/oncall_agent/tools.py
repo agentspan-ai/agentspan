@@ -268,27 +268,59 @@ def get_thread_summary(execution_id: str, pod_name: str) -> dict:
         return {"error": "jvm_pid_not_found", "detail": listing[:200],
                 "hint": "the JVM is often PID 14, not PID 1"}
 
-    dump = "/tmp/oncall_threads.txt"
-    _exec(ctx, pod_name, f"jcmd {pid} Thread.dump_to_file -overwrite -format=plain {dump}")
+    # The remote side splits the command on whitespace, so every grep PATTERN below must
+    # be a single token — no spaces, and no filename containing one either.
+    dump = "/tmp/oncall-threads.txt"
+    written = _exec(ctx, pod_name, f"jcmd {pid} Thread.dump_to_file -overwrite -format=plain {dump}")
+    if "Created" not in written:
+        return {"error": "thread_dump_failed", "pod": pod_name, "jvm_pid": pid,
+                "detail": written[:200]}
 
-    # Pull only what the summariser needs — RUNNABLE stacks are a tiny slice of the
-    # file, so this stays inside the agent-handler's ~8KB result cap.
-    runnable = _exec(ctx, pod_name, f"grep -A6 -e Thread.State:_RUNNABLE {dump}".replace("_", " "))
-    parked = _exec(ctx, pod_name, f"grep -c -e parking_to_wait_for {dump}".replace("_", " "))
-    sample = _exec(ctx, pod_name, f"grep -o -m 60 -e <0x[0-9a-f]*> {dump}")
+    # The dump is ~700KB and the agent-handler truncates results at ~8KB, so the whole
+    # file cannot come back. `-format=plain` also carries no Thread.State: line and no
+    # lock addresses — only `#id "name"` headers and frames. What DOES fit is a counter
+    # per diagnostic frame: one small `grep -c` each. These are the magnitudes that
+    # separate "wedged" from "genuinely busy", which is the question a CPU alert asks.
+    def count(pattern: str) -> int:
+        raw = _exec(ctx, pod_name, f"grep -c -e {pattern} {dump}").strip()
+        # grep exits 1 on zero matches and the handler returns empty for a non-zero
+        # exit — that is a legitimate 0, not a failure. total_threads proves the
+        # file and grep both work, so treat empty as absent-frame.
+        return int(raw) if raw.isdigit() else 0
 
-    from .thread_summary import summarize_thread_dump
-    summary = summarize_thread_dump(runnable)
-    summary["pod"] = pod_name
-    summary["jvm_pid"] = pid
-    summary["threads_parked_on_a_lock"] = parked.strip()
-    # modal lock address across the sample == the contention point
-    addrs = [a for a in sample.split() if a.startswith("<0x")]
-    if addrs:
-        top = Counter(addrs).most_common(1)[0]
-        exact = _exec(ctx, pod_name, f"grep -c -e {top[0]} {dump}").strip()
-        summary["top_lock"] = {"address": top[0].strip("<>"), "references": exact}
-    return summary
+    total = count("^#")
+    parked = count("Unsafe.park")
+    counts = {
+        "redis_pool_borrow": count("GenericObjectPool.borrowObject"),
+        "lock_acquire": count("ReentrantLock.lock"),
+        "sweeper": count("OrkesWorkflowSweeper"),
+        "decider": count("OrkesWorkflowExecutor.decide"),
+        "jdbc_read": count("PgStatement.execute"),
+        "socket_read": count("NioSocketImpl.read"),
+    }
+    active = max(total - parked, 0) if total >= 0 and parked >= 0 else -1
+    blocked_on_pool = counts["redis_pool_borrow"]
+
+    if total > 0 and active == 0:
+        verdict = (f"WEDGE, not load: {total} threads, {parked} parked, ZERO active. "
+                   "CPU is near-zero because parked threads consume none.")
+    elif blocked_on_pool >= 20 and active <= 2:
+        verdict = (f"WEDGE, not load: {blocked_on_pool} threads blocked borrowing a Redis "
+                   f"connection and only {active} active. Not a backlog problem.")
+    elif active > 0:
+        verdict = (f"{active} of {total} threads are active — attribute CPU to the "
+                   "non-zero frame counters below, not to a workflow backlog count.")
+    else:
+        verdict = "inconclusive — could not read thread counts"
+
+    return {
+        "pod": pod_name, "jvm_pid": pid, "dump_bytes_on_pod": dump,
+        "total_threads": total, "parked_threads": parked, "active_threads": active,
+        "frame_counts": counts, "verdict": verdict,
+        "note": ("counter-based: -format=plain has no thread states or lock addresses, and "
+                 "the full dump exceeds the result cap. For lock OWNERSHIP capture "
+                 f"`jcmd {pid} Thread.print -l` on the pod manually."),
+    }
 
 
 @tool(timeout_seconds=_T)

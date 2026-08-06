@@ -93,3 +93,37 @@ def test_genuine_cpu_burn_attributes_to_the_hot_frame():
     assert "not to a backlog count" in s["verdict"]
     top_frame, count = s["runnable_top_frames"][0]
     assert "OrkesWorkflowSweeper" in top_frame and count == 4
+
+
+# ── jcmd Thread.dump_to_file -format=plain ───────────────────────────────
+# Different shape: `#id "name"`, frames with no `at ` prefix, and NO
+# `Thread.State:` line at all — state must be inferred from the top frame.
+# It is the only format that includes VIRTUAL threads, so it is what
+# get_thread_summary captures.
+
+PLAIN = '''14
+2026-08-06T15:29:30Z
+21.0.10+7-LTS
+
+#9 "Reference Handler"
+      java.base/java.lang.ref.Reference.waitForReferencePendingList(Native Method)
+
+#77 "http-nio-8080-exec-7"
+      java.base/jdk.internal.misc.Unsafe.park(Native Method)
+      java.base/java.util.concurrent.locks.ReentrantLock.lock(ReentrantLock.java:322)
+      org.apache.commons.pool2.impl.LinkedBlockingDeque.pollFirst(LinkedBlockingDeque.java:892)
+
+#88 "sweeper-thread-1"
+      io.orkes.conductor.server.service.sweeper.OrkesWorkflowSweeper.sweep(OrkesWorkflowSweeper.java:88)
+'''
+
+
+def test_plain_format_is_parsed_and_state_inferred():
+    s = summarize_thread_dump(PLAIN)
+    assert s["total_threads"] == 3, "must parse the `#id \"name\"` header form"
+    # parked-in-Unsafe.park -> WAITING; real app frame on top -> RUNNABLE
+    assert s["states"].get("RUNNABLE") == 1
+    assert s["states"].get("WAITING") == 2
+    assert s["runnable_with_app_frames"] == 1
+    top_frame, _ = s["runnable_top_frames"][0]
+    assert "OrkesWorkflowSweeper" in top_frame
