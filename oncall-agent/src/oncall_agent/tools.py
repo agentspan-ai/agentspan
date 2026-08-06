@@ -10,6 +10,9 @@ cache are module-level singletons built lazily from the environment.
 """
 from __future__ import annotations
 
+import re
+from collections import Counter
+
 from conductor.ai.agents import tool
 
 from .conductor_client import ConductorDispatcher
@@ -218,6 +221,76 @@ def download_thread_dump(execution_id: str, pod_name: str) -> dict:
     )
 
 
+_POD_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+
+
+def _exec(ctx: dict, pod: str, argv: str) -> str:
+    """Run ONE read-only command inside a pod and return stdout as text.
+
+    Uses the unrestricted kubectl channel because `exec` is not in the read-only
+    verb allowlist, but the caller may only pass jcmd/grep invocations that read —
+    nothing here mutates cluster or JVM state (a thread dump is a read).
+    """
+    r = _disp().dispatch(
+        "KUBECTL_UNRESTRICTED", "kubectl_unrestricted", ctx,
+        {"unrestrictedCommand": f"exec {pod} -- {argv}"},
+    )
+    if not isinstance(r, dict):
+        return ""
+    out = r.get("output")
+    out = out.get("result") if isinstance(out, dict) else out
+    return str(out or "").replace("\\n", "\n")
+
+
+@tool(timeout_seconds=_T)
+def get_thread_summary(execution_id: str, pod_name: str) -> dict:
+    """What the JVM's threads are ACTUALLY doing — states, the RUNNABLE frames
+    burning CPU, and any lock pileup. Use this for EVERY CPU or heap alert.
+
+    Unlike download_thread_dump (which only uploads the file and hands back an S3
+    path you cannot read), this returns the analysed facts inline. A CPU diagnosis
+    must rest on these numbers, never on a workflow backlog count alone: a large
+    RUNNING backlog with ZERO runnable application threads means the JVM is WEDGED,
+    not busy, and the backlog is a symptom.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: the CPU-hot / suspect pod (from get_top_output or the alert text).
+    """
+    if not _POD_RE.match(pod_name or ""):
+        return {"error": "invalid_pod_name", "pod_name": pod_name}
+    ctx = _context(execution_id)
+
+    listing = _exec(ctx, pod_name, "jcmd -l")
+    pid = next((ln.split()[0] for ln in listing.splitlines()
+                if ln.strip() and ln.split()[0].isdigit() and "jcmd" not in ln), None)
+    if not pid:
+        return {"error": "jvm_pid_not_found", "detail": listing[:200],
+                "hint": "the JVM is often PID 14, not PID 1"}
+
+    dump = "/tmp/oncall_threads.txt"
+    _exec(ctx, pod_name, f"jcmd {pid} Thread.dump_to_file -overwrite -format=plain {dump}")
+
+    # Pull only what the summariser needs — RUNNABLE stacks are a tiny slice of the
+    # file, so this stays inside the agent-handler's ~8KB result cap.
+    runnable = _exec(ctx, pod_name, f"grep -A6 -e Thread.State:_RUNNABLE {dump}".replace("_", " "))
+    parked = _exec(ctx, pod_name, f"grep -c -e parking_to_wait_for {dump}".replace("_", " "))
+    sample = _exec(ctx, pod_name, f"grep -o -m 60 -e <0x[0-9a-f]*> {dump}")
+
+    from .thread_summary import summarize_thread_dump
+    summary = summarize_thread_dump(runnable)
+    summary["pod"] = pod_name
+    summary["jvm_pid"] = pid
+    summary["threads_parked_on_a_lock"] = parked.strip()
+    # modal lock address across the sample == the contention point
+    addrs = [a for a in sample.split() if a.startswith("<0x")]
+    if addrs:
+        top = Counter(addrs).most_common(1)[0]
+        exact = _exec(ctx, pod_name, f"grep -c -e {top[0]} {dump}").strip()
+        summary["top_lock"] = {"address": top[0].strip("<>"), "references": exact}
+    return summary
+
+
 @tool(timeout_seconds=_T)
 def get_top_output(execution_id: str, pod_name: str = "") -> dict:
     """Live CPU/memory usage (kubectl top) for a pod, or all pods if pod_name is empty. Read-only.
@@ -294,6 +367,7 @@ ALL_TOOLS = [
     run_kubectl_read,
     download_heap_dump,
     download_thread_dump,
+    get_thread_summary,
     pull_pod_logs,
     get_ingress_info,
     run_sql_select,

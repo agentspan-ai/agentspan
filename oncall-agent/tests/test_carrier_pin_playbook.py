@@ -50,3 +50,37 @@ def test_anti_patterns_present():
 def test_capture_before_restart():
     """Restarts destroyed the evidence twice; the agent must say capture first."""
     assert "before the restart" in I, "lost the capture-before-restart instruction"
+
+
+# ── CPU alerts must be grounded in thread state ──────────────────────────
+# Every CPU alert used to come back as "sweeper churn / N RUNNING workflows"
+# because (a) download_thread_dump returns only an S3 path the model cannot read
+# and (b) the playbook literally told it to grep logs for "sweeper churn".
+# Confirmation bias, encoded in the prompt.
+
+
+def test_cpu_rule_demands_thread_state_first():
+    assert "get_thread_summary" in I, "CPU rule must route to the thread summariser"
+    assert "threads first" in I, "thread evidence must be ordered FIRST, not last"
+    assert "runnable" in I, "must reason about RUNNABLE threads specifically"
+
+
+def test_backlog_narrative_is_banned_without_evidence():
+    """The canned answer must be explicitly forbidden, not merely discouraged."""
+    assert "banned without thread evidence" in I
+    for phrase in ["sweeper churn", "decider backlog"]:
+        assert phrase in I, f"the banned phrase {phrase!r} must be named to be banned"
+    assert "cause not established" in I, "must have a no-evidence escape hatch"
+
+
+def test_sweeper_path_requires_bucketing_and_sampling():
+    """If the sweeper IS hot, don't stop at a total — name which workflows and why."""
+    assert "workflow_running" in I, "must bucket the backlog by workflow, not quote a total"
+    assert "sample" in I, "must sample concrete workflow ids from the sweeper log lines"
+    assert "alert_only" in I, "must establish WHY the workflows never terminate"
+
+
+def test_thread_summary_tool_is_registered():
+    from oncall_agent.tools import ALL_TOOLS
+    names = {getattr(t, "__name__", getattr(t, "name", "")) for t in ALL_TOOLS}
+    assert "get_thread_summary" in names, "the tool must be callable, not just documented"
