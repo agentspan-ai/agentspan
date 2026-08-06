@@ -70,17 +70,39 @@ rather than dispatching tools that cannot add anything.
     CPU look for a hot loop / tight retry / sweeper churn). Cite the % and the pod, plus
     the GC/OOM/hot-loop evidence. (Skip the extra metrics call unless a pod name is
     missing or the numbers disagree.)
-    CPU EVIDENCE RULE — an empty ERROR grep is NOT the end of the log trail. CPU
-    saturation usually logs at INFO, not ERROR: sweeper churn ("Running sweeper for
-    workflow", "DeciderService", "Task timed out after"), retry storms, S3 aborts,
-    broken pipes. When grep ERROR/Exception returns empty on a CPU alert you MUST
-    (a) pull an UNFILTERED tail (lines=300) of the hottest pod and characterise the
-    DOMINANT line pattern by volume — "290 of 300 lines are sweeper iterations" is
-    hard evidence of what the process is busy doing; and (b) grep the INFO markers
-    above. Only after that, capture a thread dump — download_thread_dump(execution_id,
-    hottest pod) — and include the dump paths so the engineer can confirm the hot
-    threads. NEVER attribute CPU to the decider backlog on the queue number alone;
-    cite the log-volume evidence or say plainly that the logs did not confirm it.
+    CPU EVIDENCE RULE — THREADS FIRST, and this order is not optional.
+    For EVERY cpu/heap alert your FIRST evidence call is
+    get_thread_summary(execution_id, hottest pod). Only threads that are RUNNABLE can
+    burn CPU; everything else is inference. Read its `verdict` and do not contradict
+    it. Two outcomes, two different stories:
+      (a) runnable_with_app_frames > 0 -> the JVM IS busy. Name the actual hot frames
+          from runnable_top_frames. That frame IS the answer — whatever it is.
+      (b) runnable_with_app_frames == 0 -> the JVM is NOT busy, it is WEDGED. Report
+          the lock pileup (waiters + whether it is ownerless). A high CPU% at the pod
+          level with zero runnable app threads means the CPU is being spent OUTSIDE
+          the JVM, or the alert is stale — say so rather than inventing a hot loop.
+    BANNED WITHOUT THREAD EVIDENCE: "sweeper churn", "decider backlog", "N RUNNING
+    workflows are saturating CPU". These were asserted on ~20 alerts across 8 clusters
+    from queue COUNTS alone, and on the AuditBoard clusters they were flat wrong — the
+    real cause was a lock wedge. A backlog number explains nothing on its own. If
+    get_thread_summary is unavailable, say plainly:
+    "thread state unavailable — cause not established", and stop there;
+    do NOT fall back to the backlog narrative.
+    IF THE SWEEPER *IS* GENUINELY HOT (it appears in runnable_top_frames), do not stop
+    at "the backlog is large" — establish whether that work is even NECESSARY:
+      - BUCKET the backlog by workflow name, do not quote a bare total. Use the
+        `workflow_running` metric, or run_sql_select grouping RUNNING workflows by
+        workflow_name/version. "690K of 698K are one definition" names the culprit;
+        "698K RUNNING" names nothing.
+      - SAMPLE 2-3 concrete workflow ids straight from the sweeper log lines and
+        inspect them (run_sql_select / get_incident_details). Report: how old, which
+        task is stuck, and WHY they never terminate (ALERT_ONLY timeout policy, a WAIT
+        with no timeout, an event that never arrives, a poison-pill parse error).
+      - Then say whether the sweeps are legitimate work or wasted cycles on
+        undecidable workflows. That distinction is the actionable finding.
+    An unfiltered tail (lines=300) to characterise the dominant log pattern is still
+    useful CORROBORATION, but it is never a substitute for thread state — a wedged JVM
+    stops logging entirely, so "the logs look quiet" can mean the opposite of healthy.
     HEAP NEXT-STEP RULE: do NOT recommend raising -Xmx / memory limits as the default
     fix — that can mask a leak. For heap/memory alerts, CAPTURE THE DUMP YOURSELF:
     call download_heap_dump(execution_id, pod) on the ONE highest-heap pod (from
