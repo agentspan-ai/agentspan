@@ -21,6 +21,7 @@ from .agent import build_agent
 from .alert import Alert, alert_signature, message_text, parse_alert, signable_text
 from .config import Config
 from .runtime_compat import summary_text
+from .worker_health import CRITICAL_TASK_TYPES, evaluate
 
 log = logging.getLogger("oncall_agent")
 _SLACK_API = "https://slack.com/api"
@@ -93,6 +94,26 @@ def _run_with_deadline(runtime: AgentRuntime, agent, prompt: str, deadline_s: in
             + (f": {getattr(result, 'error', None)}" if getattr(result, "error", None) else "")
         )
     return result
+
+
+
+def _poll_ages(server_url: str, task_types) -> dict:
+    """Seconds since each task type was last polled; None when no poller exists."""
+    ages: dict = {}
+    base = (server_url or "").rstrip("/")
+    for tt in task_types:
+        try:
+            r = requests.get(f"{base}/tasks/queue/polldata", params={"taskType": tt}, timeout=8)
+            rows = r.json() if r.ok else []
+            if not rows:
+                ages[tt] = None
+                continue
+            newest = max(int(x.get("lastPollTime") or 0) for x in rows)
+            ages[tt] = max(0.0, time.time() - newest / 1000.0) if newest else None
+        except Exception:
+            # Cannot tell — do NOT report dead on a transient probe failure.
+            ages[tt] = 0.0
+    return ages
 
 
 class SlackClient:
@@ -271,6 +292,28 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                          channel, alert.execution_id, prior.get("firings", 0) + 1)
                 prior["firings"] = prior.get("firings", 1) + 1
                 slack.post_reply(channel, ts, _memory_update_text(cfg, prior, now))
+                handled += 1
+                processed.add(ts)
+                ch_state["processed"] = list(processed)[-500:]
+                ch_state["last_ts"] = ts
+                _save_state(state_path, state)
+                continue
+
+            # PREFLIGHT: are our own tool workers alive? Twice the process stayed up
+            # while SDK worker threads died, so every triage forked tool tasks nothing
+            # would ever claim and burned the full deadline producing nothing (2.1 days,
+            # 26+ dead triages). A guard inside the tool cannot help — the tool never
+            # runs. Checking here turns a silent 30-minute timeout into an instant,
+            # accurate finding.
+            health = evaluate(_poll_ages(cfg.agentspan_server_url, CRITICAL_TASK_TYPES))
+            if not health["ok"]:
+                log.error("SKIPPING triage channel=%s exec=%s — %s",
+                          channel, alert.execution_id, health["reason"])
+                slack.post_reply(
+                    channel, ts,
+                    f":warning: Triage skipped — on-call agent tool workers are not "
+                    f"polling. {health['reason']}",
+                )
                 handled += 1
                 processed.add(ts)
                 ch_state["processed"] = list(processed)[-500:]
