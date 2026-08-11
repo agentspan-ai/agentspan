@@ -515,3 +515,34 @@ def test_terminated_execution_is_not_written_to_incident_memory(tmp_path):
 
     state = json.loads(Path(cfg.state_file).read_text())
     assert state.get("incidents", {}) == {}
+
+
+# ── worker-health preflight ──────────────────────────────────────────────
+# The process stayed alive while SDK worker threads died. Every triage forked
+# tool tasks onto unpolled queues and burned the 30-minute deadline producing
+# nothing — 26+ dead triages over 2.1 days. Skip fast and say why instead.
+
+
+def test_triage_is_skipped_when_tool_workers_are_dead(tmp_path, monkeypatch):
+    monkeypatch.setattr(slack_app, "_poll_ages",
+                        lambda url, tts: {t: 3071 * 60 for t in tts})
+    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    runtime = FakeRuntime()
+    handled = run_once(_cfg(tmp_path), slack, runtime, agent=object())
+
+    assert handled == 1
+    assert runtime.calls == [], "must NOT invoke the LLM when tools cannot run"
+    posted = " ".join(p[2] for p in slack.posts)
+    assert "tool workers are not polling" in posted
+    assert "min ago" in posted, "must say how stale, not just that it failed"
+
+
+def test_triage_proceeds_normally_when_workers_are_healthy(tmp_path, monkeypatch):
+    monkeypatch.setattr(slack_app, "_poll_ages", lambda url, tts: {t: 0.1 for t in tts})
+    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    runtime = FakeRuntime()
+    handled = run_once(_cfg(tmp_path), slack, runtime, agent=object())
+
+    assert handled == 1
+    assert len(runtime.calls) == 1, "healthy workers must not block triage"
+    assert any("Likely root cause" in p[2] for p in slack.posts)
