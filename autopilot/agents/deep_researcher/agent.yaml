@@ -1,0 +1,25 @@
+name: deep_researcher
+version: 1
+description: >
+  A multi-agent deep research system that breaks a topic into sub-questions,
+  researches each one via web search, synthesizes findings, and produces a
+  structured final report.
+
+model: ${AGENTSPAN_LLM_MODEL:-openai/gpt-4o}
+
+instructions: See expanded_prompt.md
+
+trigger:
+  type: daemon
+
+tools:
+  - web_search
+  - read_document
+
+pipeline:
+  strategy: sequential
+  agents:
+    - research_planner
+    - web_researcher
+    - analyst
+    - report_writer
