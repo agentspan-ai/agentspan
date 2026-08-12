@@ -21,11 +21,12 @@ host as the test — the standard local / bundle e2e setup. Set
 ``AGENTSPAN_MEDIA_DIR`` to override the directory for deployments that
 configure a custom allowed media dir.
 
-Parametrized across providers. The Anthropic positive case is ``skip``ped: in
-current server builds media is forwarded to OpenAI but NOT attached to the
-Anthropic provider request (the model receives no image), so the token is never
-read. Remove the skip once the server forwards media for Anthropic (see
-SUITE25_ANTHROPIC_SKIP_REASON).
+Parametrized across providers, each gated on its API key. Which providers
+actually forward image input server-side is documented in the provider matrix
+below (determined by reading each provider's conductor-ai ChatModel). OpenAI
+forwards media and runs; Anthropic's converter currently drops it, so its
+positive case is ``skip``ped with a documented reason. The counterfactual (no
+media) runs for all parametrized providers.
 
 No mocks. Real server, real vision model.
 """
@@ -67,20 +68,72 @@ READ_PROMPT = (
 INSTRUCTIONS = "You are an OCR assistant. Read text from images precisely."
 
 # ── Provider matrix ─────────────────────────────────────────────────────────
-# (API-key env var, model id). Each case is gated on its key.
+# Whether a provider supports image *input* is decided by its conductor-ai
+# ChatModel: does the message converter forward ``UserMessage.getMedia()``, or
+# only ``getText()``? Determined by reading each provider's chat model in
+# conductor-ai (org.conductoross.conductor.ai.providers.*):
 #
-# Anthropic media-input is broken server-side: media is forwarded to OpenAI but
-# NOT attached to the Anthropic provider request, so the model receives no image
-# and never reads the token. The positive case is skipped until that is fixed;
-# the counterfactual (no media at all) still runs and passes for Anthropic.
-SUITE25_ANTHROPIC_SKIP_REASON = (
+#   FORWARDS media (image reaches the model) — mapped by the provider ChatModel:
+#     openai       OpenAIResponsesChatModel        -> input_image content parts
+#     azureopenai  reuses OpenAIResponsesChatModel  -> input_image content parts
+#     mistral      Spring AI MistralAiChatModel     -> image_url MediaContent
+#     ollama       Spring AI OllamaChatModel        -> images (base64)
+#     bedrock      Spring AI BedrockProxyChatModel  -> mapMediaToContentBlock/ImageBlock
+#
+#   (mistral/ollama/bedrock media handling lives in the Spring AI framework, not
+#   a conductor-ai converter — see Spring AI multimodality:
+#   https://docs.spring.io/spring-ai/reference/api/multimodality.html
+#   For bedrock a URL is fetched by spring-ai's MediaFetcher — SSRF-guarded:
+#   blocks loopback/link-local, 40 MB cap — though conductor-ai usually
+#   pre-downloads media to bytes first. MediaFetcher exists only in newer
+#   spring-ai; the versions resolved here (1.0.2/1.1.2) map bytes/URL without it.)
+#
+#   DROPS media (custom converter emits text only — image never sent):
+#     anthropic    AnthropicChatModel.convertMessage  -> Message.user(getText())
+#                  [fixed in conductor-oss#1238, pending release]
+#     gemini       GeminiChatModel.convertMessage     -> Part.text(getText())
+#                  [same bug; fixed in conductor-oss#1241, pending release]
+#     cohere       CohereChatModel        -> new ChatMessage(role, getText())
+#                  [vision-capable (e.g. command-a-vision); the request DTO's
+#                  content was a bare String. Fixed in conductor-oss#1246,
+#                  pending release]
+#     huggingface  HuggingFaceChatModel   -> api.generate({inputs}); legacy
+#                  text-generation, no messages/roles/media (see note)
+#     grok         OpenAICompatChatModel  -> MessageItem.user(getText())
+#                  [fixed in conductor-oss#1243, pending release]
+#     perplexity   reuses OpenAICompatChatModel
+#                  [same fix; conductor-oss#1243]
+#
+#   (huggingface DOES support multimodal, but only via its OpenAI-compatible
+#   router endpoint https://router.huggingface.co/v1/responses (input_text/
+#   input_image). The legacy provider used the text-generation API
+#   ({inputs} -> generated_text) and carried neither messages nor media;
+#   conductor-oss#1245 migrates it to the router (reusing OpenAIResponsesChatModel),
+#   which is a provider migration, not a converter tweak. Image support is
+#   model-dependent.)
+#
+#   Out of scope — image-GENERATION-only providers (e.g. stabilityai): no chat
+#   model at all (getChatModel throws UnsupportedOperationException), so there is
+#   no media-input path. They produce images (cf. Suite 7), they don't receive
+#   them.
+#
+# Cases below exercise OpenAI (runnable with a single API key here) plus
+# Anthropic, tracked as a skip until conductor-oss#1238 ships. Every other
+# provider is documented above but not parametrized — none can be exercised
+# here: azure/mistral/ollama/bedrock need provider-specific credentials or a
+# running server, and gemini (fix: conductor-oss#1241) has no API key available.
+_ANTHROPIC_SKIP_REASON = (
     "Server does not attach media to the Anthropic provider request — the model "
-    "receives no image (OpenAI works). Re-enable when the server forwards media "
-    "for Anthropic."
+    "receives no image (OpenAI works). Fixed in conductor-oss#1238; re-enable "
+    "once the server ships it."
 )
-_ANTHROPIC_MEDIA_SKIP = pytest.mark.skip(reason=SUITE25_ANTHROPIC_SKIP_REASON)
+# Kept for back-compat with anything referencing the original name.
+SUITE25_ANTHROPIC_SKIP_REASON = _ANTHROPIC_SKIP_REASON
+_ANTHROPIC_MEDIA_SKIP = pytest.mark.skip(reason=_ANTHROPIC_SKIP_REASON)
 
-# Positive test: Anthropic is skipped (no image reaches the model — see above).
+# Positive test: only OpenAI reaches the model with the image today; Anthropic
+# is skipped (see reason above). Gemini is out — same server bug (fix:
+# conductor-oss#1241) but no GOOGLE_AI_API_KEY available to exercise it.
 POSITIVE_CASES = [
     pytest.param("OPENAI_API_KEY", "openai/gpt-4o-mini", id="openai"),
     pytest.param(
@@ -91,8 +144,8 @@ POSITIVE_CASES = [
     ),
 ]
 
-# Counterfactual: both providers should COMPLETE and simply not emit the token
-# (no media is sent at all), so neither is expected to fail.
+# Counterfactual: with NO media every provider should COMPLETE and simply not
+# emit the token, so none are skipped here (each still gates on its key).
 COUNTERFACTUAL_CASES = [
     pytest.param("OPENAI_API_KEY", "openai/gpt-4o-mini", id="openai"),
     pytest.param("ANTHROPIC_API_KEY", "anthropic/claude-sonnet-4-5", id="anthropic"),
