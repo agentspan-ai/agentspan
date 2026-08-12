@@ -1,0 +1,50 @@
+# AI-powered PR review using the AgentSpan pr-reviewer skill.
+#
+# Runs on every pull_request open/update and posts a structured review comment.
+#
+# Required repository secrets:
+#   AGENTSPAN_SERVER_URL  — URL of your running AgentSpan server
+#   GH_TOKEN              — GitHub token with `pull-requests: write` permission
+#                           (also stored server-side: agentspan credentials set GH_TOKEN <token>)
+#
+# Optional:
+#   AGENTSPAN_LLM_MODEL   — override the model (default: anthropic/claude-sonnet-4-6)
+
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  ai-review:
+    name: Run PR Review Skill
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # needed to post comments
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history so agent can use git context
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install AgentSpan
+        run: pip install agentspan
+
+      - name: Run PR Review
+        if: ${{ secrets.AGENTSPAN_SERVER_URL != '' }}
+        run: |
+          python sdk/python/examples/pr-review-skill/run_review.py \
+            ${{ github.event.pull_request.number }} \
+            ${{ github.repository }}
+        env:
+          AGENTSPAN_SERVER_URL: ${{ secrets.AGENTSPAN_SERVER_URL }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          AGENTSPAN_LLM_MODEL: ${{ secrets.AGENTSPAN_LLM_MODEL || 'anthropic/claude-sonnet-4-6' }}
