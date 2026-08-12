@@ -25,6 +25,19 @@ STALE_AFTER_S = 120
 CRITICAL_TASK_TYPES = ("get_incident_details", "get_alert_recurrence")
 
 
+# Workers are started LAZILY by runtime.run() -> _prepare_workers, so on a freshly
+# started process they have never polled and polldata still shows the PREVIOUS
+# process's timestamps. Blocking on that would be self-defeating: the guard would
+# prevent the very call that starts the workers. So we only report dead once we have
+# seen a task type healthy in THIS process — i.e. a healthy -> stale transition.
+_seen_healthy: set[str] = set()
+
+
+def reset_seen_healthy() -> None:
+    """Test hook — forget what this process has observed."""
+    _seen_healthy.clear()
+
+
 def evaluate(poll_ages_s: dict[str, float | None], *, stale_after_s: int = STALE_AFTER_S,
              required: tuple[str, ...] = CRITICAL_TASK_TYPES) -> dict:
     """Decide whether a triage can usefully run.
@@ -33,20 +46,27 @@ def evaluate(poll_ages_s: dict[str, float | None], *, stale_after_s: int = STALE
     reports no poller at all. Distinguishing those two is the point: "never registered"
     and "registered but died" are different faults, and both differ from healthy.
     """
-    dead, stale, healthy = [], [], []
+    dead, stale, healthy, warming = [], [], [], []
     for task_type in required:
         age = poll_ages_s.get(task_type, "missing")
-        if age == "missing" or age is None:
-            dead.append(task_type)
-        elif age > stale_after_s:
-            stale.append({"task_type": task_type, "age_s": round(float(age))})
-        else:
+        fresh = age not in ("missing", None) and float(age) <= stale_after_s
+        if fresh:
+            _seen_healthy.add(task_type)
             healthy.append(task_type)
+        elif task_type not in _seen_healthy:
+            # Never yet polled in this process — cold start, not a death. Let the
+            # triage through; runtime.run() is what spawns the worker.
+            warming.append(task_type)
+        elif age == "missing" or age is None:
+            dead.append(task_type)
+        else:
+            stale.append({"task_type": task_type, "age_s": round(float(age))})
 
     ok = not dead and not stale
     return {
         "ok": ok,
         "healthy": healthy,
+        "warming_up": warming,
         "no_poller": dead,
         "stale": stale,
         "reason": _reason(ok, dead, stale, stale_after_s),
