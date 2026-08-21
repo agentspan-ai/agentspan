@@ -1,0 +1,2993 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Durable runtime for AI agents — long-running, dynamic plan-execute, and event-driven.">
+      
+      
+      
+        <link rel="canonical" href="https://agentspan.ai/docs/">
+      
+      
+      
+        <link rel="next" href="why-agentspan/">
+      
+      
+      <link rel="icon" href="assets/logo-light.svg">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Agentspan - Agentspan Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=False:300,300i,400,400i,700,700i%7CFalse:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"False";--md-code-font:"False"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="css/custom.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#agentspan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <strong>Agentspan is now part of
+    <a href="https://github.com/conductor-oss/conductor">Orkes Conductor</a></strong>
+  — these docs are frozen. New docs:
+  <a href="https://orkes.io/content/devguide/ai">orkes.io/content/devguide/ai</a> ·
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/MIGRATION.md">migration guide</a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="Agentspan Docs" class="md-header__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="assets/logo-light.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Agentspan Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Agentspan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="Agentspan Docs" class="md-nav__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="assets/logo-light.svg" alt="logo">
+
+    </a>
+    Agentspan Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-production-agents-break" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why production agents break
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#get-started-in-30-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      Get started in 30 seconds
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Get started in 30 seconds">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Install
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-set-your-llm-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Set your LLM key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-start-the-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Start the server
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-run-your-first-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Run your first agent
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-four-production-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      The four production patterns
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The four production patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#long-running-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Long-running agents
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynamic-plan-execute" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dynamic plan-execute
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-driven-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Event-driven agents
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adaptive-loops" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adaptive loops
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#works-with-your-existing-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      Works with your existing framework
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#go-deeper" class="md-nav__link">
+    <span class="md-ellipsis">
+      Go deeper
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="why-agentspan/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Why Agentspan
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="quickstart/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SDK Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent Strategies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/plan-execute/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Plan-Execute (PAC/PAE)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/adaptive-loops/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Adaptive Loops
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/memory/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Memory
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/streaming/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="concepts/testing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/support-triage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Support Ticket Triage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/research-pipeline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Research Pipeline
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/document-processor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Batch Document Processor
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/crash-resume/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Crash and Resume
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/human-in-the-loop/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Human in the Loop
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/langgraph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph Code Review Bot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/openai-agents-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK Customer Support
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="examples/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK Research Assistant
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Java SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Java SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Core Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Core Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/agent-structure/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent Field Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/agent-schema/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent JSON Schema
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/termination/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Termination
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/stateful/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Stateful Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/structured-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Structured Output
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/streaming-hitl/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming & HITL
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/callbacks/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Callbacks
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/concepts/deploy-serve-run/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deploy, Serve, Run
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Frameworks
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frameworks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/frameworks/langchain4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangChain4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/frameworks/langgraph4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/frameworks/openai/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/frameworks/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/spring-boot/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Spring Boot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/agent-runtime-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentRuntime
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/agent-client-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentClient (internal)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="java-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Public API summary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Python SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Python SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="python-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="python-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="python-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="python-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="python-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="python-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    TypeScript SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            TypeScript SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="typescript-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="typescript-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="typescript-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="typescript-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="typescript-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="typescript-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    C# SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            C# SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="csharp-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="csharp-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="csharp-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="csharp-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="csharp-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="csharp-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="providers/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Providers
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="ai-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AI Models
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="cli/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CLI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="deployment/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deployment
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="self-hosting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="integrations/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Integrations
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="worker-types/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Worker Types
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-production-agents-break" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why production agents break
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#get-started-in-30-seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      Get started in 30 seconds
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Get started in 30 seconds">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Install
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-set-your-llm-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Set your LLM key
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-start-the-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Start the server
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-run-your-first-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Run your first agent
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-four-production-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      The four production patterns
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The four production patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#long-running-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Long-running agents
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dynamic-plan-execute" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dynamic plan-execute
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-driven-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Event-driven agents
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adaptive-loops" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adaptive loops
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#works-with-your-existing-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      Works with your existing framework
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#go-deeper" class="md-nav__link">
+    <span class="md-ellipsis">
+      Go deeper
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/agentspan-ai/agentspan/edit/main/docs/index.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4v-2m10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1 2.1 2.1Z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="agentspan">Agentspan<a class="headerlink" href="#agentspan" title="Permanent link">&para;</a></h1>
+<div class="admonition warning">
+<p class="admonition-title">Agentspan is now part of Orkes Conductor (2026-08-17)</p>
+<p>These docs are frozen. Agentspan merged into <strong><a href="https://github.com/conductor-oss/conductor">Orkes Conductor</a></strong> —
+new docs live at <a href="https://orkes.io/content/devguide/ai">orkes.io/content/devguide/ai</a>, and existing agents
+migrate in minutes with the <strong><a href="https://github.com/agentspan-ai/agentspan/blob/main/MIGRATION.md">migration guide</a></strong>.</p>
+</div>
+<p><strong>AI agents that don't die when your process does.</strong></p>
+<p>Most agent frameworks run the loop in your process. A crash, deploy, or OOM kill loses everything. Agentspan separates your code from execution state — the server holds state, your workers execute tools. Agents survive restarts, pause for human approval indefinitely, and resume at the last completed step.</p>
+<p><img alt="Agentspan four pillars" src="assets/four-pillars.svg" /></p>
+<hr />
+<h2 id="why-production-agents-break">Why production agents break<a class="headerlink" href="#why-production-agents-break" title="Permanent link">&para;</a></h2>
+<p>When an agent loop runs inside your process, six things can go wrong — and they will:</p>
+<ul>
+<li><strong>Process crash mid-run.</strong> A long agent run takes minutes. If your process dies, the run is gone. No resume.</li>
+<li><strong>Human approval loses state.</strong> Pausing for human input means holding state in memory. A restart kills the pending approval.</li>
+<li><strong>No history.</strong> In-process execution leaves no record. You can't query what any agent did, replay a run, or compare models.</li>
+<li><strong>Scaling duplicates state.</strong> Multiple machines mean distributed state management — or isolated, uncoordinated agents.</li>
+<li><strong>Scheduling requires external infra.</strong> A cron means a separate scheduler, missed-fire handling, and overlap detection — all failure-prone.</li>
+<li><strong>Background jobs vanish.</strong> An async agent fired via threading or asyncio dies when your process does.</li>
+</ul>
+<p>Agentspan eliminates all six by keeping execution state on the server.</p>
+<div class="highlight"><pre><span></span><code>Your process                    Agentspan server
+└── worker                      └── agent execution
+    ├── registers tools             ├── tracks current step
+    └── executes tool calls ←────── delegates tool work
+                                    ├── retries on failure
+                                    ├── holds HITL state
+                                    └── stores full history
+</code></pre></div>
+<p>Your process can crash, restart, or be replaced. <strong>The agent keeps running.</strong></p>
+<hr />
+<h2 id="get-started-in-30-seconds">Get started in 30 seconds<a class="headerlink" href="#get-started-in-30-seconds" title="Permanent link">&para;</a></h2>
+<h3 id="1-install">1. Install<a class="headerlink" href="#1-install" title="Permanent link">&para;</a></h3>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:6"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><input id="__tabbed_1_5" name="__tabbed_1" type="radio" /><input id="__tabbed_1_6" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Python</label><label for="__tabbed_1_2">TypeScript</label><label for="__tabbed_1_3">Java</label><label for="__tabbed_1_4">C#</label><label for="__tabbed_1_5">Rust <em>(coming soon)</em></label><label for="__tabbed_1_6">Ruby <em>(coming soon)</em></label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>conductor-agent-sdk
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>npm<span class="w"> </span>install<span class="w"> </span>@conductor-oss/conductor-agent-sdk
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="cm">&lt;!-- Maven --&gt;</span>
+<span class="nt">&lt;dependency&gt;</span>
+<span class="w">  </span><span class="nt">&lt;groupId&gt;</span>org.conductoross.conductor<span class="nt">&lt;/groupId&gt;</span>
+<span class="w">  </span><span class="nt">&lt;artifactId&gt;</span>conductor-agent-sdk<span class="nt">&lt;/artifactId&gt;</span>
+<span class="w">  </span><span class="nt">&lt;version&gt;</span>0.1.0<span class="nt">&lt;/version&gt;</span>
+<span class="nt">&lt;/dependency&gt;</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code>// Gradle
+implementation &#39;org.conductoross.conductor:conductor-agent-sdk:0.1.0&#39;
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>dotnet<span class="w"> </span>add<span class="w"> </span>package<span class="w"> </span>conductor-agent-sdk
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="c1"># Cargo.toml — not yet published</span>
+<span class="c1"># [dependencies]</span>
+<span class="c1"># conductor-agent-sdk = &quot;0.1&quot;</span>
+</code></pre></div>
+<p>Star the <a href="https://github.com/agentspan-ai/agentspan">repo</a> to be notified when Rust support ships.</p>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="c1"># Gemfile — not yet published</span>
+<span class="c1"># gem &#39;conductor-agent-sdk&#39;</span>
+</code></pre></div>
+<p>Star the <a href="https://github.com/agentspan-ai/agentspan">repo</a> to be notified when Ruby support ships.</p>
+</div>
+</div>
+</div>
+<h3 id="2-set-your-llm-key">2. Set your LLM key<a class="headerlink" href="#2-set-your-llm-key" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span>sk-...<span class="w">        </span><span class="c1"># OpenAI</span>
+<span class="c1"># or</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-...<span class="w"> </span><span class="c1"># Anthropic</span>
+</code></pre></div>
+<h3 id="3-start-the-server">3. Start the server<a class="headerlink" href="#3-start-the-server" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>agentspan<span class="w"> </span>server<span class="w"> </span>start
+</code></pre></div>
+<p>Downloads and starts the Agentspan runtime on <code>http://localhost:6767</code>. First run fetches the JAR (~50 MB); subsequent starts use the cache.</p>
+<h3 id="4-run-your-first-agent">4. Run your first agent<a class="headerlink" href="#4-run-your-first-agent" title="Permanent link">&para;</a></h3>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:4"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><input id="__tabbed_2_3" name="__tabbed_2" type="radio" /><input id="__tabbed_2_4" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Python</label><label for="__tabbed_2_2">TypeScript</label><label for="__tabbed_2_3">Java</label><label for="__tabbed_2_4">C#</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">tool</span>
+
+<span class="nd">@tool</span>
+<span class="k">def</span> <span class="nf">get_weather</span><span class="p">(</span><span class="n">city</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get current weather for a city.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;72°F and sunny in </span><span class="si">{</span><span class="n">city</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<span class="n">agent</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;weatherbot&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;You are an outdoor activity assistant. Look up the weather, then recommend activities.&quot;</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">get_weather</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="s2">&quot;What should I do today in NYC?&quot;</span><span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">print_result</span><span class="p">()</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Agent</span><span class="p">,</span><span class="w"> </span><span class="nx">AgentRuntime</span><span class="p">,</span><span class="w"> </span><span class="nx">tool</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">getWeather</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">tool</span><span class="p">(</span>
+<span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">city</span><span class="w"> </span><span class="p">}</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">city</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="sb">`72°F and sunny in </span><span class="si">${</span><span class="nx">city</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;get_weather&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Get current weather for a city&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">inputSchema</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;object&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">city</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;string&#39;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;city&#39;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<span class="p">);</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;weatherbot&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;openai/gpt-4o&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;You are an outdoor activity assistant. Look up the weather, then recommend activities.&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">tools</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">getWeather</span><span class="p">],</span>
+<span class="p">});</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">runtime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">AgentRuntime</span><span class="p">();</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">run</span><span class="p">(</span><span class="nx">agent</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;What should I do today in NYC?&#39;</span><span class="p">);</span>
+<span class="nx">result</span><span class="p">.</span><span class="nx">printResult</span><span class="p">();</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">shutdown</span><span class="p">();</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">org.conductoross.conductor.ai.Agent</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.conductoross.conductor.ai.AgentRuntime</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.conductoross.conductor.ai.tool.Tool</span><span class="p">;</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Weatherbot</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">    </span><span class="nd">@Tool</span><span class="p">(</span><span class="n">description</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;Get current weather for a city&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="nf">getWeather</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">city</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="s">&quot;72°F and sunny in &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">city</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Weatherbot</span><span class="w"> </span><span class="n">wb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Weatherbot</span><span class="p">();</span>
+
+<span class="w">        </span><span class="n">Agent</span><span class="w"> </span><span class="n">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Agent</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+<span class="w">            </span><span class="p">.</span><span class="na">name</span><span class="p">(</span><span class="s">&quot;weatherbot&quot;</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="na">model</span><span class="p">(</span><span class="s">&quot;openai/gpt-4o&quot;</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="na">instructions</span><span class="p">(</span><span class="s">&quot;You are an outdoor activity assistant. Look up the weather, then recommend activities.&quot;</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="na">tools</span><span class="p">(</span><span class="n">wb</span><span class="p">)</span>
+<span class="w">            </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">(</span><span class="n">AgentRuntime</span><span class="w"> </span><span class="n">runtime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AgentRuntime</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kd">var</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">runtime</span><span class="p">.</span><span class="na">run</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;What should I do today in NYC?&quot;</span><span class="p">);</span>
+<span class="w">            </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="na">getOutput</span><span class="p">());</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="k">using</span><span class="w"> </span><span class="nn">Conductor.AI</span><span class="p">;</span>
+
+<span class="kt">var</span><span class="w"> </span><span class="n">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Agent</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">AgentConfig</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;weatherbot&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">Model</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">Instructions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;You are an outdoor activity assistant. Look up the weather, then recommend activities.&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">Tools</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="n">Tool</span><span class="p">.</span><span class="n">From</span><span class="p">((</span><span class="kt">string</span><span class="w"> </span><span class="n">city</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="s">$&quot;72°F and sunny in {city}&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;get_weather&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="n">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Get current weather for a city&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">});</span>
+
+<span class="k">await</span><span class="w"> </span><span class="k">using</span><span class="w"> </span><span class="nn">var</span><span class="w"> </span><span class="n">runtime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AgentRuntime</span><span class="p">();</span>
+<span class="kt">var</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="n">runtime</span><span class="p">.</span><span class="n">RunAsync</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;What should I do today in NYC?&quot;</span><span class="p">);</span>
+<span class="n">Console</span><span class="p">.</span><span class="n">WriteLine</span><span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">Output</span><span class="p">);</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>Open <strong>http://localhost:6767</strong> to see the execution in the visual UI.</p>
+<hr />
+<h2 id="the-four-production-patterns">The four production patterns<a class="headerlink" href="#the-four-production-patterns" title="Permanent link">&para;</a></h2>
+<h3 id="long-running-agents">Long-running agents<a class="headerlink" href="#long-running-agents" title="Permanent link">&para;</a></h3>
+<p>Execution state lives on the server, not in your process. Workers connect, run tool calls, and disconnect — the server tracks every step. A crash mid-run resumes at the last completed step when a worker reconnects. Human approval pauses indefinitely with no in-memory state at risk.</p>
+<div class="highlight"><pre><span></span><code><span class="n">agent</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;researcher&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;anthropic/claude-sonnet-4-6&quot;</span><span class="p">,</span>
+    <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Research the topic thoroughly. Use all available tools.&quot;</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">web_search</span><span class="p">,</span> <span class="n">read_page</span><span class="p">,</span> <span class="n">write_report</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="c1"># Even if this process crashes, the agent resumes on reconnect</span>
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="s2">&quot;Write a report on LLM inference optimization&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="dynamic-plan-execute">Dynamic plan-execute<a class="headerlink" href="#dynamic-plan-execute" title="Permanent link">&para;</a></h3>
+<p>The LLM plans once; Conductor executes deterministically. A planner agent emits a JSON task graph. The server compiles it into an immutable sub-workflow — parallelism is <code>FORK_JOIN</code>, branching is <code>SWITCH</code>, retries cost zero tokens. See <a href="concepts/plan-execute/">Plan-Execute</a>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">plan_execute</span>
+
+<span class="n">harness</span> <span class="o">=</span> <span class="n">plan_execute</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;report_generator&quot;</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">create_dir</span><span class="p">,</span> <span class="n">write_section</span><span class="p">,</span> <span class="n">assemble</span><span class="p">,</span> <span class="n">check_length</span><span class="p">],</span>
+    <span class="n">planner_instructions</span><span class="o">=</span><span class="s2">&quot;Plan a 3-section report on the topic.&quot;</span><span class="p">,</span>
+    <span class="n">fallback_instructions</span><span class="o">=</span><span class="s2">&quot;Fix what the deterministic plan couldn&#39;t.&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">harness</span><span class="p">,</span> <span class="s2">&quot;AI agents in 2025&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="event-driven-agents">Event-driven agents<a class="headerlink" href="#event-driven-agents" title="Permanent link">&para;</a></h3>
+<p>Attach cron schedules at deploy time. Connect to Kafka, SQS, AMQP, webhooks, or any Conductor event source — every execution fully recorded with inputs, outputs, and per-step timing. See <a href="scheduling/">Scheduling</a>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Schedule</span>
+
+<span class="n">agent</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;daily_digest&quot;</span><span class="p">,</span>
+    <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Summarize the top news for today.&quot;</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">fetch_news</span><span class="p">,</span> <span class="n">send_email</span><span class="p">],</span>
+    <span class="n">schedules</span><span class="o">=</span><span class="p">[</span><span class="n">Schedule</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;morning&quot;</span><span class="p">,</span> <span class="n">cron</span><span class="o">=</span><span class="s2">&quot;0 9 * * *&quot;</span><span class="p">)],</span>
+<span class="p">)</span>
+
+<span class="n">runtime</span><span class="o">.</span><span class="n">deploy</span><span class="p">(</span><span class="n">agent</span><span class="p">)</span>  <span class="c1"># registers the schedule; server fires it every day at 9 AM</span>
+</code></pre></div>
+<h3 id="adaptive-loops">Adaptive loops<a class="headerlink" href="#adaptive-loops" title="Permanent link">&para;</a></h3>
+<p>Any framework can loop. Only Agentspan makes each iteration a <strong>durable, observable workflow</strong> — crash mid-loop and resume at the current iteration, not from scratch. Combine Plan-Execute for deterministic inner execution with an adaptive outer loop that converges based on verified results. See <a href="concepts/adaptive-loops/">Adaptive Loops</a>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span>
+
+<span class="n">agent</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;travel_planner&quot;</span><span class="p">,</span> <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Output itineraries as JSON.&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+
+<span class="n">failures</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">iteration</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_iterations</span><span class="p">):</span>
+        <span class="n">prompt</span> <span class="o">=</span> <span class="n">build_prompt</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">daily_budget</span><span class="p">,</span> <span class="n">failures</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">prompt</span><span class="p">)</span>          <span class="c1"># durable workflow — survives crashes</span>
+
+        <span class="n">itinerary</span> <span class="o">=</span> <span class="n">extract_json</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="n">failures</span> <span class="o">=</span> <span class="n">verify_constraints</span><span class="p">(</span><span class="n">itinerary</span><span class="p">)</span>     <span class="c1"># deterministic — no LLM</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">failures</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;✓ All constraints passed in </span><span class="si">{</span><span class="n">iteration</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> iteration(s)&quot;</span><span class="p">)</span>
+            <span class="k">break</span>
+        <span class="c1"># Exact failure messages feed into the next prompt</span>
+</code></pre></div>
+<p>Each <code>runtime.run()</code> is a durable Conductor workflow — every iteration observable in the UI, resumable on crash, and fully logged.</p>
+<p>See <code>examples/118_adaptive_loop_showcase.py</code> — a runnable travel planner that loops until budget and structural constraints pass (<code>python 118_adaptive_loop_showcase.py "Tokyo"</code>).</p>
+<hr />
+<h2 id="works-with-your-existing-framework">Works with your existing framework<a class="headerlink" href="#works-with-your-existing-framework" title="Permanent link">&para;</a></h2>
+<p>Pass your existing agent directly to <code>runtime.run()</code>. Your code is unchanged.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># LangGraph</span>
+<span class="kn">from</span> <span class="nn">langgraph.prebuilt</span> <span class="kn">import</span> <span class="n">create_react_agent</span>
+<span class="n">graph</span> <span class="o">=</span> <span class="n">create_react_agent</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">tools</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">prompt</span><span class="p">)</span>
+
+<span class="c1"># OpenAI Agents SDK</span>
+<span class="kn">from</span> <span class="nn">agents</span> <span class="kn">import</span> <span class="n">Agent</span> <span class="k">as</span> <span class="n">OAIAgent</span>
+<span class="n">agent</span> <span class="o">=</span> <span class="n">OAIAgent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;helper&quot;</span><span class="p">,</span> <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">])</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">prompt</span><span class="p">)</span>
+
+<span class="c1"># Google ADK</span>
+<span class="kn">from</span> <span class="nn">google.adk.agents</span> <span class="kn">import</span> <span class="n">LlmAgent</span>
+<span class="n">agent</span> <span class="o">=</span> <span class="n">LlmAgent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;helper&quot;</span><span class="p">,</span> <span class="n">instruction</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">])</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">prompt</span><span class="p">)</span>
+</code></pre></div>
+<hr />
+<h2 id="go-deeper">Go deeper<a class="headerlink" href="#go-deeper" title="Permanent link">&para;</a></h2>
+<div class="grid cards">
+<ul>
+<li>
+<p><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 18h2v-2h-2v2m1-16A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8m0-14a4 4 0 0 0-4 4h2a2 2 0 0 1 2-2 2 2 0 0 1 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5a4 4 0 0 0-4-4Z"/></svg></span> <strong>Why Agentspan</strong></p>
+<hr />
+<p>Why conventional frameworks fail in production, and how Agentspan's server-side execution model solves it.</p>
+<p><a href="why-agentspan/">Read more →</a></p>
+</li>
+<li>
+<p><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19.5 17c-.14 0-.26 0-.39.04L17.5 13.8c.45-.45.75-1.09.75-1.8a2.5 2.5 0 0 0-2.5-2.5c-.14 0-.25 0-.4.04L13.74 6.3c.47-.46.76-1.09.76-1.8a2.5 2.5 0 0 0-5 0c0 .7.29 1.34.76 1.79L8.65 9.54c-.15-.04-.26-.04-.4-.04a2.5 2.5 0 0 0-2.5 2.5c0 .71.29 1.34.75 1.79l-1.61 3.25C4.76 17 4.64 17 4.5 17a2.5 2.5 0 0 0 0 5A2.5 2.5 0 0 0 7 19.5c0-.7-.29-1.34-.76-1.79l1.62-3.25c.14.04.26.04.39.04s.25 0 .38-.04l1.63 3.25c-.47.45-.76 1.09-.76 1.79a2.5 2.5 0 0 0 5 0A2.5 2.5 0 0 0 12 17c-.13 0-.26 0-.39.04L10 13.8c.45-.45.75-1.09.75-1.8 0-.7-.29-1.33-.75-1.79l1.61-3.25c.13.04.26.04.39.04s.26 0 .39-.04L14 10.21a2.5 2.5 0 0 0 1.75 4.29c.13 0 .25 0 .38-.04l1.63 3.25c-.47.45-.76 1.09-.76 1.79a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0-2.5-2.5m-15 3.5c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1m8.5-1c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1M7.25 12c0-.55.45-1 1-1s1 .45 1 1-.45 1-1 1-1-.45-1-1M11 4.5c0-.55.45-1 1-1s1 .45 1 1-.45 1-1 1-1-.45-1-1m3.75 7.5c0-.55.45-1 1-1s1 .45 1 1-.45 1-1 1-1-.45-1-1m4.75 8.5c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1Z"/></svg></span> <strong>Plan-Execute</strong></p>
+<hr />
+<p>The LLM plans once; Conductor executes deterministically. No tokens on retries, parallelism, or branching.</p>
+<p><a href="concepts/plan-execute/">Read more →</a></p>
+</li>
+<li>
+<p><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 4H3a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2M3 19V6h8v13H3m18 0h-8V6h8v13m-7-9.5h6V11h-6V9.5m0 2.5h6v1.5h-6V12m0 2.5h6V16h-6v-1.5Z"/></svg></span> <strong>SDK Reference</strong></p>
+<hr />
+<p>Python, TypeScript, Java, and C# — full API reference, examples, and framework integration guides.</p>
+<p><a href="sdk/">Read more →</a></p>
+</li>
+<li>
+<p><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m13.13 22.19-1.63-3.83c1.57-.58 3.04-1.36 4.4-2.27l-2.77 6.1M5.64 12.5l-3.83-1.63 6.1-2.77C7 9.46 6.22 10.93 5.64 12.5M19.22 4c.28 0 .53 0 .74.05.17 1.39-.02 4.25-3.3 7.53-1.7 1.71-3.73 3.02-6.01 3.89l-2.15-2.1c.92-2.31 2.23-4.34 3.92-6.03C15.18 4.58 17.64 4 19.22 4m0-2c-1.98 0-4.98.69-8.22 3.93-2.19 2.19-3.5 4.6-4.35 6.71-.28.75-.09 1.57.46 2.13l2.13 2.12c.38.38.89.61 1.42.61.23 0 .47-.06.7-.15A19.1 19.1 0 0 0 18.07 13c5.66-5.66 3.54-10.61 3.54-10.61S20.7 2 19.22 2m-4.68 7.46c-.78-.78-.78-2.05 0-2.83s2.05-.78 2.83 0c.77.78.78 2.05 0 2.83-.78.78-2.05.78-2.83 0m-5.66 7.07-1.41-1.41 1.41 1.41M6.24 22l3.64-3.64c-.34-.09-.67-.24-.97-.45L4.83 22h1.41M2 22h1.41l4.77-4.76-1.42-1.41L2 20.59V22m0-2.83 4.09-4.08c-.21-.3-.36-.62-.45-.97L2 17.76v1.41Z"/></svg></span> <strong>Examples</strong></p>
+<hr />
+<p>Production-shape examples: support triage, research pipelines, HITL workflows, LangGraph bots.</p>
+<p><a href="examples/support-triage/">Read more →</a></p>
+</li>
+<li>
+<p><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 0 0-8 8 8 8 0 0 0 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18a6 6 0 0 1-6-6 6 6 0 0 1 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z"/></svg></span> <strong>Adaptive loops</strong></p>
+<hr />
+<p>Durable iterative agents — each iteration a Conductor workflow. Replan based on verified results, converge on goals, and observe every iteration in the UI.</p>
+<p><a href="concepts/adaptive-loops/">Read more →</a></p>
+</li>
+</ul>
+</div>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": ".", "features": ["navigation.instant", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "content.tabs.link"], "search": "assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>

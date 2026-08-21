@@ -1,0 +1,3250 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Agentspan — long-running, dynamic, and event-driven AI agents built on Conductor.">
+      
+      
+      
+        <link rel="canonical" href="https://agentspan.ai/docs/typescript-sdk/writing-agents/">
+      
+      
+        <link rel="prev" href="../getting-started/">
+      
+      
+        <link rel="next" href="../framework-agents/">
+      
+      
+      <link rel="icon" href="../../assets/logo-light.svg">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Writing Agents - Agentspan Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=False:300,300i,400,400i,700,700i%7CFalse:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"False";--md-code-font:"False"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../css/custom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#writing-agents" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <strong>Agentspan is now part of
+    <a href="https://github.com/conductor-oss/conductor">Orkes Conductor</a></strong>
+  — these docs are frozen. New docs:
+  <a href="https://orkes.io/content/devguide/ai">orkes.io/content/devguide/ai</a> ·
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/MIGRATION.md">migration guide</a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Agentspan Docs" class="md-header__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="../../assets/logo-light.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Agentspan Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Writing Agents
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Agentspan Docs" class="md-nav__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="../../assets/logo-light.svg" alt="logo">
+
+    </a>
+    Agentspan Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../why-agentspan/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Why Agentspan
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SDK Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent Strategies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/plan-execute/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Plan-Execute (PAC/PAE)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/adaptive-loops/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Adaptive Loops
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/memory/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Memory
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/streaming/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/testing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/support-triage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Support Ticket Triage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/research-pipeline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Research Pipeline
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/document-processor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Batch Document Processor
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/crash-resume/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Crash and Resume
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/human-in-the-loop/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Human in the Loop
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/langgraph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph Code Review Bot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/openai-agents-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK Customer Support
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK Research Assistant
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Java SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Java SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Core Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Core Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-structure/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent Field Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-schema/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent JSON Schema
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/termination/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Termination
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/stateful/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Stateful Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/structured-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Structured Output
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/streaming-hitl/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming & HITL
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/callbacks/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Callbacks
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/deploy-serve-run/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deploy, Serve, Run
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Frameworks
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frameworks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/langchain4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangChain4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/langgraph4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/openai/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/spring-boot/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Spring Boot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-runtime-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentRuntime
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-client-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentClient (internal)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Public API summary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Python SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Python SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    TypeScript SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            TypeScript SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#defining-an-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      Defining an agent
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Defining an agent">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#instructions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instructions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#local-tools-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      Local tools — tool()
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-discovery-tool-toolsfrom" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tool discovery — @Tool / toolsFrom
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Built-in tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Built-in tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#waitformessagetool-workflow-message-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      waitForMessageTool — workflow message queue
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#agenttool-agent-as-a-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      agentTool — agent as a tool
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-agent-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-agent strategies
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handoffs
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guardrails" class="md-nav__link">
+    <span class="md-ellipsis">
+      Guardrails
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#termination-textgate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Termination + TextGate
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#callbacks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Callbacks
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#streaming" class="md-nav__link">
+    <span class="md-ellipsis">
+      Streaming
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#human-in-the-loop-hitl" class="md-nav__link">
+    <span class="md-ellipsis">
+      Human-in-the-loop (HITL)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Schedules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-from-method-agentdec-agentsfrom" class="md-nav__link">
+    <span class="md-ellipsis">
+      Agent-from-method (@AgentDec / agentsFrom)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stateful-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Stateful agents
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    C# SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            C# SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../providers/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Providers
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AI Models
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CLI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deployment
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../self-hosting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Integrations
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../worker-types/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Worker Types
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#defining-an-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      Defining an agent
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Defining an agent">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#instructions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instructions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#local-tools-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      Local tools — tool()
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-discovery-tool-toolsfrom" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tool discovery — @Tool / toolsFrom
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Built-in tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Built-in tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#waitformessagetool-workflow-message-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      waitForMessageTool — workflow message queue
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#agenttool-agent-as-a-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      agentTool — agent as a tool
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-agent-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-agent strategies
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handoffs
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guardrails" class="md-nav__link">
+    <span class="md-ellipsis">
+      Guardrails
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#termination-textgate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Termination + TextGate
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#callbacks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Callbacks
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#streaming" class="md-nav__link">
+    <span class="md-ellipsis">
+      Streaming
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#human-in-the-loop-hitl" class="md-nav__link">
+    <span class="md-ellipsis">
+      Human-in-the-loop (HITL)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Schedules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-from-method-agentdec-agentsfrom" class="md-nav__link">
+    <span class="md-ellipsis">
+      Agent-from-method (@AgentDec / agentsFrom)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stateful-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Stateful agents
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/agentspan-ai/agentspan/edit/main/docs/typescript-sdk/writing-agents.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4v-2m10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1 2.1 2.1Z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="writing-agents">Writing Agents<a class="headerlink" href="#writing-agents" title="Permanent link">&para;</a></h1>
+<p>Everything you author is an <code>Agent</code>. A simple LLM agent, a tool-using agent, and a multi-agent orchestration are all the same <code>Agent</code> class with different options. This page walks the authoring surface.</p>
+<p>All snippets import from <code>@conductor-oss/conductor-agent-sdk</code> and assume a runtime:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Agent</span><span class="p">,</span><span class="w"> </span><span class="nx">AgentRuntime</span><span class="p">,</span><span class="w"> </span><span class="nx">tool</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">runtime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">AgentRuntime</span><span class="p">();</span>
+</code></pre></div>
+<h2 id="defining-an-agent">Defining an agent<a class="headerlink" href="#defining-an-agent" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;greeter&#39;</span><span class="p">,</span><span class="w">                 </span><span class="c1">// required; must match /^[a-zA-Z][a-zA-Z0-9_-]*$/</span>
+<span class="w">  </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;anthropic/claude-sonnet-4-6&#39;</span><span class="p">,</span><span class="w">     </span><span class="c1">// provider/model string</span>
+<span class="w">  </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Keep answers short.&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">temperature</span><span class="o">:</span><span class="w"> </span><span class="kt">0.7</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">maxTurns</span><span class="o">:</span><span class="w"> </span><span class="kt">25</span><span class="p">,</span><span class="w">                    </span><span class="c1">// default 25</span>
+<span class="w">  </span><span class="nx">maxTokens</span><span class="o">:</span><span class="w"> </span><span class="kt">2048</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">timeoutSeconds</span><span class="o">:</span><span class="w"> </span><span class="kt">0</span><span class="p">,</span><span class="w">               </span><span class="c1">// 0 = server default</span>
+<span class="p">});</span>
+</code></pre></div>
+<p>There is also a functional form, <code>agent(fn, options)</code>, where <code>fn</code> is the dynamic-instructions callable (see below):</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">agent</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="s1">&#39;You are a helpful assistant.&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;helper&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;anthropic/claude-sonnet-4-6&#39;</span><span class="p">,</span>
+<span class="p">});</span>
+</code></pre></div>
+<h3 id="instructions">Instructions<a class="headerlink" href="#instructions" title="Permanent link">&para;</a></h3>
+<p>Instructions can be a plain string, a callable, or a server-managed prompt template.</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// Static</span>
+<span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;a&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;You are concise.&#39;</span><span class="w"> </span><span class="p">});</span>
+
+<span class="c1">// Dynamic (callable) — evaluated to a string when the agent is serialized</span>
+<span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;a&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="sb">`Today is </span><span class="si">${</span><span class="ow">new</span><span class="w"> </span><span class="nb">Date</span><span class="p">().</span><span class="nx">toDateString</span><span class="p">()</span><span class="si">}</span><span class="sb">.`</span><span class="w"> </span><span class="p">});</span>
+
+<span class="c1">// Server-managed prompt template (referenced by name + version)</span>
+<span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">PromptTemplate</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+<span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;a&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="kt">new</span><span class="w"> </span><span class="nx">PromptTemplate</span><span class="p">(</span><span class="s1">&#39;support_greeting&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">brand</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Acme&#39;</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="mf">1</span><span class="p">),</span>
+<span class="p">});</span>
+</code></pre></div>
+<h2 id="tools">Tools<a class="headerlink" href="#tools" title="Permanent link">&para;</a></h2>
+<h3 id="local-tools-tool">Local tools — <code>tool()</code><a class="headerlink" href="#local-tools-tool" title="Permanent link">&para;</a></h3>
+<p><code>tool()</code> wraps an async function. Pass a Zod schema <strong>or</strong> a plain JSON Schema object for <code>inputSchema</code>. The function runs locally as a Conductor worker that the runtime polls; the runtime registers and polls it automatically on <code>run()</code> / <code>serve()</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">getWeather</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">tool</span><span class="p">(</span>
+<span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="p">(</span><span class="nx">args</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">city</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">city</span><span class="o">:</span><span class="w"> </span><span class="kt">args.city</span><span class="p">,</span><span class="w"> </span><span class="nx">tempC</span><span class="o">:</span><span class="w"> </span><span class="kt">21</span><span class="p">,</span><span class="w"> </span><span class="nx">conditions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;sunny&#39;</span><span class="w"> </span><span class="p">};</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;get_weather&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Get the current weather for a city.&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">inputSchema</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;object&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">city</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;string&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;City name&#39;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<span class="w">      </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;city&#39;</span><span class="p">],</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="p">);</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;weather_agent&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;anthropic/claude-sonnet-4-6&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Answer weather questions using the tool.&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">tools</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">getWeather</span><span class="p">],</span>
+<span class="p">});</span>
+</code></pre></div>
+<p><code>tool()</code> options: <code>name</code>, <code>description</code>, <code>inputSchema</code>, <code>outputSchema?</code>, <code>approvalRequired?</code>, <code>timeoutSeconds?</code>, <code>external?</code>, <code>credentials?</code>, <code>guardrails?</code>, <code>maxCalls?</code>, <code>retryCount?</code>, <code>retryDelaySeconds?</code>, <code>retryPolicy?</code>.</p>
+<p>The tool function receives an optional second argument, the <a href="../api-reference/#toolcontext"><code>ToolContext</code></a> (<code>sessionId</code>, <code>executionId</code>, <code>agentName</code>, <code>metadata</code>, <code>dependencies</code>, and a mutable <code>state</code>). See <a href="#stateful-agents">Stateful agents</a>.</p>
+<h3 id="tool-discovery-tool-toolsfrom">Tool discovery — <code>@Tool</code> / <code>toolsFrom</code><a class="headerlink" href="#tool-discovery-tool-toolsfrom" title="Permanent link">&para;</a></h3>
+<p>Decorate methods on a class and extract them, bound to the instance:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Tool</span><span class="p">,</span><span class="w"> </span><span class="nx">toolsFrom</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">class</span><span class="w"> </span><span class="nx">MathTools</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">@Tool</span><span class="p">({</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Add two numbers.&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">inputSchema</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;object&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">a</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;number&#39;</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">b</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;number&#39;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;a&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;b&#39;</span><span class="p">],</span>
+<span class="w">  </span><span class="p">}})</span>
+<span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">add</span><span class="p">(</span><span class="nx">args</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">a</span><span class="o">:</span><span class="w"> </span><span class="kt">number</span><span class="p">;</span><span class="w"> </span><span class="nx">b</span><span class="o">:</span><span class="w"> </span><span class="kt">number</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">sum</span><span class="o">:</span><span class="w"> </span><span class="kt">args.a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">args</span><span class="p">.</span><span class="nx">b</span><span class="w"> </span><span class="p">};</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">tools</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">toolsFrom</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="nx">MathTools</span><span class="p">());</span><span class="w">     </span><span class="c1">// ToolFunction[]</span>
+<span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;calc&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">tools</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<blockquote>
+<p><code>@Tool</code>/<code>@AgentDec</code> are TypeScript experimental decorators — set <code>"experimentalDecorators": true</code> in your <code>tsconfig.json</code>.</p>
+</blockquote>
+<h3 id="built-in-tools">Built-in tools<a class="headerlink" href="#built-in-tools" title="Permanent link">&para;</a></h3>
+<p>These return a <code>ToolDef</code> that runs server-side (no local worker). Add them to <code>tools: [...]</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Builder</th>
+<th>Tool type</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>httpTool({ name, description, url, method?, headers?, inputSchema?, credentials? })</code></td>
+<td><code>http</code></td>
+<td>Call an HTTP endpoint.</td>
+</tr>
+<tr>
+<td><code>mcpTool({ serverUrl, name?, description?, headers?, toolNames?, maxTools?, credentials? })</code></td>
+<td><code>mcp</code></td>
+<td>Expose an MCP server's tools.</td>
+</tr>
+<tr>
+<td><code>apiTool({ url, name?, description?, headers?, toolNames?, maxTools?, credentials? })</code></td>
+<td><code>api</code></td>
+<td>Expose an OpenAPI/API as tools.</td>
+</tr>
+<tr>
+<td><code>agentTool(agent, { name?, description?, retryCount?, retryDelaySeconds?, optional? })</code></td>
+<td><code>agent_tool</code></td>
+<td>Call another <code>Agent</code> as a tool (sub-agent).</td>
+</tr>
+<tr>
+<td><code>humanTool({ name, description, inputSchema? })</code></td>
+<td><code>human</code></td>
+<td>Pause for human input (HITL).</td>
+</tr>
+<tr>
+<td><code>imageTool({ name, description, llmProvider, model, style?, size? })</code></td>
+<td><code>generate_image</code></td>
+<td>Generate images.</td>
+</tr>
+<tr>
+<td><code>audioTool({ name, description, llmProvider, model, voice?, speed?, format? })</code></td>
+<td><code>generate_audio</code></td>
+<td>Text-to-speech.</td>
+</tr>
+<tr>
+<td><code>videoTool({ name, description, llmProvider, model, duration?, resolution?, fps?, ... })</code></td>
+<td><code>generate_video</code></td>
+<td>Generate video.</td>
+</tr>
+<tr>
+<td><code>pdfTool({ name?, description?, pageSize?, theme?, fontSize? })</code></td>
+<td><code>generate_pdf</code></td>
+<td>Render markdown to PDF.</td>
+</tr>
+<tr>
+<td><code>waitForMessageTool({ name, description, batchSize?, blocking? })</code></td>
+<td><code>pull_workflow_messages</code></td>
+<td>Dequeue messages from the workflow message queue.</td>
+</tr>
+<tr>
+<td><code>searchTool({ name, description, vectorDb, index, embeddingModelProvider, embeddingModel, namespace?, maxResults? })</code></td>
+<td><code>rag_search</code></td>
+<td>RAG vector search.</td>
+</tr>
+<tr>
+<td><code>indexTool({ name, description, vectorDb, index, embeddingModelProvider, embeddingModel, namespace?, chunkSize?, chunkOverlap? })</code></td>
+<td><code>rag_index</code></td>
+<td>RAG index/ingest.</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">httpTool</span><span class="p">,</span><span class="w"> </span><span class="nx">mcpTool</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;researcher&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;anthropic/claude-sonnet-4-6&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">tools</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="nx">httpTool</span><span class="p">({</span>
+<span class="w">      </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;get_user&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Fetch a user by id.&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">url</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;https://api.example.com/users/{id}&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">method</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;GET&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="p">}),</span>
+<span class="w">    </span><span class="nx">mcpTool</span><span class="p">({</span><span class="w"> </span><span class="nx">serverUrl</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;https://mcp.example.com/sse&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">toolNames</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;search&#39;</span><span class="p">]</span><span class="w"> </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="p">});</span>
+</code></pre></div>
+<h4 id="waitformessagetool-workflow-message-queue"><code>waitForMessageTool</code> — workflow message queue<a class="headerlink" href="#waitformessagetool-workflow-message-queue" title="Permanent link">&para;</a></h4>
+<p><code>waitForMessageTool</code> lets a running agent dequeue messages pushed into its workflow message queue (Conductor <code>PULL_WORKFLOW_MESSAGES</code>). No worker is needed — the server handles it. In blocking mode (default) the task stays in progress until a message arrives.</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">waitForMessageTool</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;inbox_agent&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;anthropic/claude-sonnet-4-6&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;When asked to wait, call wait_for_message and process what arrives.&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">tools</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">waitForMessageTool</span><span class="p">({</span>
+<span class="w">    </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;wait_for_message&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Wait for the next inbound message.&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">batchSize</span><span class="o">:</span><span class="w"> </span><span class="kt">1</span><span class="p">,</span><span class="w">       </span><span class="c1">// up to 100; default 1</span>
+<span class="w">    </span><span class="nx">blocking</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span><span class="w">     </span><span class="c1">// default true</span>
+<span class="w">  </span><span class="p">})],</span>
+<span class="p">});</span>
+</code></pre></div>
+<h4 id="agenttool-agent-as-a-tool"><code>agentTool</code> — agent as a tool<a class="headerlink" href="#agenttool-agent-as-a-tool" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">agentTool</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">translator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;translator&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Translate to French.&#39;</span><span class="w"> </span><span class="p">});</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">orchestrator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;orchestrator&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Use the translator tool when asked to translate.&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">tools</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">agentTool</span><span class="p">(</span><span class="nx">translator</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Translate text to French.&#39;</span><span class="w"> </span><span class="p">})],</span>
+<span class="p">});</span>
+</code></pre></div>
+<h2 id="multi-agent-strategies">Multi-agent strategies<a class="headerlink" href="#multi-agent-strategies" title="Permanent link">&para;</a></h2>
+<p>Set <code>agents: [...]</code> and a <code>strategy</code>. Strategies: <code>'sequential'</code>, <code>'parallel'</code>, <code>'handoff'</code>, <code>'router'</code>, <code>'round_robin'</code>, <code>'random'</code>, <code>'swarm'</code>, <code>'manual'</code>, <code>'plan_execute'</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// Sequential — agents run in order. .pipe() is sugar for strategy: &#39;sequential&#39;.</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">pipeline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">writer</span><span class="p">.</span><span class="nx">pipe</span><span class="p">(</span><span class="nx">editor</span><span class="p">);</span>
+<span class="c1">// equivalent to:</span>
+<span class="c1">// new Agent({ name: &#39;writer_editor&#39;, agents: [writer, editor], strategy: &#39;sequential&#39; });</span>
+
+<span class="c1">// Parallel — agents run concurrently, results gathered</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">team</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;research_team&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">agents</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">webResearcher</span><span class="p">,</span><span class="w"> </span><span class="nx">dataAnalyst</span><span class="p">],</span><span class="w"> </span><span class="nx">strategy</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;parallel&#39;</span><span class="w"> </span><span class="p">});</span>
+
+<span class="c1">// Handoff — the parent LLM delegates to sub-agents (they appear as callable tools)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">support</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;support&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Route to the right specialist.&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">agents</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">billingAgent</span><span class="p">,</span><span class="w"> </span><span class="nx">technicalAgent</span><span class="p">,</span><span class="w"> </span><span class="nx">salesAgent</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">strategy</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;handoff&#39;</span><span class="p">,</span>
+<span class="p">});</span>
+
+<span class="c1">// Router — a router agent (or function) picks the sub-agent</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">routed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;router&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">agents</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">a</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">strategy</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;router&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">router</span><span class="o">:</span><span class="w"> </span><span class="kt">routerAgent</span><span class="p">,</span><span class="w">   </span><span class="c1">// an Agent or (…) =&gt; string returning a sub-agent name</span>
+<span class="p">});</span>
+</code></pre></div>
+<p><code>scatterGather({ name, workers, ... })</code> is a convenience builder that returns a coordinator agent which fans a problem out to worker agents in parallel and synthesizes the results:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">scatterGather</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">coordinator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">scatterGather</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;fanout&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">workers</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">worker</span><span class="p">],</span><span class="w"> </span><span class="nx">retryCount</span><span class="o">:</span><span class="w"> </span><span class="kt">2</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<h2 id="handoffs">Handoffs<a class="headerlink" href="#handoffs" title="Permanent link">&para;</a></h2>
+<p>For <code>swarm</code>/<code>handoff</code> strategies you can declare explicit handoff transitions with <code>handoffs: [...]</code>. Each condition has a <code>target</code> (a sub-agent name).</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">OnTextMention</span><span class="p">,</span><span class="w"> </span><span class="nx">OnToolResult</span><span class="p">,</span><span class="w"> </span><span class="nx">OnCondition</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">team</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;coding_team&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">agents</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">pythonExpert</span><span class="p">,</span><span class="w"> </span><span class="nx">jsExpert</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">strategy</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;swarm&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">handoffs</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="c1">// Hand off when the output mentions text (case-insensitive)</span>
+<span class="w">    </span><span class="ow">new</span><span class="w"> </span><span class="nx">OnTextMention</span><span class="p">({</span><span class="w"> </span><span class="nx">target</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;python_expert&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Python&#39;</span><span class="w"> </span><span class="p">}),</span>
+
+<span class="w">    </span><span class="c1">// Hand off when a specific tool returns (optionally only if result contains text)</span>
+<span class="w">    </span><span class="ow">new</span><span class="w"> </span><span class="nx">OnToolResult</span><span class="p">({</span><span class="w"> </span><span class="nx">target</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;escalation&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">toolName</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;detect_severity&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">resultContains</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;critical&#39;</span><span class="w"> </span><span class="p">}),</span>
+
+<span class="w">    </span><span class="c1">// Hand off when a custom predicate returns true (runs as a worker task)</span>
+<span class="w">    </span><span class="ow">new</span><span class="w"> </span><span class="nx">OnCondition</span><span class="p">({</span><span class="w"> </span><span class="nx">target</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;fallback&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">condition</span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">result</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">1000</span><span class="w"> </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="p">});</span>
+</code></pre></div>
+<p>You can also constrain which transitions are allowed with <code>allowedTransitions: { agentName: ['otherAgent', ...] }</code>.</p>
+<h2 id="guardrails">Guardrails<a class="headerlink" href="#guardrails" title="Permanent link">&para;</a></h2>
+<p>Guardrails validate input or output. Attach them at the agent level (<code>guardrails: [...]</code>) or per-tool (<code>tool(fn, { guardrails: [...] })</code>). Each has a <code>position</code> (<code>'input'</code> | <code>'output'</code>, default <code>'output'</code>) and an <code>onFail</code> policy (<code>'raise'</code> | <code>'retry'</code> | <code>'fix'</code> | <code>'human'</code>, default <code>'raise'</code>).</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">guardrail</span><span class="p">,</span><span class="w"> </span><span class="nx">RegexGuardrail</span><span class="p">,</span><span class="w"> </span><span class="nx">LLMGuardrail</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="c1">// Regex (runs on the server, no worker)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">noSecrets</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">RegexGuardrail</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;no_api_keys&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">patterns</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;sk-[A-Za-z0-9]{20,}&#39;</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">mode</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;block&#39;</span><span class="p">,</span><span class="w">          </span><span class="c1">// &#39;block&#39; fails if any pattern matches; &#39;allow&#39; fails if none match</span>
+<span class="w">  </span><span class="nx">onFail</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;raise&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Output contained a secret.&#39;</span><span class="p">,</span>
+<span class="p">});</span>
+
+<span class="c1">// LLM (server-side LLM judge)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">policy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">LLMGuardrail</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;safety&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;anthropic/claude-sonnet-4-6&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">policy</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Reject any content that gives medical dosage advice.&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">position</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;output&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">onFail</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;retry&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">maxRetries</span><span class="o">:</span><span class="w"> </span><span class="kt">2</span><span class="p">,</span>
+<span class="p">});</span>
+
+<span class="c1">// Custom (your function, runs locally as a worker)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">minLength</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">guardrail</span><span class="p">(</span>
+<span class="w">  </span><span class="p">(</span><span class="nx">content</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">passed</span><span class="o">:</span><span class="w"> </span><span class="kt">content.length</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mf">10</span><span class="p">,</span><span class="w"> </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Too short&#39;</span><span class="w"> </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;min_length&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">position</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;output&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">onFail</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;fix&#39;</span><span class="w"> </span><span class="p">},</span>
+<span class="p">);</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;safe_agent&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;…&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">guardrails</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">noSecrets</span><span class="p">.</span><span class="nx">toGuardrailDef</span><span class="o">?</span><span class="p">.()</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="nx">noSecrets</span><span class="p">,</span><span class="w"> </span><span class="nx">policy</span><span class="p">.</span><span class="nx">toGuardrailDef</span><span class="o">?</span><span class="p">.()</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="nx">policy</span><span class="p">,</span><span class="w"> </span><span class="nx">minLength</span><span class="p">],</span>
+<span class="p">});</span>
+</code></pre></div>
+<p><code>RegexGuardrail</code> / <code>LLMGuardrail</code> are class instances; the serializer accepts the instance directly. There is also a <code>guardrail.external({ name, position?, onFail? })</code> form for guardrails handled by a remote worker, and a <code>@Guardrail</code> decorator with <code>guardrailsFrom(instance)</code>.</p>
+<h2 id="termination-textgate">Termination + TextGate<a class="headerlink" href="#termination-textgate" title="Permanent link">&para;</a></h2>
+<p>Termination conditions decide when a multi-turn / multi-agent loop should stop. Pass one to <code>termination:</code>. They compose with <code>.and()</code> / <code>.or()</code> (or the variadic <code>AndCondition</code> / <code>OrCondition</code>).</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">TextMention</span><span class="p">,</span><span class="w"> </span><span class="nx">MaxMessage</span><span class="p">,</span><span class="w"> </span><span class="nx">TokenUsageCondition</span><span class="p">,</span><span class="w"> </span><span class="nx">StopMessage</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;debate&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">model</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">agents</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">a</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">strategy</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;round_robin&#39;</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">termination</span><span class="o">:</span><span class="w"> </span><span class="kt">new</span><span class="w"> </span><span class="nx">TextMention</span><span class="p">(</span><span class="s1">&#39;TERMINATE&#39;</span><span class="p">)</span><span class="w">               </span><span class="c1">// stop when output mentions text</span>
+<span class="w">    </span><span class="p">.</span><span class="nx">or</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="nx">MaxMessage</span><span class="p">(</span><span class="mf">10</span><span class="p">))</span><span class="w">                                </span><span class="c1">// …or after 10 messages</span>
+<span class="w">    </span><span class="p">.</span><span class="nx">or</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="nx">TokenUsageCondition</span><span class="p">({</span><span class="w"> </span><span class="nx">maxTotalTokens</span><span class="o">:</span><span class="w"> </span><span class="kt">50000</span><span class="w"> </span><span class="p">})),</span>
+<span class="p">});</span>
+</code></pre></div>
+<p>Available conditions: <code>TextMention(text, caseSensitive?)</code>, <code>StopMessage(stopMessage)</code>, <code>MaxMessage(maxMessages)</code>, <code>TokenUsageCondition({ maxTotalTokens?, maxPromptTokens?, maxCompletionTokens? })</code>, and the composites <code>AndCondition(...)</code> / <code>OrCondition(...)</code>.</p>
+<p><code>TextGate</code> and <code>gate()</code> gate transitions (e.g. on <code>gate:</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">TextGate</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+<span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;a&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">gate</span><span class="o">:</span><span class="w"> </span><span class="kt">new</span><span class="w"> </span><span class="nx">TextGate</span><span class="p">({</span><span class="w"> </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;APPROVED&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">caseSensitive</span><span class="o">:</span><span class="w"> </span><span class="kt">false</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<h2 id="callbacks">Callbacks<a class="headerlink" href="#callbacks" title="Permanent link">&para;</a></h2>
+<p>Subclass <code>CallbackHandler</code> and override the lifecycle hooks you care about. Each hook runs as a server-registered worker.</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">CallbackHandler</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">class</span><span class="w"> </span><span class="nx">Logger</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nx">CallbackHandler</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">onAgentStart</span><span class="p">(</span><span class="nx">agentName</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">prompt</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;[start]&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">agentName</span><span class="p">,</span><span class="w"> </span><span class="nx">prompt</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">onToolStart</span><span class="p">(</span><span class="nx">agentName</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">toolName</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">args</span><span class="o">:</span><span class="w"> </span><span class="kt">unknown</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;[tool]&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">toolName</span><span class="p">,</span><span class="w"> </span><span class="nx">args</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">onAgentEnd</span><span class="p">(</span><span class="nx">agentName</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">result</span><span class="o">:</span><span class="w"> </span><span class="kt">unknown</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;[end]&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">agentName</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;a&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;…&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">callbacks</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="ow">new</span><span class="w"> </span><span class="nx">Logger</span><span class="p">()]</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<p>Hooks: <code>onAgentStart</code>, <code>onAgentEnd</code>, <code>onModelStart</code>, <code>onModelEnd</code>, <code>onToolStart</code>, <code>onToolEnd</code>.</p>
+<h2 id="streaming">Streaming<a class="headerlink" href="#streaming" title="Permanent link">&para;</a></h2>
+<p><code>runtime.stream(agent, prompt)</code> returns an <code>AgentStream</code> you can <code>for await</code> over. Events have a <code>type</code> (<code>'thinking'</code>, <code>'tool_call'</code>, <code>'tool_result'</code>, <code>'waiting'</code>, <code>'handoff'</code>, <code>'message'</code>, <code>'done'</code>, ...). You can also <code>runtime.start(...)</code> and call <code>handle.stream()</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">stream</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">stream</span><span class="p">(</span><span class="nx">agent</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Plan a 3-day trip to Tokyo.&#39;</span><span class="p">);</span>
+<span class="k">for</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">event</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">stream</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="kr">type</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;thinking&#39;</span><span class="p">)</span><span class="w">      </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;[thinking]&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">content</span><span class="p">);</span>
+<span class="w">  </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="kr">type</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;tool_call&#39;</span><span class="p">)</span><span class="w">   </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;[tool]&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">toolName</span><span class="p">,</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">args</span><span class="p">);</span>
+<span class="w">  </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="kr">type</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;tool_result&#39;</span><span class="p">)</span><span class="w"> </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;[result]&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">toolName</span><span class="p">,</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">result</span><span class="p">);</span>
+<span class="w">  </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="kr">type</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;done&#39;</span><span class="p">)</span><span class="w">         </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;[done]&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">output</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">stream</span><span class="p">.</span><span class="nx">getResult</span><span class="p">();</span><span class="w">   </span><span class="c1">// terminal AgentResult after the stream ends</span>
+</code></pre></div>
+<h2 id="human-in-the-loop-hitl">Human-in-the-loop (HITL)<a class="headerlink" href="#human-in-the-loop-hitl" title="Permanent link">&para;</a></h2>
+<p>A tool with <code>approvalRequired: true</code>, or a <code>humanTool</code>, pauses execution and emits a <code>waiting</code> event. Resolve it via the handle / stream: <code>approve(output?)</code>, <code>reject(reason?)</code>, <code>send(message)</code>, or <code>respond(body)</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">deleteData</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">tool</span><span class="p">(</span>
+<span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="p">(</span><span class="nx">args</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">table</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">deleted</span><span class="o">:</span><span class="w"> </span><span class="kt">args.table</span><span class="w"> </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;delete_data&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Delete a table. Destructive — requires approval.&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">inputSchema</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;object&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">table</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;string&#39;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;table&#39;</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="nx">approvalRequired</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="p">);</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;ops&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">tools</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">deleteData</span><span class="p">],</span><span class="w"> </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;…&#39;</span><span class="w"> </span><span class="p">});</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">handle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">start</span><span class="p">(</span><span class="nx">agent</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Delete the stale_cache table.&#39;</span><span class="p">);</span>
+<span class="k">for</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">event</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">handle</span><span class="p">.</span><span class="nx">stream</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="kr">type</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;waiting&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// The waiting event carries the pending tool batch on event.pendingTool,</span>
+<span class="w">    </span><span class="c1">// or fetch the full status:</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">handle</span><span class="p">.</span><span class="nx">getStatus</span><span class="p">();</span>
+<span class="w">    </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;Approval needed for:&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">status</span><span class="p">.</span><span class="nx">pendingTool</span><span class="o">?</span><span class="p">.</span><span class="nx">toolCalls</span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">handle</span><span class="p">.</span><span class="nx">approve</span><span class="p">();</span><span class="w">            </span><span class="c1">// approve, or:</span>
+<span class="w">    </span><span class="c1">// await handle.reject(&#39;Not allowed&#39;);</span>
+<span class="w">    </span><span class="c1">// await handle.respond({ approved: true, note: &#39;go ahead&#39; });</span>
+<span class="w">  </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="kr">type</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s1">&#39;done&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;done&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">output</span><span class="p">);</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>One HUMAN task gates the whole batch of pending tool calls with a single <code>{ approved, reason }</code> verdict — iterate <code>pendingTool.toolCalls</code> to see every tool covered. The <code>pendingTool</code> is mirrored onto the <code>waiting</code> event so you can read it without a <code>getStatus()</code> round-trip.</p>
+<p><code>humanTool</code> works the same way but lets the LLM ask the human a structured question; the response schema is on <code>pendingTool.response_schema</code>.</p>
+<h2 id="schedules">Schedules<a class="headerlink" href="#schedules" title="Permanent link">&para;</a></h2>
+<p>Attach cron schedules to an agent at deploy time. Reconciliation is declarative: a list upserts those and prunes the rest; <code>[]</code> purges all; omitting <code>schedules</code> leaves them untouched.</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Agent</span><span class="p">,</span><span class="w"> </span><span class="nx">AgentRuntime</span><span class="p">,</span><span class="w"> </span><span class="nx">Schedule</span><span class="p">,</span><span class="w"> </span><span class="nx">schedules</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">digest</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;eng_digest&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Write a digest.&#39;</span><span class="w"> </span><span class="p">});</span>
+
+<span class="k">await</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">deploy</span><span class="p">(</span><span class="nx">digest</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">schedules</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="ow">new</span><span class="w"> </span><span class="nx">Schedule</span><span class="p">({</span>
+<span class="w">      </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;weekday-9am&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">cron</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;0 0 9 * * MON-FRI&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">timezone</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;America/Los_Angeles&#39;</span><span class="p">,</span>
+<span class="w">      </span><span class="nx">input</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">channel</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;#eng&#39;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">      </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Weekday morning digest&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="p">});</span>
+
+<span class="c1">// Inspect / control via the `schedules` namespace</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">infos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">schedules</span><span class="p">.</span><span class="nx">list</span><span class="p">({</span><span class="w"> </span><span class="nx">agent</span><span class="o">:</span><span class="w"> </span><span class="kt">digest.name</span><span class="w"> </span><span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">schedules</span><span class="p">.</span><span class="nx">pause</span><span class="p">(</span><span class="nx">infos</span><span class="p">[</span><span class="mf">0</span><span class="p">].</span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">reason</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;cooldown&#39;</span><span class="w"> </span><span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">schedules</span><span class="p">.</span><span class="nx">resume</span><span class="p">(</span><span class="nx">infos</span><span class="p">[</span><span class="mf">0</span><span class="p">].</span><span class="nx">name</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">execId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">schedules</span><span class="p">.</span><span class="nx">runNow</span><span class="p">(</span><span class="nx">infos</span><span class="p">[</span><span class="mf">0</span><span class="p">].</span><span class="nx">name</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">next</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">schedules</span><span class="p">.</span><span class="nx">previewNext</span><span class="p">(</span><span class="s1">&#39;0 0 9 * * MON-FRI&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">n</span><span class="o">:</span><span class="w"> </span><span class="kt">5</span><span class="w"> </span><span class="p">});</span>
+
+<span class="k">await</span><span class="w"> </span><span class="nx">runtime</span><span class="p">.</span><span class="nx">deploy</span><span class="p">(</span><span class="nx">digest</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">schedules</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">});</span><span class="w">   </span><span class="c1">// purge all</span>
+</code></pre></div>
+<p>Lifecycle calls (<code>get</code>/<code>pause</code>/<code>resume</code>/<code>delete</code>/<code>runNow</code>) key on the <strong>wire name</strong> (the prefixed <code>name</code> returned in <code>ScheduleInfo</code>), not the short name you supplied. The <code>AgentClient</code> also has <code>schedule(agent, schedules)</code> (see <a href="../advanced/#agentclient--control-plane">advanced.md</a>).</p>
+<h2 id="agent-from-method-agentdec-agentsfrom">Agent-from-method (<code>@AgentDec</code> / <code>agentsFrom</code>)<a class="headerlink" href="#agent-from-method-agentdec-agentsfrom" title="Permanent link">&para;</a></h2>
+<p>Define agents as decorated methods on a class and extract them:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">AgentDec</span><span class="p">,</span><span class="w"> </span><span class="nx">agentsFrom</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">class</span><span class="w"> </span><span class="nx">MyAgents</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">@AgentDec</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;summarizer&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;anthropic/claude-sonnet-4-6&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Summarize text.&#39;</span><span class="w"> </span><span class="p">})</span>
+<span class="w">  </span><span class="nx">summarize</span><span class="p">()</span><span class="w"> </span><span class="p">{}</span>
+
+<span class="w">  </span><span class="kd">@AgentDec</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;classifier&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;anthropic/claude-sonnet-4-6&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">instructions</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Classify text.&#39;</span><span class="w"> </span><span class="p">})</span>
+<span class="w">  </span><span class="nx">classify</span><span class="p">()</span><span class="w"> </span><span class="p">{}</span>
+<span class="p">}</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="p">[</span><span class="nx">summarizer</span><span class="p">,</span><span class="w"> </span><span class="nx">classifier</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">agentsFrom</span><span class="p">(</span><span class="ow">new</span><span class="w"> </span><span class="nx">MyAgents</span><span class="p">());</span><span class="w">   </span><span class="c1">// Agent[]</span>
+</code></pre></div>
+<h2 id="stateful-agents">Stateful agents<a class="headerlink" href="#stateful-agents" title="Permanent link">&para;</a></h2>
+<p>Set <code>stateful: true</code> on an agent (or <code>stateful: true</code> on a tool def) to isolate tool workers per execution via a unique domain UUID. Within a single run, tools share a mutable <code>context.state</code> object; mutations are captured and propagated between tool calls.</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">ToolContext</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@conductor-oss/conductor-agent-sdk&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">addItem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">tool</span><span class="p">(</span>
+<span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="p">(</span><span class="nx">args</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">item</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">ctx?</span><span class="o">:</span><span class="w"> </span><span class="kt">ToolContext</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">items</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="nx">ctx</span><span class="o">?</span><span class="p">.</span><span class="nx">state</span><span class="o">?</span><span class="p">.</span><span class="nx">list</span><span class="w"> </span><span class="kr">as</span><span class="w"> </span><span class="kt">string</span><span class="p">[])</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[];</span>
+<span class="w">    </span><span class="nx">items</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">item</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">ctx</span><span class="o">?</span><span class="p">.</span><span class="nx">state</span><span class="p">)</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">state</span><span class="p">.</span><span class="nx">list</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">items</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">total</span><span class="o">:</span><span class="w"> </span><span class="kt">items.length</span><span class="w"> </span><span class="p">};</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;add_item&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">description</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Add an item.&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">inputSchema</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;object&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">properties</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">item</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kr">type</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;string&#39;</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">&#39;item&#39;</span><span class="p">],</span>
+<span class="w">  </span><span class="p">}},</span>
+<span class="p">);</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">agent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Agent</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;list_agent&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">model</span><span class="p">,</span><span class="w"> </span><span class="nx">tools</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="nx">addItem</span><span class="p">],</span><span class="w"> </span><span class="nx">stateful</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<h2 id="next">Next<a class="headerlink" href="#next" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../framework-agents/">framework-agents.md</a> — run OpenAI / ADK / LangChain / LangGraph / Vercel AI agents.</li>
+<li><a href="../advanced/">advanced.md</a> — deploy/serve, control plane, structured output, credentials, plans, skills.</li>
+<li><a href="../api-reference/">api-reference.md</a> — full public surface.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>

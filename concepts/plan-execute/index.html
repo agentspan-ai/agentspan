@@ -1,0 +1,3364 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="PLAN_EXECUTE compiles LLM-generated (or static) plans into deterministic Conductor sub-workflows — the planner reasons, the executor runs.">
+      
+      
+      
+        <link rel="canonical" href="https://agentspan.ai/docs/concepts/plan-execute/">
+      
+      
+        <link rel="prev" href="../multi-agent/">
+      
+      
+        <link rel="next" href="../adaptive-loops/">
+      
+      
+      <link rel="icon" href="../../assets/logo-light.svg">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Plan-Execute Strategy - Agentspan Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=False:300,300i,400,400i,700,700i%7CFalse:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"False";--md-code-font:"False"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../css/custom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#plan-execute" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <strong>Agentspan is now part of
+    <a href="https://github.com/conductor-oss/conductor">Orkes Conductor</a></strong>
+  — these docs are frozen. New docs:
+  <a href="https://orkes.io/content/devguide/ai">orkes.io/content/devguide/ai</a> ·
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/MIGRATION.md">migration guide</a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Agentspan Docs" class="md-header__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="../../assets/logo-light.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Agentspan Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Plan-Execute Strategy
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Agentspan Docs" class="md-nav__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="../../assets/logo-light.svg" alt="logo">
+
+    </a>
+    Agentspan Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../why-agentspan/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Why Agentspan
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SDK Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent Strategies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Plan-Execute (PAC/PAE)
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Plan-Execute (PAC/PAE)
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-wins-against-a-plain-llm-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why this wins against a plain LLM loop
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-deterministic-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      The deterministic boundary
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      When to use it
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      The shape
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plan-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      Plan schema
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#typed-plans-no-json-soup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Typed plans (no JSON soup)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output-input-across-steps-with-ref" class="md-nav__link">
+    <span class="md-ellipsis">
+      Output → input across steps with Ref
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#static-plans-skip-the-planner-llm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static plans — skip the planner LLM
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-guardrails-propagate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tool guardrails propagate
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fallback-the-recovery-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fallback — the recovery agent
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-pac-actually-emits" class="md-nav__link">
+    <span class="md-ellipsis">
+      What PAC actually emits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common patterns
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#research-report-llm-driven-planning" class="md-nav__link">
+    <span class="md-ellipsis">
+      Research report (LLM-driven planning)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-pipeline-no-planner-reasoning-needed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static pipeline (no planner reasoning needed)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parallel-work-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parallel work + validation
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#planner-context-ground-the-planner-in-your-domain-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Planner context — ground the planner in your domain rules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspecting-compiled-plans" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inspecting compiled plans
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#knobs-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      Knobs reference
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plan-execute-replan" class="md-nav__link">
+    <span class="md-ellipsis">
+      Plan → execute → replan
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failure-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failure modes
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adaptive-loops/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Adaptive Loops
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../memory/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Memory
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../streaming/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/support-triage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Support Ticket Triage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/research-pipeline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Research Pipeline
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/document-processor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Batch Document Processor
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/crash-resume/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Crash and Resume
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/human-in-the-loop/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Human in the Loop
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/langgraph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph Code Review Bot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/openai-agents-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK Customer Support
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK Research Assistant
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Java SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Java SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Core Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Core Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-structure/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent Field Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-schema/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent JSON Schema
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/termination/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Termination
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/stateful/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Stateful Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/structured-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Structured Output
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/streaming-hitl/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming & HITL
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/callbacks/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Callbacks
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/deploy-serve-run/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deploy, Serve, Run
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Frameworks
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frameworks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/langchain4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangChain4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/langgraph4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/openai/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/spring-boot/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Spring Boot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-runtime-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentRuntime
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-client-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentClient (internal)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Public API summary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Python SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Python SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    TypeScript SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            TypeScript SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    C# SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            C# SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../providers/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Providers
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AI Models
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CLI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deployment
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../self-hosting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Integrations
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../worker-types/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Worker Types
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-wins-against-a-plain-llm-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why this wins against a plain LLM loop
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-deterministic-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      The deterministic boundary
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      When to use it
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      The shape
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plan-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      Plan schema
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#typed-plans-no-json-soup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Typed plans (no JSON soup)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output-input-across-steps-with-ref" class="md-nav__link">
+    <span class="md-ellipsis">
+      Output → input across steps with Ref
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#static-plans-skip-the-planner-llm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static plans — skip the planner LLM
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tool-guardrails-propagate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tool guardrails propagate
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fallback-the-recovery-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fallback — the recovery agent
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-pac-actually-emits" class="md-nav__link">
+    <span class="md-ellipsis">
+      What PAC actually emits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common patterns
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#research-report-llm-driven-planning" class="md-nav__link">
+    <span class="md-ellipsis">
+      Research report (LLM-driven planning)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-pipeline-no-planner-reasoning-needed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static pipeline (no planner reasoning needed)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parallel-work-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parallel work + validation
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#planner-context-ground-the-planner-in-your-domain-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Planner context — ground the planner in your domain rules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspecting-compiled-plans" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inspecting compiled plans
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#knobs-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      Knobs reference
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plan-execute-replan" class="md-nav__link">
+    <span class="md-ellipsis">
+      Plan → execute → replan
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failure-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failure modes
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/agentspan-ai/agentspan/edit/main/docs/concepts/plan-execute.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4v-2m10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1 2.1 2.1Z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="plan-execute">Plan-Execute<a class="headerlink" href="#plan-execute" title="Permanent link">&para;</a></h1>
+<p><strong>The LLM decides <em>what</em> to do. Conductor handles <em>how</em> — no tokens on orchestration, retries, or branching.</strong></p>
+<p>Most agent frameworks route every decision through the LLM — retry logic, branch selection, parallelism. Tokens for every control flow operation. Nondeterminism throughout.</p>
+<p>Plan-Execute draws a hard line.</p>
+<p><img alt="Plan-Execute deterministic boundary" src="../../assets/plan-execute-boundary.svg" /></p>
+<p>One planner call produces a JSON task graph. The Agentspan server compiles it into a deterministic Conductor sub-workflow. <strong>After that single LLM call, the execution is pure Conductor</strong> — crash-safe, replay-safe, and free of LLM randomness.</p>
+<div class="admonition tip">
+<p class="admonition-title">The core insight</p>
+<p>Two identical plans produce two identical workflow definitions and two identical executions. Retries, parallelism (FORK_JOIN), branching (SWITCH), and validation are Conductor primitives — not LLM turns. The LLM is only invoked where it genuinely adds value: planning the shape of work, and generating per-step content.</p>
+</div>
+<p>The two phases in detail:</p>
+<ol>
+<li><strong>Plan</strong> — the planner agent emits a JSON DAG of operations once.</li>
+<li><strong>Execute</strong> — the server compiles that JSON into an immutable Conductor sub-workflow and runs it deterministically.</li>
+</ol>
+<p>(The strategy is called <code>PLAN_EXECUTE</code> in the SDK. The server-side compiler is PAC, "PLAN_AND_COMPILE".)</p>
+<hr />
+<h2 id="why-this-wins-against-a-plain-llm-loop">Why this wins against a plain LLM loop<a class="headerlink" href="#why-this-wins-against-a-plain-llm-loop" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>LLM-loop agent</th>
+<th>Plan-Execute</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Retries</td>
+<td>LLM re-reasons</td>
+<td>Conductor retry, no token cost</td>
+</tr>
+<tr>
+<td>Parallelism</td>
+<td>Ask LLM to fan out</td>
+<td>FORK_JOIN — deterministic, exact</td>
+</tr>
+<tr>
+<td>Branching</td>
+<td>LLM decides each turn</td>
+<td>SWITCH on JS expression</td>
+</tr>
+<tr>
+<td>Crash recovery</td>
+<td>Restart from scratch</td>
+<td>Resume at last completed step</td>
+</tr>
+<tr>
+<td>Replay two runs</td>
+<td>Different each time</td>
+<td>Identical — plan is a value</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td>LLM self-checks</td>
+<td>Deterministic validator + SWITCH gate</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>Non-deterministic</td>
+<td>Pass a static plan — no LLM at all</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-deterministic-boundary">The deterministic boundary<a class="headerlink" href="#the-deterministic-boundary" title="Permanent link">&para;</a></h2>
+<p>The whole point of PAC/PAE is to draw a hard line between the <strong>non-deterministic part</strong> (the planner LLM reasoning about <em>what to do</em>) and the <strong>deterministic part</strong> (Conductor running the compiled DAG). Once the plan is compiled, the executor is replay-safe, branch-stable, and free of LLM randomness.</p>
+<pre class="mermaid"><code>flowchart TB
+    subgraph ND["LLM (non-deterministic)"]
+        direction LR
+        Planner["planner agent&lt;br/&gt;emits JSON plan"]
+    end
+
+    subgraph PAC["PAC compile step (server, pure function)"]
+        direction LR
+        ExtractJSON["extract_json&lt;br/&gt;(static_plan → markdown_plan → planSource)"]
+        Compile["compile to&lt;br/&gt;WorkflowDef"]
+        ExtractJSON --&gt; Compile
+    end
+
+    subgraph DET["Conductor sub-workflow (deterministic)"]
+        direction LR
+        Setup["SET_VARIABLE&lt;br/&gt;_ctx_init"]
+        Fork["FORK_JOIN&lt;br/&gt;(parallel steps)"]
+        Join["JOIN&lt;br/&gt;(aggregate)"]
+        Validate["validation +&lt;br/&gt;SWITCH gate"]
+        Setup --&gt; Fork --&gt; Join --&gt; Validate
+    end
+
+    Prompt[["user prompt"]] --&gt; Planner
+    Planner -- "JSON plan in ```json fence```" --&gt; ExtractJSON
+    Compile -- "workflowDef (Conductor JSON)" --&gt; Setup
+
+    StaticPlan[["static_plan=&lt;br/&gt;(skip planner)"]] -.-&gt;|"Case 0:&lt;br/&gt;overrides LLM"| ExtractJSON
+    Validate -- pass --&gt; Done(["COMPLETED"])
+    Validate -- fail --&gt; Fallback{{"fallback agent?"}}
+    Fallback -- yes --&gt; FallbackRun["LLM-loop recovery"]
+    Fallback -- no --&gt; Failed(["FAILED"])
+
+    classDef llm fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef pure fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+    classDef det fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px;
+    class Planner,FallbackRun llm;
+    class ExtractJSON,Compile pure;
+    class Setup,Fork,Join,Validate det;</code></pre>
+<p><strong>Why this shape gives you determinism:</strong></p>
+<ul>
+<li><strong>One planner call, then we're done with the LLM.</strong> The plan is a value; everything downstream is a function of that value. Two identical plans produce two identical workflow defs and two identical executions (modulo tool side effects).</li>
+<li><strong><code>Ref("step_id")</code> is resolved at compile time</strong>, not at run time — there is no runtime "interpret-the-plan" loop that could diverge. The wire form (<code>{"$ref": "fetch"}</code>) becomes a Conductor template (<code>${fetch.output.result}</code>) once, in PAC.</li>
+<li><strong>Branching is a SWITCH, not a re-prompt.</strong> <code>success_condition</code> is a JS expression evaluated by Conductor's JavaScript engine — same input, same branch, every time.</li>
+<li><strong>Parallelism is FORK_JOIN, not "ask the LLM to fan out".</strong> A 5-section parallel report has exactly 5 branches, deterministically.</li>
+<li><strong><code>plan=</code> (static plan) bypasses the LLM entirely.</strong> Workflow shape and execution are now fully determined by your code. Use this for tests, replays, or any pipeline where planning lives outside the agent.</li>
+</ul>
+<h2 id="when-to-use-it">When to use it<a class="headerlink" href="#when-to-use-it" title="Permanent link">&para;</a></h2>
+<p>PLAN_EXECUTE wins when the work has <strong>fixed structure but variable content</strong>:</p>
+<ul>
+<li>Generate a research report (3 sections, parallel writes, then assemble + validate)</li>
+<li>Process a batch of records with conditional branches</li>
+<li>Multi-stage refactor where each stage is the same shape but the inputs differ</li>
+<li>Anywhere you'd otherwise hand-write 20 turns of LLM tool-calling and hope it doesn't loop</li>
+</ul>
+<p>If you need fully agentic exploration with no fixed shape, use <code>Strategy.HANDOFF</code> instead. If you have a fully fixed pipeline, use <code>Strategy.SEQUENTIAL</code>. PLAN_EXECUTE is the middle ground.</p>
+<h2 id="the-shape">The shape<a class="headerlink" href="#the-shape" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Strategy</span><span class="p">,</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">plan_execute</span>
+
+<span class="c1"># One-call construction (recommended):</span>
+<span class="n">harness</span> <span class="o">=</span> <span class="n">plan_execute</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;report_generator&quot;</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">create_directory</span><span class="p">,</span> <span class="n">write_file</span><span class="p">,</span> <span class="n">assemble_files</span><span class="p">,</span> <span class="n">check_word_count</span><span class="p">],</span>
+    <span class="n">planner_instructions</span><span class="o">=</span><span class="s2">&quot;Plan a research report on the user&#39;s topic. Use 3 sections, then assemble.&quot;</span><span class="p">,</span>
+    <span class="n">fallback_instructions</span><span class="o">=</span><span class="s2">&quot;The deterministic plan failed — recover agentically.&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Or assemble manually if you need every knob:</span>
+<span class="n">planner</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;planner&quot;</span><span class="p">,</span> <span class="n">instructions</span><span class="o">=</span><span class="n">PLANNER_INSTRUCTIONS</span><span class="p">,</span> <span class="n">model</span><span class="o">=...</span><span class="p">)</span>
+<span class="n">fallback</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;fb&quot;</span><span class="p">,</span> <span class="n">instructions</span><span class="o">=</span><span class="n">FALLBACK_INSTRUCTIONS</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span> <span class="n">model</span><span class="o">=...</span><span class="p">)</span>
+<span class="n">harness</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;report_generator&quot;</span><span class="p">,</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="n">Strategy</span><span class="o">.</span><span class="n">PLAN_EXECUTE</span><span class="p">,</span>
+    <span class="n">planner</span><span class="o">=</span><span class="n">planner</span><span class="p">,</span>
+    <span class="n">fallback</span><span class="o">=</span><span class="n">fallback</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>         <span class="c1"># canonical plan-executable set; PAC validates against this</span>
+    <span class="n">fallback_max_turns</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The <strong>planner</strong>, <strong>fallback</strong>, and <strong>tools</strong> slots are the three first-class fields. <code>agents=[...]</code> is <strong>not</strong> valid for PLAN_EXECUTE — set the named slots.</p>
+<h2 id="plan-schema">Plan schema<a class="headerlink" href="#plan-schema" title="Permanent link">&para;</a></h2>
+<p>The server auto-appends a <code>## Plan schema</code> block to the planner's user prompt (along with <code>## Available tools</code> derived from <code>harness.tools</code>). Your <code>planner_instructions</code> only needs to cover <strong>domain-level guidance</strong> — what to plan, not how to format JSON.</p>
+<p>The schema PAC consumes:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;steps&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;unique step id&gt;&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;depends_on&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;&lt;other step id&gt;&quot;</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">&quot;parallel&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;operations&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;tool&gt;&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="err">&lt;li</span><span class="kc">teral</span><span class="w"> </span><span class="err">arg</span><span class="w"> </span><span class="err">map&gt;</span><span class="p">}},</span>
+<span class="w">        </span><span class="p">{</span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;tool&gt;&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;generate&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;instructions&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;what the LLM should produce&gt;&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;output_schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;JSON shape that becomes the tool&#39;s args&gt;&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;max_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4096</span>
+<span class="w">        </span><span class="p">}}</span>
+<span class="w">      </span><span class="p">]</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;validation&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;validator&gt;&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="err">...</span><span class="p">},</span>
+<span class="w">     </span><span class="nt">&quot;success_condition&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;$.passed === true&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;on_success&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;tool&gt;&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="err">...</span><span class="p">}}],</span>
+<span class="w">  </span><span class="nt">&quot;on_failure&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;tool&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;tool&gt;&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="err">...</span><span class="p">}}]</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><strong>Key concepts:</strong></p>
+<ul>
+<li><strong><code>args</code> vs <code>generate</code></strong> — <code>args</code> runs the tool with literal values you decide at plan time. <code>generate</code> defers arg construction to a per-op LLM call at run time.</li>
+<li><strong><code>depends_on</code></strong> — cross-step concurrency. A step starts when <em>all</em> listed deps complete. Defaults to the previous step.</li>
+<li><strong><code>parallel</code></strong> — when true, the step's own <code>operations</code> run concurrently (FORK_JOIN). Without it, operations run in order within the step.</li>
+<li><strong><code>success_condition</code></strong> — JS expression evaluated against the validator's output (<code>$</code> = parsed output map). Returns truthy on pass.</li>
+<li><strong><code>on_success</code> / <code>on_failure</code></strong> — tools to run after validation. Optional.</li>
+</ul>
+<h2 id="typed-plans-no-json-soup">Typed plans (no JSON soup)<a class="headerlink" href="#typed-plans-no-json-soup" title="Permanent link">&para;</a></h2>
+<p>For static plans (or plans you build programmatically), import the typed builders:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Plan</span><span class="p">,</span> <span class="n">Step</span><span class="p">,</span> <span class="n">Op</span><span class="p">,</span> <span class="n">Generate</span><span class="p">,</span> <span class="n">Validation</span><span class="p">,</span> <span class="n">Action</span>
+
+<span class="n">plan</span> <span class="o">=</span> <span class="n">Plan</span><span class="p">(</span>
+    <span class="n">steps</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">Step</span><span class="p">(</span><span class="s2">&quot;setup&quot;</span><span class="p">,</span> <span class="n">operations</span><span class="o">=</span><span class="p">[</span><span class="n">Op</span><span class="p">(</span><span class="s2">&quot;create_directory&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="s2">&quot;out&quot;</span><span class="p">})]),</span>
+        <span class="n">Step</span><span class="p">(</span>
+            <span class="s2">&quot;write&quot;</span><span class="p">,</span>
+            <span class="n">depends_on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;setup&quot;</span><span class="p">],</span>
+            <span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">operations</span><span class="o">=</span><span class="p">[</span>
+                <span class="n">Op</span><span class="p">(</span><span class="s2">&quot;write_file&quot;</span><span class="p">,</span> <span class="n">generate</span><span class="o">=</span><span class="n">Generate</span><span class="p">(</span>
+                    <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Write the introduction.&quot;</span><span class="p">,</span>
+                    <span class="n">output_schema</span><span class="o">=</span><span class="s1">&#39;{&quot;path&quot;: &quot;out/intro.md&quot;, &quot;content&quot;: &quot;...&quot;}&#39;</span><span class="p">,</span>
+                <span class="p">)),</span>
+            <span class="p">],</span>
+        <span class="p">),</span>
+    <span class="p">],</span>
+    <span class="n">validation</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">Validation</span><span class="p">(</span><span class="s2">&quot;check_word_count&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="s2">&quot;out/intro.md&quot;</span><span class="p">,</span> <span class="s2">&quot;min_words&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">}),</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>IDE autocomplete, Pylance type-checks, no escaping nightmares.</p>
+<h2 id="output-input-across-steps-with-ref">Output → input across steps with <code>Ref</code><a class="headerlink" href="#output-input-across-steps-with-ref" title="Permanent link">&para;</a></h2>
+<p>Wire the <strong>whole output</strong> of one step into the args of a later step with <code>Ref("step_id")</code>. No JSON path, no field selection, no Conductor task-ref naming to memorise.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Op</span><span class="p">,</span> <span class="n">Plan</span><span class="p">,</span> <span class="n">Ref</span><span class="p">,</span> <span class="n">Step</span>
+
+<span class="n">plan</span> <span class="o">=</span> <span class="n">Plan</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="p">[</span>
+    <span class="n">Step</span><span class="p">(</span><span class="s2">&quot;fetch&quot;</span><span class="p">,</span> <span class="n">operations</span><span class="o">=</span><span class="p">[</span><span class="n">Op</span><span class="p">(</span><span class="s2">&quot;fetch_data&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;url&quot;</span><span class="p">:</span> <span class="n">URL</span><span class="p">})]),</span>
+    <span class="n">Step</span><span class="p">(</span>
+        <span class="s2">&quot;summarize&quot;</span><span class="p">,</span>
+        <span class="n">depends_on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;fetch&quot;</span><span class="p">],</span>
+        <span class="n">operations</span><span class="o">=</span><span class="p">[</span>
+            <span class="c1"># The whole dict returned by `fetch_data` becomes the value of</span>
+            <span class="c1"># the `document` arg passed to `summarize`. No `.result` suffix,</span>
+            <span class="c1"># no JSONPath — the SDK serialises Ref(...) to {&quot;$ref&quot;: &quot;fetch&quot;}</span>
+            <span class="c1"># and the server rewrites it to the right Conductor template</span>
+            <span class="c1"># against an INLINE wrapper that normalises dict vs. wrapped</span>
+            <span class="c1"># worker returns.</span>
+            <span class="n">Op</span><span class="p">(</span><span class="s2">&quot;summarize&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;document&quot;</span><span class="p">:</span> <span class="n">Ref</span><span class="p">(</span><span class="s2">&quot;fetch&quot;</span><span class="p">)}),</span>
+        <span class="p">],</span>
+    <span class="p">),</span>
+<span class="p">])</span>
+</code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>The referenced step must be declared in this step's <code>depends_on</code> — explicit beats implicit. The server's PAC compile step rejects plans that Ref a step they don't depend on (the typed-Plan builders ship the Ref to the wire as-is; the failure surfaces at workflow start, not in your IDE).</li>
+<li>The referenced step must exist in the plan.</li>
+<li>Self-Refs (<code>Ref(stepId)</code> from inside <code>stepId</code>) are a compile error.</li>
+<li>A step can Ref multiple upstream steps independently — <code>Op("report", args={"src": Ref("fetch"), "summary": Ref("summarize")})</code> works.</li>
+<li>For a <code>parallel=True</code> step, <code>Ref("step_id")</code> resolves to the <strong>array of branch results</strong> (the FORK_JOIN aggregator's payload).</li>
+<li>Refs work inside nested args (lists, nested dicts) — the serialiser walks the whole arg tree.</li>
+</ul>
+<p>See <code>examples/108_plan_execute_refs.py</code> for a three-step pipeline that pipes one step's record dict through two downstream steps without ever spelling out a JSONPath.</p>
+<h2 id="static-plans-skip-the-planner-llm">Static plans — skip the planner LLM<a class="headerlink" href="#static-plans-skip-the-planner-llm" title="Permanent link">&para;</a></h2>
+<p>Pass a <code>Plan</code> (or a raw dict in the same shape) to <code>runtime.run</code> and PAC uses it directly:</p>
+<div class="highlight"><pre><span></span><code><span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">harness</span><span class="p">,</span> <span class="s2">&quot;anything&quot;</span><span class="p">,</span> <span class="n">plan</span><span class="o">=</span><span class="n">plan</span><span class="p">,</span> <span class="n">cwd</span><span class="o">=</span><span class="n">work_dir</span><span class="p">)</span>
+</code></pre></div>
+<p>The planner LLM still runs (the workflow shape is fixed at compile time) but its output is discarded — PAC's <code>extract_json</code> reads <code>workflow.input.static_plan</code> as Case 0, which wins over planner output. Use this for:</p>
+<ul>
+<li>Tests (deterministic plan, no LLM nondeterminism)</li>
+<li>Replays of a previously-emitted plan</li>
+<li>Pipelines where planning lives outside the agent (a separate service or a code path that builds the <code>Plan</code> object)</li>
+</ul>
+<h2 id="tool-guardrails-propagate">Tool guardrails propagate<a class="headerlink" href="#tool-guardrails-propagate" title="Permanent link">&para;</a></h2>
+<p><code>@tool(guardrails=[...])</code> works inside PLAN_EXECUTE the same way it works in the LLM-loop:</p>
+<div class="highlight"><pre><span></span><code><span class="n">no_pii</span> <span class="o">=</span> <span class="n">RegexGuardrail</span><span class="p">(</span><span class="n">patterns</span><span class="o">=</span><span class="p">[</span><span class="sa">r</span><span class="s2">&quot;\b\d</span><span class="si">{16}</span><span class="s2">\b&quot;</span><span class="p">],</span> <span class="n">on_fail</span><span class="o">=</span><span class="n">OnFail</span><span class="o">.</span><span class="n">RAISE</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+
+<span class="nd">@tool</span><span class="p">(</span><span class="n">guardrails</span><span class="o">=</span><span class="p">[</span><span class="n">no_pii</span><span class="p">])</span>
+<span class="k">def</span> <span class="nf">send_email</span><span class="p">(</span><span class="n">to</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">body</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span>
+</code></pre></div>
+<p>PAC wraps every emitted SIMPLE for <code>send_email</code> in a guardrail SWITCH gate. The bare SIMPLE only runs from the gate's <code>pass</code> branch. If the guardrail trips:</p>
+<ul>
+<li><code>on_fail=raise</code> — TERMINATE the dynamic plan; harness's <code>fallback</code> agent recovers</li>
+<li><code>on_fail=retry</code> / <code>fix</code> / <code>human</code> — collapse to TERMINATE in plan mode; same fallback path. (See <code>OnFail</code> docstring for full semantics — there's no LLM loop in plan mode to feed retry feedback into; the fallback IS the retry loop.)</li>
+</ul>
+<p>The compiler emits <strong>only the SWITCH cases that are reachable</strong> for the configured <code>on_fail</code>. An <code>on_fail=raise</code> guardrail produces one <code>raise</code> case, not four dead branches.</p>
+<h2 id="fallback-the-recovery-agent">Fallback — the recovery agent<a class="headerlink" href="#fallback-the-recovery-agent" title="Permanent link">&para;</a></h2>
+<p>Configure <code>fallback=&lt;Agent&gt;</code> on the harness for adaptive recovery when:</p>
+<ul>
+<li>The planner emits a malformed plan (PAC validation fails)</li>
+<li>A guardrail trips on a deterministic step</li>
+<li>A plan step itself fails at run time</li>
+</ul>
+<p>The fallback runs as a normal LLM-loop agent with the harness's <code>tools</code>. It receives the original prompt + the failure context (planner output, error message). <code>fallback_max_turns</code> caps its turn count during recovery.</p>
+<p>Without a fallback, any failure terminates the workflow. Acceptable for fail-loud pipelines; surprising otherwise — PAC <strong>refuses to compile</strong> when guardrails with <code>on_fail=retry|fix|human</code> are configured but no fallback exists, forcing you to either configure a fallback or explicitly set <code>on_fail=raise</code> to acknowledge fail-closed semantics.</p>
+<h2 id="what-pac-actually-emits">What PAC actually emits<a class="headerlink" href="#what-pac-actually-emits" title="Permanent link">&para;</a></h2>
+<p>For a plan with N parallel steps + 1 validator, the compiled WorkflowDef looks roughly like:</p>
+<div class="highlight"><pre><span></span><code>SET_VARIABLE      _ctx_init
+FORK_JOIN         (per-step branches)
+  LLM_CHAT_COMPLETE  (per generate op)
+  INLINE             (parse LLM JSON output)
+  SWITCH             (parse-error gate)
+  SIMPLE             (the tool call)
+JOIN
+INLINE            (aggregate parallel branch results — only if downstream reads it)
+SIMPLE            (validator)
+INLINE            (val_eval — emits &quot;passed&quot;/&quot;failed&quot;)
+SWITCH vsw        (&quot;passed&quot; → on_success, default → TERMINATE/on_failure)
+</code></pre></div>
+<p>Visually, for a 3-section parallel-write plan with one validator:</p>
+<pre class="mermaid"><code>flowchart TB
+    Start([start]) --&gt; Init["SET_VARIABLE&lt;br/&gt;_ctx_init"]
+    Init --&gt; Fork{{"FORK_JOIN"}}
+
+    Fork --&gt; S1L["LLM_CHAT_COMPLETE&lt;br/&gt;section_1 generate"]
+    S1L --&gt; S1P["INLINE&lt;br/&gt;parse JSON"]
+    S1P --&gt; S1S{"SWITCH&lt;br/&gt;parse ok?"}
+    S1S -- ok --&gt; S1T["SIMPLE&lt;br/&gt;write_file"]
+    S1S -- fail --&gt; S1F["TERMINATE"]
+
+    Fork --&gt; S2L["LLM_CHAT_COMPLETE&lt;br/&gt;section_2 generate"]
+    S2L --&gt; S2P["INLINE&lt;br/&gt;parse JSON"]
+    S2P --&gt; S2S{"SWITCH&lt;br/&gt;parse ok?"}
+    S2S -- ok --&gt; S2T["SIMPLE&lt;br/&gt;write_file"]
+    S2S -- fail --&gt; S2F["TERMINATE"]
+
+    Fork --&gt; S3L["LLM_CHAT_COMPLETE&lt;br/&gt;section_3 generate"]
+    S3L --&gt; S3P["INLINE&lt;br/&gt;parse JSON"]
+    S3P --&gt; S3S{"SWITCH&lt;br/&gt;parse ok?"}
+    S3S -- ok --&gt; S3T["SIMPLE&lt;br/&gt;write_file"]
+    S3S -- fail --&gt; S3F["TERMINATE"]
+
+    S1T --&gt; Join((JOIN))
+    S2T --&gt; Join
+    S3T --&gt; Join
+
+    Join --&gt; Agg["INLINE&lt;br/&gt;step_output_write_all&lt;br/&gt;(Ref normaliser)"]
+    Agg --&gt; Val["SIMPLE&lt;br/&gt;check_word_count"]
+    Val --&gt; VEval["INLINE&lt;br/&gt;val_eval"]
+    VEval --&gt; VSW{"SWITCH&lt;br/&gt;passed?"}
+    VSW -- passed --&gt; OK([COMPLETED])
+    VSW -- failed --&gt; Bad([TERMINATE / on_failure])
+
+    classDef llm fill:#fff3e0,stroke:#e65100;
+    classDef pure fill:#e8f5e9,stroke:#1b5e20;
+    classDef tool fill:#e3f2fd,stroke:#0d47a1;
+    classDef gate fill:#fce4ec,stroke:#880e4f;
+    class S1L,S2L,S3L llm;
+    class S1P,S2P,S3P,Agg,VEval,Init pure;
+    class S1T,S2T,S3T,Val tool;
+    class S1S,S2S,S3S,VSW,Fork,Join gate;</code></pre>
+<p>Only the orange <code>LLM_CHAT_COMPLETE</code> nodes are non-deterministic. Everything else — parse, gate, tool call, aggregate, validate, branch — is pure Conductor and replay-safe. With a <strong>static plan</strong> (<code>plan=</code> argument), the planner LLM call up-front is elided too, leaving a fully deterministic pipeline.</p>
+<p>The <code>## Available tools</code> block in the planner prompt and PAC's validator share the same source: <code>harness.tools</code>. A planner can't emit a tool name that PAC will reject (and PAC will reject anything not in the harness's set — closes the hallucinated-tool-name bug).</p>
+<h2 id="common-patterns">Common patterns<a class="headerlink" href="#common-patterns" title="Permanent link">&para;</a></h2>
+<h3 id="research-report-llm-driven-planning">Research report (LLM-driven planning)<a class="headerlink" href="#research-report-llm-driven-planning" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="n">harness</span> <span class="o">=</span> <span class="n">plan_execute</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;report&quot;</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">create_directory</span><span class="p">,</span> <span class="n">write_file</span><span class="p">,</span> <span class="n">assemble_files</span><span class="p">,</span> <span class="n">check_word_count</span><span class="p">],</span>
+    <span class="n">planner_instructions</span><span class="o">=</span><span class="s2">&quot;Plan a research report on the user&#39;s topic. Use 3 sections.&quot;</span><span class="p">,</span>
+    <span class="n">fallback_instructions</span><span class="o">=</span><span class="s2">&quot;Fix what the deterministic plan couldn&#39;t.&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">harness</span><span class="p">,</span> <span class="s2">&quot;AI agents in 2025&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="static-pipeline-no-planner-reasoning-needed">Static pipeline (no planner reasoning needed)<a class="headerlink" href="#static-pipeline-no-planner-reasoning-needed" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="n">harness</span> <span class="o">=</span> <span class="n">plan_execute</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;ingest&quot;</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">fetch</span><span class="p">,</span> <span class="n">transform</span><span class="p">,</span> <span class="n">store</span><span class="p">])</span>
+<span class="n">plan</span> <span class="o">=</span> <span class="n">Plan</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="p">[</span>
+    <span class="n">Step</span><span class="p">(</span><span class="s2">&quot;fetch&quot;</span><span class="p">,</span> <span class="n">operations</span><span class="o">=</span><span class="p">[</span><span class="n">Op</span><span class="p">(</span><span class="s2">&quot;fetch&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;url&quot;</span><span class="p">:</span> <span class="n">url</span><span class="p">})]),</span>
+    <span class="n">Step</span><span class="p">(</span><span class="s2">&quot;transform&quot;</span><span class="p">,</span> <span class="n">depends_on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;fetch&quot;</span><span class="p">],</span> <span class="n">operations</span><span class="o">=</span><span class="p">[</span><span class="n">Op</span><span class="p">(</span><span class="s2">&quot;transform&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="s2">&quot;raw.json&quot;</span><span class="p">})]),</span>
+    <span class="n">Step</span><span class="p">(</span><span class="s2">&quot;store&quot;</span><span class="p">,</span> <span class="n">depends_on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;transform&quot;</span><span class="p">],</span> <span class="n">operations</span><span class="o">=</span><span class="p">[</span><span class="n">Op</span><span class="p">(</span><span class="s2">&quot;store&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;result&quot;</span><span class="p">})]),</span>
+<span class="p">])</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">harness</span><span class="p">,</span> <span class="s2">&quot;ingest job&quot;</span><span class="p">,</span> <span class="n">plan</span><span class="o">=</span><span class="n">plan</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="parallel-work-validation">Parallel work + validation<a class="headerlink" href="#parallel-work-validation" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="n">plan</span> <span class="o">=</span> <span class="n">Plan</span><span class="p">(</span>
+    <span class="n">steps</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">Step</span><span class="p">(</span><span class="s2">&quot;setup&quot;</span><span class="p">,</span> <span class="n">operations</span><span class="o">=</span><span class="p">[</span><span class="n">Op</span><span class="p">(</span><span class="s2">&quot;create_directory&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="s2">&quot;out&quot;</span><span class="p">})]),</span>
+        <span class="n">Step</span><span class="p">(</span><span class="s2">&quot;write_all&quot;</span><span class="p">,</span> <span class="n">depends_on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;setup&quot;</span><span class="p">],</span> <span class="n">parallel</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">operations</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">Op</span><span class="p">(</span><span class="s2">&quot;write_file&quot;</span><span class="p">,</span> <span class="n">generate</span><span class="o">=</span><span class="n">Generate</span><span class="p">(</span>
+                <span class="n">instructions</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Write section </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span>
+                <span class="n">output_schema</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="se">{{</span><span class="s1">&quot;path&quot;: &quot;out/</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">.md&quot;, &quot;content&quot;: &quot;...&quot;</span><span class="se">}}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="p">))</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+        <span class="p">]),</span>
+        <span class="n">Step</span><span class="p">(</span><span class="s2">&quot;assemble&quot;</span><span class="p">,</span> <span class="n">depends_on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;write_all&quot;</span><span class="p">],</span> <span class="n">operations</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">Op</span><span class="p">(</span><span class="s2">&quot;assemble_files&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;output_path&quot;</span><span class="p">:</span> <span class="s2">&quot;report.md&quot;</span><span class="p">,</span> <span class="s2">&quot;input_paths&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span><span class="p">})</span>
+        <span class="p">]),</span>
+    <span class="p">],</span>
+    <span class="n">validation</span><span class="o">=</span><span class="p">[</span><span class="n">Validation</span><span class="p">(</span><span class="s2">&quot;check_word_count&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="s2">&quot;report.md&quot;</span><span class="p">,</span> <span class="s2">&quot;min_words&quot;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">})],</span>
+<span class="p">)</span>
+</code></pre></div>
+<h2 id="planner-context-ground-the-planner-in-your-domain-rules">Planner context — ground the planner in your domain rules<a class="headerlink" href="#planner-context-ground-the-planner-in-your-domain-rules" title="Permanent link">&para;</a></h2>
+<p>The planner's <code>instructions</code> are fine for "how to emit a plan." They're a poor fit for the <em>domain-specific rules</em> a real plan depends on: KYC tier thresholds, onboarding phase ordering, compliance escalation paths, region-specific exceptions. Those live in docs that change weekly — not in code that ships quarterly.</p>
+<p><code>planner_context</code> injects those rules into the planner's user prompt at runtime, as a <code>## Reference Context</code> block. Two entry shapes:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">Context</span><span class="p">,</span> <span class="n">Strategy</span>
+
+<span class="n">harness</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;onboarding_harness&quot;</span><span class="p">,</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="n">Strategy</span><span class="o">.</span><span class="n">PLAN_EXECUTE</span><span class="p">,</span>
+    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">validate_kyc</span><span class="p">,</span> <span class="n">create_account</span><span class="p">,</span> <span class="n">send_welcome_email</span><span class="p">],</span>
+    <span class="n">planner</span><span class="o">=</span><span class="n">planner</span><span class="p">,</span>
+    <span class="n">fallback</span><span class="o">=</span><span class="n">fallback</span><span class="p">,</span>
+    <span class="n">planner_context</span><span class="o">=</span><span class="p">[</span>
+        <span class="c1"># 1) Inline text — short, stable, hand-edited in code.</span>
+        <span class="s2">&quot;Onboarding has 3 mandatory phases in order: validate_kyc → create_account → send_welcome_email.&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Tier &#39;enterprise&#39; customers ADDITIONALLY require schedule_kickoff_call.&quot;</span><span class="p">,</span>
+
+        <span class="c1"># 2) Live doc — fetched per planner invocation, no compile-time fetch, no cache.</span>
+        <span class="c1">#    Authorization placeholders use the same `${CRED}` shape as ToolConfig.headers.</span>
+        <span class="n">Context</span><span class="p">(</span>
+            <span class="n">url</span><span class="o">=</span><span class="s2">&quot;https://confluence.example.com/onboarding-rules&quot;</span><span class="p">,</span>
+            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="s2">&quot;Bearer $</span><span class="si">{CONFLUENCE_TOKEN}</span><span class="s2">&quot;</span><span class="p">},</span>
+            <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>    <span class="c1"># fetch failure → workflow fails (default)</span>
+            <span class="n">max_bytes</span><span class="o">=</span><span class="mi">8192</span><span class="p">,</span>   <span class="c1"># truncate at 8KB + add a [doc truncated] marker</span>
+        <span class="p">),</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+</code></pre></div>
+<p><strong>How it compiles.</strong> Each URL entry emits a <code>PLANNER_CONTEXT_FETCH</code> system task inside the planner-route's <em>live</em> branch (the static-plan path skips it for free). With ≥2 URLs the fetches are wrapped in a <code>FORK_JOIN</code> so they run in parallel. A small in-process TTL cache (default 60 s) plus <code>If-None-Match</code>/ETag means repeat fetches for the same doc within the TTL return the cached body without touching the wire — and 304 responses refresh the TTL without re-downloading.</p>
+<p><strong>Cache scope.</strong> Cache key is <code>(url, sorted-headers)</code>, so different <code>Authorization</code> headers (different principals) never share a cache entry. Bounded LRU at ~1024 entries.</p>
+<p><strong>Credential placeholders.</strong> <code>${CRED_NAME}</code> in headers gets escaped server-side to <code>#{CRED_NAME}</code> so Conductor's templater leaves it alone; the runtime credential resolver fills the value at request time — same pipeline as HTTP tool headers. Headers containing <code>CR</code>/<code>LF</code> are rejected at compile time to close the HTTP-response-splitting injection vector.</p>
+<p><strong>Failure handling.</strong> <code>required=True</code> (default) hard-fails the workflow on fetch error. <code>required=False</code> substitutes a <code>[doc unavailable]</code> marker in the planner prompt so the planner runs on partial context — for "nice-to-have" docs (glossaries, FAQs).</p>
+<p>End-to-end demo: <code>examples/115_plan_execute_planner_context.py</code> (Python; mirrored to TS / Java / C#).</p>
+<h2 id="inspecting-compiled-plans">Inspecting compiled plans<a class="headerlink" href="#inspecting-compiled-plans" title="Permanent link">&para;</a></h2>
+<p><code>POST /api/agent/inspect-plan</code> compiles a plan against a PLAN_EXECUTE harness config and returns the resulting Conductor <code>WorkflowDef</code> + error string + warnings + stats — <strong>without dispatching the SUB_WORKFLOW</strong>. Useful for:</p>
+<ul>
+<li>IDE tooling validating that a plan compiles cleanly against a fixed agent config before deploy</li>
+<li>Plan-debug REPLs visualizing the compiled DAG</li>
+<li>CI checks that verify a static plan still compiles after agent-config or tool-schema changes</li>
+</ul>
+<p>Request shape:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;agentConfig&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* same shape as POST /agent/start */</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;plan&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;steps&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;operations&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Response includes the same fields PAC sets on <code>output</code> at execution time (<code>workflowDef</code>, <code>error</code>, <code>warnings</code>, <code>stats</code>) — uses the production compile path, so the inspected output is byte-equal to what a real run would produce for that plan.</p>
+<h2 id="knobs-reference">Knobs reference<a class="headerlink" href="#knobs-reference" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>planner=</code></td>
+<td>Required. The agent that emits the JSON plan.</td>
+</tr>
+<tr>
+<td><code>fallback=</code></td>
+<td>Optional. Agentic recovery when a plan can't compile/exec.</td>
+</tr>
+<tr>
+<td><code>tools=</code></td>
+<td>Required. Plan-executable tool set. PAC validates <code>op.tool</code> names against this list and propagates each tool's guardrails.</td>
+</tr>
+<tr>
+<td><code>planner_context=</code></td>
+<td>Optional. List of <code>Context(text=…)</code> / <code>Context(url=…)</code> entries appended to the planner's user prompt as <code>## Reference Context</code>. URLs fetched per-planner-invocation with TTL cache + ETag revalidation. See "Planner context" above.</td>
+</tr>
+<tr>
+<td><code>fallback_max_turns=</code></td>
+<td>Caps the fallback agent's turn count during recovery.</td>
+</tr>
+<tr>
+<td><code>plan_source=</code></td>
+<td>Optional. Reads a fixed plan from a deterministic tool call after the planner sub-workflow runs. When the planner's text output fails extraction, this source is tried as a fallback. The newer run-time <code>plan=</code> argument (see "Static plans" below) is the simpler path for most cases.</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Run-time kwarg</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>plan=</code></td>
+<td>Skip the planner LLM's output; use this <code>Plan</code>/dict directly.</td>
+</tr>
+<tr>
+<td><code>cwd=</code></td>
+<td>Working directory for filesystem-bound tools.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>examples/85_plan_execute_harness.py</code> — research report with LLM planner + fallback recovery</li>
+<li><code>examples/103_plan_and_compile.py</code> — minimal PAC demo with <code>args</code> + <code>generate</code> ops + validation</li>
+<li><code>examples/104_plan_execute_guardrails.py</code> — guardrail propagation in plan mode</li>
+<li><code>examples/100_issue_fixer_agent.py</code> — production-shape pipeline with PLAN_EXECUTE coder + agentic fallback</li>
+<li><code>examples/108_plan_execute_refs.py</code> — cross-step output piping via <code>Ref("step_id")</code></li>
+<li><code>examples/109_plan_execute_replan.py</code> — outer-loop replan pattern: run plan, inspect result, build the next plan with feedback baked into the per-op <code>generate.instructions</code></li>
+<li><code>examples/110_plan_execute_replan_solve.py</code> — adaptive goal-seeking loop: K parallel proposers + deterministic verifier per iteration; the replanner threads each candidate's exact failure modes back into the next iteration's prompt and loops until any candidate clears all constraints</li>
+<li><code>examples/111_plan_execute_replan_binsearch.py</code> — many-iteration binary-search loop. The verifier holds a secret integer and each iteration's verdict reveals only one bit (too_low / too_high), so the loop <em>must</em> iterate ~log₂ N times. Use this when you want to see the plan-execute-replan cycle visibly converge over many iterations</li>
+<li><code>examples/112_dowhile_loop_inside_workflow.py</code> — the loop <em>inside</em> a single Conductor workflow via a hand-built <code>DO_WHILE</code> task. Body of the loop: planner LLM → INLINE verify → reviewer LLM → SET_VARIABLE update. One workflow ID for the whole run; iterations show up as <code>planner_llm__1</code>, <code>planner_llm__2</code>, etc. in the same workflow's task list. This is the shape of the future <code>Strategy.PLAN_EXECUTE_REPLAN</code> (recommendation #2 from the design review)</li>
+<li><code>examples/113_aml_sar_investigation_loop.py</code> — AML/SAR investigation as a DO_WHILE-inside-workflow with real PAC sub-workflows per iteration. The planner emits red-flag tool calls, the loop checks for "needs more evidence", and the cycle continues until the case is dispositioned. Mirrors finance compliance workflows</li>
+<li><code>examples/114_portfolio_rebalance_loop.py</code> — multi-constraint portfolio rebalancing with wash-sale / concentration / drift checks. Each iteration refines the trade list to satisfy more constraints; the loop terminates when all checks pass</li>
+<li><code>examples/115_plan_execute_planner_context.py</code> — customer onboarding with <code>planner_context</code> grounding the planner in tier rules. Mixed inline-text + commented Confluence-URL with <code>${CONFLUENCE_TOKEN}</code> reference for the credentialed-URL pattern. Mirrored to TS/Java/C#</li>
+</ul>
+<h2 id="plan-execute-replan">Plan → execute → replan<a class="headerlink" href="#plan-execute-replan" title="Permanent link">&para;</a></h2>
+<p>PAE itself is single-shot: plan-once, execute-once, fallback-once on hard failure. For tasks that need iterative refinement — run, check the output, decide to continue or replan, repeat — wrap the harness in your own loop. <code>examples/109_plan_execute_replan.py</code> shows the simple shape: each iteration calls <code>runtime.run(harness, prompt, plan=plan_N)</code>, the host code reads the artifacts the run produced, a decider returns <code>done | replan</code>, and a builder constructs <code>plan_{N+1}</code> with the prior iteration's measurements baked into the LLM instructions. The inner per-iteration run stays deterministic; the outer loop carries the adaptive control flow.</p>
+<p><code>examples/110_plan_execute_replan_solve.py</code> shows the <em>adaptive goal-seeking</em> variant. Each iteration's plan emits <strong>K parallel proposers</strong> (generate ops in a FORK_JOIN step) feeding a deterministic verifier that produces a precise <strong>per-candidate, per-constraint failure breakdown</strong> (e.g. <code>word_count_off (got 21, expected 25)</code>). The outer loop reads the verdict JSON, terminates the moment any candidate clears all constraints, and otherwise threads each prior candidate's exact failures into the next iteration's <code>generate.instructions</code>. The result is a real plan → execute → replan → execute cycle that converges by <em>fixing what the previous attempt got wrong</em>, not by retrying the same prompt with a different seed. The pattern generalises to any LLM-generator + deterministic-verifier loop — swap the verifier for <code>run_pytest</code>, <code>check_proof</code>, <code>query_db</code>, etc., and the outer loop is identical.</p>
+<h2 id="failure-modes">Failure modes<a class="headerlink" href="#failure-modes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Workflow FAILED with "uses unknown tool" in PAC error</td>
+<td>Planner emitted a tool name not in <code>harness.tools</code></td>
+<td>Add the tool, or fix the planner prompt; the auto-injected <code>## Available tools</code> block already constrains the planner — check it appears in your prompt</td>
+</tr>
+<tr>
+<td>Workflow FAILED, no fallback ran</td>
+<td><code>plan_exec</code> SUB_WORKFLOW failure not caught</td>
+<td>Confirm <code>harness.fallback</code> is set; failures route through <code>exec_route</code> SWITCH to fallback</td>
+</tr>
+<tr>
+<td>Compile fails with "guardrails with on_fail=retry|fix|human but no fallback"</td>
+<td>PAC blocks compile to prevent the silent degrade-to-terminate footgun</td>
+<td>Configure a fallback or set <code>on_fail=raise</code></td>
+</tr>
+<tr>
+<td>Compile fails with "uses unsupported JSON Schema keyword '$ref' (or <code>oneOf</code>/<code>allOf</code>/<code>format</code>/etc.)"</td>
+<td>The runtime input-schema validator implements a Draft-07 subset — keywords like <code>$ref</code>/<code>allOf</code>/<code>oneOf</code>/<code>format</code> would silently pass at runtime, producing <em>permissive validation</em>. PAC rejects at compile time instead</td>
+<td>Restrict the tool's <code>inputSchema</code> to the supported subset (<code>type</code>, <code>properties</code>, <code>required</code>, <code>additionalProperties</code>, <code>enum</code>, <code>minLength</code>, <code>maxLength</code>, <code>pattern</code>, <code>minimum</code>, <code>maximum</code>, <code>items</code>, <code>minItems</code>, <code>maxItems</code>) or remove the misleading constraint</td>
+</tr>
+<tr>
+<td>Compile fails with "plannerContext header '...' contains CR/LF"</td>
+<td>A <code>Context(url=…, headers=…)</code> value contained a newline — would smuggle a fake HTTP header (response-splitting vector)</td>
+<td>Sanitize the credential value; CR/LF in HTTP header values is never legitimate</td>
+</tr>
+<tr>
+<td><code>[doc unavailable]</code> markers in the planner's <code>## Reference Context</code> block</td>
+<td><code>Context(url=…, required=False)</code> doc fetch returned non-2xx</td>
+<td>If the doc IS required, set <code>required=True</code> (default) so the workflow fails loudly instead. If it's truly optional, the marker is the intended behaviour</td>
+</tr>
+<tr>
+<td>Plan compiled but did wrong thing</td>
+<td>Planner LLM produced a syntactically-valid but semantically-wrong plan</td>
+<td>Improve <code>planner_instructions</code>; consider switching to <code>plan=</code> static plan for deterministic flows. For domain rules, lift them into <code>planner_context</code> so the planner re-reads them on every run instead of relying on the static <code>instructions</code></td>
+</tr>
+<tr>
+<td>Need to see what PAC will compile a plan to without running it</td>
+<td>Use the <code>POST /api/agent/inspect-plan</code> endpoint — same compile path PAC uses at runtime, no SUB_WORKFLOW dispatch</td>
+<td>See "Inspecting compiled plans" above</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>

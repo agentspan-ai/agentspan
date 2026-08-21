@@ -1,0 +1,3187 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Agentspan — long-running, dynamic, and event-driven AI agents built on Conductor.">
+      
+      
+      
+        <link rel="canonical" href="https://agentspan.ai/docs/csharp-sdk/api-reference/">
+      
+      
+        <link rel="prev" href="../advanced/">
+      
+      
+        <link rel="next" href="../../providers/">
+      
+      
+      <link rel="icon" href="../../assets/logo-light.svg">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>API Reference - Agentspan Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=False:300,300i,400,400i,700,700i%7CFalse:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"False";--md-code-font:"False"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../css/custom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#api-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <strong>Agentspan is now part of
+    <a href="https://github.com/conductor-oss/conductor">Orkes Conductor</a></strong>
+  — these docs are frozen. New docs:
+  <a href="https://orkes.io/content/devguide/ai">orkes.io/content/devguide/ai</a> ·
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/MIGRATION.md">migration guide</a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Agentspan Docs" class="md-header__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="../../assets/logo-light.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Agentspan Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Agentspan Docs" class="md-nav__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="../../assets/logo-light.svg" alt="logo">
+
+    </a>
+    Agentspan Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../why-agentspan/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Why Agentspan
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SDK Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent Strategies
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/plan-execute/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Plan-Execute (PAC/PAE)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/adaptive-loops/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Adaptive Loops
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/memory/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Memory
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/streaming/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/testing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/support-triage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Support Ticket Triage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/research-pipeline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Research Pipeline
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/document-processor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Batch Document Processor
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/crash-resume/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Crash and Resume
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/human-in-the-loop/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Human in the Loop
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/langgraph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph Code Review Bot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/openai-agents-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK Customer Support
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK Research Assistant
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Java SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Java SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Core Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Core Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-structure/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent Field Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-schema/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent JSON Schema
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/termination/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Termination
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/stateful/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Stateful Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/structured-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Structured Output
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/streaming-hitl/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming & HITL
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/callbacks/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Callbacks
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/deploy-serve-run/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deploy, Serve, Run
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Frameworks
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frameworks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/langchain4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangChain4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/langgraph4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/openai/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/spring-boot/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Spring Boot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-runtime-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentRuntime
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-client-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentClient (internal)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Public API summary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Python SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Python SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    TypeScript SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            TypeScript SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    C# SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            C# SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#agentruntime" class="md-nav__link">
+    <span class="md-ellipsis">
+      AgentRuntime
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentruntimeoptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      AgentRuntimeOptions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      Agent
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentbuilder" class="md-nav__link">
+    <span class="md-ellipsis">
+      AgentBuilder
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Strategy
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools-tooldef-and-built-ins" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tools: ToolDef and built-ins
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guardrails" class="md-nav__link">
+    <span class="md-ellipsis">
+      Guardrails
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#terminationcondition" class="md-nav__link">
+    <span class="md-ellipsis">
+      TerminationCondition
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handoff
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#textgate" class="md-nav__link">
+    <span class="md-ellipsis">
+      TextGate
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#callbackhandler" class="md-nav__link">
+    <span class="md-ellipsis">
+      CallbackHandler
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedule-schedules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Schedule / Schedules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plans" class="md-nav__link">
+    <span class="md-ellipsis">
+      Plans
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Results
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentclient" class="md-nav__link">
+    <span class="md-ellipsis">
+      AgentClient
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exceptions
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../providers/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Providers
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AI Models
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CLI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deployment
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../self-hosting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Integrations
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../worker-types/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Worker Types
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#agentruntime" class="md-nav__link">
+    <span class="md-ellipsis">
+      AgentRuntime
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentruntimeoptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      AgentRuntimeOptions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      Agent
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentbuilder" class="md-nav__link">
+    <span class="md-ellipsis">
+      AgentBuilder
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Strategy
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools-tooldef-and-built-ins" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tools: ToolDef and built-ins
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guardrails" class="md-nav__link">
+    <span class="md-ellipsis">
+      Guardrails
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#terminationcondition" class="md-nav__link">
+    <span class="md-ellipsis">
+      TerminationCondition
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handoff
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#textgate" class="md-nav__link">
+    <span class="md-ellipsis">
+      TextGate
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#callbackhandler" class="md-nav__link">
+    <span class="md-ellipsis">
+      CallbackHandler
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedule-schedules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Schedule / Schedules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plans" class="md-nav__link">
+    <span class="md-ellipsis">
+      Plans
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results" class="md-nav__link">
+    <span class="md-ellipsis">
+      Results
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agentclient" class="md-nav__link">
+    <span class="md-ellipsis">
+      AgentClient
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exceptions
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/agentspan-ai/agentspan/edit/main/docs/csharp-sdk/api-reference.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4v-2m10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1 2.1 2.1Z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
+<p>The public surface of the Agentspan package, one section per type. Snippets in
+the other docs show usage; this is the lookup table.</p>
+<ul>
+<li><a href="#agentruntime">AgentRuntime</a></li>
+<li><a href="#agentruntimeoptions">AgentRuntimeOptions</a></li>
+<li><a href="#agent">Agent</a></li>
+<li><a href="#agentbuilder">AgentBuilder</a></li>
+<li><a href="#strategy">Strategy</a></li>
+<li><a href="#tools-tooldef-and-built-ins">Tools: ToolDef and built-ins</a></li>
+<li><a href="#guardrails">Guardrails</a></li>
+<li><a href="#terminationcondition">TerminationCondition</a></li>
+<li><a href="#handoff">Handoff</a></li>
+<li><a href="#textgate">TextGate</a></li>
+<li><a href="#callbackhandler">CallbackHandler</a></li>
+<li><a href="#schedule--schedules">Schedule / Schedules</a></li>
+<li><a href="#plans">Plans</a></li>
+<li><a href="#results">Results: AgentResult, AgentHandle, AgentEvent, AgentStatus</a></li>
+<li><a href="#agentclient">AgentClient</a></li>
+<li><a href="#exceptions">Exceptions</a></li>
+</ul>
+<h2 id="agentruntime">AgentRuntime<a class="headerlink" href="#agentruntime" title="Permanent link">&para;</a></h2>
+<p><code>sealed class AgentRuntime : IAsyncDisposable, IDisposable</code>. Main entry point.</p>
+<p>Constructor: <code>AgentRuntime(AgentRuntimeOptions? options = null)</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Member</th>
+<th>Signature</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Client</code></td>
+<td><code>AgentClient Client { get; }</code></td>
+<td>The control-plane client.</td>
+</tr>
+<tr>
+<td><code>Schedules</code></td>
+<td><code>Schedules Schedules { get; }</code></td>
+<td>Cron lifecycle.</td>
+</tr>
+<tr>
+<td><code>WorkerThreadCount</code></td>
+<td><code>int { get; }</code></td>
+<td>From <code>AGENTSPAN_WORKER_THREADS</code>.</td>
+</tr>
+<tr>
+<td><code>WorkerPollIntervalMs</code></td>
+<td><code>int { get; }</code></td>
+<td>From <code>AGENTSPAN_WORKER_POLL_INTERVAL</code>.</td>
+</tr>
+<tr>
+<td><code>RunAsync</code></td>
+<td><code>Task&lt;AgentResult&gt; RunAsync(Agent agent, string prompt, string? sessionId = null, IEnumerable&lt;string&gt;? media = null, Plan? plan = null, CancellationToken ct = default)</code></td>
+<td>Run + host workers + wait.</td>
+</tr>
+<tr>
+<td><code>Run</code></td>
+<td><code>AgentResult Run(Agent, string, string? = null, IEnumerable&lt;string&gt;? = null)</code></td>
+<td>Sync wrapper.</td>
+</tr>
+<tr>
+<td><code>StartAsync</code></td>
+<td><code>Task&lt;AgentHandle&gt; StartAsync(Agent, string, string? = null, IEnumerable&lt;string&gt;? = null, Plan? = null, CancellationToken = default)</code></td>
+<td>Start, return handle.</td>
+</tr>
+<tr>
+<td><code>Start</code></td>
+<td><code>AgentHandle Start(Agent, string, ...)</code></td>
+<td>Sync wrapper.</td>
+</tr>
+<tr>
+<td><code>RunByNameAsync</code> / <code>StartByNameAsync</code></td>
+<td><code>(...)</code> by workflow name</td>
+<td>Pre-deployed agents.</td>
+</tr>
+<tr>
+<td><code>StreamAsync</code></td>
+<td><code>IAsyncEnumerable&lt;AgentEvent&gt; StreamAsync(Agent, string, string? = null, IEnumerable&lt;string&gt;? = null, CancellationToken = default)</code></td>
+<td>Run + stream events.</td>
+</tr>
+<tr>
+<td><code>DeployAsync</code></td>
+<td><code>Task&lt;DeploymentInfo[]&gt; DeployAsync(params Agent[])</code> ; <code>Task&lt;DeploymentInfo&gt; DeployAsync(Agent, IEnumerable&lt;Schedule&gt;?)</code></td>
+<td>Register without executing; second form reconciles schedules.</td>
+</tr>
+<tr>
+<td><code>Deploy</code></td>
+<td><code>DeploymentInfo[] Deploy(params Agent[])</code></td>
+<td>Sync.</td>
+</tr>
+<tr>
+<td><code>ServeAsync</code></td>
+<td><code>Task ServeAsync(Agent, CancellationToken = default)</code> ; <code>Task ServeAsync(CancellationToken = default, params Agent[])</code></td>
+<td>Host workers; blocks until cancelled.</td>
+</tr>
+<tr>
+<td><code>PlanAsync</code> / <code>Plan</code></td>
+<td><code>Task&lt;JsonNode?&gt; PlanAsync(Agent, CancellationToken = default)</code></td>
+<td>Dry-run compile.</td>
+</tr>
+<tr>
+<td><code>ResumeAsync</code> / <code>Resume</code></td>
+<td><code>Task&lt;AgentHandle&gt; ResumeAsync(string executionId, Agent, CancellationToken = default)</code></td>
+<td>Reattach + re-register workers across restarts.</td>
+</tr>
+<tr>
+<td><code>SendMessageAsync</code></td>
+<td><code>Task SendMessageAsync(string executionId, object message, CancellationToken = default)</code></td>
+<td>Push to the Workflow Message Queue.</td>
+</tr>
+<tr>
+<td><code>GetStatusAsync</code></td>
+<td><code>Task&lt;AgentStatus&gt; GetStatusAsync(string executionId, CancellationToken = default)</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RespondAsync</code></td>
+<td><code>Task RespondAsync(string executionId, object response, CancellationToken = default)</code></td>
+<td>HITL response by id.</td>
+</tr>
+<tr>
+<td><code>ApproveAsync</code> / <code>RejectAsync</code> / <code>RespondAsync</code> (event)</td>
+<td><code>(AgentEvent waitingEvent, ...)</code></td>
+<td>Event-targeted HITL (targets the event's execution).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="agentruntimeoptions">AgentRuntimeOptions<a class="headerlink" href="#agentruntimeoptions" title="Permanent link">&para;</a></h2>
+<p><code>sealed class AgentRuntimeOptions</code> — <code>string? ServerUrl</code>, <code>string? AuthKey</code>,
+<code>string? AuthSecret</code>. Any unset value falls back to the corresponding
+<code>AGENTSPAN_*</code> env var.</p>
+<h2 id="agent">Agent<a class="headerlink" href="#agent" title="Permanent link">&para;</a></h2>
+<p><code>sealed partial class Agent</code>. Constructor: <code>Agent(string name)</code> (name must match
+<code>^[a-zA-Z_][a-zA-Z0-9_-]*$</code>).</p>
+<p>Key settable members:</p>
+<table>
+<thead>
+<tr>
+<th>Member</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Name</code></td>
+<td><code>string</code> (get-only)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Model</code></td>
+<td><code>string?</code></td>
+<td><code>"provider/model"</code>.</td>
+</tr>
+<tr>
+<td><code>Instructions</code></td>
+<td><code>string?</code></td>
+<td>Static system prompt.</td>
+</tr>
+<tr>
+<td><code>InstructionsFn</code></td>
+<td><code>Func&lt;string&gt;?</code></td>
+<td>Dynamic; takes precedence over <code>Instructions</code>.</td>
+</tr>
+<tr>
+<td><code>PromptTemplateInstructions</code></td>
+<td><code>PromptTemplate?</code></td>
+<td>Server-side template.</td>
+</tr>
+<tr>
+<td><code>Tools</code></td>
+<td><code>List&lt;ToolDef&gt;</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Agents</code></td>
+<td><code>List&lt;Agent&gt;</code></td>
+<td>Sub-agents.</td>
+</tr>
+<tr>
+<td><code>Strategy</code></td>
+<td><code>Strategy?</code></td>
+<td>Required when <code>Agents</code> is non-empty.</td>
+</tr>
+<tr>
+<td><code>Router</code></td>
+<td><code>Agent?</code></td>
+<td>For <code>Strategy.Router</code>.</td>
+</tr>
+<tr>
+<td><code>MaxTurns</code> / <code>MaxTokens</code> / <code>Temperature</code> / <code>TimeoutSeconds</code></td>
+<td>nullable</td>
+<td></td>
+</tr>
+<tr>
+<td><code>Guardrails</code></td>
+<td><code>List&lt;GuardrailDef&gt;</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Termination</code></td>
+<td><code>TerminationCondition?</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Handoffs</code></td>
+<td><code>List&lt;Handoff&gt;</code></td>
+<td>Swarm triggers.</td>
+</tr>
+<tr>
+<td><code>Gate</code></td>
+<td><code>TextGate?</code></td>
+<td>Sequential-pipeline stop gate.</td>
+</tr>
+<tr>
+<td><code>AllowedTransitions</code></td>
+<td><code>Dictionary&lt;string, List&lt;string&gt;&gt;?</code></td>
+<td>Constrained transitions.</td>
+</tr>
+<tr>
+<td><code>Callbacks</code></td>
+<td><code>List&lt;CallbackHandler&gt;</code></td>
+<td>Composable lifecycle handlers.</td>
+</tr>
+<tr>
+<td><code>BeforeAgentCallback</code> / <code>AfterAgentCallback</code> / <code>BeforeModelCallback</code> / <code>AfterModelCallback</code> / <code>BeforeToolCallback</code> / <code>AfterToolCallback</code></td>
+<td><code>Func&lt;...&gt;?</code></td>
+<td>Inline delegate hooks.</td>
+</tr>
+<tr>
+<td><code>OutputType</code></td>
+<td><code>Type?</code></td>
+<td>Structured output.</td>
+</tr>
+<tr>
+<td><code>Stateful</code></td>
+<td><code>bool</code></td>
+<td>Domain-routed workers.</td>
+</tr>
+<tr>
+<td><code>EnablePlanning</code></td>
+<td><code>bool</code></td>
+<td>"Plan first" prompt preamble.</td>
+</tr>
+<tr>
+<td><code>Strategy.PlanExecute</code> slots</td>
+<td><code>Planner</code>, <code>Fallback</code>, <code>FallbackMaxTurns</code>, <code>PlannerContext</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>External</code></td>
+<td><code>bool</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>Framework</code> / <code>FrameworkConfig</code></td>
+<td><code>string?</code> / <code>Dictionary&lt;string,object&gt;?</code></td>
+<td>Set by framework adapters.</td>
+</tr>
+</tbody>
+</table>
+<p>Operators / statics:</p>
+<ul>
+<li><code>operator &gt;&gt;</code> — <code>Agent a &gt;&gt; Agent b</code> builds a <code>Strategy.Sequential</code> pipeline.</li>
+<li><code>Agent.ScatterGather(name, worker, ...)</code> — coordinator that fans a worker agent out in parallel.</li>
+<li><code>Agent.FromInstance(object)</code> / <code>Agent.FromInstance(object, string name)</code> — resolve <code>[AgentDef]</code> methods.</li>
+</ul>
+<h2 id="agentbuilder">AgentBuilder<a class="headerlink" href="#agentbuilder" title="Permanent link">&para;</a></h2>
+<p><code>sealed class AgentBuilder</code>. Start with <code>AgentBuilder.Create(string name)</code>, chain
+<code>With*</code>, finish with <code>Build()</code> (throws <code>ConfigurationException</code> if sub-agents have
+no strategy).</p>
+<p><code>WithModel</code>, <code>WithInstructions(string)</code>, <code>WithInstructions(Func&lt;string&gt;)</code>,
+<code>WithInstructions(PromptTemplate)</code>, <code>WithTools(params ToolDef[])</code>,
+<code>WithAgents(params Agent[])</code>, <code>WithStrategy</code>, <code>WithRouter</code>, <code>WithOutputType&lt;T&gt;()</code>,
+<code>WithMaxTurns</code>, <code>WithMaxTokens</code>, <code>WithTemperature</code>, <code>WithTimeout</code>, <code>WithExternal</code>,
+<code>WithEnablePlanning</code>, <code>WithPlanner</code>, <code>WithFallback</code>, <code>WithFallbackMaxTurns</code>,
+<code>WithPlannerContext(params Context[])</code> / <code>(params string[])</code>, <code>WithIncludeContents</code>,
+<code>WithThinkingBudget</code>, <code>WithRequiredTools</code>, <code>WithIntroduction</code>, <code>WithMetadata</code>,
+<code>WithHandoffs(params Handoff[])</code>, <code>WithGate(TextGate)</code>,
+<code>WithCallbacks(params CallbackHandler[])</code>, and the four
+<code>WithBefore/AfterAgent/ToolCallback(...)</code> delegate setters.</p>
+<h2 id="strategy">Strategy<a class="headerlink" href="#strategy" title="Permanent link">&para;</a></h2>
+<p><code>enum Strategy</code>: <code>Handoff</code>, <code>Sequential</code>, <code>Parallel</code>, <code>Router</code>, <code>RoundRobin</code>,
+<code>Random</code>, <code>Swarm</code>, <code>Manual</code>, <code>PlanExecute</code>.</p>
+<h2 id="tools-tooldef-and-built-ins">Tools: ToolDef and built-ins<a class="headerlink" href="#tools-tooldef-and-built-ins" title="Permanent link">&para;</a></h2>
+<p><strong><code>ToolAttribute</code></strong> (<code>[Tool]</code>) on a method: <code>Name</code>, <code>Description</code>,
+<code>ApprovalRequired</code>, <code>External</code>, <code>TimeoutSeconds</code>, <code>Credentials</code> (<code>string[]</code>),
+<code>Stateful</code>, <code>RetryCount</code> (2), <code>RetryDelaySeconds</code> (2), <code>RetryPolicy</code>
+(<code>"linear_backoff"</code>). Constructors: <code>ToolAttribute()</code>, <code>ToolAttribute(string description)</code>.</p>
+<p><strong><code>ToolDef</code></strong> — <code>Name</code>, <code>Description</code>, <code>InputSchema</code> (<code>JsonObject</code>),
+<code>ApprovalRequired</code>, <code>External</code>, <code>TimeoutSeconds</code>, <code>Credentials</code>, <code>Stateful</code>,
+<code>RetryCount</code>, <code>RetryDelaySeconds</code>, <code>RetryPolicy</code>, <code>Guardrails</code>. Method
+<code>WithGuardrails(params GuardrailDef[])</code> returns a copy with guardrails appended.</p>
+<p><strong><code>ToolContext</code></strong> (record) — injected into tool methods: <code>SessionId</code>,
+<code>ExecutionId</code>, <code>AgentName</code>, <code>Metadata</code>, <code>Dependencies</code>, <code>State</code>, <code>ExecutionToken</code>.</p>
+<p><strong><code>ToolRegistry.FromInstance(object)</code></strong> → <code>List&lt;ToolDef&gt;</code> (scans <code>[Tool]</code> methods).</p>
+<p><strong><code>ToolDefFactory.Create(name, description, handler, inputSchema = null, credentials = null)</code></strong>
+— sync or async <code>handler</code> of shape <code>(Dictionary&lt;string, JsonElement&gt; args, ToolContext? ctx) -&gt; object?</code>.</p>
+<p>Built-in factories (all return <code>ToolDef</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Factory</th>
+<th>Signature highlights</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AgentTool.Create</code></td>
+<td><code>(Agent agent, string? name = null, string? description = null, int? retryCount = null, int? retryDelaySeconds = null, bool? optional = null)</code></td>
+</tr>
+<tr>
+<td><code>HttpTools.Create</code></td>
+<td><code>(string name, string description, string url, string method = "GET", Dictionary&lt;string,string&gt;? headers = null, JsonObject? inputSchema = null, string[]? credentials = null)</code></td>
+</tr>
+<tr>
+<td><code>McpTools.Create</code></td>
+<td><code>(string serverUrl, string? name = null, string? description = null, Dictionary&lt;string,string&gt;? headers = null, List&lt;string&gt;? toolNames = null, int maxTools = 64, string[]? credentials = null)</code></td>
+</tr>
+<tr>
+<td><code>RagTools.Index</code> / <code>RagTools.Search</code></td>
+<td><code>(string name, string description, string vectorDb, string index, string embeddingModelProvider, string embeddingModel, string namespace = "default_ns", ...)</code></td>
+</tr>
+<tr>
+<td><code>MediaTools.Image</code> / <code>.Audio</code> / <code>.Video</code></td>
+<td><code>(string name, string description, string llmProvider, string model, JsonObject? inputSchema = null, Dictionary&lt;string,object&gt;? extra = null)</code></td>
+</tr>
+<tr>
+<td><code>MediaTools.Pdf</code></td>
+<td><code>(string name = "generate_pdf", string description = "...", JsonObject? inputSchema = null, Dictionary&lt;string,object&gt;? extra = null)</code></td>
+</tr>
+<tr>
+<td><code>HumanTool.Create</code></td>
+<td><code>(string name = "ask_user", string description = "...", JsonObject? inputSchema = null)</code></td>
+</tr>
+<tr>
+<td><code>WaitForMessageTool.Create</code></td>
+<td><code>(string name = "wait_for_message", string description = "...", int batchSize = 1, bool blocking = true)</code></td>
+</tr>
+<tr>
+<td><code>ApiTools.Create</code></td>
+<td><code>(string url, string? name = null, string? description = null, Dictionary&lt;string,string&gt;? headers = null, List&lt;string&gt;? toolNames = null, int maxTools = 64, string[]? credentials = null)</code></td>
+</tr>
+<tr>
+<td><code>CliTool.Create</code></td>
+<td><code>(IEnumerable&lt;string&gt;? allowedCommands = null, string name = "run_command", int timeoutSeconds = 30, string[]? credentials = null)</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="guardrails">Guardrails<a class="headerlink" href="#guardrails" title="Permanent link">&para;</a></h2>
+<p><strong><code>GuardrailAttribute</code></strong> (<code>[Guardrail]</code>): <code>Name</code>, <code>Position</code> (default <code>Output</code>),
+<code>OnFail</code> (default <code>Raise</code>), <code>MaxRetries</code> (3).</p>
+<p><strong><code>GuardrailDef</code></strong> — <code>Name</code>, <code>Position</code>, <code>OnFail</code>, <code>MaxRetries</code>.</p>
+<p><strong><code>GuardrailResult</code></strong> (record) — <code>(bool Passed, string? Message = null, string? FixedOutput = null)</code>.</p>
+<p><strong><code>GuardrailRegistry.FromInstance(object)</code></strong> → <code>List&lt;GuardrailDef&gt;</code>.</p>
+<p><strong><code>RegexGuardrail.Create</code></strong> — <code>(string|IEnumerable&lt;string&gt; pattern(s), string mode = "block", string? name = null, string? message = null, Position position = Output, OnFail onFail = Retry, int maxRetries = 3)</code>. <code>mode</code>: <code>"block"</code> (fail on match) or <code>"allow"</code> (fail when nothing matches).</p>
+<p><strong><code>LLMGuardrail.Create</code></strong> — <code>(string model, string policy, string? name = null, int? maxTokens = null, Position position = Output, OnFail onFail = Retry, int maxRetries = 3, string? apiKey = null)</code>.</p>
+<p>Enums: <code>Position</code> { <code>Input</code>, <code>Output</code> }; <code>OnFail</code> { <code>Retry</code>, <code>Raise</code>, <code>Fix</code>, <code>Human</code> }.</p>
+<h2 id="terminationcondition">TerminationCondition<a class="headerlink" href="#terminationcondition" title="Permanent link">&para;</a></h2>
+<p><code>abstract class TerminationCondition</code> with <code>operator &amp;</code> (AND) and <code>operator |</code> (OR).</p>
+<ul>
+<li><code>TextMentionTermination(string text, bool caseSensitive = false)</code></li>
+<li><code>StopMessageTermination(string stopMessage)</code></li>
+<li><code>MaxMessageTermination(int maxMessages)</code></li>
+<li><code>TokenUsageTermination(int? maxTotalTokens = null, int? maxPromptTokens = null, int? maxCompletionTokens = null)</code></li>
+<li><code>AndTermination</code> / <code>OrTermination</code> — produced by the operators.</li>
+</ul>
+<h2 id="handoff">Handoff<a class="headerlink" href="#handoff" title="Permanent link">&para;</a></h2>
+<p><code>abstract class Handoff</code> — <code>Target</code> (get-only), <code>abstract bool ShouldHandoff(IReadOnlyDictionary&lt;string, object?&gt; context)</code>.</p>
+<ul>
+<li><code>OnTextMention(string text, string target)</code> ; static <code>OnTextMention.Of(text, target)</code>.</li>
+<li><code>OnToolResult(string toolName, string target, string? resultContains = null)</code> ; static <code>.Of(toolName, target)</code> and <code>.Of(toolName, target, resultContains)</code>.</li>
+<li><code>OnCondition(string target, Func&lt;IReadOnlyDictionary&lt;string, object?&gt;, bool&gt; condition)</code>.</li>
+</ul>
+<p>Context keys: <code>result</code>, <code>messages</code>, <code>tool_name</code>, <code>tool_result</code>.</p>
+<h2 id="textgate">TextGate<a class="headerlink" href="#textgate" title="Permanent link">&para;</a></h2>
+<p><code>sealed class TextGate</code> — <code>TextGate(string text, bool caseSensitive = true)</code>;
+properties <code>Text</code>, <code>CaseSensitive</code>. Stops a sequential pipeline after the agent if
+its output contains <code>Text</code>.</p>
+<h2 id="callbackhandler">CallbackHandler<a class="headerlink" href="#callbackhandler" title="Permanent link">&para;</a></h2>
+<p><code>abstract class CallbackHandler</code>. Override any of:
+<code>OnAgentStart</code>, <code>OnAgentEnd</code>, <code>OnModelStart</code>, <code>OnModelEnd</code>, <code>OnToolStart</code>,
+<code>OnToolEnd</code> — each <code>Dictionary&lt;string, object&gt;? On...(Dictionary&lt;string, JsonElement&gt; kwargs)</code>.
+A non-empty return overrides / short-circuits. Register a list via
+<code>Agent.Callbacks</code>; handlers run in order, first non-empty return wins.</p>
+<p>Positions map to server task names: <code>before_agent</code>, <code>after_agent</code>,
+<code>before_model</code>, <code>after_model</code>, <code>before_tool</code>, <code>after_tool</code>.</p>
+<h2 id="schedule-schedules">Schedule / Schedules<a class="headerlink" href="#schedule-schedules" title="Permanent link">&para;</a></h2>
+<p><code>namespace Conductor.AI.Scheduling</code>.</p>
+<p><strong><code>Schedule</code></strong> (init-only): <code>Name</code> (required), <code>Cron</code> (required, 6-field Quartz),
+<code>Timezone</code> (<code>"UTC"</code>), <code>Input</code> (<code>IReadOnlyDictionary&lt;string, object?&gt;</code>), <code>Catchup</code>,
+<code>Paused</code>, <code>StartAt</code>, <code>EndAt</code>, <code>Description</code>. <code>Validate()</code> throws on bad input.</p>
+<p><strong><code>ScheduleInfo</code></strong> (record) — server view: <code>Name</code> (wire), <code>ShortName</code>, <code>Agent</code>,
+<code>Cron</code>, <code>Timezone</code>, <code>Input</code>, <code>Paused</code>, <code>PausedReason</code>, <code>Catchup</code>, <code>StartAt</code>,
+<code>EndAt</code>, <code>Description</code>, <code>NextRun</code>, <code>CreateTime</code>, <code>UpdateTime</code>, <code>CreatedBy</code>,
+<code>UpdatedBy</code>.</p>
+<p><strong><code>Schedules</code></strong> — <code>SaveAsync(Schedule, agentName)</code>, <code>GetAsync(wireName)</code>,
+<code>ListAsync(agentName)</code>, <code>PauseAsync(wireName, reason?)</code>, <code>ResumeAsync(wireName)</code>,
+<code>DeleteAsync(wireName)</code>, <code>RunNowAsync(ScheduleInfo)</code>,
+<code>PreviewNextAsync(cron, n = 5, startAt?, endAt?)</code>,
+<code>ReconcileAsync(agentName, IEnumerable&lt;Schedule&gt;?)</code>. Statics: <code>Prefix</code>, <code>Unprefix</code>,
+<code>CheckUniqueNames</code>.</p>
+<h2 id="plans">Plans<a class="headerlink" href="#plans" title="Permanent link">&para;</a></h2>
+<p><code>namespace Conductor.AI.Plans</code>. For <code>Strategy.PlanExecute</code>.</p>
+<ul>
+<li><strong><code>Plan</code></strong> — <code>Steps</code> (<code>List&lt;Step&gt;</code>), <code>Validation</code>, <code>OnSuccess</code>, <code>OnFailure</code>. <code>ToJson()</code>.</li>
+<li><strong><code>Step(string id)</code></strong> — <code>Operations</code> (<code>List&lt;Op&gt;</code>), <code>DependsOn</code> (<code>List&lt;string&gt;</code>), <code>Parallel</code>.</li>
+<li><strong><code>Op(string tool, Dictionary&lt;string, object?&gt; args)</code></strong> (literal) ; <code>Op.WithGenerate(string tool, Generate)</code> (LLM-driven). Exactly one of args/generate.</li>
+<li><strong><code>Generate</code></strong> — <code>Instructions</code> (required), <code>OutputSchema</code> (required), <code>MaxTokens?</code>, <code>Context</code> (string or <code>Ref</code>).</li>
+<li><strong><code>Ref(string stepId)</code></strong> — wires a prior step's output (<code>{"$ref": "stepId"}</code>); the step must be in <code>DependsOn</code>.</li>
+<li><strong><code>Context.FromText(string)</code></strong> / <strong><code>Context.FromUrl(url, headers? = null, required = true, maxBytes = 16384)</code></strong> — planner reference context.</li>
+<li><strong><code>Validation(string tool)</code></strong> — <code>Args</code>, <code>SuccessCondition</code>. <strong><code>Action(string tool)</code></strong> — <code>Args</code>.</li>
+</ul>
+<h2 id="results">Results<a class="headerlink" href="#results" title="Permanent link">&para;</a></h2>
+<p><strong><code>AgentResult</code></strong> (record): <code>ExecutionId</code>, <code>CorrelationId</code>, <code>Output</code>
+(<code>Dictionary&lt;string, object&gt;?</code>; final text usually <code>Output["result"]</code>), <code>Messages</code>,
+<code>ToolCalls</code>, <code>Status</code>, <code>FinishReason</code>, <code>Error</code>, <code>TokenUsage</code>, <code>Metadata</code>, <code>Events</code>,
+<code>SubResults</code>. Convenience: <code>IsSuccess</code>, <code>IsFailed</code>, <code>IsRejected</code>, and
+<code>PrintResult()</code>.</p>
+<p><strong><code>AgentHandle</code></strong> — <code>ExecutionId</code>, <code>RunId</code>, <code>WaitAsync(ct)</code>, <code>StreamAsync(ct)</code>,
+<code>GetStatusAsync(ct)</code>, <code>RespondAsync(object)</code>, <code>ApproveAsync()</code> /
+<code>ApproveAsync(string comment)</code>, <code>RejectAsync(string? reason)</code>, the event-targeted
+overloads <code>ApproveAsync(AgentEvent, ...)</code> / <code>RejectAsync(AgentEvent, reason)</code> /
+<code>RespondAsync(AgentEvent, object)</code>, <code>IsWaitingAsync(ct)</code>,
+<code>WaitUntilWaitingAsync(timeout, pollInterval? = null, ct)</code>, <code>StopAsync()</code> /
+<code>Stop()</code>, <code>CancelAsync(reason)</code> / <code>Cancel(reason)</code>.</p>
+<p><strong><code>AgentEvent</code></strong> (record): <code>Type</code> (<code>EventType</code>), <code>Content</code>, <code>ToolName</code>, <code>Args</code>,
+<code>Result</code>, <code>Target</code>, <code>Output</code>, <code>ExecutionId</code>, <code>GuardrailName</code>, <code>Timestamp</code>, <code>Status</code>.</p>
+<p><strong><code>AgentStatus</code></strong> (record): <code>ExecutionId</code>, <code>IsComplete</code>, <code>IsRunning</code>, <code>IsWaiting</code>,
+<code>Output</code>, <code>StatusValue</code>, <code>Reason</code>, <code>CurrentTask</code>, <code>PendingTool</code>, <code>TokenUsage</code>.</p>
+<p>Enums: <code>EventType</code> { <code>Thinking</code>, <code>ToolCall</code>, <code>ToolResult</code>, <code>GuardrailPass</code>,
+<code>GuardrailFail</code>, <code>Waiting</code>, <code>Handoff</code>, <code>Message</code>, <code>Error</code>, <code>Done</code> };
+<code>Status</code> { <code>Completed</code>, <code>Failed</code>, <code>Terminated</code>, <code>TimedOut</code> };
+<code>FinishReason</code> { <code>Stop</code>, <code>Length</code>, <code>ToolCalls</code>, <code>Error</code>, <code>Cancelled</code>, <code>Timeout</code>,
+<code>Guardrail</code>, <code>Rejected</code> }.</p>
+<p>Other records: <code>TokenUsage(PromptTokens, CompletionTokens, TotalTokens)</code>,
+<code>DeploymentInfo(RegisteredName, AgentName)</code>.</p>
+<h2 id="agentclient">AgentClient<a class="headerlink" href="#agentclient" title="Permanent link">&para;</a></h2>
+<p><code>sealed class AgentClient : IDisposable</code> (formerly <code>AgentHttpClient</code>). Constructor:
+<code>AgentClient(string serverUrl, string? authKey = null, string? authSecret = null)</code>.
+Obtain the runtime's instance via <code>runtime.Client</code>.</p>
+<p>Control-plane convenience: <code>RunAsync(Agent, ...)</code>, <code>StartAsync(Agent, ...)</code>,
+<code>DeployAsync(params Agent[])</code>, <code>ScheduleAsync(Agent, IEnumerable&lt;Schedule&gt;, ct)</code>,
+<code>Schedules</code> (property). Run is control-plane only — no local tool workers.</p>
+<p>Lower level: <code>StartAsync(JsonObject)</code>, <code>DeployAsync(JsonObject)</code>,
+<code>CompileAsync(JsonObject)</code>, <code>GetStatusAsync</code>, <code>GetExecutionAsync</code>, <code>RespondAsync</code>,
+<code>StreamEventsAsync</code>, <code>StartWorkflowByNameAsync</code>, <code>SendWorkflowMessageAsync</code>,
+<code>StopAgentAsync</code>, <code>CancelAgentAsync</code>, <code>GetWorkflowAsync</code>,
+<code>ResolveCredentialsAsync(executionToken, names)</code>.</p>
+<h2 id="exceptions">Exceptions<a class="headerlink" href="#exceptions" title="Permanent link">&para;</a></h2>
+<p><code>ConfigurationException</code> (invalid agent config, e.g. sub-agents without strategy),
+<code>AgentApiException</code> (HTTP error from the agent API; carries the status code and
+body). Credential resolution throws <code>CredentialNotFoundException</code>,
+<code>CredentialAuthException</code>, <code>CredentialRateLimitException</code>, or
+<code>CredentialServiceException</code>. Scheduling throws <code>ScheduleException</code> and subtypes
+<code>ScheduleNotFound</code>, <code>ScheduleNameConflict</code>, <code>InvalidCronExpression</code>.
+</content></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>

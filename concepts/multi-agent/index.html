@@ -1,0 +1,3136 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="All 8 coordination strategies — sequential, parallel, handoff, router, swarm, round_robin, random, manual">
+      
+      
+      
+        <link rel="canonical" href="https://agentspan.ai/docs/concepts/multi-agent/">
+      
+      
+        <link rel="prev" href="../skills/">
+      
+      
+        <link rel="next" href="../plan-execute/">
+      
+      
+      <link rel="icon" href="../../assets/logo-light.svg">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Multi-Agent Strategies - Agentspan Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=False:300,300i,400,400i,700,700i%7CFalse:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"False";--md-code-font:"False"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../css/custom.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#multi-agent-strategies" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  <strong>Agentspan is now part of
+    <a href="https://github.com/conductor-oss/conductor">Orkes Conductor</a></strong>
+  — these docs are frozen. New docs:
+  <a href="https://orkes.io/content/devguide/ai">orkes.io/content/devguide/ai</a> ·
+  <a href="https://github.com/agentspan-ai/agentspan/blob/main/MIGRATION.md">migration guide</a>
+
+          </div>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Agentspan Docs" class="md-header__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="../../assets/logo-light.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Agentspan Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Multi-Agent Strategies
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Agentspan Docs" class="md-nav__button md-logo" aria-label="Agentspan Docs" data-md-component="logo">
+      
+  <img src="../../assets/logo-light.svg" alt="logo">
+
+    </a>
+    Agentspan Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/agentspan-ai/agentspan" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    agentspan-ai/agentspan
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../why-agentspan/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Why Agentspan
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SDK Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Multi-Agent Strategies
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent Strategies
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sequential-a-b-c" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sequential — a &gt;&gt; b &gt;&gt; c
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parallel" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parallel
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handoff-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handoff (default)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#router" class="md-nav__link">
+    <span class="md-ellipsis">
+      Router
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#swarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Swarm
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#round-robin" class="md-nav__link">
+    <span class="md-ellipsis">
+      Round Robin
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#random" class="md-nav__link">
+    <span class="md-ellipsis">
+      Random
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#manual" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#termination-conditions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Termination Conditions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nested-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Nested Strategies
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plan-execute/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Plan-Execute (PAC/PAE)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adaptive-loops/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Adaptive Loops
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../memory/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Memory
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../streaming/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Testing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/support-triage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Support Ticket Triage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/research-pipeline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Research Pipeline
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/document-processor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Batch Document Processor
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/crash-resume/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Crash and Resume
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/human-in-the-loop/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Human in the Loop
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/langgraph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph Code Review Bot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/openai-agents-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK Customer Support
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK Research Assistant
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Java SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Java SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Core Concepts
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Core Concepts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-structure/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent Field Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-schema/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Agent JSON Schema
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/tools/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/multi-agent/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Multi-Agent
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/guardrails/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guardrails
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/termination/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Termination
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/scheduling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Scheduling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/skills/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Skills
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/stateful/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Stateful Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/structured-output/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Structured Output
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/streaming-hitl/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Streaming & HITL
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/callbacks/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Callbacks
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/concepts/deploy-serve-run/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deploy, Serve, Run
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Frameworks
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frameworks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/langchain4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangChain4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/langgraph4j/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    LangGraph4j
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/openai/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    OpenAI Agents SDK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/frameworks/google-adk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Google ADK
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/spring-boot/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Spring Boot
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-runtime-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentRuntime
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/agent-client-api/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AgentClient (internal)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../java-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Public API summary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Python SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Python SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../python-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    TypeScript SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            TypeScript SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../typescript-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    C# SDK
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            C# SDK
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/getting-started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/writing-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Writing Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/framework-agents/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Framework Agents
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/advanced/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../csharp-sdk/api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../providers/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Providers
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai-models/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AI Models
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CLI
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../deployment/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deployment
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../self-hosting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Self-Hosting
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Integrations
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../worker-types/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Worker Types
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sequential-a-b-c" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sequential — a &gt;&gt; b &gt;&gt; c
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parallel" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parallel
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#handoff-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handoff (default)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#router" class="md-nav__link">
+    <span class="md-ellipsis">
+      Router
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#swarm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Swarm
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#round-robin" class="md-nav__link">
+    <span class="md-ellipsis">
+      Round Robin
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#random" class="md-nav__link">
+    <span class="md-ellipsis">
+      Random
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#manual" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#termination-conditions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Termination Conditions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nested-strategies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Nested Strategies
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/agentspan-ai/agentspan/edit/main/docs/concepts/multi-agent.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4v-2m10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1 2.1 2.1Z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="multi-agent-strategies">Multi-Agent Strategies<a class="headerlink" href="#multi-agent-strategies" title="Permanent link">&para;</a></h1>
+<p>Every multi-agent system in Agentspan is built from one primitive: <code>Agent</code>. Set <code>agents=[...]</code> and choose a <code>strategy</code> to coordinate them.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>handoff</code> (default)</td>
+<td>LLM chooses which sub-agent handles the request</td>
+</tr>
+<tr>
+<td><code>sequential</code></td>
+<td>Sub-agents run in order, output feeds forward</td>
+</tr>
+<tr>
+<td><code>parallel</code></td>
+<td>All sub-agents run concurrently, results aggregated</td>
+</tr>
+<tr>
+<td><code>router</code></td>
+<td>A router agent or function selects which sub-agent runs</td>
+</tr>
+<tr>
+<td><code>swarm</code></td>
+<td>Condition-based handoffs between agents</td>
+</tr>
+<tr>
+<td><code>round_robin</code></td>
+<td>Agents take turns in a fixed rotation</td>
+</tr>
+<tr>
+<td><code>random</code></td>
+<td>Random sub-agent selection each turn</td>
+</tr>
+<tr>
+<td><code>manual</code></td>
+<td>Human selects which agent speaks each turn</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sequential-a-b-c">Sequential — <code>a &gt;&gt; b &gt;&gt; c</code><a class="headerlink" href="#sequential-a-b-c" title="Permanent link">&para;</a></h2>
+<p>Sub-agents run in order. Each agent's output becomes the next agent's input.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant R as Researcher
+    participant W as Writer
+    participant E as Editor
+    Code-&gt;&gt;Server: run(researcher &gt;&gt; writer &gt;&gt; editor, prompt)
+    activate Server
+    Server-&gt;&gt;R: run
+    activate R
+    R--&gt;&gt;Server: result
+    deactivate R
+    Server-&gt;&gt;W: run (receives researcher output)
+    activate W
+    W--&gt;&gt;Server: result
+    deactivate W
+    Server-&gt;&gt;E: run (receives writer output)
+    activate E
+    E--&gt;&gt;Server: result
+    deactivate E
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span>
+
+<span class="n">researcher</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;researcher&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                   <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Research the topic and provide key facts.&quot;</span><span class="p">)</span>
+<span class="n">writer</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;writer&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+               <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Write an engaging article from the research.&quot;</span><span class="p">)</span>
+<span class="n">editor</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;editor&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+               <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Polish the article for publication.&quot;</span><span class="p">)</span>
+
+<span class="c1"># Operator syntax</span>
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">researcher</span> <span class="o">&gt;&gt;</span> <span class="n">writer</span> <span class="o">&gt;&gt;</span> <span class="n">editor</span>
+
+<span class="c1"># Equivalent constructor syntax</span>
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;pipeline&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">researcher</span><span class="p">,</span> <span class="n">writer</span><span class="p">,</span> <span class="n">editor</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;sequential&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="s2">&quot;AI agents in software development&quot;</span><span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">print_result</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="parallel">Parallel<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
+<p>All sub-agents run concurrently. Results are aggregated into <code>result.sub_results</code>.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant M as Market Analyst
+    participant R as Risk Analyst
+    participant F as Financial Analyst
+    Code-&gt;&gt;Server: run(due_diligence, prompt)
+    activate Server
+    par run concurrently
+        Server-&gt;&gt;M: run
+        activate M
+    and
+        Server-&gt;&gt;R: run
+        activate R
+    and
+        Server-&gt;&gt;F: run
+        activate F
+    end
+    M--&gt;&gt;Server: result
+    deactivate M
+    R--&gt;&gt;Server: result
+    deactivate R
+    F--&gt;&gt;Server: result
+    deactivate F
+    Note over Server: synthesize all results
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span>
+
+<span class="n">market</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;market&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+               <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Analyze market size, growth, and key players.&quot;</span><span class="p">)</span>
+<span class="n">risk</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;risk&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+             <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Analyze regulatory, technical, and competitive risks.&quot;</span><span class="p">)</span>
+<span class="n">financial</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;financial&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                  <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Analyze financial projections and metrics.&quot;</span><span class="p">)</span>
+
+<span class="n">analysis</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;analysis&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">market</span><span class="p">,</span> <span class="n">risk</span><span class="p">,</span> <span class="n">financial</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;parallel&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">analysis</span><span class="p">,</span> <span class="s2">&quot;Launching an AI healthcare tool in the US&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">sub_results</span><span class="p">[</span><span class="s2">&quot;market&quot;</span><span class="p">])</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">sub_results</span><span class="p">[</span><span class="s2">&quot;risk&quot;</span><span class="p">])</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">sub_results</span><span class="p">[</span><span class="s2">&quot;financial&quot;</span><span class="p">])</span>
+</code></pre></div>
+<h2 id="handoff-default">Handoff (default)<a class="headerlink" href="#handoff-default" title="Permanent link">&para;</a></h2>
+<p>The orchestrator LLM decides which sub-agent handles the request. Sub-agents can also hand off to each other.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant LLM
+    participant B as Billing
+    participant T as Technical
+    participant G as General
+    Code-&gt;&gt;Server: run(support, prompt)
+    activate Server
+    Server-&gt;&gt;LLM: route decision
+    activate LLM
+    LLM--&gt;&gt;Server: "Billing"
+    deactivate LLM
+    Server-&gt;&gt;B: run
+    activate B
+    B--&gt;&gt;Server: result
+    deactivate B
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">tool</span>
+
+<span class="nd">@tool</span>
+<span class="k">def</span> <span class="nf">check_balance</span><span class="p">(</span><span class="n">account_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check account balance.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;account_id&quot;</span><span class="p">:</span> <span class="n">account_id</span><span class="p">,</span> <span class="s2">&quot;balance&quot;</span><span class="p">:</span> <span class="mf">5432.10</span><span class="p">}</span>
+
+<span class="n">billing</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;billing&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Handle billing inquiries.&quot;</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">check_balance</span><span class="p">])</span>
+<span class="n">technical</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;technical&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                  <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Handle technical issues.&quot;</span><span class="p">)</span>
+
+<span class="n">support</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;support&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Route customer requests to the right team.&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">billing</span><span class="p">,</span> <span class="n">technical</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;handoff&quot;</span><span class="p">,</span>   <span class="c1"># This is the default</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">support</span><span class="p">,</span> <span class="s2">&quot;What&#39;s the balance on account ACC-123?&quot;</span><span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">print_result</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="router">Router<a class="headerlink" href="#router" title="Permanent link">&para;</a></h2>
+<p>A dedicated router agent or function selects which sub-agent runs:</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant Cls as Classifier
+    participant B as Billing
+    participant T as Technical
+    participant G as General
+    Code-&gt;&gt;Server: run(support, prompt)
+    activate Server
+    Server-&gt;&gt;Cls: classify intent
+    activate Cls
+    Cls--&gt;&gt;Server: "Billing"
+    deactivate Cls
+    Server-&gt;&gt;B: run
+    activate B
+    B--&gt;&gt;Server: result
+    deactivate B
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span>
+
+<span class="n">classifier</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;classifier&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;anthropic/claude-sonnet-4-6&quot;</span><span class="p">,</span>
+    <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Classify the request as &#39;billing&#39;, &#39;technical&#39;, or &#39;general&#39;. Reply with just the category.&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">billing</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;billing&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Handle billing inquiries.&quot;</span><span class="p">)</span>
+<span class="n">technical</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;technical&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                  <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Handle technical issues.&quot;</span><span class="p">)</span>
+<span class="n">general</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;general&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Handle general questions.&quot;</span><span class="p">)</span>
+
+<span class="n">support</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;support&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">billing</span><span class="p">,</span> <span class="n">technical</span><span class="p">,</span> <span class="n">general</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;router&quot;</span><span class="p">,</span>
+    <span class="n">router</span><span class="o">=</span><span class="n">classifier</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">support</span><span class="p">,</span> <span class="s2">&quot;My invoice has a wrong charge&quot;</span><span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">print_result</span><span class="p">()</span>
+</code></pre></div>
+<p>You can also use a Python function as the router:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">route</span><span class="p">(</span><span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the name of the agent to route to.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;bill&quot;</span> <span class="ow">in</span> <span class="n">prompt</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">or</span> <span class="s2">&quot;invoice&quot;</span> <span class="ow">in</span> <span class="n">prompt</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+        <span class="k">return</span> <span class="s2">&quot;billing&quot;</span>
+    <span class="k">elif</span> <span class="s2">&quot;error&quot;</span> <span class="ow">in</span> <span class="n">prompt</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">or</span> <span class="s2">&quot;bug&quot;</span> <span class="ow">in</span> <span class="n">prompt</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+        <span class="k">return</span> <span class="s2">&quot;technical&quot;</span>
+    <span class="k">return</span> <span class="s2">&quot;general&quot;</span>
+
+<span class="n">support</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;support&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">billing</span><span class="p">,</span> <span class="n">technical</span><span class="p">,</span> <span class="n">general</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;router&quot;</span><span class="p">,</span>
+    <span class="n">router</span><span class="o">=</span><span class="n">route</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<h2 id="swarm">Swarm<a class="headerlink" href="#swarm" title="Permanent link">&para;</a></h2>
+<p>Condition-based handoffs between agents. Each agent can trigger a handoff based on text patterns or other conditions:</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant T as Triage
+    participant Ref as Refund Specialist
+    participant Esc as Escalation
+    Code-&gt;&gt;Server: run(support, prompt)
+    activate Server
+    Server-&gt;&gt;T: run
+    activate T
+    T--&gt;&gt;Server: "customer wants a refund"
+    deactivate T
+    Note over Server: OnTextMention("refund") triggers
+    Server-&gt;&gt;Ref: run
+    activate Ref
+    Ref--&gt;&gt;Server: result
+    deactivate Ref
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">Strategy</span>
+<span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">TextMentionTermination</span>
+
+<span class="n">triage</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;triage&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+               <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Triage support requests. Say &#39;BILLING&#39; for billing, &#39;TECH&#39; for technical.&quot;</span><span class="p">)</span>
+<span class="n">billing</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;billing&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Handle billing inquiries.&quot;</span><span class="p">)</span>
+<span class="n">technical</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;technical&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+                  <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Handle technical issues.&quot;</span><span class="p">)</span>
+
+<span class="n">team</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;support_team&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">triage</span><span class="p">,</span> <span class="n">billing</span><span class="p">,</span> <span class="n">technical</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="n">Strategy</span><span class="o">.</span><span class="n">SWARM</span><span class="p">,</span>
+    <span class="n">handoffs</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">TextMentionTermination</span><span class="p">(</span><span class="s2">&quot;BILLING&quot;</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="s2">&quot;billing&quot;</span><span class="p">),</span>
+        <span class="n">TextMentionTermination</span><span class="p">(</span><span class="s2">&quot;TECH&quot;</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="s2">&quot;technical&quot;</span><span class="p">),</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+</code></pre></div>
+<h2 id="round-robin">Round Robin<a class="headerlink" href="#round-robin" title="Permanent link">&para;</a></h2>
+<p>Agents take turns in a fixed rotation:</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant O as Optimist
+    participant P as Pessimist
+    participant R as Realist
+    Code-&gt;&gt;Server: run(debate, prompt)
+    activate Server
+    loop 3 rounds
+        Server-&gt;&gt;O: run
+        activate O
+        O--&gt;&gt;Server: result
+        deactivate O
+        Server-&gt;&gt;P: run
+        activate P
+        P--&gt;&gt;Server: result
+        deactivate P
+        Server-&gt;&gt;R: run
+        activate R
+        R--&gt;&gt;Server: result
+        deactivate R
+    end
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="n">agent1</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;agent1&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+               <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;You are the first debater. Argue for AI regulation.&quot;</span><span class="p">)</span>
+<span class="n">agent2</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;agent2&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+               <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;You are the second debater. Argue against AI regulation.&quot;</span><span class="p">)</span>
+
+<span class="n">debate</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;debate&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">agent1</span><span class="p">,</span> <span class="n">agent2</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;round_robin&quot;</span><span class="p">,</span>
+    <span class="n">max_turns</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>   <span class="c1"># 3 rounds each</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">debate</span><span class="p">,</span> <span class="s2">&quot;Begin the debate.&quot;</span><span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">print_result</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="random">Random<a class="headerlink" href="#random" title="Permanent link">&para;</a></h2>
+<p>A random sub-agent is selected each turn. Useful for load balancing across models or creating diverse output ensembles.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant G as GPT-4o
+    participant C as Claude
+    participant Ge as Gemini
+    Code-&gt;&gt;Server: run(ensemble, prompt)
+    activate Server
+    Note over Server: random selection
+    Server-&gt;&gt;C: run (randomly chosen)
+    activate C
+    C--&gt;&gt;Server: result
+    deactivate C
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="n">ensemble</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;diverse_writers&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;gpt4&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span> <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Write concisely.&quot;</span><span class="p">),</span>
+        <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;claude&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;anthropic/claude-sonnet-4-6&quot;</span><span class="p">,</span> <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Write creatively.&quot;</span><span class="p">),</span>
+        <span class="n">Agent</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;gemini&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">&quot;google_gemini/gemini-2.0-flash&quot;</span><span class="p">,</span> <span class="n">instructions</span><span class="o">=</span><span class="s2">&quot;Write with examples.&quot;</span><span class="p">),</span>
+    <span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;random&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">ensemble</span><span class="p">,</span> <span class="s2">&quot;Explain why consistency matters in distributed systems&quot;</span><span class="p">)</span>
+    <span class="n">result</span><span class="o">.</span><span class="n">print_result</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="manual">Manual<a class="headerlink" href="#manual" title="Permanent link">&para;</a></h2>
+<p>Execution pauses between turns waiting for explicit human selection of the next agent. Useful for human-directed workflows.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant A as Agent A
+    participant B as Agent B
+    participant C as Agent C
+    Code-&gt;&gt;Server: start(workflow, prompt)
+    activate Server
+    Note over Server,C: paused — waiting for human to pick next agent
+    Code-&gt;&gt;Server: handle.send("agent_a")
+    Server-&gt;&gt;A: run
+    activate A
+    A--&gt;&gt;Server: result
+    deactivate A
+    Note over Server,C: paused — waiting again
+    Code-&gt;&gt;Server: handle.send("agent_b")
+    Server-&gt;&gt;B: run
+    activate B
+    B--&gt;&gt;Server: result
+    deactivate B
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span><span class="p">,</span> <span class="n">AgentRuntime</span><span class="p">,</span> <span class="n">start</span>
+
+<span class="n">workflow</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;manual_workflow&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">agent_a</span><span class="p">,</span> <span class="n">agent_b</span><span class="p">,</span> <span class="n">agent_c</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;manual&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <span class="n">AgentRuntime</span><span class="p">()</span> <span class="k">as</span> <span class="n">runtime</span><span class="p">:</span>
+    <span class="n">handle</span> <span class="o">=</span> <span class="n">runtime</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">workflow</span><span class="p">,</span> <span class="s2">&quot;initial prompt&quot;</span><span class="p">)</span>
+    <span class="c1"># Manual strategy pauses at each turn waiting for input.</span>
+    <span class="c1"># Use handle.send(agent_name) to select which agent runs next.</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">handle</span><span class="o">.</span><span class="n">get_status</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">status</span><span class="o">.</span><span class="n">is_waiting</span><span class="p">:</span>
+        <span class="n">handle</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="s2">&quot;agent_a&quot;</span><span class="p">)</span>  <span class="c1"># send the name of the agent to invoke</span>
+</code></pre></div>
+<h2 id="termination-conditions">Termination Conditions<a class="headerlink" href="#termination-conditions" title="Permanent link">&para;</a></h2>
+<p>Control when multi-agent loops stop:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MaxMessageTermination</span><span class="p">,</span>
+    <span class="n">TextMentionTermination</span><span class="p">,</span>
+    <span class="n">StopMessageTermination</span><span class="p">,</span>
+    <span class="n">TokenUsageTermination</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Stop after 20 messages</span>
+<span class="n">MaxMessageTermination</span><span class="p">(</span><span class="n">max_messages</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+
+<span class="c1"># Stop when an agent says &quot;DONE&quot;</span>
+<span class="n">TextMentionTermination</span><span class="p">(</span><span class="s2">&quot;DONE&quot;</span><span class="p">)</span>
+
+<span class="c1"># Stop on StopMessage events</span>
+<span class="n">StopMessageTermination</span><span class="p">()</span>
+
+<span class="c1"># Stop when token budget is exceeded</span>
+<span class="n">TokenUsageTermination</span><span class="p">(</span><span class="n">max_total_tokens</span><span class="o">=</span><span class="mi">10000</span><span class="p">)</span>
+</code></pre></div>
+<p>Combine multiple conditions:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">conductor.ai.agents</span> <span class="kn">import</span> <span class="n">Agent</span>
+
+<span class="n">agent</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;team&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">agent1</span><span class="p">,</span> <span class="n">agent2</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;round_robin&quot;</span><span class="p">,</span>
+    <span class="n">stop_when</span><span class="o">=</span><span class="n">MaxMessageTermination</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span> <span class="o">|</span> <span class="n">TextMentionTermination</span><span class="p">(</span><span class="s2">&quot;DONE&quot;</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+<h2 id="nested-strategies">Nested Strategies<a class="headerlink" href="#nested-strategies" title="Permanent link">&para;</a></h2>
+<p>Strategies compose freely — a parallel agent can contain sequential pipelines:</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Code as Your Code
+    participant Server as Agentspan Server
+    participant M as Market Agent
+    participant T as Tech Agent
+    participant Reg as Regulatory Agent
+    participant W as Writer
+    participant E as Editor
+    participant F as Formatter
+    Code-&gt;&gt;Server: run(report_pipeline, prompt)
+    activate Server
+    Note over Server: Stage 1 — Parallel Research
+    par run concurrently
+        Server-&gt;&gt;M: run
+        activate M
+    and
+        Server-&gt;&gt;T: run
+        activate T
+    and
+        Server-&gt;&gt;Reg: run
+        activate Reg
+    end
+    M--&gt;&gt;Server: result
+    deactivate M
+    T--&gt;&gt;Server: result
+    deactivate T
+    Reg--&gt;&gt;Server: result
+    deactivate Reg
+    Note over Server: Stage 2 — Sequential Publish
+    Server-&gt;&gt;W: run
+    activate W
+    W--&gt;&gt;Server: result
+    deactivate W
+    Server-&gt;&gt;E: run (receives Writer output)
+    activate E
+    E--&gt;&gt;Server: result
+    deactivate E
+    Server-&gt;&gt;F: run (receives Editor output)
+    activate F
+    F--&gt;&gt;Server: result
+    deactivate F
+    Server--&gt;&gt;Code: AgentResult
+    deactivate Server</code></pre>
+<div class="highlight"><pre><span></span><code><span class="n">research_pipeline</span> <span class="o">=</span> <span class="n">researcher</span> <span class="o">&gt;&gt;</span> <span class="n">writer</span>
+
+<span class="n">analysis</span> <span class="o">=</span> <span class="n">Agent</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;analysis&quot;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;openai/gpt-4o&quot;</span><span class="p">,</span>
+    <span class="n">agents</span><span class="o">=</span><span class="p">[</span><span class="n">research_pipeline</span><span class="p">,</span> <span class="n">financial_agent</span><span class="p">,</span> <span class="n">risk_agent</span><span class="p">],</span>
+    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;parallel&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>
