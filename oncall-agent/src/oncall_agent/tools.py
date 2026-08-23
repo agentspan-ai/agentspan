@@ -1,0 +1,538 @@
+"""Read-only investigation tools the agent can call.
+
+Each tool maps to a read-only agent-handler command. The LLM only ever passes the
+incident ``execution_id`` (which it gets from the alert); the org / cluster /
+cloudEnvironmentTag are derived once from that execution and cached, so the model
+can't get the cluster wrong and nothing sensitive is threaded through tool args.
+
+Tools run as Agentspan workers (separate processes), so the dispatcher and context
+cache are module-level singletons built lazily from the environment.
+"""
+from __future__ import annotations
+
+import re
+from collections import Counter
+
+from conductor.ai.agents import tool
+
+from .conductor_client import ConductorDispatcher
+from .config import Config
+from .recurrence import summarize_recurrence
+from .kubectl_guard import NotReadOnlyKubectlError, ensure_readonly_kubectl
+from .sql_guard import NotReadOnlySQLError, ensure_select
+
+_dispatcher: ConductorDispatcher | None = None
+_ctx_cache: dict[str, dict] = {}
+
+# Generous timeout: a dispatched command starts a workflow and we poll it to completion.
+_T = 240
+
+
+def _disp() -> ConductorDispatcher:
+    global _dispatcher
+    if _dispatcher is None:
+        cfg = Config.from_env()
+        _dispatcher = ConductorDispatcher(
+            cfg.conductor_server_url, cfg.conductor_key_id, cfg.conductor_key_secret
+        )
+    return _dispatcher
+
+
+def _context(execution_id: str) -> dict:
+    if execution_id not in _ctx_cache:
+        _ctx_cache[execution_id] = _disp().get_context(execution_id)
+    return _ctx_cache[execution_id]
+
+
+@tool(timeout_seconds=_T)
+def get_incident_details(execution_id: str) -> dict:
+    """Fetch the failing health_check execution: the detected issues (with severity),
+    the per-component health results, and the cluster/organization context. ALWAYS
+    call this FIRST, using the execution id from the alert URL (.../execution/<id>).
+
+    Args:
+        execution_id: Conductor workflow execution id from the alert.
+    """
+    wf = _disp().get_execution(execution_id)
+    issues = None
+    cluster_data = None
+    component_health: dict = {}
+    for t in wf.get("tasks", []):
+        ref, ttype = t.get("ref"), str(t.get("type") or "")
+        if ref == "issues":
+            issues = t.get("output")
+        elif ref == "parse_conductor_cluster_data_ref":
+            # The load-bearing summary: redis.usage, redis.decider_queue_size
+            # (= running workflows), redis.indexer_queue_size, heap_memory, cpu, postgres.
+            out = t.get("output") or {}
+            cluster_data = out.get("result", out)
+        elif ttype.endswith("health_check"):
+            out = t.get("output")
+            component_health[ref] = {
+                "healthy": out.get("healthy") if isinstance(out, dict) else None,
+                "status": t.get("status"),
+            }
+    return {
+        "executionId": execution_id,
+        "status": wf.get("status"),
+        "context": _context(execution_id),
+        "issues": issues,
+        # redis usage + queue sizes + heap/cpu/postgres — almost all you need, no SQL.
+        "clusterData": cluster_data,
+        "componentHealth": component_health,
+    }
+
+
+@tool(timeout_seconds=_T)
+def get_alert_recurrence(execution_id: str, alert_signature: str) -> dict:
+    """Is this alert NEW or has it been firing for a while? Call this EARLY (right
+    after get_incident_details) — it's the first question a human on-call asks, and
+    it changes everything: a one-off spike is an incident, but an alert firing on a
+    third of recent health-checks is a standing capacity problem, not a fresh page.
+
+    Looks back over this cluster's recent health_check runs and reports how often
+    this alert TYPE fired. Cheap (one search, no deep dive). If the verdict is
+    CHRONIC/RECURRING, say so up front and keep the investigation light — you're
+    confirming a known condition, not discovering a new one.
+
+    Args:
+        execution_id: incident execution id (used to resolve the cluster).
+        alert_signature: a SHORT, STABLE phrase identifying the alert TYPE — e.g.
+            "Conductor Server CPU usage", "Redis instance is at", "has failed",
+            "Prometheus is down". Do NOT include the varying numbers (percentages,
+            pod ids) — that would defeat the match. Take it from the issues text.
+    """
+    ctx = _context(execution_id)
+    cluster_id = ctx.get("clusterId")
+    if not cluster_id:
+        return {"error": "no_cluster_id", "detail": "cannot resolve clusterId for recurrence check"}
+    runs = _disp().recent_health_checks(cluster_id, size=100)
+    report = summarize_recurrence(runs, alert_signature)
+    out = report.as_dict()
+    out["clusterId"] = cluster_id
+    out["alertSignature"] = alert_signature
+    return out
+
+
+@tool(timeout_seconds=_T)
+def get_cluster_metrics(execution_id: str) -> dict:
+    """Current cluster metrics: CPU, heap, Redis usage, decider/indexer queue sizes,
+    DB size. Read-only. Use for Redis/CPU/heap/queue issues."""
+    return _disp().dispatch("GET_CLUSTER_METRICS", "get_cluster_metrics", _context(execution_id))
+
+
+@tool(timeout_seconds=_T)
+def get_infrastructure_metrics(execution_id: str) -> dict:
+    """Cloud + Kubernetes infra metrics (node/pod CPU & memory). Read-only."""
+    return _disp().dispatch(
+        "GET_INFRASTRUCTURE_METRICS", "get_infrastructure_metrics", _context(execution_id)
+    )
+
+
+@tool(timeout_seconds=_T)
+def get_pods_data(execution_id: str) -> dict:
+    """List pods with status and restart counts. Read-only. Use this to find pod names."""
+    return _disp().dispatch("GET_PODS_DATA", "get_pods_data", _context(execution_id))
+
+
+@tool(timeout_seconds=_T)
+def get_deployments_info(execution_id: str) -> dict:
+    """Deployment metadata and replica readiness. Read-only."""
+    return _disp().dispatch("GET_DEPLOYMENTS_INFO", "get_deployments_info", _context(execution_id))
+
+
+@tool(timeout_seconds=_T)
+def get_pod_events(execution_id: str, pod_name: str) -> dict:
+    """Kubernetes events for a pod (OOMKills, restarts, scheduling/image failures). Read-only.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: pod to inspect (from get_pods_data).
+    """
+    return _disp().dispatch(
+        "GET_POD_EVENTS", "get_pod_events", _context(execution_id), {"podName": pod_name}
+    )
+
+
+@tool(timeout_seconds=_T)
+def run_kubectl_read(execution_id: str, command: str) -> dict:
+    """Run a READ-ONLY kubectl command inside the cluster (get / describe / logs /
+    top / events / rollout history|status / explain / auth can-i). Any mutating
+    verb (delete, apply, scale, exec, patch, rollout restart, ...) and any shell
+    metacharacter is rejected BEFORE it reaches the cluster.
+
+    Use when a dedicated tool doesn't cover the read you need — e.g.
+    `describe pod X -n NS` for the OOMKill/eviction reason, `rollout history
+    deployment/X` to date a rollout, or reading the ingress-nginx namespace.
+
+    ALWAYS pass the cluster's own namespace (-n <ns>): the in-cluster agent's
+    service account is namespace-scoped, so cluster-scope reads (-A) come back
+    Forbidden. The namespace is visible in get_pods_data output / pod events.
+
+    Args:
+        execution_id: incident execution id.
+        command: the kubectl command, without the leading "kubectl" (tolerated).
+    """
+    try:
+        safe = ensure_readonly_kubectl(command)
+    except NotReadOnlyKubectlError as exc:
+        return {"error": "rejected_non_readonly_kubectl", "detail": str(exc), "command": command}
+    return _disp().dispatch(
+        "KUBECTL_UNRESTRICTED",
+        "kubectl_unrestricted",
+        _context(execution_id),
+        {"unrestrictedCommand": safe},
+    )
+
+
+@tool(timeout_seconds=_T)
+def download_heap_dump(execution_id: str, pod_name: str) -> dict:
+    """Capture a JVM heap dump from ONE pod via ah5r-prod and return where it was
+    stored (``paths``) — the engineer analyzes it (Eclipse MAT) against recent changes.
+
+    HEAVY: jmap pauses the JVM (stop-the-world) for seconds on a multi-GB heap.
+    Use ONLY when the alert itself is heap/memory pressure, on ONLY the single
+    highest-heap pod, at most once per incident. Never dump more than one pod.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: the ONE highest-heap conductor/worker pod (from get_top_output).
+    """
+    return _disp().dispatch(
+        "DOWNLOAD_HEAP_DUMP", "download_heap_dump", _context(execution_id), {"podName": pod_name}
+    )
+
+
+@tool(timeout_seconds=_T)
+def download_thread_dump(execution_id: str, pod_name: str) -> dict:
+    """Capture a JVM thread dump (jstack) from a pod via ah5r-prod and return where
+    it was stored (``paths``). Cheap and near-instant — the go-to evidence for CPU
+    saturation, hot loops, stuck sweeper threads, and deadlocks.
+
+    Use on the hottest pod when a CPU alert has no obvious cause in the logs;
+    the dump names the busy threads. Prefer this over a heap dump for CPU issues.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: the CPU-hot pod (from get_top_output / the alert text).
+    """
+    return _disp().dispatch(
+        "DOWNLOAD_THREAD_DUMP", "download_thread_dump", _context(execution_id), {"podName": pod_name}
+    )
+
+
+_POD_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+
+
+def _exec(ctx: dict, pod: str, argv: str) -> str:
+    """Run ONE read-only command inside a pod and return stdout as text.
+
+    Uses the unrestricted kubectl channel because `exec` is not in the read-only
+    verb allowlist, but the caller may only pass jcmd/grep invocations that read —
+    nothing here mutates cluster or JVM state (a thread dump is a read).
+    """
+    r = _disp().dispatch(
+        "KUBECTL_UNRESTRICTED", "kubectl_unrestricted", ctx,
+        {"unrestrictedCommand": f"exec {pod} -- {argv}"},
+    )
+    if not isinstance(r, dict):
+        return ""
+    out = r.get("output")
+    out = out.get("result") if isinstance(out, dict) else out
+    return str(out or "").replace("\\n", "\n")
+
+
+@tool(timeout_seconds=_T)
+def get_thread_summary(execution_id: str, pod_name: str) -> dict:
+    """What the JVM's threads are ACTUALLY doing — states, the RUNNABLE frames
+    burning CPU, and any lock pileup. Use this for EVERY CPU or heap alert.
+
+    Unlike download_thread_dump (which only uploads the file and hands back an S3
+    path you cannot read), this returns the analysed facts inline. A CPU diagnosis
+    must rest on these numbers, never on a workflow backlog count alone: a large
+    RUNNING backlog with ZERO runnable application threads means the JVM is WEDGED,
+    not busy, and the backlog is a symptom.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: the CPU-hot / suspect pod (from get_top_output or the alert text).
+    """
+    if not _POD_RE.match(pod_name or ""):
+        return {"error": "invalid_pod_name", "pod_name": pod_name}
+    ctx = _context(execution_id)
+
+    listing = _exec(ctx, pod_name, "jcmd -l")
+    pid = next((ln.split()[0] for ln in listing.splitlines()
+                if ln.strip() and ln.split()[0].isdigit() and "jcmd" not in ln), None)
+    if not pid:
+        return {"error": "jvm_pid_not_found", "detail": listing[:200],
+                "hint": "the JVM is often PID 14, not PID 1"}
+
+    # The remote side splits the command on whitespace, so every grep PATTERN below must
+    # be a single token — no spaces, and no filename containing one either.
+    dump = "/tmp/oncall-threads.txt"
+    written = _exec(ctx, pod_name, f"jcmd {pid} Thread.dump_to_file -overwrite -format=plain {dump}")
+    if "Created" not in written:
+        return {"error": "thread_dump_failed", "pod": pod_name, "jvm_pid": pid,
+                "detail": written[:200]}
+
+    # The dump is ~700KB and the agent-handler truncates results at ~8KB, so the whole
+    # file cannot come back. `-format=plain` also carries no Thread.State: line and no
+    # lock addresses — only `#id "name"` headers and frames. What DOES fit is a counter
+    # per diagnostic frame: one small `grep -c` each. These are the magnitudes that
+    # separate "wedged" from "genuinely busy", which is the question a CPU alert asks.
+    def count(pattern: str) -> int:
+        raw = _exec(ctx, pod_name, f"grep -c -e {pattern} {dump}").strip()
+        # grep exits 1 on zero matches and the handler returns empty for a non-zero
+        # exit — that is a legitimate 0, not a failure. total_threads proves the
+        # file and grep both work, so treat empty as absent-frame.
+        return int(raw) if raw.isdigit() else 0
+
+    total = count("^#")
+    parked = count("Unsafe.park")
+    counts = {
+        "redis_pool_borrow": count("GenericObjectPool.borrowObject"),
+        "lock_acquire": count("ReentrantLock.lock"),
+        "sweeper": count("OrkesWorkflowSweeper"),
+        "decider": count("OrkesWorkflowExecutor.decide"),
+        "jdbc_read": count("PgStatement.execute"),
+        "socket_read": count("NioSocketImpl.read"),
+    }
+    active = max(total - parked, 0) if total >= 0 and parked >= 0 else -1
+    blocked_on_pool = counts["redis_pool_borrow"]
+
+    if total > 0 and active == 0:
+        verdict = (f"WEDGE, not load: {total} threads, {parked} parked, ZERO active. "
+                   "CPU is near-zero because parked threads consume none.")
+    elif blocked_on_pool >= 20 and active <= 2:
+        verdict = (f"WEDGE, not load: {blocked_on_pool} threads blocked borrowing a Redis "
+                   f"connection and only {active} active. Not a backlog problem.")
+    elif active > 0:
+        verdict = (f"{active} of {total} threads are active — attribute CPU to the "
+                   "non-zero frame counters below, not to a workflow backlog count.")
+    else:
+        verdict = "inconclusive — could not read thread counts"
+
+    return {
+        "pod": pod_name, "jvm_pid": pid, "dump_bytes_on_pod": dump,
+        "total_threads": total, "parked_threads": parked, "active_threads": active,
+        "frame_counts": counts, "verdict": verdict,
+        "note": ("counter-based: -format=plain has no thread states or lock addresses, and "
+                 "the full dump exceeds the result cap. For lock OWNERSHIP capture "
+                 f"`jcmd {pid} Thread.print -l` on the pod manually."),
+    }
+
+
+@tool(timeout_seconds=_T)
+def get_top_output(execution_id: str, pod_name: str = "") -> dict:
+    """Live CPU/memory usage (kubectl top) for a pod, or all pods if pod_name is empty. Read-only.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: optional pod name; empty means all pods.
+    """
+    params = {"podName": pod_name} if pod_name else {}
+    return _disp().dispatch(
+        "GET_TOP_OUTPUT_FROM_POD", "get_top_output_from_pod", _context(execution_id), params
+    )
+
+
+@tool(timeout_seconds=_T)
+def pull_pod_logs(execution_id: str, pod_name: str, grep: str = "", lines: int = 200) -> dict:
+    """Pull recent log lines from a pod, optionally filtered by a grep pattern. Read-only.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: pod to pull logs from (from get_pods_data).
+        grep: optional pattern to filter lines (e.g. "ERROR", "Exception", "OutOfMemory").
+        lines: trailing lines to fetch (default 200, capped at 1000).
+    """
+    params = {"podName": pod_name, "lines": min(max(int(lines), 1), 1000), "fetchOption": "TAIL"}
+    if grep:
+        params["grep"] = grep
+    return _disp().dispatch("PULL_LOGS", "pull_logs", _context(execution_id), params)
+
+
+@tool(timeout_seconds=_T)
+def get_ingress_info(execution_id: str) -> dict:
+    """Ingress controller hostname + external address (LB) for the cluster. Read-only.
+
+    Use for DNS / domain-resolution / domain-reachability alerts: if the ingress has
+    no external address, the load balancer isn't provisioned (a concrete cause to
+    cite). If it DOES have an address, the failure is external (DNS record, cert, or
+    network path) and not visible from inside the cluster — say so and escalate to infra.
+    """
+    return _disp().dispatch("GET_INGRESS_INFO", "get_ingress_info", _context(execution_id))
+
+
+@tool(timeout_seconds=_T)
+def run_sql_select(execution_id: str, query: str) -> dict:
+    """Run a READ-ONLY SQL SELECT against the cluster's Conductor DB to inspect
+    workflow/task/queue state. Only SELECT/WITH/EXPLAIN/SHOW are permitted; any
+    attempt to modify data is rejected BEFORE it reaches the database.
+
+    Args:
+        execution_id: incident execution id.
+        query: a single read-only SQL statement.
+    """
+    try:
+        safe = ensure_select(query)
+    except NotReadOnlySQLError as exc:
+        return {"error": "rejected_non_readonly_sql", "detail": str(exc), "query": query}
+    return _disp().dispatch(
+        "SQL_CONDUCTOR",
+        "sql_conductor",
+        _context(execution_id),
+        {"query": safe, "transactional": False, "expectedRowCount": None},
+    )
+
+
+
+@tool(timeout_seconds=_T)
+def analyze_sweeper_waste(execution_id: str, pod_name: str, lines: int = 300) -> dict:
+    """Is the sweeper doing NECESSARY work, or re-sweeping workflows that can never
+    advance? Call this whenever the sweeper shows up as a hot frame — a backlog COUNT
+    alone never answers it.
+
+    OrkesWorkflowSweeper.sweep() drains the decider queue only when a workflow is null
+    or terminal; everything else is swept again forever. When decide() changes nothing
+    it logs "Going to repair the task ..." and bumps `queue_message_repushed`. This
+    counts those against "Running sweeper for workflow" and names the stuck tasks.
+
+    Args:
+        execution_id: incident execution id.
+        pod_name: a conductor pod (from get_pods_data).
+        lines: log window size; larger sees more but costs more.
+    """
+    import json as _json
+    from .sweeper_waste import summarize_sweeper_waste
+    raw = pull_pod_logs.__wrapped__(execution_id, pod_name, grep="OrkesWorkflowSweeper", lines=lines) \
+        if hasattr(pull_pod_logs, "__wrapped__") else pull_pod_logs(execution_id, pod_name,
+                                                                    grep="OrkesWorkflowSweeper",
+                                                                    lines=lines)
+    out = summarize_sweeper_waste(_json.dumps(raw, default=str).replace("\\n", "\n"))
+    out["pod"] = pod_name
+    out["window_lines"] = lines
+    out["caveat"] = ("counts come from one grepped window; if wasted_sweeps is 0 but the "
+                     "sweeper is hot, widen `lines` before concluding the work is genuine.")
+    return out
+
+
+
+def _sql_rows(execution_id: str, sql: str) -> list[dict]:
+    """run_sql_select, unwrapped to plain rows. The handler double-encodes: the
+    `result` field is itself a JSON string."""
+    import json as _json
+    r = run_sql_select.__wrapped__(execution_id, sql) if hasattr(run_sql_select, "__wrapped__") \
+        else run_sql_select(execution_id, sql)
+    out = r.get("output") if isinstance(r, dict) else None
+    res = (out or {}).get("result") if isinstance(out, dict) else out
+    if isinstance(res, str):
+        try:
+            res = _json.loads(res).get("result", res)
+        except Exception:
+            return []
+    return res if isinstance(res, list) else []
+
+
+@tool(timeout_seconds=_T)
+def get_running_backlog_buckets(execution_id: str, top: int = 8) -> dict:
+    """WHICH workflow definitions make up the RUNNING backlog, and how old they are.
+
+    Use this instead of ever quoting a bare RUNNING count. "16,555 RUNNING" is not
+    actionable; "two definitions are 93% of it, both starting 17 March" is.
+
+    Queries the workflow_archive_shard_* tables directly — the parent workflow_archive
+    returns nothing (it does not route). Small fleets are read exactly; large ones are
+    hash-distributed and uniform, so one shard is sampled and scaled, flagged as
+    ESTIMATED. Also surfaces the overall failure rate, which is its own finding.
+
+    Args:
+        execution_id: incident execution id.
+        top: how many definitions to report.
+    """
+    from .running_backlog import plan_shard_query, build_backlog_report
+    # Two small queries, not one big one: one-staging has 301 shards and listing them
+    # all exceeds the ~8KB result cap, which silently comes back empty.
+    counted = _sql_rows(execution_id, """SELECT count(*) AS shard_count FROM pg_stat_user_tables
+        WHERE relname LIKE 'workflow_archive_shard%' AND n_live_tup > 0""")
+    fleet = int(counted[0].get("shard_count") or 0) if counted else 0
+    shards = _sql_rows(execution_id, """SELECT relname, n_live_tup FROM pg_stat_user_tables
+        WHERE relname LIKE 'workflow_archive_shard%' AND n_live_tup > 0
+        ORDER BY n_live_tup DESC LIMIT 4""")
+    plan = plan_shard_query(shards, total_populated=fleet or None)
+    if plan["mode"] == "none":
+        return {"error": "no_populated_archive_shards",
+                "hint": "RUNNING state may be Redis-only on this cluster"}
+    union = " UNION ALL ".join(f"SELECT status, workflow_name, created_on FROM {t}"
+                               for t in plan["shards"])
+    status_rows = _sql_rows(execution_id,
+        f"SELECT status, count(*) AS n FROM ({union}) x GROUP BY status ORDER BY n DESC")
+    bucket_rows = _sql_rows(execution_id,
+        f"""SELECT workflow_name, count(*) AS running, min(created_on) AS oldest
+            FROM ({union}) x WHERE status='RUNNING'
+            GROUP BY workflow_name ORDER BY running DESC LIMIT {int(top)}""")
+    return build_backlog_report(plan, status_rows, bucket_rows, top=top)
+
+
+
+@tool(timeout_seconds=_T)
+def check_known_issues(execution_id: str, repushed_task_types: str = "",
+                       waste_ratio: float = -1.0, thread_names: str = "",
+                       frames: str = "") -> dict:
+    """Is this a bug we already fixed upstream? Reads the running conductor image tag and
+    matches it against known issues plus the symptoms you have already measured.
+
+    Call this on ANY cpu/heap/'Conductor has failed' alert, after get_thread_summary and
+    analyze_sweeper_waste, passing what they found. Both multi-hour outages this month
+    were fixed upstream weeks earlier — nobody linked the version to the merged PR, so
+    each was re-diagnosed from scratch. This closes that loop without a human.
+
+    Version parsing fails CLOSED: branch-style tags exist in this fleet and are reported
+    as UNKNOWN rather than assumed safe.
+
+    Args:
+        execution_id: incident execution id.
+        repushed_task_types: comma-separated task types being re-pushed (WAIT, HUMAN, ...),
+            from the `queue_message_repushed` metric or the sweeper repair lines.
+        waste_ratio: analyze_sweeper_waste()["waste_ratio"], or -1 if unknown.
+        thread_names: comma-separated notable thread names from the dump.
+        frames: comma-separated notable stack frames from the dump.
+    """
+    from .known_issues import match_known_issues
+    img = run_kubectl_read.__wrapped__(execution_id,
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}") \
+        if hasattr(run_kubectl_read, "__wrapped__") else run_kubectl_read(execution_id,
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}")
+    out = img.get("output") if isinstance(img, dict) else None
+    tag = str((out.get("result") if isinstance(out, dict) else out) or "").strip()
+    split = lambda v: {x.strip() for x in v.split(",") if x.strip()}
+    return match_known_issues(
+        tag or None,
+        repushed_task_types=split(repushed_task_types) or None,
+        waste_ratio=None if waste_ratio < 0 else waste_ratio,
+        thread_names=split(thread_names) or None,
+        frames=split(frames) or None,
+    )
+
+
+ALL_TOOLS = [
+    get_incident_details,
+    get_alert_recurrence,
+    get_cluster_metrics,
+    get_infrastructure_metrics,
+    get_pods_data,
+    get_deployments_info,
+    get_pod_events,
+    get_top_output,
+    run_kubectl_read,
+    download_heap_dump,
+    download_thread_dump,
+    get_thread_summary,
+    analyze_sweeper_waste,
+    get_running_backlog_buckets,
+    check_known_issues,
+    pull_pod_logs,
+    get_ingress_info,
+    run_sql_select,
+]
