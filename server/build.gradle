@@ -17,7 +17,7 @@ repositories {
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.32.0-rc.5'
+    conductorVersion   = '3.32.0-rc.6'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'
     sqliteJdbcVersion  = '3.47.0.0'

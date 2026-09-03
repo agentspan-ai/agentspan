@@ -9,14 +9,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.conductoross.conductor.dao.SecretsDAO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-
-import com.netflix.conductor.dao.SecretsDAO;
 
 import dev.agentspan.runtime.AgentRuntime;
 

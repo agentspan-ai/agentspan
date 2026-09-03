@@ -6,7 +6,7 @@ package dev.agentspan.runtime.spi;
 
 import java.util.List;
 
-import com.netflix.conductor.dao.SecretsDAO;
+import org.conductoross.conductor.dao.SecretsDAO;
 
 import dev.agentspan.runtime.model.credentials.CredentialMeta;
 
