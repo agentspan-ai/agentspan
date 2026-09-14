@@ -1,0 +1,20 @@
+name: ${AGENT_NAME}
+version: 1
+model: ${MODEL:-openai/gpt-4o}
+instructions: |
+  ${INSTRUCTIONS}
+
+trigger:
+  type: cron
+  schedule: "${SCHEDULE:-0 8 * * *}"
+
+tools:
+  ${TOOLS}
+
+credentials:
+  ${CREDENTIALS}
+
+error_handling:
+  max_retries: 3
+  backoff: exponential
+  on_failure: pause_and_notify
