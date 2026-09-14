@@ -50,8 +50,12 @@ G1_BLOCK_INPUT = RegexGuardrail(
 )
 
 # G3: Agent output regex (block, multi-pattern) — blocks secrets
+# Case-insensitive: a secrets filter must catch "Password"/"TOKEN" etc., not
+# just the lowercase forms. Without (?i) the guardrail misses capitalised
+# words the LLM nondeterministically produces (e.g. "Password" at a sentence
+# start), letting them slip into output and flaking this suite.
 G3_NO_SECRETS = RegexGuardrail(
-    patterns=[r"\bpassword\b", r"\bsecret\b", r"\btoken\b"],
+    patterns=[r"(?i)\bpassword\b", r"(?i)\bsecret\b", r"(?i)\btoken\b"],
     mode="block",
     name="no_secrets",
     message="Do not include passwords, secrets, or tokens.",
@@ -359,7 +363,7 @@ class TestSuite8Guardrails:
         assert g3["position"] == "output"
         assert g3["onFail"] == "retry"
         patterns = g3.get("patterns", [])
-        for pat in [r"\bpassword\b", r"\bsecret\b", r"\btoken\b"]:
+        for pat in [r"(?i)\bpassword\b", r"(?i)\bsecret\b", r"(?i)\btoken\b"]:
             assert pat in patterns, f"G3 missing pattern '{pat}'. Got: {patterns}"
 
         # ── Tool-level guardrails ─────────────────────────────────────
