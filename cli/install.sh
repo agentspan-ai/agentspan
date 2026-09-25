@@ -309,3 +309,13 @@ printf "  2. Set your LLM API key:   export OPENAI_API_KEY=sk-...\n"
 printf "  3. Start the server:       agentspan server start\n"
 printf "  4. Open the UI:            http://localhost:6767\n"
 printf "\nDocs: https://docs.agentspan.dev\n\n"
+
+# ── Sunset notice (2026-08-17): Agentspan merged into Orkes Conductor ─────────
+printf "${BOLD}──────────────────────────────────────────────────────────────${NC}\n"
+printf "${BOLD}NOTE: Agentspan has merged into Orkes Conductor (2026-08-17).${NC}\n"
+printf "This CLI still works but is no longer developed (final: v0.4.4).\n"
+printf "The maintained path is the Conductor server + Python SDK:\n"
+printf "  pip install \"conductor-python[agents]>=2.0.0\"\n"
+printf "  docker run -d -p 8080:8080 -p 5000:5000 -e OPENAI_API_KEY conductoross/conductor\n"
+printf "Migration guide: https://github.com/agentspan-ai/agentspan/blob/main/MIGRATION.md\n"
+printf "${BOLD}──────────────────────────────────────────────────────────────${NC}\n\n"

@@ -20,7 +20,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Loads or generates the AES-256-GCM master key used by EncryptedDbCredentialStoreProvider.
+ * Loads or generates the AES-256-GCM master key used by AgentspanSecretsDAO.
  *
  * <p>Key sourcing rules:</p>
  * <ul>

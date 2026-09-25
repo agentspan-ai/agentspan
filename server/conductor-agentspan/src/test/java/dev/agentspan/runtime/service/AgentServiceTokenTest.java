@@ -52,6 +52,15 @@ class AgentServiceTokenTest {
     @Mock
     private dev.agentspan.runtime.util.ProviderValidator providerValidator;
 
+    @Mock
+    private SkillRegistryService skillRegistryService;
+
+    @Mock
+    private com.netflix.conductor.core.utils.IDGenerator idGenerator;
+
+    @Mock
+    private com.netflix.conductor.service.MetadataService metadataService;
+
     private AgentService agentService;
 
     @BeforeEach
@@ -65,7 +74,10 @@ class AgentServiceTokenTest {
                 workflowService,
                 streamRegistry,
                 executionService,
-                providerValidator);
+                providerValidator,
+                skillRegistryService,
+                idGenerator,
+                metadataService);
 
         RequestContextHolder.set(RequestContext.builder()
                 .requestId("r1")

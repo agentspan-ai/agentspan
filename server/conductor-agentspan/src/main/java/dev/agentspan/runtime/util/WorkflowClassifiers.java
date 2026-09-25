@@ -67,6 +67,9 @@ public final class WorkflowClassifiers {
 
     /** Returns {@code true} when the def resolves to the {@link #AGENT} classifier. */
     public static boolean isAgent(Map<String, Object> metadata) {
+        if (metadata == null) {
+            return false;
+        }
         return AGENT.equalsIgnoreCase(classifierOf(metadata));
     }
 }

@@ -26,7 +26,7 @@ public class ProviderValidator {
      * When embedded in a host (e.g. orkes-conductor), Conductor is the authority for model
      * providers and credentials: conductor-ai <b>integrations</b> resolve providers by name,
      * and the host's <b>credential store</b> (AWS SSM / Vault / etc., reached via the
-     * {@code CredentialStoreProvider} SPI) supplies raw keys. This standalone pre-flight check
+     * {@code SecretsDAO}/{@code CredentialsDAO} SPI) supplies raw keys. This standalone pre-flight check
      * only knows AgentSpan's own provider model, so it would wrongly reject host-configured
      * providers. The execution path already delegates to conductor-ai (which resolves or
      * rejects the provider), so when embedded we defer to Conductor and skip this check.
