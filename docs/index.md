@@ -5,6 +5,11 @@ description: Durable runtime for AI agents — long-running, dynamic plan-execut
 
 # Agentspan
 
+!!! warning "Agentspan is now part of Orkes Conductor (2026-08-17)"
+    These docs are frozen. Agentspan merged into **[Orkes Conductor](https://github.com/conductor-oss/conductor)** —
+    new docs live at [orkes.io/content/devguide/ai](https://orkes.io/content/devguide/ai), and existing agents
+    migrate in minutes with the **[migration guide](https://github.com/agentspan-ai/agentspan/blob/main/MIGRATION.md)**.
+
 **AI agents that don't die when your process does.**
 
 Most agent frameworks run the loop in your process. A crash, deploy, or OOM kill loses everything. Agentspan separates your code from execution state — the server holds state, your workers execute tools. Agents survive restarts, pause for human approval indefinitely, and resume at the last completed step.

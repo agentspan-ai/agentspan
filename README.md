@@ -1,3 +1,12 @@
+> [!IMPORTANT]
+> ## Agentspan is now part of Orkes Conductor
+> As of **August 17, 2026**, Agentspan has merged into **[Orkes Conductor](https://github.com/conductor-oss/conductor)** and this repository is archived (read-only).
+>
+> - **New users:** start with the [Conductor agent quickstart](https://orkes.io/content/quickstart/first-agent)
+> - **Existing users:** your agents keep running — see the **[migration guide](./MIGRATION.md)** (for most code: one install line + one import path)
+> - **Final release:** `v0.4.4` — release assets remain downloadable; `pip install agentspan` stays installable (final: `0.2.1`)
+> - **Issues & contributions:** [conductor-oss/conductor](https://github.com/conductor-oss/conductor/issues)
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/agentspan-logo-dark.png">

@@ -25,7 +25,6 @@ public class SkillDetail {
     private String packageFileHandleId;
     private String storageType;
     private String status;
-    private String ownerId;
     private Long createdAt;
     private Long updatedAt;
     private Long packageSize;

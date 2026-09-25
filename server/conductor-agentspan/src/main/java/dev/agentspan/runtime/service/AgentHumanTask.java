@@ -30,7 +30,13 @@ import dev.agentspan.runtime.model.AgentSSEEvent;
  * for system tasks.  This override hooks into {@code start()} to emit the
  * SSE event directly.</p>
  *
- * <p>Registered as a {@code @Primary} bean via {@link AgentHumanTaskConfig}.</p>
+ * <p>Registered as the {@code HUMAN} system task by {@link AgentHumanTaskConfig},
+ * which is gated on {@code agentspan.embedded=true}. It is intentionally not a
+ * {@code @Component}: two beans named {@code HUMAN} (this one and Conductor's
+ * {@code Human}) would collide during component scanning, and both would land in
+ * {@code SystemTaskRegistry}'s taskType→task map as duplicate keys. The config's
+ * {@code @Bean("HUMAN")} instead <em>overrides</em> Conductor's default so exactly
+ * one {@code HUMAN} bean exists.</p>
  */
 public class AgentHumanTask extends WorkflowSystemTask {
 

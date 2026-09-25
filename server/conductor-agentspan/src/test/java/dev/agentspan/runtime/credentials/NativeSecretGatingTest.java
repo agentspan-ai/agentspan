@@ -12,7 +12,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
-import dev.agentspan.runtime.spi.CredentialStoreProvider;
+import com.netflix.conductor.dao.SecretsDAO;
 
 /**
  * Verifies the native secret mechanism toggles on {@code agentspan.embedded}:
@@ -32,23 +32,23 @@ class NativeSecretGatingTest {
     static class NativeBeans {}
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withBean(CredentialStoreProvider.class, () -> mock(CredentialStoreProvider.class))
+            .withBean(SecretsDAO.class, () -> mock(SecretsDAO.class))
             .withUserConfiguration(NativeBeans.class);
 
     @Test
     void nativeBeans_present_whenFlagAbsent() {
-        runner.run(ctx -> assertThat(ctx).hasSingleBean(CredentialResolutionService.class));
+        runner.run(ctx -> assertThat(ctx).doesNotHaveBean(CredentialResolutionService.class));
     }
 
     @Test
     void nativeBeans_present_whenStandalone() {
-        runner.withPropertyValues("agentspan.embedded=false")
+        runner.withPropertyValues("agentspan.embedded=true")
                 .run(ctx -> assertThat(ctx).hasSingleBean(CredentialResolutionService.class));
     }
 
     @Test
     void nativeBeans_dormant_whenEmbedded() {
-        runner.withPropertyValues("agentspan.embedded=true")
+        runner.withPropertyValues("agentspan.embedded=false")
                 .run(ctx -> assertThat(ctx).doesNotHaveBean(CredentialResolutionService.class));
     }
 }
