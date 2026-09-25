@@ -5,6 +5,7 @@
 
 package dev.agentspan.runtime.service;
 
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -65,7 +66,7 @@ public class ListApiToolsTask extends WorkflowSystemTask {
                 new ObjectMapper(),
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(10))
-                        .followRedirects(HttpClient.Redirect.NORMAL)
+                        .followRedirects(HttpClient.Redirect.NEVER)
                         .build());
     }
 
@@ -180,18 +181,50 @@ public class ListApiToolsTask extends WorkflowSystemTask {
         return null;
     }
 
+    /**
+     * Throws if the URL's host resolves to a private, loopback, or link-local address.
+     * Prevents SSRF attacks where a user supplies an internal URL (e.g. AWS metadata endpoint).
+     */
+    private void guardSsrf(String url) throws Exception {
+        URI uri = URI.create(url);
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            throw new IllegalArgumentException("URL has no host: " + url);
+        }
+        InetAddress addr = InetAddress.getByName(host);
+        if (addr.isLoopbackAddress() || addr.isSiteLocalAddress()
+                || addr.isLinkLocalAddress() || addr.isAnyLocalAddress()
+                || addr.isMulticastAddress()) {
+            throw new IllegalArgumentException(
+                    "Requests to internal/private addresses are not allowed: " + host);
+        }
+    }
+
     /** Returns a FetchResult if the response is valid JSON, otherwise null. */
     private FetchResult attemptFetch(String url, Map<String, String> headers) {
         try {
-            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(REQUEST_TIMEOUT)
-                    .GET();
-            if (headers != null) {
-                headers.forEach(reqBuilder::header);
+            guardSsrf(url);
+            String currentUrl = url;
+            HttpResponse<String> response = null;
+            for (int redirects = 0; redirects <= 5; redirects++) {
+                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                        .uri(URI.create(currentUrl))
+                        .timeout(REQUEST_TIMEOUT)
+                        .GET();
+                if (headers != null) {
+                    headers.forEach(reqBuilder::header);
+                }
+                response = httpClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() < 300 || response.statusCode() >= 400) {
+                    break;
+                }
+                String location = response.headers().firstValue("Location").orElse(null);
+                if (location == null) {
+                    break;
+                }
+                currentUrl = URI.create(currentUrl).resolve(location).toString();
+                guardSsrf(currentUrl);
             }
-
-            HttpResponse<String> response = httpClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() >= 400) {
                 return null;
