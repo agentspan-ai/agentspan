@@ -5,6 +5,7 @@
 
 package dev.agentspan.runtime.service;
 
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -192,9 +193,11 @@ public class ListApiToolsTask extends WorkflowSystemTask {
             throw new IllegalArgumentException("URL has no host: " + url);
         }
         InetAddress addr = InetAddress.getByName(host);
+        boolean isUniqueLocal = addr instanceof Inet6Address
+                && (addr.getAddress()[0] & 0xfe) == 0xfc; // fc00::/7 (includes fd00::/8)
         if (addr.isLoopbackAddress() || addr.isSiteLocalAddress()
                 || addr.isLinkLocalAddress() || addr.isAnyLocalAddress()
-                || addr.isMulticastAddress()) {
+                || addr.isMulticastAddress() || isUniqueLocal) {
             throw new IllegalArgumentException(
                     "Requests to internal/private addresses are not allowed: " + host);
         }

@@ -45,6 +45,8 @@ class ListApiToolsTaskTest {
             "http://10.0.0.1/openapi.json",
             "http://192.168.1.1/openapi.json",
             "http://172.16.0.1/swagger.json",
+            "http://[::1]/spec.json",                      // IPv6 loopback
+            "http://[fd12:3456:789a:1::1]/spec.json",      // IPv6 unique-local (fc00::/7)
     })
     void ssrfGuard_blocksPrivateAndLoopbackAddresses(String url) {
         HttpClient httpClient = mock(HttpClient.class);
