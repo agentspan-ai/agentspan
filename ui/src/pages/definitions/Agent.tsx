@@ -1,4 +1,4 @@
-import { Box, Tooltip } from "@mui/material";
+import { Box, Chip, Tooltip } from "@mui/material";
 import {
   CopySimple as CopyIcon,
   Trash as DeleteIcon,
@@ -11,21 +11,18 @@ import Header from "components/Header";
 import NoDataComponent from "components/NoDataComponent";
 import { SnackbarMessage } from "components/SnackbarMessage";
 import ConfirmChoiceDialog from "components/ConfirmChoiceDialog";
-import TagList from "components/v1/TagList";
 import PlayIcon from "components/v1/icons/PlayIcon";
 import { MessageContext } from "components/v1/layout/MessageContext";
 import { removeDeletedWorkflow } from "pages/runWorkflow/runWorkflowUtils";
 import { useCallback, useContext, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
-import { UseQueryResult } from "react-query";
 import SectionContainer from "shared/SectionContainer";
 import SectionHeader from "shared/SectionHeader";
 import SectionHeaderActions from "shared/SectionHeaderActions";
 import { useAuth } from "shared/auth";
 import { colors } from "theme/tokens/variables";
 import { PopoverMessage } from "types/Messages";
-import { TagDto } from "types/Tag";
-import { WorkflowDef } from "types/WorkflowDef";
+import { AgentSummary } from "types/AgentSummary";
 import {
   RUN_AGENT_URL,
   AGENT_DEFINITION_URL,
@@ -33,25 +30,55 @@ import {
 import useCustomPagination from "utils/hooks/useCustomPagination";
 import { usePushHistory } from "utils/hooks/usePushHistory";
 import { logger } from "utils/logger";
-import { useActionWithPath, useWorkflowDefs } from "utils/query";
-import { createSearchableTags, tryToJson } from "utils/utils";
-import { getUniqueWorkflows } from "utils/workflow";
+import { useActionWithPath, useAgentList } from "utils/query";
+import { tryToJson } from "utils/utils";
 import CloneAgentDialog from "./dialog/CloneAgentDialog";
+
+// External provider types that cannot be cloned (they live in Azure/AWS, not as workflow defs).
+const EXTERNAL_TYPES = new Set(["azure-foundry", "bedrock", "bedrock-agentcore"]);
+
+function providerLabel(type?: string | null): string {
+  switch (type) {
+    case "azure-foundry":
+      return "Azure Foundry";
+    case "bedrock":
+      return "Bedrock";
+    case "bedrock-agentcore":
+      return "Bedrock AgentCore";
+    default:
+      return "Conductor";
+  }
+}
+
+// Chip color per provider — maps to MUI Chip color prop.
+function providerChipColor(
+  type?: string | null,
+): "primary" | "warning" | "default" {
+  switch (type) {
+    case "azure-foundry":
+      return "primary"; // blue
+    case "bedrock":
+    case "bedrock-agentcore":
+      return "warning"; // amber
+    default:
+      return "default";
+  }
+}
 
 export default function AgentDefinitions() {
   const { isTrialExpired } = useAuth();
 
-  const { data, isFetching, refetch }: UseQueryResult<WorkflowDef[]> =
-    useWorkflowDefs();
+  const { data, isFetching, refetch } = useAgentList();
 
   const [selectedWorkflowWithAction, setSelectedWorkflowWithAction] = useState<{
-    selectedWorkflow: WorkflowDef | null;
+    selectedWorkflow: AgentSummary | null;
     action: string;
   }>({
     selectedWorkflow: null,
     action: "",
   });
   const [toastMessage, setToastMessage] = useState<PopoverMessage | null>(null);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
 
   const { setMessage } = useContext(MessageContext);
   const pushHistory = usePushHistory();
@@ -61,32 +88,47 @@ export default function AgentDefinitions() {
   ] = useCustomPagination();
   const [confirmDelete, setConfirmDelete] = useState<{
     confirmDelete: boolean;
-    workflowName: string;
-    workflowVersion: number;
+    agentName: string;
+    agentVersion: number;
   } | null>(null);
   const filterObj =
     filterParam === "" ? undefined : tryToJson<FilterObjectItem>(filterParam);
 
-  const deleteWorkflowVersionAction = useActionWithPath({
+  const deleteAgentAction = useActionWithPath({
     onSuccess: () => {
-      if (confirmDelete?.workflowName) {
+      if (confirmDelete?.agentName) {
         removeDeletedWorkflow(
-          encodeURIComponent(confirmDelete?.workflowName),
-          confirmDelete?.workflowVersion,
+          encodeURIComponent(confirmDelete.agentName),
+          confirmDelete.agentVersion,
         );
       }
-
       refetch();
     },
     onError: (err: Error) => {
-      setMessage({
-        severity: "error",
-        text: "Failed to delete agent",
-      });
+      setMessage({ severity: "error", text: "Failed to delete agent" });
       logger.error(err);
       refetch();
     },
   });
+
+  // Unique provider types present in the current data, sorted.
+  const providerTypes = useMemo<string[]>(() => {
+    if (!data) return [];
+    const types = new Set<string>();
+    data.forEach((a) => types.add(a.type ?? "conductor"));
+    return [...types].sort();
+  }, [data]);
+
+  // Agents filtered to the selected provider chip.
+  const filteredAgents = useMemo<AgentSummary[]>(() => {
+    if (!data) return [];
+    if (selectedType === null) return data;
+    return data.filter((a) =>
+      selectedType === "conductor"
+        ? !a.type || !EXTERNAL_TYPES.has(a.type)
+        : a.type === selectedType,
+    );
+  }, [data, selectedType]);
 
   const columns = useMemo<LegacyColumn[]>(
     () => [
@@ -94,19 +136,26 @@ export default function AgentDefinitions() {
         id: "workflow_name",
         name: "name",
         label: "Agent name",
-        renderer: (val: string) => {
-          return (
+        renderer: (name: string, row: AgentSummary) => (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <NavLink
               data-cy="workflow-link"
-              path={`${AGENT_DEFINITION_URL.BASE}/${encodeURIComponent(
-                val.trim(),
-              )}`}
-              id={`${val.trim()}-link-btn`}
+              path={`${AGENT_DEFINITION_URL.BASE}/${encodeURIComponent(name.trim())}`}
+              id={`${name.trim()}-link-btn`}
             >
-              {val.trim()}
+              {name.trim()}
             </NavLink>
-          );
-        },
+            {row.type && (
+              <Chip
+                label={providerLabel(row.type)}
+                color={providerChipColor(row.type)}
+                size="small"
+                variant="outlined"
+                sx={{ fontSize: 10, height: 18, px: 0.25 }}
+              />
+            )}
+          </Box>
+        ),
         tooltip: "The name of the agent",
       },
       {
@@ -115,18 +164,6 @@ export default function AgentDefinitions() {
         label: "Description",
         grow: 2,
         tooltip: "The description of the agent",
-      },
-      {
-        id: "workflow_tags",
-        name: "tags",
-        label: "Tags",
-        searchable: true,
-        searchableFunc: (tags: TagDto[]) => createSearchableTags(tags),
-        renderer: (tags: TagDto[], row: WorkflowDef) => (
-          <TagList tags={tags} name={row?.name} />
-        ),
-        grow: 2,
-        tooltip: "The tags associated with the agent",
       },
       {
         id: "create_time",
@@ -230,47 +267,43 @@ export default function AgentDefinitions() {
         sortable: false,
         searchable: false,
         grow: 0.5,
-        minWidth: "180px",
+        minWidth: "140px",
         tooltip: "Actions you can perform on the agent",
-        renderer: (name: string, workflowRowData: WorkflowDef) => {
+        renderer: (name: string, row: AgentSummary) => {
+          const isExternal = row.type && EXTERNAL_TYPES.has(row.type);
           return (
-            <Box style={{ display: "flex", justifyContent: "space-evenly" }}>
-              <Tooltip title={"Clone agent"}>
+            <Box style={{ display: "flex", justifyContent: "flex-start", gap: 4 }}>
+              {!isExternal && (
+                <Tooltip title="Clone agent">
+                  <IconButton
+                    onClick={() =>
+                      setSelectedWorkflowWithAction({
+                        selectedWorkflow: row,
+                        action: "clone",
+                      })
+                    }
+                    disabled={isTrialExpired}
+                    size="small"
+                  >
+                    <CopyIcon size={20} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <Tooltip title="Delete agent">
                 <IconButton
-                  onClick={() =>
-                    setSelectedWorkflowWithAction({
-                      selectedWorkflow: workflowRowData,
-                      action: "clone",
-                    })
-                  }
-                  disabled={isTrialExpired}
-                  size="small"
-                  sx={{
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <CopyIcon size={20} />
-                </IconButton>
-              </Tooltip>
-
-              <Tooltip title={"Delete agent"}>
-                <IconButton
-                  id={`delete-${workflowRowData.name}-btn`}
+                  id={`delete-${name}-btn`}
                   disabled={isTrialExpired}
                   onClick={() => {
-                    const selectedData = data?.find((x) => x.name === name);
-                    if (selectedData) {
+                    const selected = data?.find((x) => x.name === name);
+                    if (selected) {
                       setConfirmDelete({
                         confirmDelete: true,
-                        workflowName: selectedData.name,
-                        workflowVersion: selectedData.version,
+                        agentName: selected.name,
+                        agentVersion: selected.version,
                       });
                     }
                   }}
                   size="small"
-                  sx={{
-                    whiteSpace: "nowrap",
-                  }}
                 >
                   <DeleteIcon size={20} />
                 </IconButton>
@@ -285,21 +318,21 @@ export default function AgentDefinitions() {
 
   const handleFilterChange = useCallback(
     (obj?: FilterObjectItem) => {
-      if (obj) {
-        setFilterParam(JSON.stringify(obj));
-      } else {
-        setFilterParam("");
-      }
+      setFilterParam(obj ? JSON.stringify(obj) : "");
     },
     [setFilterParam],
   );
 
-  const workflows = useMemo(() => {
-    // Extract latest versions only
-    if (data) {
-      return getUniqueWorkflows(data);
-    }
-  }, [data]);
+  // Count agents per type for chip labels.
+  const countForType = useCallback(
+    (type: string) => {
+      if (!data) return 0;
+      return type === "conductor"
+        ? data.filter((a) => !a.type || !EXTERNAL_TYPES.has(a.type)).length
+        : data.filter((a) => a.type === type).length;
+    },
+    [data],
+  );
 
   return (
     <>
@@ -307,42 +340,33 @@ export default function AgentDefinitions() {
         <title>Agent Definitions</title>
       </Helmet>
 
-      {selectedWorkflowWithAction &&
-        selectedWorkflowWithAction?.selectedWorkflow &&
-        selectedWorkflowWithAction?.action === "clone" && (
+      {selectedWorkflowWithAction.selectedWorkflow &&
+        selectedWorkflowWithAction.action === "clone" && (
           <CloneAgentDialog
             onClose={() =>
-              setSelectedWorkflowWithAction({
-                selectedWorkflow: null,
-                action: "",
-              })
+              setSelectedWorkflowWithAction({ selectedWorkflow: null, action: "" })
             }
             onSuccess={() => {
-              setSelectedWorkflowWithAction({
-                selectedWorkflow: null,
-                action: "",
-              });
+              setSelectedWorkflowWithAction({ selectedWorkflow: null, action: "" });
               refetch();
               setToastMessage({
                 text: "Agent cloned successfully",
                 severity: "success",
               });
             }}
-            selectedWorkflow={selectedWorkflowWithAction?.selectedWorkflow}
+            selectedWorkflow={selectedWorkflowWithAction.selectedWorkflow}
             workflowList={data ?? []}
           />
         )}
 
       {confirmDelete && (
         <ConfirmChoiceDialog
-          handleConfirmationValue={(selectedChoice) => {
-            if (selectedChoice) {
+          handleConfirmationValue={(confirmed) => {
+            if (confirmed) {
               // @ts-ignore
-              deleteWorkflowVersionAction.mutate({
+              deleteAgentAction.mutate({
                 method: "delete",
-                path: `/agent/${encodeURIComponent(
-                  confirmDelete.workflowName,
-                )}?version=${confirmDelete.workflowVersion}`,
+                path: `/agent/${encodeURIComponent(confirmDelete.agentName)}?version=${confirmDelete.agentVersion}`,
               });
             }
             setConfirmDelete(null);
@@ -350,21 +374,19 @@ export default function AgentDefinitions() {
           message={
             <>
               Are you sure you want to delete{" "}
-              <strong style={{ color: "red" }}>
-                {confirmDelete.workflowName}
-              </strong>{" "}
+              <strong style={{ color: "red" }}>{confirmDelete.agentName}</strong>{" "}
               agent definition? This cannot be undone.
               <div style={{ marginTop: "15px" }}>
-                Please type <strong>{confirmDelete.workflowName}</strong> to
-                confirm.
+                Please type <strong>{confirmDelete.agentName}</strong> to confirm.
               </div>
             </>
           }
-          header={"Deletion confirmation"}
+          header="Deletion confirmation"
           isInputConfirmation
-          valueToBeDeleted={confirmDelete.workflowName}
+          valueToBeDeleted={confirmDelete.agentName}
         />
       )}
+
       <SectionHeader
         _deprecate_marginTop={0}
         title="Agent Definitions"
@@ -381,10 +403,38 @@ export default function AgentDefinitions() {
           />
         }
       />
+
       <SectionContainer>
+        {/* Provider filter chips */}
+        {providerTypes.length > 1 && (
+          <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
+            <Chip
+              label={`All (${data?.length ?? 0})`}
+              onClick={() => setSelectedType(null)}
+              color={selectedType === null ? "primary" : "default"}
+              variant={selectedType === null ? "filled" : "outlined"}
+              clickable
+            />
+            {providerTypes.map((type) => (
+              <Chip
+                key={type}
+                label={`${providerLabel(type)} (${countForType(type)})`}
+                onClick={() =>
+                  setSelectedType(selectedType === type ? null : type)
+                }
+                color={
+                  selectedType === type ? providerChipColor(type) : "default"
+                }
+                variant={selectedType === type ? "filled" : "outlined"}
+                clickable
+              />
+            ))}
+          </Box>
+        )}
+
         <Paper id="workflow-definitions-table-wrapper" variant="outlined">
           <Header loading={isFetching} />
-          {workflows && (
+          {filteredAgents && (
             <DataTable
               localStorageKey="workflowsTable"
               quickSearchEnabled
@@ -394,7 +444,6 @@ export default function AgentDefinitions() {
               defaultShowColumns={[
                 "workflow_name",
                 "workflow_description",
-                "workflow_tags",
                 "latest_version",
                 "create_time",
                 "owner_email",
@@ -404,20 +453,15 @@ export default function AgentDefinitions() {
               keyField="name"
               onFilterChange={handleFilterChange}
               initialFilterObj={filterObj}
-              data={workflows}
+              data={filteredAgents}
               columns={columns}
-              filterByTags
               customActions={[
-                <Tooltip
-                  title="Refresh agent definitions"
-                  key={"rfrshWdefs"}
-                >
+                <Tooltip title="Refresh agent definitions" key="rfrshWdefs">
                   <Button
                     variant="text"
                     color="inherit"
                     size="small"
                     startIcon={<RefreshIcon />}
-                    key="refresh"
                     onClick={refetch as () => void}
                   >
                     Refresh
@@ -427,7 +471,7 @@ export default function AgentDefinitions() {
               onChangePage={handlePageChange}
               paginationDefaultPage={pageParam ? Number(pageParam) : 1}
               noDataComponent={
-                searchParam === "" ? (
+                searchParam === "" && selectedType === null ? (
                   <NoDataComponent
                     title="Agent Definition"
                     description="No agents deployed yet. Use the CLI to deploy agents."
@@ -436,9 +480,12 @@ export default function AgentDefinitions() {
                   <NoDataComponent
                     title="Empty"
                     titleBg={colors.warningTag}
-                    description="I'm sorry that search didn't find any matches. Please try different filters."
-                    buttonText="Clear search"
-                    buttonHandler={() => setSearchParam("")}
+                    description="No agents match the current filters."
+                    buttonText="Clear filters"
+                    buttonHandler={() => {
+                      setSearchParam("");
+                      setSelectedType(null);
+                    }}
                   />
                 )
               }
@@ -446,15 +493,14 @@ export default function AgentDefinitions() {
           )}
         </Paper>
       </SectionContainer>
+
       {toastMessage && (
         <SnackbarMessage
           autoHideDuration={3000}
           id="workflow-definitions-toast-message"
           message={toastMessage.text}
           severity={toastMessage.severity}
-          onDismiss={() => {
-            setToastMessage(null);
-          }}
+          onDismiss={() => setToastMessage(null)}
         />
       )}
     </>
