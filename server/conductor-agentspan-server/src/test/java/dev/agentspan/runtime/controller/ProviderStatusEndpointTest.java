@@ -12,6 +12,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
+import org.conductoross.conductor.dao.SecretsDAO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,6 @@ import org.springframework.test.context.ActiveProfiles;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.dao.SecretsDAO;
 
 import dev.agentspan.runtime.AgentRuntime;
 

@@ -19,7 +19,7 @@ dependencies {
     compileOnly "org.conductoross:conductor-common:${conductorVersion}"
     compileOnly "org.conductoross:conductor-core:${conductorVersion}"
     compileOnly "org.conductoross:conductor-ai:${conductorVersion}"
-    compileOnly "org.conductoross:conductor-http-task:${conductorVersion}"
+    compileOnly "org.conductoross:conductor-http-task:3.32.0-rc.5"
     compileOnly 'org.springframework.boot:spring-boot-starter-web'
     compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
     compileOnly 'org.springframework.boot:spring-boot-starter-validation'

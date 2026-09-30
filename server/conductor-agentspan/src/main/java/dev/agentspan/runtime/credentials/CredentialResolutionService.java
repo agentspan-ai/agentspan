@@ -4,6 +4,7 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import org.conductoross.conductor.dao.SecretsDAO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -11,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.dao.SecretsDAO;
 
 /**
  * Single authority for credential resolution across all call paths.

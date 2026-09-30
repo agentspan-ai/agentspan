@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.*;
 import java.util.Map;
 import java.util.function.Function;
 
+import org.conductoross.conductor.dao.SecretsDAO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,8 +17,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-
-import com.netflix.conductor.dao.SecretsDAO;
 
 import dev.agentspan.runtime.AgentRuntime;
 
