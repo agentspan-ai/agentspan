@@ -562,6 +562,9 @@ class Agent:
         output_type: Optional[type] = None,
         guardrails: Optional[List[Any]] = None,
         memory: Optional[Any] = None,
+        semantic_memory: Optional[Any] = None,
+        memory_summary_model: Optional[str] = None,
+        feedback_sink: Optional[Callable[..., Any]] = None,
         dependencies: Optional[Dict[str, Any]] = None,
         max_turns: int = 25,
         max_tokens: Optional[int] = None,
@@ -724,6 +727,13 @@ class Agent:
         self.output_type = output_type
         self.guardrails: List[Any] = list(guardrails) if guardrails else []
         self.memory = memory
+        # OCG-backed long-term memory (see agents/ocg_memory.py). When set, the
+        # runtime auto-injects relevant memories into the prompt before a run and,
+        # after the run, summarizes the conversation into a memory. feedback_sink,
+        # if provided, receives the good/bad capability links for that memory.
+        self.semantic_memory = semantic_memory
+        self.memory_summary_model = memory_summary_model
+        self.feedback_sink = feedback_sink
         self.dependencies: Dict[str, Any] = dict(dependencies) if dependencies else {}
         self.max_turns = max_turns
         self.max_tokens = max_tokens

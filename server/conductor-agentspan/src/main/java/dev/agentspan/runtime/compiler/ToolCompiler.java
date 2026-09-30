@@ -69,6 +69,16 @@ public class ToolCompiler {
     }
 
     /**
+     * Host-mode-aware rewrite of {@code ${NAME}} credential placeholders in an HTTP
+     * headers map. Exposed for compiler-emitted HTTP tasks (e.g. long-term memory)
+     * that must resolve credentials the same way tool HTTP calls do — embedded hosts
+     * get {@code ${workflow.secrets.NAME}}, standalone gets {@code #{NAME}}.
+     */
+    public static Map<String, Object> escapeCredentialHeaders(Map<?, ?> headers) {
+        return escapeCredentialPlaceholders(headers);
+    }
+
+    /**
      * Rewrite a {@code ${NAME}} credential placeholder to the inert transport form {@code #{NAME}}.
      *
      * <p>Two-form design: header configs travel through INLINE enrich/prepare scripts (as script
