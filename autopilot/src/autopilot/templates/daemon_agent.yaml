@@ -1,0 +1,22 @@
+name: ${AGENT_NAME}
+version: 1
+model: ${MODEL:-openai/gpt-4o}
+instructions: |
+  ${INSTRUCTIONS}
+
+trigger:
+  type: daemon
+  poll_interval: ${POLL_INTERVAL:-60s}
+
+tools:
+  ${TOOLS}
+
+credentials:
+  ${CREDENTIALS}
+
+stateful: true
+
+error_handling:
+  max_retries: 3
+  backoff: exponential
+  on_failure: pause_and_notify
