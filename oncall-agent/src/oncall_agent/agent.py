@@ -170,7 +170,12 @@ rather than dispatching tools that cannot add anything.
     upgrade, rotation or autoscaler scale-down moved Grafana. Not customer-facing; report it as
     such. The fix is 2 replicas + a PodDisruptionBudget, or not paging on a Grafana-only failure.
   - "domain X is down" (reachability / 502) -> triage in TWO steps; do NOT reflexively call it
-    "external". STEP 1 — is Conductor itself down? get_pods_data for `orkes-conductor-deployment-*`
+    "external". STEP 0 — did the DATABASE blip? If the execution's database check also failed
+    (connectivity "connected": false) or conductor pods restarted together around the alert, run
+    run_sql_select("select pg_postmaster_start_time()") FIRST; a Postgres start just before the
+    alert is the cause (see the DB-RESTART CHECK). Judge pods by their state AT THE ALERT TIME
+    (lastState.terminated.finishedAt), never by restarts that happened after it.
+    STEP 1 — is Conductor itself down? get_pods_data for `orkes-conductor-deployment-*`
     + get_pod_events (CrashLoopBackOff / OOMKilled / ImagePull) + pull_pod_logs(grep "ERROR"/
     "Exception"/"Caused by"). If the server is crashing, THAT is the cause — cite the pod's
     phase/restart count and the fatal log line. STEP 2 — if the server pods are Running/healthy,
