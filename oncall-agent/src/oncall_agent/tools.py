@@ -10,8 +10,10 @@ cache are module-level singletons built lazily from the environment.
 """
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter
+from pathlib import Path
 
 from conductor.ai.agents import tool
 
@@ -516,6 +518,76 @@ def check_known_issues(execution_id: str, repushed_task_types: str = "",
     )
 
 
+
+_CONDUCTOR_REPO = os.environ.get("ORKES_CONDUCTOR_REPO", str(Path.home() / "Orkes" / "orkes-conductor"))
+
+
+def _git(args: list[str]) -> list[str]:
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", _CONDUCTOR_REPO, *args],
+                           capture_output=True, text=True, timeout=45)
+        return [ln for ln in r.stdout.splitlines() if ln.strip()] if r.returncode == 0 else []
+    except Exception:
+        return []
+
+
+@tool(timeout_seconds=_T)
+def find_missing_fixes(execution_id: str, symbol: str, top: int = 8) -> dict:
+    """Does an upstream fix already exist for the code you are looking at?
+
+    GENERAL — no prior knowledge of the bug required. Give it any code identifier you
+    OBSERVED (a hot RUNNABLE frame, the class in a log line, an exception type) and it
+    resolves that to a source file and asks git what has been fixed in that code since
+    the version this cluster runs, including PR numbers.
+
+    Use it the moment a frame or class becomes your prime suspect, BEFORE reasoning the
+    bug out from first principles. Both multi-hour outages this month were already fixed
+    upstream; nobody checked.
+
+    Args:
+        execution_id: incident execution id (used to read the running image tag).
+        symbol: a class or file name, e.g. "OrkesWorkflowSweeper" or "ExecutorUtils".
+        top: how many candidate commits to return.
+    """
+    from .fix_finder import parse_log, build_report
+    from .known_issues import parse_version
+    if not Path(_CONDUCTOR_REPO, ".git").exists():
+        return {"error": "conductor_repo_unavailable", "path": _CONDUCTOR_REPO,
+                "hint": "set ORKES_CONDUCTOR_REPO to a checkout of orkes-conductor"}
+    safe = re.sub(r"[^A-Za-z0-9_.$]", "", symbol or "")
+    if not safe:
+        return {"error": "invalid_symbol", "symbol": symbol}
+
+    img = run_kubectl_read.__wrapped__(execution_id,
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}") \
+        if hasattr(run_kubectl_read, "__wrapped__") else run_kubectl_read(execution_id,
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}")
+    out = img.get("output") if isinstance(img, dict) else None
+    tag = str((out.get("result") if isinstance(out, dict) else out) or "").strip()
+    parsed = parse_version(tag)
+    version = "v" + ".".join(map(str, parsed)) if parsed else None
+    if version is None:
+        return build_report(safe, [], None, [], [], top=top)
+
+    _git(["fetch", "origin", "main", "--tags", "-q"])
+    paths = [p for p in _git(["ls-tree", "-r", "--name-only", "origin/main"])
+             if p.endswith(f"{safe}.java") and "/test/" not in p]
+    if not paths:
+        return {"error": "symbol_not_found_in_repo", "symbol": safe, "running_version": version}
+
+    commits, merges = [], []
+    for p in paths:
+        commits += parse_log(_git(["log", "--oneline", f"{version}..origin/main", "--", p]))
+        merges += parse_log(_git(["log", "--oneline", "--merges", "--full-history",
+                                  f"{version}..origin/main", "--", p]))
+    seen, uniq = set(), []
+    for c in commits:
+        if c["sha"] not in seen:
+            seen.add(c["sha"]); uniq.append(c)
+    return build_report(safe, paths, version, uniq, merges, top=top)
+
+
 ALL_TOOLS = [
     get_incident_details,
     get_alert_recurrence,
@@ -532,6 +604,7 @@ ALL_TOOLS = [
     analyze_sweeper_waste,
     get_running_backlog_buckets,
     check_known_issues,
+    find_missing_fixes,
     pull_pod_logs,
     get_ingress_info,
     run_sql_select,
