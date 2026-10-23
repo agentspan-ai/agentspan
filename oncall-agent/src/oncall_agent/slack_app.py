@@ -18,7 +18,7 @@ import requests
 from conductor.ai.agents import AgentRuntime
 
 from .agent import build_agent
-from .alert import Alert, alert_signature, message_text, parse_alert, signable_text
+from .alert import Alert, alert_signature, message_text, pagerduty_cluster, parse_alert, signable_text
 from .config import Config
 from .runtime_compat import summary_text
 from .worker_health import CRITICAL_TASK_TYPES, evaluate
@@ -243,6 +243,12 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
         if ts in processed:
             continue
         alert = parse_alert(message_text(msg))
+        if not alert and (cluster := pagerduty_cluster(message_text(msg))):
+            from .tools import _disp
+            exec_id = _disp().latest_failed_health_check(cluster, int(float(ts) * 1000))
+            if exec_id:
+                alert = Alert(execution_id=exec_id, severity=None, cluster=cluster,
+                              organization=None, raw=message_text(msg))
         if alert:
             now = time.time()
             # An execution id, once triaged, is never triaged again — the raw

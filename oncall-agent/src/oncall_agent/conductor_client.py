@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from typing import Any, Callable
@@ -164,6 +165,19 @@ class ConductorDispatcher:
                 }
             )
         return runs
+
+    def latest_failed_health_check(self, cluster_name: str, at_ms: int) -> str | None:
+        """Newest failed ``health_check`` run for exactly this cluster in the 30 min up to ``at_ms``."""
+        result = self._call(lambda: self._wf.search(
+            start=0, size=50, free_text=cluster_name,
+            query=f"workflowType IN (health_check) AND startTime>{at_ms - 1_800_000} AND startTime<{at_ms + 60_000}",
+        ))
+        exact = re.compile(rf"clusterName={re.escape(cluster_name)}[,}}]")
+        for s in getattr(result, "results", None) or []:
+            if exact.search(getattr(s, "input", None) or "") and \
+                    (getattr(s, "reason_for_incompletion", None) or "").startswith("*`["):
+                return getattr(s, "workflow_id", None)
+        return None
 
     # ── dispatch ─────────────────────────────────────────────
     def dispatch(
