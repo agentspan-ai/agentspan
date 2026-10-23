@@ -30,6 +30,7 @@ _CLUSTER_RE = re.compile(
 _DECORATION = str.maketrans("", "", "*`")
 
 
+_PD_CLUSTER_RE = re.compile(r"cloud\.orkes\.io/home/clusterDetails/([A-Za-z0-9-]+)")
 _URL_RE = re.compile(r"<[^>]*>|https?://\S+")
 _NUMBERISH = re.compile(r"[\d.]+%?")
 
@@ -116,6 +117,12 @@ class Alert:
     cluster: str | None
     organization: str | None
     raw: str
+
+
+def pagerduty_cluster(text: str | None) -> str | None:
+    """Cluster name from a PagerDuty post's ``clusterDetails/<cluster>`` link, else ``None``."""
+    m = _PD_CLUSTER_RE.search(text or "")
+    return m.group(1) if m else None
 
 
 def parse_alert(text: str | None) -> Alert | None:
