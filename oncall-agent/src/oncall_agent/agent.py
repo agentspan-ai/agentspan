@@ -144,13 +144,31 @@ rather than dispatching tools that cannot add anything.
     pull_pod_logs(X). Cite the phase and the event reason.
   - "Container X in the Pod Y has been restarted (count, reason)" -> get_pod_events(Y) to
     confirm the reason (OOMKilled vs Error) + pull_pod_logs(Y) for the pre-crash error.
+    DB-RESTART CHECK: exit 137 with reason "Error" (NOT OOMKilled) is a kubelet liveness kill,
+    not a crash. If several conductor pods were killed within seconds of each other, run
+    run_sql_select("select pg_postmaster_start_time()"). A Postgres start 1-2 min BEFORE the
+    kills means the database restarted (on Azure: Flexible Server maintenance or HA failover),
+    /health hung on the DB and the liveness probe killed healthy JVMs. Cite both timestamps.
+    Azure rolls maintenance across an org's servers one after another, so check the org's
+    other clusters too. Do NOT recommend more memory; the fix is a liveness probe that does
+    not depend on the DB (/actuator/health/liveness), and optionally a planned maintenance window.
 
   Networking / ingress (CRITICAL — mostly outside the cluster):
   - "DNS resolution has failed" / "domain X has not been resolved" ->
+    FIRST get_alert_recurrence: a single failed run with the next check healthy is a transient
+    resolver failure (the UI and Grafana hostnames fail about equally; most of the fleet's volume
+    is BTIS and Insperity) — say it is transient and do not escalate. Only a repeating failure
+    goes on to the steps below.
     get_ingress_info: if the ingress has NO external address, the load balancer isn't
     provisioned — that is the concrete cause. If it HAS an address, the failure is external
     (DNS record, cert, or network path) and not observable from inside the cluster — say
     that plainly and route to infra. Do not guess beyond the evidence.
+  - "domain X is down" for the GRAFANA hostname only (UI domain UP) -> Grafana runs as ONE
+    replica, so a node drain leaves nothing serving for a few minutes. run_kubectl_read the
+    grafana pod start time, its ReplicaSet creationTimestamp and the nodes' creationTimestamps:
+    an old ReplicaSet + a pod started at the alert time + nodes created around it = GKE/AKS node
+    upgrade, rotation or autoscaler scale-down moved Grafana. Not customer-facing; report it as
+    such. The fix is 2 replicas + a PodDisruptionBudget, or not paging on a Grafana-only failure.
   - "domain X is down" (reachability / 502) -> triage in TWO steps; do NOT reflexively call it
     "external". STEP 1 — is Conductor itself down? get_pods_data for `orkes-conductor-deployment-*`
     + get_pod_events (CrashLoopBackOff / OOMKilled / ImagePull) + pull_pod_logs(grep "ERROR"/
