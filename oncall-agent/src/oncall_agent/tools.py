@@ -21,6 +21,8 @@ from .conductor_client import ConductorDispatcher
 from .config import Config
 from .recurrence import summarize_recurrence
 from .kubectl_guard import NotReadOnlyKubectlError, ensure_readonly_kubectl
+from .ingress_check import check_ingresses, served_certificate
+from .node_churn import summarize_node_churn
 from .sql_guard import NotReadOnlySQLError, ensure_select
 
 _dispatcher: ConductorDispatcher | None = None
@@ -74,6 +76,16 @@ def get_incident_details(execution_id: str) -> dict:
                 "healthy": out.get("healthy") if isinstance(out, dict) else None,
                 "status": t.get("status"),
             }
+            if isinstance(out, dict):
+                # Why it failed: the service-level reason and every pod that failed its probe
+                # ("Pod IP is invalid: N/A" = the pod was still being scheduled).
+                if out.get("fallbackReason"):
+                    component_health[ref]["reason"] = out["fallbackReason"]
+                pods = out.get("pods") if isinstance(out.get("pods"), dict) else {}
+                failed = {name: p.get("fallbackReason") or p.get("httpStatus")
+                          for name, p in pods.items() if isinstance(p, dict) and p.get("healthy") is False}
+                if failed:
+                    component_health[ref]["failedPods"] = failed
     return {
         "executionId": execution_id,
         "status": wf.get("status"),
@@ -83,6 +95,51 @@ def get_incident_details(execution_id: str) -> dict:
         "clusterData": cluster_data,
         "componentHealth": component_health,
     }
+
+
+def _kubectl_text(execution_id: str, command: str) -> str:
+    out = run_kubectl_read.__wrapped__(execution_id, command) \
+        if hasattr(run_kubectl_read, "__wrapped__") else run_kubectl_read(execution_id, command)
+    for t in (out.get("tasks") or []) if isinstance(out, dict) else []:
+        o = t.get("output")
+        if isinstance(o, dict) and isinstance(o.get("result"), str):
+            return o["result"]
+    return ""
+
+
+@tool(timeout_seconds=_T)
+def get_node_churn(execution_id: str) -> dict:
+    """Were the cluster's NODES replaced around the alert (node-pool upgrade, auto-repair,
+    autoscaler scale-down)? Call this EARLY for any "has failed", "is down", pod-not-Running
+    or restart alert: a node rollout moves every pod, and single-replica Grafana/workers or a
+    conductor pod that has no IP yet make the health check fail while nothing is broken.
+
+    Measured against when the failures STARTED (the first failed run of the current streak),
+    not this firing and not now. Verdict NODE_CHURN = the nodes changed at the
+    alert, which explains the failure; NO_CHURN = rule node movement out; UNKNOWN = the nodes
+    were replaced again since, so the cluster no longer shows it.
+
+    Args:
+        execution_id: incident execution id.
+    """
+    wf = _disp().get_execution(execution_id)
+    wf_input = wf.get("input") if isinstance(wf.get("input"), dict) else {}
+    alert_ms = int(wf_input.get("_scheduledTime") or wf_input.get("_executedTime") or 0)
+    if not alert_ms:
+        return {"verdict": "UNKNOWN", "detail": "alert time not found on the execution"}
+    # A standing alert started when the failures began, not at this firing.
+    cluster_id = _context(execution_id).get("clusterId")
+    onset_ms = _disp().failing_since(cluster_id, alert_ms) if cluster_id else alert_ms
+    nodes = _kubectl_text(execution_id, "get nodes -o custom-columns=NAME:.metadata.name,"
+                          "CREATED:.metadata.creationTimestamp,VERSION:.status.nodeInfo.kubeletVersion")
+    events = _kubectl_text(execution_id, "get events -A --field-selector involvedObject.kind=Node "
+                           "-o custom-columns=TIME:.lastTimestamp,REASON:.reason,NODE:.involvedObject.name")
+    report = summarize_node_churn(nodes, events, onset_ms)
+    report["judgedAt"] = "failure onset" if onset_ms < alert_ms else "this alert"
+    report["failingSinceMs"] = onset_ms
+    if not nodes:
+        report["detail"] += " (kubectl get nodes returned nothing — possibly Forbidden for this agent)"
+    return report
 
 
 @tool(timeout_seconds=_T)
@@ -167,9 +224,9 @@ def run_kubectl_read(execution_id: str, command: str) -> dict:
     `describe pod X -n NS` for the OOMKill/eviction reason, `rollout history
     deployment/X` to date a rollout, or reading the ingress-nginx namespace.
 
-    ALWAYS pass the cluster's own namespace (-n <ns>): the in-cluster agent's
-    service account is namespace-scoped, so cluster-scope reads (-A) come back
-    Forbidden. The namespace is visible in get_pods_data output / pod events.
+    Cluster-wide reads (`get nodes`, `-A`) work on the clusters checked so far; if one
+    comes back Forbidden, retry with the cluster's namespace (-n <ns>), which is visible
+    in get_pods_data output / pod events.
 
     Args:
         execution_id: incident execution id.
@@ -365,6 +422,40 @@ def get_ingress_info(execution_id: str) -> dict:
     network path) and not visible from inside the cluster — say so and escalate to infra.
     """
     return _disp().dispatch("GET_INGRESS_INFO", "get_ingress_info", _context(execution_id))
+
+
+@tool(timeout_seconds=_T)
+def check_ingress_config(execution_id: str) -> dict:
+    """Is every ingress actually served, and with a valid certificate? Call this for ANY
+    "domain X is down" / DNS / certificate alert, BEFORE concluding "load balancer" or
+    "external network". Reads every ingress (class, hosts, TLS secret, address), the
+    IngressClasses that exist, cert-manager Certificates, and fetches the certificate each
+    host REALLY serves from outside. Flags: an ingress whose class no controller owns (it
+    was disabled or mis-set — nothing serves the host, and it gets no address), nginx's
+    FAKE default certificate, an expired/untrusted cert, a Certificate that is not Ready.
+
+    Args:
+        execution_id: incident execution id.
+    """
+    ingress = _kubectl_text(execution_id, "get ingress -A -o custom-columns=NS:.metadata.namespace,"
+                            "NAME:.metadata.name,CLASS:.spec.ingressClassName,HOSTS:.spec.rules[*].host,"
+                            "TLS:.spec.tls[*].secretName,ADDR:.status.loadBalancer.ingress[*].ip")
+    classes = _kubectl_text(execution_id, "get ingressclass -o custom-columns=NAME:.metadata.name")
+    certs = _kubectl_text(execution_id, "get certificate -A -o custom-columns=NS:.metadata.namespace,"
+                          "NAME:.metadata.name,READY:.status.conditions[0].status,"
+                          "MESSAGE:.status.conditions[0].message")
+    hosts = {h for line in ingress.splitlines()[1:] if len(line.split()) > 3
+             for h in line.split()[3].split(",") if "." in h}
+    report = check_ingresses(ingress, classes, certs, {h: served_certificate(h) for h in sorted(hosts)})
+    if not ingress:
+        report["problems"].append("kubectl get ingress returned nothing — possibly Forbidden for this agent")
+    # Who changed an ingress nothing serves, and when: managers include "kubectl-edit" for hand edits.
+    for ing in report["ingresses"]:
+        if ing["class"] != "<none>" and ing["class"] not in report["ingressClasses"]:
+            ing["changedBy"] = _kubectl_text(execution_id, f"get ingress {ing['name']} -n {ing['namespace']} "
+                                             "-o custom-columns=MANAGER:.metadata.managedFields[*].manager,"
+                                             "TIME:.metadata.managedFields[*].time")
+    return report
 
 
 @tool(timeout_seconds=_T)
@@ -591,6 +682,7 @@ def find_missing_fixes(execution_id: str, symbol: str, top: int = 8) -> dict:
 ALL_TOOLS = [
     get_incident_details,
     get_alert_recurrence,
+    get_node_churn,
     get_cluster_metrics,
     get_infrastructure_metrics,
     get_pods_data,
@@ -607,5 +699,6 @@ ALL_TOOLS = [
     find_missing_fixes,
     pull_pod_logs,
     get_ingress_info,
+    check_ingress_config,
     run_sql_select,
 ]

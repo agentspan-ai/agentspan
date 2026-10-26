@@ -59,6 +59,19 @@ def _trim(value: Any, max_len: int = 8000) -> Any:
 log = logging.getLogger("oncall_agent")
 
 
+def _epoch_ms(value: Any) -> int | None:
+    """Search results carry start_time as epoch ms or an ISO-8601 string."""
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str) and value:
+        from datetime import datetime
+        try:
+            return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() * 1000)
+        except ValueError:
+            return int(value) if value.isdigit() else None
+    return None
+
+
 class ConductorDispatcher:
     def __init__(
         self,
@@ -133,6 +146,29 @@ class ConductorDispatcher:
             "cloudEnvironmentTag": cloud_env_tag,
             "environment": wf_input.get("environment", "prod"),
         }
+
+    def failing_since(self, cluster_id: str, at_ms: int, max_hours: int = 48) -> int:
+        """Start of the unbroken run of failed health checks that ends at ``at_ms``.
+
+        Walks back in 6h windows until a clean run is found; returns the first failed
+        run's start (epoch ms), or ``at_ms`` itself when the run before it was clean.
+        """
+        onset = at_ms
+        for window in range(max_hours // 6):
+            hi = at_ms - window * 6 * 3_600_000
+            result = self._call(lambda: self._wf.search(
+                start=0, size=100, free_text=cluster_id,
+                query=f"workflowType IN (health_check) AND startTime>{hi - 6 * 3_600_000} AND startTime<={hi}",
+            ))
+            runs = sorted(getattr(result, "results", None) or [],
+                          key=lambda r: str(getattr(r, "start_time", "")), reverse=True)
+            for r in runs:
+                if not (getattr(r, "reason_for_incompletion", None) or "").strip():
+                    return onset
+                ms = _epoch_ms(getattr(r, "start_time", None))
+                if ms is not None:
+                    onset = min(onset, ms)
+        return onset
 
     def recent_health_checks(self, cluster_id: str, size: int = 100) -> list[dict]:
         """Recent ``health_check`` runs for ONE cluster, newest first.

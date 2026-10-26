@@ -15,6 +15,7 @@ The report is generated output — do NOT commit it.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -62,11 +63,32 @@ def triage_prompt(reason: str, execution_id: str) -> str:
     )
 
 
+def load_cases(path: str, disp: ConductorDispatcher) -> list[dict]:
+    """Ground-truth cases: each alert's execution plus the checks its triage must pass."""
+    cases = json.load(open(path))
+    for case in cases:
+        wf = disp._wf.get_workflow(case["execution_id"], include_tasks=False)
+        case.update(workflow_id=case["execution_id"], start_time=wf.start_time,
+                    reason=wf.reason_for_incompletion)
+    return cases
+
+
+def check_case(case: dict, summary: str) -> list[str]:
+    """Plain string checks against the triage text; returns the failures."""
+    text = summary.lower()
+    failures = [f"mentions none of {group}" for group in case.get("must_mention_any", [])
+                if not any(term.lower() in text for term in group)]
+    failures += [f"recommends '{term}'" for term in case.get("must_not_mention", [])
+                 if term.lower() in text]
+    return failures
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="On-call triage eval batch")
     parser.add_argument("--limit", type=int, default=30, help="max unique incidents")
     parser.add_argument("--hours", type=int, default=48, help="lookback window")
     parser.add_argument("--out", default="/tmp/oncall_eval.md", help="report path")
+    parser.add_argument("--cases", help="ground-truth cases JSON (eval/cases.json) instead of recent alerts")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO)
@@ -76,7 +98,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.conductor_server_url, cfg.conductor_key_id, cfg.conductor_key_secret
     )
 
-    incidents = select_eval_incidents(collect_alerting_runs(disp, args.hours), args.limit)
+    if args.cases:
+        incidents = load_cases(args.cases, disp)
+    else:
+        incidents = select_eval_incidents(collect_alerting_runs(disp, args.hours), args.limit)
     log.info("selected %d unique incidents", len(incidents))
     if not incidents:
         print("no incidents in window", file=sys.stderr)
@@ -95,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
         "",
     ]
     ok = 0
+    passed = 0
     with AgentRuntime(server_url=cfg.agentspan_server_url) as runtime:
         agent = build_agent(cfg.model)
         for i, inc in enumerate(incidents, 1):
@@ -126,6 +152,17 @@ def main(argv: list[str] | None = None) -> int:
                 "",
                 summary,
                 "",
+            ]
+            if "cause" in inc:
+                failures = check_case(inc, summary)
+                passed += not failures
+                lines += [
+                    f"**Known cause** ({inc.get('ground_truth')}): {inc['cause']}",
+                    "",
+                    f"**Check**: {'PASS' if not failures else 'FAIL - ' + '; '.join(failures)}",
+                    "",
+                ]
+            lines += [
                 "**Score**: [ ] Useful  [ ] Partly  [ ] Wrong",
                 "",
                 "**Note**:",
@@ -137,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
             with open(args.out, "w") as fh:
                 fh.write("\n".join(lines))
 
-    log.info("done: %d/%d triaged OK -> %s", ok, len(incidents), args.out)
+    log.info("done: %d/%d triaged OK, %d passed checks -> %s", ok, len(incidents), passed, args.out)
     print(args.out)
     return 0
 

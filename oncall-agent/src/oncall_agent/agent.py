@@ -31,6 +31,25 @@ Procedure:
      been recurring — needs an owner / capacity fix", not "urgent new outage". Note the
      retention caveat: true onset may predate the search window — say so, don't invent a
      start date.
+1c. For ANY "has failed", "is down", pod-not-Running or container-restart alert, call
+   `get_node_churn(execution_id)` next. Node-pool upgrades (GKE/AKS/EKS auto-upgrade),
+   auto-repair and autoscaler scale-down drain nodes and move every pod; single-replica
+   Grafana and workers have no endpoint while they move, and a conductor pod that is still
+   being scheduled shows in `componentHealth.<x>.failedPods` as "Pod IP is invalid: N/A".
+   - NODE_CHURN and the failures STOPPED within ~30 min of the rollout (judgedAt "this
+     alert", or a short streak): that IS the root cause. Say "nodes were replaced
+     (node-pool upgrade / rotation)" with the node creation times, map each failed
+     component to a pod that was moving, and STOP. Do NOT blame ingress, DNS or the
+     application, and do NOT recommend restarting anything — the pods recovered on the
+     new nodes. Next step: 2 replicas + a PodDisruptionBudget for the single-replica
+     components, and a maintenance window on the node pool.
+   - NODE_CHURN but STILL failing long after the rollout (judgedAt "failure onset", hours
+     ago): the rollout was only the TRIGGER — something did not come back. Say so with the
+     onset time, then find what restarted into a broken state: a controller that re-read a
+     config change made earlier (check the ingress/resource spec and its managedFields for a
+     manual `kubectl-edit`), a pod stuck Pending, a lost volume. Continue the playbook.
+   - NO_CHURN: node movement is ruled out; continue with the playbook.
+   - UNKNOWN: say the node evidence is gone, and continue.
 2. Treat the queue/usage numbers as the SYMPTOM, then find the CAUSE in the LOGS:
    - Redis high/critical usage is almost always driven by a `decider_queue_size`
      backlog — i.e. running workflows not draining. The cause is in the cluster, not in
@@ -159,7 +178,8 @@ rather than dispatching tools that cannot add anything.
     resolver failure (the UI and Grafana hostnames fail about equally; most of the fleet's volume
     is BTIS and Insperity) — say it is transient and do not escalate. Only a repeating failure
     goes on to the steps below.
-    get_ingress_info: if the ingress has NO external address, the load balancer isn't
+    check_ingress_config first (a disabled ingress class or the fake certificate explains a
+    "down" host without any network fault), then get_ingress_info: if the ingress has NO external address, the load balancer isn't
     provisioned — that is the concrete cause. If it HAS an address, the failure is external
     (DNS record, cert, or network path) and not observable from inside the cluster — say
     that plainly and route to infra. Do not guess beyond the evidence.
@@ -175,6 +195,15 @@ rather than dispatching tools that cannot add anything.
     run_sql_select("select pg_postmaster_start_time()") FIRST; a Postgres start just before the
     alert is the cause (see the DB-RESTART CHECK). Judge pods by their state AT THE ALERT TIME
     (lastState.terminated.finishedAt), never by restarts that happened after it.
+    (get_node_churn must be NO_CHURN or UNKNOWN before you go further — a recovered NODE_CHURN ends here.)
+    STEP 0b — call check_ingress_config. It reads every ingress, the IngressClasses and
+    Certificates, and the certificate each host REALLY serves from outside. Any `problems`
+    entry is concrete evidence and usually the answer: an ingress whose class no controller
+    owns (disabled by hand — cite `changedBy`, e.g. a `kubectl-edit` and its time) gets NO
+    address, so "the load balancer lost its IP" is WRONG in that case; a FAKE default
+    certificate means no ingress serves the host; a Certificate not Ready means renewal is
+    stuck. Never say "load balancer / external network" while check_ingress_config reports
+    a problem for the failing host.
     STEP 1 — is Conductor itself down? get_pods_data for `orkes-conductor-deployment-*`
     + get_pod_events (CrashLoopBackOff / OOMKilled / ImagePull) + pull_pod_logs(grep "ERROR"/
     "Exception"/"Caused by"). If the server is crashing, THAT is the cause — cite the pod's

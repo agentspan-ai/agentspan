@@ -1,0 +1,164 @@
+[
+  {
+    "id": "pentest2026gcp-gke-node-upgrade",
+    "execution_id": "c479beb5-d0f9-11f1-80dd-ce47124126f7",
+    "cause": "GKE auto-upgrade of default-pool (operation-1792990277867-764d2d52, 04:51-05:03 UTC 2026-10-26) replaced all 3 nodes; one conductor pod had no IP yet, single-replica grafana and workers had no endpoint while they moved.",
+    "surviving_evidence": "health_check per-pod output (zs8tw 'Pod IP is invalid'); gcloud container operations list (UPGRADE_NODES); node creationTimestamp 04:52/04:58/05:00 until the next upgrade.",
+    "must_mention_any": [
+      [
+        "node upgrade",
+        "node-pool upgrade",
+        "node pool upgrade",
+        "nodes upgrade",
+        "auto-upgrade",
+        "autoupgrade",
+        "gke upgrade",
+        "upgrade_nodes",
+        "node rotation",
+        "nodes were replaced",
+        "node replacement",
+        "nodes replaced"
+      ]
+    ],
+    "must_not_mention": [
+      "restart the older nginx",
+      "restart ingress",
+      "proxy-next-upstream"
+    ],
+    "ground_truth": "confirmed"
+  },
+  {
+    "id": "munichre-poc-azure-pg-restart",
+    "execution_id": "35460b8c-cebe-11f1-93e9-12bbe5fb9533",
+    "cause": "Azure Postgres restarted at 08:44:57 UTC 2026-10-23; /health hung on all pods and the kubelet liveness-killed two of them.",
+    "surviving_evidence": "pg_postmaster_start_time() = 08:44:57 until Postgres restarts again; health_check output.",
+    "must_mention_any": [
+      [
+        "postgres restart",
+        "database restart",
+        "postgres restarted",
+        "database restarted",
+        "pg_postmaster_start_time",
+        "postmaster"
+      ]
+    ],
+    "must_not_mention": [],
+    "ground_truth": "confirmed"
+  },
+  {
+    "id": "btis-test-usc-dns-oneoff",
+    "execution_id": "1ce482bd-ced8-11f1-9973-1e94935cd42b",
+    "cause": "Single transient DNS resolution failure; the next checks were clean.",
+    "surviving_evidence": "health_check history around the alert (get_alert_recurrence).",
+    "must_mention_any": [
+      [
+        "transient",
+        "one-off",
+        "single",
+        "self-resolved",
+        "self resolved"
+      ]
+    ],
+    "must_not_mention": [],
+    "ground_truth": "partial"
+  },
+  {
+    "id": "vantaca-dev2-pg-pool-drop",
+    "execution_id": "8ab84e1e-b0b7-11f1-a56e-beb5ff388b6e",
+    "cause": "Postgres dropped the whole Hikari pool; /health wedged and the kubelet liveness-restarted all 3 conductor pods within 2 s (03:42:46-48 UTC 2026-09-15). Not grafana rotation, not DNS.",
+    "surviving_evidence": "health_check output only (pod-IP probes 200 from ~21 s old JVMs, cpu 0.86-0.93 on all pods, ClusterIP refused). Pod restart evidence has decayed.",
+    "must_mention_any": [
+      [
+        "liveness",
+        "restarted",
+        "all three",
+        "all 3"
+      ],
+      [
+        "postgres",
+        "database",
+        "hikari"
+      ]
+    ],
+    "must_not_mention": [
+      "ndots"
+    ],
+    "ground_truth": "confirmed"
+  },
+  {
+    "id": "aml-orkes-dev-agent-probe-flap",
+    "execution_id": "07b155e9-b0b4-11f1-88be-262cada0cef9",
+    "cause": "Agent pod startup-probe flapped: /actuator/health includes ConductorServerConnectivity (PKIX failure to ah5r), so health_check tasks run by the agent timed out. Conductor itself was fine.",
+    "surviving_evidence": "health_check task statuses (agent-run tasks TIMED_OUT with poll timeouts, server-run tasks passed).",
+    "must_mention_any": [
+      [
+        "agent"
+      ],
+      [
+        "poll",
+        "timed out",
+        "timeout",
+        "probe"
+      ]
+    ],
+    "must_not_mention": [
+      "restart conductor"
+    ],
+    "ground_truth": "confirmed"
+  },
+  {
+    "id": "westpac-mesh-prod-empty-polls-cpu",
+    "execution_id": "f1112958-b29f-11f1-a56e-beb5ff388b6e",
+    "cause": "CPU ~71% on all 3 pods from ~2,456 empty batch-polls/s/pod across 328 task types; the /health cpu gauge read 1.0 on one pod and 0.0 on the others.",
+    "surviving_evidence": "health_check output; poll data if the polling pattern persists.",
+    "must_mention_any": [
+      [
+        "poll"
+      ]
+    ],
+    "must_not_mention": [],
+    "ground_truth": "confirmed"
+  },
+  {
+    "id": "auditboard-qa-daily-cpu-window",
+    "execution_id": "1a7530ce-c08e-11f1-b61e-beb5ff388b6e",
+    "cause": "Daily 03:20-07:40 UTC CPU saturation; baseline is decider churn on 73k parked workflows, the daily extra load is unexplained.",
+    "surviving_evidence": "health_check history (daily pattern).",
+    "must_mention_any": [
+      [
+        "daily",
+        "every day",
+        "recurring",
+        "same window"
+      ]
+    ],
+    "must_not_mention": [],
+    "ground_truth": "partial"
+  },
+  {
+    "id": "orkes-cwr-prod-public-ingress-disabled",
+    "execution_id": "60877f96-d130-11f1-8569-b69402c1caa0",
+    "cause": "Public ingress conductor-ingress was disabled by hand (kubectl edit 2026-10-22 18:57 UTC, ingressClassName 'disabled-temporariily'); after the 10-26 02:24 node upgrade restarted ingress-nginx, nothing served the host and nginx returned its fake default certificate. Separately the private ingress cert expired 10-22 (HTTP-01 challenge pending 34 d on an internal LB).",
+    "surviving_evidence": "ingress spec.ingressClassName + managedFields (kubectl-edit, 10-22); fake cert served on the UI host; Certificate conductor-private-tls Expired; challenge pending.",
+    "must_mention_any": [
+      [
+        "disabled-temporariily",
+        "ingressclassname",
+        "ingress class",
+        "disabled"
+      ],
+      [
+        "fake certificate",
+        "fake cert",
+        "default certificate",
+        "kubectl edit",
+        "kubectl-edit"
+      ]
+    ],
+    "must_not_mention": [
+      "restart the older nginx",
+      "proxy-next-upstream"
+    ],
+    "ground_truth": "confirmed"
+  }
+]
