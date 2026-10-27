@@ -302,10 +302,13 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
         ts = msg["ts"]
         if ts in processed:
             continue
-        alert = parse_alert(message_text(msg))
+        # Only alerts posted by bots (health-check notifier, PagerDuty) start a triage — a
+        # person pasting an execution link into the channel must not.
+        from_bot = bool(msg.get("bot_id") or msg.get("subtype") == "bot_message")
+        alert = parse_alert(message_text(msg)) if from_bot else None
         pd_resolved = (msg.get("metadata") or {}).get("event_type") == "incident_resolved" \
             or (msg.get("text") or "").startswith(":large_green_circle:")
-        if not alert and not pd_resolved and (cluster := pagerduty_cluster(message_text(msg))):
+        if not alert and from_bot and not pd_resolved and (cluster := pagerduty_cluster(message_text(msg))):
             from .tools import _disp
             exec_id = _disp().latest_failed_health_check(cluster, int(float(ts) * 1000))
             if exec_id:
@@ -451,9 +454,11 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             except _NotRemembered:  # posted, but an "unknown" cause is not worth replaying
                 pass
             except TriageIncomplete as exc:  # never post or remember a non-answer
+                state.get("signatures", {}).pop(sig, None)  # let the next firing get a real triage
                 log.error("triage incomplete channel=%s exec=%s: %s", channel, alert.execution_id, exc)
                 slack.post_reply(channel, ts, ":warning: Triage ended without a conclusion — needs a human.")
             except TriageTimeout as exc:  # abandon this incident, keep polling
+                state.get("signatures", {}).pop(sig, None)  # no cooldown for a triage that never finished
                 log.error("triage timed out channel=%s exec=%s: %s",
                           channel, alert.execution_id, exc)
                 slack.post_reply(
@@ -462,6 +467,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                     f"{_TRIAGE_DEADLINE_S}s — `{alert.execution_id}` needs a human.",
                 )
             except Exception as exc:  # surface into the thread, keep polling
+                state.get("signatures", {}).pop(sig, None)
                 log.exception("triage failed")
                 slack.post_reply(channel, ts, f":warning: Triage failed: `{exc}`")
             handled += 1
