@@ -123,16 +123,27 @@ class SlackClient:
         self._token = bot_token
 
     def read_messages(self, channel: str, oldest: str = "0", limit: int = _POLL_LIMIT) -> list[dict]:
-        resp = requests.get(
-            f"{_SLACK_API}/conversations.history",
-            headers={"Authorization": f"Bearer {self._token}"},
-            params={"channel": channel, "oldest": oldest, "limit": limit},
-            timeout=30,
-        )
-        data = resp.json()
-        if not data.get("ok"):
-            raise RuntimeError(f"conversations.history failed: {data.get('error')}")
-        return [m for m in data.get("messages", []) if m.get("type") == "message"]
+        """Every message newer than ``oldest`` — paged, so a burst larger than one page
+        (alerts pile up while a triage blocks the loop) is not silently skipped."""
+        out, cursor = [], None
+        for _ in range(50):
+            params = {"channel": channel, "oldest": oldest, "limit": max(limit, 100)}
+            if cursor:
+                params["cursor"] = cursor
+            resp = requests.get(
+                f"{_SLACK_API}/conversations.history",
+                headers={"Authorization": f"Bearer {self._token}"},
+                params=params,
+                timeout=30,
+            )
+            data = resp.json()
+            if not data.get("ok"):
+                raise RuntimeError(f"conversations.history failed: {data.get('error')}")
+            out += [m for m in data.get("messages", []) if m.get("type") == "message"]
+            cursor = (data.get("response_metadata") or {}).get("next_cursor")
+            if not data.get("has_more") or not cursor:
+                break
+        return out
 
     def post_reply(self, channel: str, thread_ts: str, text: str) -> None:
         resp = requests.post(
@@ -270,6 +281,15 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             if exec_id:
                 alert = Alert(execution_id=exec_id, severity=None, cluster=cluster,
                               organization=None, raw=message_text(msg))
+            elif time.time() - float(ts) < 600:
+                # The search index can lag the page by minutes: stop here and retry this
+                # message next poll instead of marking it processed and losing it.
+                log.info("page for %s not resolvable yet; retrying next poll", cluster)
+                break
+            else:
+                log.warning("page for %s matched no failed health_check", cluster)
+                slack.post_reply(channel, ts, f":grey_question: Couldn't match this page to a failed "
+                                              f"health check for `{cluster}` in the 30 min before it — needs a human.")
         if alert:
             now = time.time()
             # An execution id, once triaged, is never triaged again — the raw
@@ -364,11 +384,21 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
 
             log.info("triage channel=%s exec=%s cluster=%s sev=%s",
                      channel, alert.execution_id, alert.cluster, alert.severity)
-            slack.post_reply(
-                channel,
-                ts,
-                f":mag: On-call triage starting for execution `{alert.execution_id}`…",
-            )
+            try:
+                slack.post_reply(
+                    channel,
+                    ts,
+                    f":mag: On-call triage starting for execution `{alert.execution_id}`…",
+                )
+            except Exception:
+                # Un-mark so the next poll retries this alert instead of skipping it as seen.
+                state.get("executions", {}).pop(alert.execution_id, None)
+                if last is None:
+                    state.get("signatures", {}).pop(sig, None)
+                else:
+                    state.setdefault("signatures", {})[sig] = last
+                _save_state(state_path, state)
+                raise
             try:
                 result = _run_with_deadline(
                     runtime, agent, _triage_prompt(alert, prior), _TRIAGE_DEADLINE_S
