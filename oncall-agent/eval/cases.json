@@ -160,5 +160,30 @@
       "proxy-next-upstream"
     ],
     "ground_truth": "confirmed"
+  },
+  {
+    "id": "vantaca-stage2-redis-aof-misconf",
+    "execution_id": "211a5d04-d1d1-11f1-a10d-0eff9ceae735",
+    "cause": "Azure Cache for Redis vantacastfeg returned 'MISCONF Errors writing to the AOF file' at 06:39:21 UTC 2026-10-27; /health 500 (redis BAD) on all 3 pods -> liveness kills 06:39:36-50; self-healed by 06:44. Postgres OK; the Oct 24 Postgres restart is unrelated.",
+    "surviving_evidence": "health_check per-pod /health bodies (redis BAD, postgres OK); later health checks clean; conductor previous-container log (MISCONF) until the next restart.",
+    "must_mention_any": [
+      [
+        "misconf",
+        "aof"
+      ],
+      [
+        "self-heal",
+        "self heal",
+        "recovered",
+        "transient",
+        "single"
+      ]
+    ],
+    "must_not_mention": [
+      "triggered by a postgres restart",
+      "not self-healing",
+      "kill loop is ongoing"
+    ],
+    "ground_truth": "confirmed"
   }
 ]

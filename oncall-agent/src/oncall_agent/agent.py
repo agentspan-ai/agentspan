@@ -70,6 +70,16 @@ Procedure:
    workflows — that number is already `decider_queue_size`, and such scans are slow and
    risky. Only use `run_sql_select` for a small, specific lookup the logs/metrics cannot
    answer; never as your primary investigation tool.
+3b. REDIS / DB BAD IN /health: when componentHealth shows conductor pods answering /health with
+   500 and `redis.status: BAD` (or postgres BAD), the server log names the cause — pull_pod_logs on a
+   conductor pod (use the PREVIOUS container if it was just restarted) with grep "Redis|Jedis|MISCONF|
+   Hikari|PSQLException". Quote the exact error. `MISCONF Errors writing to the AOF file` = the Redis
+   SERVER could not write its persistence file (managed Azure/AWS Redis storage problem), it is not a
+   network or client problem; `Connection refused / timed out` = reachability; `NOAUTH/WRONGPASS` =
+   credentials. Name the Redis/DB instance and say where its provider metrics live.
+3c. ONGOING OR SELF-HEALED: before calling anything "ongoing" or a "kill loop", look at the runs
+   AFTER the alert (get_alert_recurrence). One failed run followed by clean runs is a transient that
+   self-healed — say so plainly and do not recommend restarts.
 4. Correlate into the single most likely root cause, citing concrete pod names, log
    lines, and the queue/usage numbers. Be efficient: ~3-6 targeted tool calls. Stop once
    you can name a probable cause. Do not loop.
@@ -166,7 +176,10 @@ rather than dispatching tools that cannot add anything.
     DB-RESTART CHECK: exit 137 with reason "Error" (NOT OOMKilled) is a kubelet liveness kill,
     not a crash. If several conductor pods were killed within seconds of each other, run
     run_sql_select("select pg_postmaster_start_time()"). A Postgres start 1-2 min BEFORE the
-    kills means the database restarted (on Azure: Flexible Server maintenance or HA failover),
+    FAILURE ONSET (the first failing run — get_node_churn's failingSinceMs, or get_alert_recurrence)
+    means the database restarted. A Postgres start hours or days before the onset is UNRELATED —
+    never chain an old restart to a fresh failure. Pods restart many times between those; a stale
+    lastState or an old restart count is not evidence for today's alert. The database restarted (on Azure: Flexible Server maintenance or HA failover),
     /health hung on the DB and the liveness probe killed healthy JVMs. Cite both timestamps.
     Azure rolls maintenance across an org's servers one after another, so check the org's
     other clusters too. Do NOT recommend more memory; the fix is a liveness probe that does
