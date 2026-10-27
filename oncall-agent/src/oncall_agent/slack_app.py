@@ -17,7 +17,7 @@ from pathlib import Path
 import requests
 from conductor.ai.agents import AgentRuntime
 
-from .agent import build_agent
+from .agent import INSTRUCTIONS, build_agent
 from .alert import Alert, alert_signature, message_text, pagerduty_cluster, parse_alert, signable_text
 from .config import Config
 from .runtime_compat import summary_text
@@ -191,6 +191,24 @@ def _root_cause_excerpt(summary: str, limit: int = 700) -> str:
     return excerpt[:limit]
 
 
+_PLAYBOOK_VERSION = __import__("hashlib").sha1(INSTRUCTIONS.encode()).hexdigest()[:12]
+
+
+def _same_incident(prior: dict, execution_id: str) -> bool:
+    """True when this firing continues the incident the stored diagnosis was written for."""
+    if prior.get("playbook") != _PLAYBOOK_VERSION:
+        return False
+    try:
+        from .tools import _disp
+        ctx = _disp().get_context(execution_id)
+        wf = _disp().get_execution(execution_id)
+        alert_ms = int((wf.get("input") or {}).get("_scheduledTime") or 0)
+        onset_ms = _disp().failing_since(ctx.get("clusterId"), alert_ms)
+    except Exception:
+        return False
+    return onset_ms <= prior.get("last_full_ts", 0) * 1000
+
+
 def _memory_update_text(cfg: Config, prior: dict, now: float) -> str:
     age_h = (now - prior.get("last_full_ts", now)) / 3600
     first_h = (now - prior.get("first_seen", now)) / 3600
@@ -293,6 +311,11 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             # update from the remembered diagnosis — no LLM tokens burned.
             incidents = state.setdefault("incidents", {})
             prior = incidents.get(sig)
+            # Reuse a diagnosis only for the SAME incident: written by the current playbook,
+            # and the cluster has failed continuously since — a clean check in between means
+            # a new incident (seen live 2026-10-27: a stale wrong diagnosis was replayed).
+            if prior and not _same_incident(prior, alert.execution_id):
+                prior = None
             if prior and (now - prior.get("last_full_ts", 0)) < _FULL_TRIAGE_INTERVAL_S:
                 log.info("memory update (no LLM) channel=%s exec=%s firings=%d",
                          channel, alert.execution_id, prior.get("firings", 0) + 1)
@@ -342,6 +365,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 slack.post_reply(channel, ts, _header(cfg) + summary)
                 incidents[sig] = {
                     "summary": _root_cause_excerpt(summary),
+                    "playbook": _PLAYBOOK_VERSION,
                     "last_full_ts": now,
                     "first_seen": (prior or {}).get("first_seen", now),
                     "firings": (prior or {}).get("firings", 0) + 1,
