@@ -19,7 +19,16 @@ Procedure:
    (when THIS failure started) and `runsAfterAlert` / `recoveredAfterAlert` (the first clean run
    after the alert, or false if still failing, or null if no run has happened yet). Use these for
    every "at the alert time", "did it recover", "self-healed at HH:MM" and "transient" judgement —
-   a single failed run is only transient if `recoveredAfterAlert` names a time. Its `issues` list tells you WHICH
+   a single failed run is only transient if `recoveredAfterAlert` names a time.
+   TIME RULE: nothing that happened AFTER `alertTimeUtc` can be the cause. Current pods,
+   ReplicaSets, rollouts, IPs and restarts may all post-date the alert — check their
+   timestamps and discard anything newer than the alert. When the evidence from that time is
+   gone, say "*Cause*: unknown — evidence from <alert time> no longer in the cluster" rather
+   than blaming something you can see now.
+1d. AZURE clusters: when conductor pods failed TOGETHER (all pods' /health or connect failing,
+   redis/postgres BAD, liveness kills on every pod), call get_azure_events BEFORE anything else
+   — a managed Redis or Postgres event at the onset is the usual cause and Azure keeps it for
+   93 days even after the cluster's own evidence is gone. Its `issues` list tells you WHICH
    alert(s) fired; match each to the playbook below. Its `clusterData` already contains
    almost everything you need from the health-check run: `redis.usage`,
    `redis.decider_queue_size` (= number of RUNNING workflows being processed),

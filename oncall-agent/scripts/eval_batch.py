@@ -65,7 +65,7 @@ def triage_prompt(reason: str, execution_id: str) -> str:
 
 def load_cases(path: str, disp: ConductorDispatcher) -> list[dict]:
     """Ground-truth cases: each alert's execution plus the checks its triage must pass."""
-    cases = json.load(open(path))
+    cases = [c for c in json.load(open(path)) if not c.get("retired")]
     for case in cases:
         wf = disp._wf.get_workflow(case["execution_id"], include_tasks=False)
         case.update(workflow_id=case["execution_id"], start_time=wf.start_time,

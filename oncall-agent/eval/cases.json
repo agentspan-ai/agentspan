@@ -104,7 +104,8 @@
     "must_not_mention": [
       "restart conductor"
     ],
-    "ground_truth": "confirmed"
+    "ground_truth": "confirmed",
+    "retired": "cluster no longer registered (Cannot find the Cluster) \u2014 not replayable"
   },
   {
     "id": "westpac-mesh-prod-empty-polls-cpu",
