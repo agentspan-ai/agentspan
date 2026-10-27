@@ -20,7 +20,7 @@ from conductor.ai.agents import AgentRuntime
 from .agent import INSTRUCTIONS, build_agent
 from .alert import Alert, alert_signature, message_text, pagerduty_cluster, parse_alert, signable_text
 from .config import Config
-from .runtime_compat import summary_text
+from .runtime_compat import TriageIncomplete, summary_text
 from .worker_health import CRITICAL_TASK_TYPES, evaluate
 
 log = logging.getLogger("oncall_agent")
@@ -44,6 +44,10 @@ _FULL_TRIAGE_INTERVAL_S = int(os.environ.get("ONCALL_FULL_TRIAGE_INTERVAL", "216
 # iteration while each iteration also does a network call, so under connection
 # churn it drifts arbitrarily far behind real time. Hence the deadline here.
 _TRIAGE_DEADLINE_S = int(os.environ.get("ONCALL_TRIAGE_DEADLINE", "1800"))
+
+
+class _NotRemembered(Exception):
+    """Internal: skip storing a diagnosis in incident memory."""
 
 
 class TriageTimeout(Exception):
@@ -405,6 +409,8 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 )
                 summary = summary_text(result)
                 slack.post_reply(channel, ts, _header(cfg) + summary)
+                if summary.lower().startswith("*cause*: unknown"):
+                    raise _NotRemembered()
                 incidents[sig] = {
                     "summary": _root_cause_excerpt(summary),
                     "playbook": _PLAYBOOK_VERSION,
@@ -416,6 +422,11 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                     state["incidents"] = dict(
                         sorted(incidents.items(), key=lambda kv: kv[1]["last_full_ts"])[-200:]
                     )
+            except _NotRemembered:  # posted, but an "unknown" cause is not worth replaying
+                pass
+            except TriageIncomplete as exc:  # never post or remember a non-answer
+                log.error("triage incomplete channel=%s exec=%s: %s", channel, alert.execution_id, exc)
+                slack.post_reply(channel, ts, ":warning: Triage ended without a conclusion — needs a human.")
             except TriageTimeout as exc:  # abandon this incident, keep polling
                 log.error("triage timed out channel=%s exec=%s: %s",
                           channel, alert.execution_id, exc)

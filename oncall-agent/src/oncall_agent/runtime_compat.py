@@ -5,6 +5,11 @@ import platform
 from typing import Any
 
 
+class TriageIncomplete(Exception):
+    """The agent finished without the mandated *Cause*: answer (ran out of turns,
+    narrated, or returned an empty result). Never post or remember it as a triage."""
+
+
 def summary_text(result: Any) -> str:
     """Extract the agent's final text from an ``AgentRuntime.run`` result.
 
@@ -25,9 +30,11 @@ def summary_text(result: Any) -> str:
     if text is None and isinstance(output, str) and output.strip():
         text = output
     if text is None:
-        return str(output if output is not None else result)
+        raise TriageIncomplete(f"agent returned no text: {str(output if output is not None else result)[:200]}")
     marker = text.find("*Cause*:")
-    return text[marker:] if marker > 0 else text
+    if marker < 0:
+        raise TriageIncomplete(f"agent answer has no *Cause*: line: {text[:200]}")
+    return text[marker:]
 
 
 def use_thread_workers_if_needed() -> None:
