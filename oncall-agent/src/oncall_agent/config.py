@@ -58,7 +58,7 @@ class Config:
             slack_alert_channel=os.environ.get("SLACK_ALERT_CHANNEL") or None,
             poll_interval=int(os.environ.get("ONCALL_POLL_INTERVAL", "300")),
             state_file=os.environ.get(
-                "ONCALL_STATE_FILE", "/tmp/oncall_agent_state.json"
+                "ONCALL_STATE_FILE", os.path.expanduser("~/.oncall-agent/state.json")
             ),
             agentspan_server_url=os.environ.get(
                 "AGENTSPAN_SERVER_URL", "http://localhost:6767/api"

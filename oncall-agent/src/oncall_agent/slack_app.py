@@ -164,17 +164,43 @@ class SlackClient:
             raise RuntimeError(f"chat.postMessage failed: {data.get('error')}")
 
 
+_LEGACY_STATE = Path("/tmp/oncall_agent_state.json")
+_LOCK_FD = None
+
+
 def _load_state(path: Path) -> dict:
-    if path.exists():
-        try:
-            return json.loads(path.read_text())
-        except Exception:
-            pass
-    return {"last_ts": None, "processed": []}
+    """Load state; on a missing or corrupt file start from NOW, never from Slack's
+    beginning (that re-triaged the channel's history into old threads)."""
+    for candidate in (path, _LEGACY_STATE):
+        if candidate.exists():
+            try:
+                return json.loads(candidate.read_text())
+            except Exception:
+                log.error("state file %s unreadable; starting fresh from now", candidate)
+                break
+    return {"last_ts": None, "processed": [], "started_at": time.time()}
 
 
 def _save_state(path: Path, state: dict) -> None:
-    path.write_text(json.dumps(state, indent=2))
+    """Atomic write: a crash mid-write must not leave a truncated file behind."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    os.replace(tmp, path)
+
+
+def _acquire_single_instance_lock(path: Path) -> None:
+    """Two listeners would overwrite each other's state and double-post; refuse to run twice."""
+    import fcntl
+    global _LOCK_FD
+    if _LOCK_FD is not None:  # already held by this process (run_once runs every poll)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _LOCK_FD = open(path.with_suffix(".lock"), "w")
+    try:
+        fcntl.flock(_LOCK_FD, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        raise SystemExit(f"another on-call listener holds {path.with_suffix('.lock')}; exiting")
 
 
 def _triage_prompt(alert: Alert, prior: dict | None = None) -> str:
@@ -267,7 +293,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
 
     # Slack returns newest-first; process oldest-first so the window advances cleanly.
     messages = slack.read_messages(
-        channel, oldest=ch_state.get("last_ts") or "0", limit=_POLL_LIMIT
+        channel, oldest=ch_state.get("last_ts") or str(state.get("started_at") or "0"), limit=_POLL_LIMIT
     )
     messages.sort(key=lambda m: float(m["ts"]))
 
@@ -451,6 +477,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
 def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> int:
     """Process new messages in every configured channel once. Returns alerts triaged."""
     state_path = Path(cfg.state_file)
+    _acquire_single_instance_lock(state_path)
     state = _load_state(state_path)
     handled = 0
     for channel in cfg.slack_alert_channels:
