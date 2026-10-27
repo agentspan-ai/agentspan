@@ -277,7 +277,16 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             # that tokenize differently, so the signature layer alone misses
             # that pair (seen live 2026-07-22).
             executions = state.setdefault("executions", {})
-            sig = alert_signature(signable_text(message_text(msg)))
+            # The cluster goes in verbatim: the token filter drops digit-bearing words, so
+            # "vantaca-stage1" and "vantaca-stage2" would otherwise share one signature.
+            sig_cluster = alert.cluster
+            if not sig_cluster:
+                try:
+                    from .tools import _disp
+                    sig_cluster = _disp().get_context(alert.execution_id).get("clusterName")
+                except Exception:
+                    sig_cluster = None
+            sig = f"{sig_cluster or '?'}|" + alert_signature(signable_text(message_text(msg)))
             signatures = state.setdefault("signatures", {})
             last = signatures.get(sig)
             if alert.execution_id in executions or (
