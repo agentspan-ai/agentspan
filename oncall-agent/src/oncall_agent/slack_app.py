@@ -262,7 +262,9 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
         if ts in processed:
             continue
         alert = parse_alert(message_text(msg))
-        if not alert and (cluster := pagerduty_cluster(message_text(msg))):
+        pd_resolved = (msg.get("metadata") or {}).get("event_type") == "incident_resolved" \
+            or (msg.get("text") or "").startswith(":large_green_circle:")
+        if not alert and not pd_resolved and (cluster := pagerduty_cluster(message_text(msg))):
             from .tools import _disp
             exec_id = _disp().latest_failed_health_check(cluster, int(float(ts) * 1000))
             if exec_id:

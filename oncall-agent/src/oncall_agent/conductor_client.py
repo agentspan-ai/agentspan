@@ -244,7 +244,9 @@ class ConductorDispatcher:
             query=f"workflowType IN (health_check) AND startTime>{at_ms - 1_800_000} AND startTime<{at_ms + 60_000}",
         ))
         exact = re.compile(rf"clusterName={re.escape(cluster_name)}[,}}]")
-        for s in getattr(result, "results", None) or []:
+        newest_first = sorted(getattr(result, "results", None) or [],
+                              key=lambda r: _epoch_ms(getattr(r, "start_time", None)) or 0, reverse=True)
+        for s in newest_first:
             if exact.search(getattr(s, "input", None) or "") and \
                     (getattr(s, "reason_for_incompletion", None) or "").startswith("*`["):
                 return getattr(s, "workflow_id", None)
