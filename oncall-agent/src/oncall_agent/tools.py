@@ -21,6 +21,7 @@ from .conductor_client import ConductorDispatcher
 from .config import Config
 from .recurrence import summarize_recurrence
 from .kubectl_guard import NotReadOnlyKubectlError, ensure_readonly_kubectl
+from .azure_events import azure_events
 from .ingress_check import check_ingresses, served_certificate
 from .node_churn import summarize_node_churn
 from .sql_guard import NotReadOnlySQLError, ensure_select
@@ -459,6 +460,33 @@ def check_ingress_config(execution_id: str) -> dict:
 
 
 @tool(timeout_seconds=_T)
+def get_azure_events(execution_id: str) -> dict:
+    """For AZURE clusters: what Azure itself reported for this cluster's managed Redis and
+    Postgres around when the failures STARTED — Redis `Errors` by type (AOF = persistence
+    write failed and Redis refused writes with MISCONF; Failover = patching/maintenance),
+    Postgres not-alive windows (restart/failover), and activity-log events (maintenance,
+    scaling, config changes, with who did it). Call it whenever /health shows redis or
+    postgres BAD, or conductor pods were killed together, on an Azure cluster — it answers
+    "was it the managed service?" directly instead of inferring it from pod restarts.
+
+    Args:
+        execution_id: incident execution id.
+    """
+    ctx = _context(execution_id)
+    wf = _disp().get_execution(execution_id)
+    wf_input = wf.get("input") if isinstance(wf.get("input"), dict) else {}
+    alert_ms = int(wf_input.get("_scheduledTime") or wf_input.get("_executedTime") or 0)
+    cluster_id = ctx.get("clusterId")
+    onset_ms = _disp().failing_since(cluster_id, alert_ms) if cluster_id and alert_ms else alert_ms
+    if not onset_ms:
+        return {"error": "alert time not found on the execution"}
+    try:
+        return azure_events(ctx.get("clusterName"), onset_ms)
+    except Exception as exc:
+        return {"error": "azure_lookup_failed", "detail": str(exc)[:300]}
+
+
+@tool(timeout_seconds=_T)
 def run_sql_select(execution_id: str, query: str) -> dict:
     """Run a READ-ONLY SQL SELECT against the cluster's Conductor DB to inspect
     workflow/task/queue state. Only SELECT/WITH/EXPLAIN/SHOW are permitted; any
@@ -700,5 +728,6 @@ ALL_TOOLS = [
     pull_pod_logs,
     get_ingress_info,
     check_ingress_config,
+    get_azure_events,
     run_sql_select,
 ]

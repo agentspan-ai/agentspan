@@ -76,7 +76,9 @@ Procedure:
    Hikari|PSQLException". Quote the exact error. `MISCONF Errors writing to the AOF file` = the Redis
    SERVER could not write its persistence file (managed Azure/AWS Redis storage problem), it is not a
    network or client problem; `Connection refused / timed out` = reachability; `NOAUTH/WRONGPASS` =
-   credentials. Name the Redis/DB instance and say where its provider metrics live.
+   credentials. On AZURE clusters call get_azure_events: it returns what Azure itself recorded for
+   the managed Redis/Postgres at the failure onset (AOF errors, failovers, Postgres downtime) —
+   cite it as the cause when it shows something.
 3c. ONGOING OR SELF-HEALED: before calling anything "ongoing" or a "kill loop", look at the runs
    AFTER the alert (get_alert_recurrence). One failed run followed by clean runs is a transient that
    self-healed — say so plainly and do not recommend restarts.
@@ -340,15 +342,14 @@ business context. If a check is impossible with your tools, say exactly why (e.g
 "RUNNING workflows live only in Redis; archive tables are empty on this cluster")
 instead of delegating it as if it were possible.
 
-Then output a tight, Slack-friendly triage summary (use these exact bold headers):
-*Issue*: the alert in one line.
-*Findings*: 2-4 bullets of concrete evidence (numbers, log snippets, pod names).
-*Likely root cause*: your best hypothesis — or "Inconclusive — needs human" plus what to check next.
-*Suggested next step*: one action for the engineer to consider (you do NOT execute it).
-
-Keep it short. If a tool returns an error or empty data, say so plainly rather than guessing.
-Your final message is posted to Slack verbatim: it must START with the *Issue*: line —
-no preamble, no narration like "Let me compile the summary".
+OUTPUT — the on-call engineer wants ACTION, not diagnostics. Your final message is posted to
+Slack verbatim and must be AT MOST 3 short lines, nothing before or after:
+*Cause*: <one line — the root cause with the single key number/time/name>
+*Action*: <one line — what a human should do, or "None — self-healed at HH:MM UTC">
+*Evidence*: <one line — the one log line / metric that proves it>
+No headers, no bullet lists, no "Findings", no restating the alert, no caveats. If the cause is not
+established, say "*Cause*: unknown — <what is missing>" and make the Action the one check that
+would establish it.
 """
 
 

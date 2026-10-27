@@ -14,7 +14,7 @@ def summary_text(result: Any) -> str:
 
     The model narrates before the summary despite instructions ("I have all the
     data I need. Let me..."), so enforce the contract deterministically: if the
-    text contains the mandated ``*Issue*:`` header, drop everything before it.
+    text contains the mandated ``*Cause*:`` line, drop everything before it.
     """
     output = getattr(result, "output", None)
     text: str | None = None
@@ -26,7 +26,7 @@ def summary_text(result: Any) -> str:
         text = output
     if text is None:
         return str(output if output is not None else result)
-    marker = text.find("*Issue*:")
+    marker = text.find("*Cause*:")
     return text[marker:] if marker > 0 else text
 
 
