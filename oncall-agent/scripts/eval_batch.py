@@ -129,7 +129,10 @@ def main(argv: list[str] | None = None) -> int:
             started = time.time()
             try:
                 result = runtime.run(agent, triage_prompt(reason, wf_id))
-                summary = summary_text(result)
+                status = str(getattr(result, "status", "COMPLETED") or "COMPLETED").upper()
+                if status != "COMPLETED":
+                    raise RuntimeError(f"agent run ended {status}")
+                summary = summary_text(result)  # raises TriageIncomplete without a Cause line
             except Exception as exc:  # keep the batch going; the report shows it
                 summary = f"TRIAGE FAILED: {exc}"
                 log.exception("[%d/%d] failed", i, len(incidents))

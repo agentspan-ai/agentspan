@@ -268,11 +268,15 @@ class ConductorDispatcher:
         exact = re.compile(rf"clusterName={re.escape(cluster_name)}[,}}]")
         newest_first = sorted(getattr(result, "results", None) or [],
                               key=lambda r: _epoch_ms(getattr(r, "start_time", None)) or 0, reverse=True)
-        for s in newest_first:
-            if exact.search(getattr(s, "input", None) or "") and \
-                    (getattr(s, "reason_for_incompletion", None) or "").startswith("*`["):
-                return getattr(s, "workflow_id", None)
-        return None
+        hits = [s for s in newest_first
+                if exact.search(getattr(s, "input", None) or "")
+                and (getattr(s, "reason_for_incompletion", None) or "").startswith("*`[")]
+        orgs = {m.group(1) for s in hits
+                if (m := re.search(r"organizationId=([0-9a-f-]{36})", getattr(s, "input", None) or ""))}
+        if len(orgs) > 1:
+            log.warning("cluster name %s is failing in %d orgs; page is ambiguous", cluster_name, len(orgs))
+            return None
+        return getattr(hits[0], "workflow_id", None) if hits else None
 
     # ── dispatch ─────────────────────────────────────────────
     def dispatch(
