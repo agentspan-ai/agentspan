@@ -314,8 +314,14 @@ class ConductorDispatcher:
         deadline = time.time() + timeout_s
         while True:
             wf = self._call(lambda: self._wf.get_workflow(wf_id, include_tasks=True))
-            if getattr(wf, "status", None) in _TERMINAL or time.time() >= deadline:
-                return self._summarize(wf)
+            status = getattr(wf, "status", None)
+            if status in _TERMINAL or time.time() >= deadline:
+                out = self._summarize(wf)
+                if status != "COMPLETED":
+                    # A still-running or failed dispatch must not read as an empty result.
+                    out["error"] = ("dispatch_timed_out" if status not in _TERMINAL
+                                    else f"dispatch_{str(status).lower()}")
+                return out
             time.sleep(poll_s)
 
     @staticmethod

@@ -531,6 +531,9 @@ def analyze_sweeper_waste(execution_id: str, pod_name: str, lines: int = 300) ->
         if hasattr(pull_pod_logs, "__wrapped__") else pull_pod_logs(execution_id, pod_name,
                                                                     grep="OrkesWorkflowSweeper",
                                                                     lines=lines)
+    if isinstance(raw, dict) and raw.get("error"):
+        return {"error": "sweeper_log_read_failed", "detail": raw.get("error"),
+                "verdict": "unknown — could not read the sweeper log; this says NOTHING about the sweeper"}
     out = summarize_sweeper_waste(_json.dumps(raw, default=str).replace("\\n", "\n"))
     out["pod"] = pod_name
     out["window_lines"] = lines
@@ -546,14 +549,18 @@ def _sql_rows(execution_id: str, sql: str) -> list[dict]:
     import json as _json
     r = run_sql_select.__wrapped__(execution_id, sql) if hasattr(run_sql_select, "__wrapped__") \
         else run_sql_select(execution_id, sql)
+    if isinstance(r, dict) and r.get("error"):
+        raise RuntimeError(f"SQL lookup failed: {r.get('error')} {str(r.get('detail') or '')[:150]}")
     out = r.get("output") if isinstance(r, dict) else None
     res = (out or {}).get("result") if isinstance(out, dict) else out
     if isinstance(res, str):
         try:
             res = _json.loads(res).get("result", res)
         except Exception:
-            return []
-    return res if isinstance(res, list) else []
+            raise RuntimeError(f"SQL lookup returned unparseable output: {res[:150]}")
+    if not isinstance(res, list):
+        raise RuntimeError(f"SQL lookup returned no rows field: {str(res)[:150]}")
+    return res
 
 
 @tool(timeout_seconds=_T)
@@ -572,6 +579,13 @@ def get_running_backlog_buckets(execution_id: str, top: int = 8) -> dict:
         execution_id: incident execution id.
         top: how many definitions to report.
     """
+    try:
+        return _running_backlog_buckets(execution_id, top)
+    except RuntimeError as exc:  # a failed lookup is not "no backlog"
+        return {"error": "backlog_lookup_failed", "detail": str(exc)}
+
+
+def _running_backlog_buckets(execution_id: str, top: int) -> dict:
     from .running_backlog import plan_shard_query, build_backlog_report
     # Two small queries, not one big one: one-staging has 301 shards and listing them
     # all exceeds the ~8KB result cap, which silently comes back empty.
