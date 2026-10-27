@@ -113,6 +113,12 @@ rather than dispatching tools that cannot add anything.
     CPU look for a hot loop / tight retry / sweeper churn). Cite the % and the pod, plus
     the GC/OOM/hot-loop evidence. (Skip the extra metrics call unless a pod name is
     missing or the numbers disagree.)
+    LOAD SOURCE FIRST: for CPU alerts get_incident_details carries `pollLoad` and
+    `dailyCpuPattern`. If pollLoad says the server answers thousands of EMPTY polls/s across
+    hundreds of task types, THAT is the cause — name the polls/s, task types and tasks/s handed
+    out; the fix is fewer polled task types / lower poll frequency, not more CPU. If
+    dailyCpuPattern finds a recurring daily window containing the alert, say it is a daily
+    scheduled load in those UTC hours (recurring, not a one-off) and keep the rest light.
     CPU EVIDENCE RULE — THREADS FIRST, and this order is not optional.
     For EVERY cpu/heap alert your FIRST evidence call is
     get_thread_summary(execution_id, hottest pod). Only threads doing work can burn CPU;

@@ -22,6 +22,7 @@ from .config import Config
 from .recurrence import summarize_recurrence
 from .kubectl_guard import NotReadOnlyKubectlError, ensure_readonly_kubectl
 from .azure_events import azure_events
+from .bq_metrics import daily_cpu_pattern, poll_load
 from .ingress_check import check_ingresses, served_certificate
 from .node_churn import summarize_node_churn
 from .sql_guard import NotReadOnlySQLError, ensure_select
@@ -47,6 +48,45 @@ def _context(execution_id: str) -> dict:
     if execution_id not in _ctx_cache:
         _ctx_cache[execution_id] = _disp().get_context(execution_id)
     return _ctx_cache[execution_id]
+
+
+def _cpu_context(cluster: str | None, onset_ms: int) -> dict:
+    out = {}
+    for key, fn in (("pollLoad", poll_load), ("dailyCpuPattern", daily_cpu_pattern)):
+        try:
+            r = fn(cluster, onset_ms)
+            out[key] = {k: v for k, v in r.items() if k != "hourProfile"}
+        except Exception as exc:
+            out[key] = {"error": str(exc)[:150]}
+    return out
+
+
+@tool(timeout_seconds=_T)
+def get_poll_load(execution_id: str) -> dict:
+    """Poll requests/s the server answers, across how many task types, versus tasks actually
+    handed out — in the 30 min before the failure onset (BigQuery fleet metrics, no cluster
+    calls). A server answering thousands of EMPTY polls per second burns CPU on nothing.
+
+    Args:
+        execution_id: incident execution id.
+    """
+    info = _disp().alert_info(execution_id)
+    ctx = _context(execution_id)
+    onset = _disp().failing_since(ctx.get("clusterId"), info["alert_ms"], info["issues"])
+    return poll_load(ctx.get("clusterName"), onset or info["alert_ms"])
+
+
+@tool(timeout_seconds=_T)
+def get_daily_cpu_pattern(execution_id: str) -> dict:
+    """Is conductor CPU elevated in the same UTC hours every day (14-day hour-of-day profile)?
+    A recurring daily window means a scheduled/batch load, not a one-off incident.
+
+    Args:
+        execution_id: incident execution id.
+    """
+    info = _disp().alert_info(execution_id)
+    ctx = _context(execution_id)
+    return daily_cpu_pattern(ctx.get("clusterName"), info["alert_ms"])
 
 
 def _azure_findings(cluster_id: str | None, onset_ms: int) -> list[str] | None:
@@ -116,6 +156,9 @@ def get_incident_details(execution_id: str) -> dict:
         # Managed Redis/Postgres events at the onset, always included: the model skipped the
         # separate tool on exactly the incidents it explains (eval 2026-10-27).
         "azureEvents": _azure_findings(ctx.get("clusterId"), onset or info["alert_ms"]),
+        # CPU alerts: where the load comes from, read from fleet metrics in BigQuery.
+        **(_cpu_context(ctx.get("clusterName"), onset or info["alert_ms"])
+           if any("cpu" in k for k in info["issues"]) else {}),
         "context": ctx,
         "issues": issues,
         # redis usage + queue sizes + heap/cpu/postgres — almost all you need, no SQL.
@@ -777,5 +820,7 @@ ALL_TOOLS = [
     get_ingress_info,
     check_ingress_config,
     get_azure_events,
+    get_poll_load,
+    get_daily_cpu_pattern,
     run_sql_select,
 ]
