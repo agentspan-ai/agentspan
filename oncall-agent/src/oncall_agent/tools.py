@@ -636,9 +636,9 @@ def check_known_issues(execution_id: str, repushed_task_types: str = "",
     """
     from .known_issues import match_known_issues
     img = run_kubectl_read.__wrapped__(execution_id,
-        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}") \
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[?(@.name=='conductor')].image}") \
         if hasattr(run_kubectl_read, "__wrapped__") else run_kubectl_read(execution_id,
-        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}")
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[?(@.name=='conductor')].image}")
     out = img.get("output") if isinstance(img, dict) else None
     tag = str((out.get("result") if isinstance(out, dict) else out) or "").strip()
     split = lambda v: {x.strip() for x in v.split(",") if x.strip()}
@@ -693,17 +693,25 @@ def find_missing_fixes(execution_id: str, symbol: str, top: int = 8) -> dict:
         return {"error": "invalid_symbol", "symbol": symbol}
 
     img = run_kubectl_read.__wrapped__(execution_id,
-        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}") \
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[?(@.name=='conductor')].image}") \
         if hasattr(run_kubectl_read, "__wrapped__") else run_kubectl_read(execution_id,
-        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[*].image}")
+        "get deployment orkes-conductor-deployment -o jsonpath={.spec.template.spec.containers[?(@.name=='conductor')].image}")
     out = img.get("output") if isinstance(img, dict) else None
     tag = str((out.get("result") if isinstance(out, dict) else out) or "").strip()
     parsed = parse_version(tag)
-    version = "v" + ".".join(map(str, parsed)) if parsed else None
-    if version is None:
+    if parsed is None:
         return build_report(safe, [], None, [], [], top=top)
 
     _git(["fetch", "origin", "main", "--tags", "-q"])
+    # The running build may be an rc ("5.5.0-rc19"): diff from THAT tag, not the bare
+    # semver, and refuse to answer when no tag exists — an empty git log means "unknown",
+    # not "this code is current".
+    raw = tag.rsplit(":", 1)[-1].strip()
+    version = next((c for c in (f"v{raw}", raw, "v" + ".".join(map(str, parsed)))
+                    if _git(["rev-parse", "--verify", "-q", f"refs/tags/{c}"])), None)
+    if version is None:
+        return {"error": "running_version_tag_not_found", "image_tag": raw,
+                "detail": "no matching git tag — missing fixes cannot be computed; do not read this as current"}
     paths = [p for p in _git(["ls-tree", "-r", "--name-only", "origin/main"])
              if p.endswith(f"{safe}.java") and "/test/" not in p]
     if not paths:
