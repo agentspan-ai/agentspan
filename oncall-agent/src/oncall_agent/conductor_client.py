@@ -59,6 +59,26 @@ def _trim(value: Any, max_len: int = 8000) -> Any:
 log = logging.getLogger("oncall_agent")
 
 
+_POD = re.compile(r"\b[a-z0-9-]+-[a-z0-9]{8,10}-[a-z0-9]{5}\b")
+
+
+def issue_keys(reason: str | None) -> set[str]:
+    """The issue lines of a health-check alert, normalized for comparison.
+
+    The first line is boilerplate shared by every alert ("The health-checking has FAILED
+    for ..."), so only the issue lines count; severity markers, pod names and numbers are
+    dropped so one issue matches across firings.
+    """
+    keys = set()
+    for line in (reason or "").splitlines()[1:]:
+        line = re.sub(r"^\W*(CRITICAL|MAJOR|MINOR|WARNING)\W*", "", line.strip(), flags=re.I)
+        line = _POD.sub("<pod>", line.lower())
+        line = re.sub(r"[\d.]+%?", "#", line).strip()
+        if line:
+            keys.add(line)
+    return keys
+
+
 def _epoch_ms(value: Any) -> int | None:
     """Search results carry start_time as epoch ms or an ISO-8601 string."""
     if isinstance(value, (int, float)):
@@ -147,12 +167,26 @@ class ConductorDispatcher:
             "environment": wf_input.get("environment", "prod"),
         }
 
-    def failing_since(self, cluster_id: str, at_ms: int, max_hours: int = 48) -> int:
-        """Start of the unbroken run of failed health checks that ends at ``at_ms``.
+    def alert_info(self, execution_id: str) -> dict:
+        """When the alert's health check ran (epoch ms) and its issue keys."""
+        wf = self._call(lambda: self._wf.get_workflow(execution_id, include_tasks=False))
+        wf_input = getattr(wf, "input", None) or {}
+        at_ms = (wf_input.get("_scheduledTime") or wf_input.get("_executedTime")
+                 or _epoch_ms(getattr(wf, "start_time", None)) or 0)
+        return {"alert_ms": int(at_ms),
+                "issues": issue_keys(getattr(wf, "reason_for_incompletion", None))}
 
-        Walks back in 6h windows until a clean run is found; returns the first failed
-        run's start (epoch ms), or ``at_ms`` itself when the run before it was clean.
+    def failing_since(self, cluster_id: str, at_ms: int, issues: set[str] | None = None,
+                      max_hours: int = 48) -> int:
+        """Start of the unbroken run of health checks failing with the SAME issue as the alert.
+
+        Walks back in 6h windows; the streak ends at the first run that is clean or fails
+        only with other issues (a standing cert/API-key warning must not stretch an
+        unrelated outage back for days). Returns ``at_ms`` itself when the previous run
+        does not share an issue.
         """
+        if not cluster_id or not at_ms:
+            return at_ms
         onset = at_ms
         for window in range(max_hours // 6):
             hi = at_ms - window * 6 * 3_600_000
@@ -161,9 +195,10 @@ class ConductorDispatcher:
                 query=f"workflowType IN (health_check) AND startTime>{hi - 6 * 3_600_000} AND startTime<={hi}",
             ))
             runs = sorted(getattr(result, "results", None) or [],
-                          key=lambda r: str(getattr(r, "start_time", "")), reverse=True)
+                          key=lambda r: _epoch_ms(getattr(r, "start_time", None)) or 0, reverse=True)
             for r in runs:
-                if not (getattr(r, "reason_for_incompletion", None) or "").strip():
+                keys = issue_keys(getattr(r, "reason_for_incompletion", None))
+                if not keys or (issues and not keys & issues):
                     return onset
                 ms = _epoch_ms(getattr(r, "start_time", None))
                 if ms is not None:

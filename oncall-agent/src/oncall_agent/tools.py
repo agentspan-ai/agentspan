@@ -123,14 +123,12 @@ def get_node_churn(execution_id: str) -> dict:
     Args:
         execution_id: incident execution id.
     """
-    wf = _disp().get_execution(execution_id)
-    wf_input = wf.get("input") if isinstance(wf.get("input"), dict) else {}
-    alert_ms = int(wf_input.get("_scheduledTime") or wf_input.get("_executedTime") or 0)
+    info = _disp().alert_info(execution_id)
+    alert_ms = info["alert_ms"]
     if not alert_ms:
         return {"verdict": "UNKNOWN", "detail": "alert time not found on the execution"}
     # A standing alert started when the failures began, not at this firing.
-    cluster_id = _context(execution_id).get("clusterId")
-    onset_ms = _disp().failing_since(cluster_id, alert_ms) if cluster_id else alert_ms
+    onset_ms = _disp().failing_since(_context(execution_id).get("clusterId"), alert_ms, info["issues"])
     nodes = _kubectl_text(execution_id, "get nodes -o custom-columns=NAME:.metadata.name,"
                           "CREATED:.metadata.creationTimestamp,VERSION:.status.nodeInfo.kubeletVersion")
     events = _kubectl_text(execution_id, "get events -A --field-selector involvedObject.kind=Node "
@@ -473,13 +471,10 @@ def get_azure_events(execution_id: str) -> dict:
         execution_id: incident execution id.
     """
     ctx = _context(execution_id)
-    wf = _disp().get_execution(execution_id)
-    wf_input = wf.get("input") if isinstance(wf.get("input"), dict) else {}
-    alert_ms = int(wf_input.get("_scheduledTime") or wf_input.get("_executedTime") or 0)
-    cluster_id = ctx.get("clusterId")
-    onset_ms = _disp().failing_since(cluster_id, alert_ms) if cluster_id and alert_ms else alert_ms
-    if not onset_ms:
+    info = _disp().alert_info(execution_id)
+    if not info["alert_ms"]:
         return {"error": "alert time not found on the execution"}
+    onset_ms = _disp().failing_since(ctx.get("clusterId"), info["alert_ms"], info["issues"])
     try:
         return azure_events(ctx.get("clusterName"), onset_ms)
     except Exception as exc:

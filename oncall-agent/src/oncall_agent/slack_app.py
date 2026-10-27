@@ -201,9 +201,10 @@ def _same_incident(prior: dict, execution_id: str) -> bool:
     try:
         from .tools import _disp
         ctx = _disp().get_context(execution_id)
-        wf = _disp().get_execution(execution_id)
-        alert_ms = int((wf.get("input") or {}).get("_scheduledTime") or 0)
-        onset_ms = _disp().failing_since(ctx.get("clusterId"), alert_ms)
+        info = _disp().alert_info(execution_id)
+        if not info["alert_ms"] or not ctx.get("clusterId"):
+            return False
+        onset_ms = _disp().failing_since(ctx.get("clusterId"), info["alert_ms"], info["issues"])
     except Exception:
         return False
     return onset_ms <= prior.get("last_full_ts", 0) * 1000
