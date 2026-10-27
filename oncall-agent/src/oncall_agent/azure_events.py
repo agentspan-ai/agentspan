@@ -51,9 +51,10 @@ def _rid(r: dict) -> str:
             f"/providers/{provider}/{r['name']}")
 
 
-def _metric(rid: str, metric: str, agg: str, start: str, end: str, split: str | None = None) -> list:
-    args = ["az", "monitor", "metrics", "list", "--resource", rid, "--metric", metric, "--aggregation", agg,
-            "--interval", "PT5M", "--start-time", start, "--end-time", end, "-o", "json"]
+def _metric(rid: str, metric: str, agg: str, start: str, end: str, split: str | None = None,
+            interval: str = "PT5M") -> list:
+    args = ["az", "monitor", "metrics", "list", "--resource", rid, "--metric", metric, "--aggregation", *agg.split(","),
+            "--interval", interval, "--start-time", start, "--end-time", end, "-o", "json"]
     if split:
         args += ["--filter", f"{split} eq '*'"]
     return json.loads(_run(args))["value"][0]["timeseries"]
@@ -71,9 +72,28 @@ def summarize_redis_errors(timeseries: list) -> list[dict]:
 
 
 def summarize_db_alive(timeseries: list) -> list[str]:
-    """5-minute windows where Postgres reported not alive (is_db_alive minimum 0)."""
+    """Minutes where Postgres was not alive: is_db_alive minimum 0, or most of the minute's
+    liveness samples missing (a short restart shows up only as a sample gap)."""
     return [p["timeStamp"] for ts in timeseries for p in ts["data"]
-            if p.get("minimum") is not None and p["minimum"] < 1]
+            if (p.get("minimum") is not None and p["minimum"] < 1)
+            or (p.get("count") is not None and p["count"] < 4)]
+
+
+def health_events(rid: str, start: str, end: str) -> list[dict]:
+    """Azure Resource Health events (platform maintenance, service issues) for the resource."""
+    try:
+        out = _run(["az", "rest", "--method", "get", "--url",
+                    f"https://management.azure.com{rid}/providers/Microsoft.ResourceHealth/events"
+                    f"?api-version=2022-10-01&queryStartTime={start}"])
+    except RuntimeError:
+        return []
+    events = []
+    for e in json.loads(out or "{}").get("value", []):
+        p = e.get("properties", {})
+        t = p.get("impactStartTime") or ""
+        if start <= t[:19] + "Z" <= end or start[:13] <= t[:13] <= end[:13]:
+            events.append({"time": t, "type": p.get("eventType"), "title": p.get("title")})
+    return events
 
 
 def activity(rid: str, start: str, end: str) -> list[dict]:
@@ -103,8 +123,11 @@ def azure_events(cluster_id: str, onset_ms: int, before_min: int = 60, after_min
             if kind == "redis":
                 entry["errors"] = summarize_redis_errors(_metric(rid, "Errors", "Total", start, end, "ErrorType"))
             else:
-                entry["notAliveWindows"] = summarize_db_alive(_metric(rid, "is_db_alive", "Minimum", start, end))
+                # 1-minute resolution: a maintenance restart lasts under a minute and vanishes in 5-min averages
+                entry["notAliveWindows"] = summarize_db_alive(_metric(rid, "is_db_alive", "Minimum,Count", start, end,
+                                                                      interval="PT1M"))
             entry["activityLog"] = activity(rid, start, end)
+            entry["healthEvents"] = health_events(rid, start, end)
         except Exception as exc:  # report, never guess
             entry["error"] = str(exc)
         out[kind] = entry
@@ -114,8 +137,10 @@ def azure_events(cluster_id: str, onset_ms: int, before_min: int = 60, after_min
                         + (" — AOF persistence write failed; Redis refuses writes with MISCONF until it clears"
                            if e["type"] == "AOF" else " — Redis failover (patching/maintenance)" if e["type"] == "Failover" else ""))
     for t in out.get("postgres", {}).get("notAliveWindows", []):
-        findings.append(f"Azure Postgres {out['postgres']['name']}: not alive in the 5 min from {t} (restart/failover)")
+        findings.append(f"Azure Postgres {out['postgres']['name']}: not alive / liveness samples missing in the minute from {t} (restart/failover)")
     for kind in ("redis", "postgres"):
+        for h in out.get(kind, {}).get("healthEvents", []):
+            findings.append(f"Azure Resource Health for {kind} {out[kind]['name']}: {h['type']} '{h['title']}' at {h['time']}")
         if out.get(kind, {}).get("error"):
             findings.append(f"Azure {kind} lookup FAILED ({out[kind]['error'][:120]}) — "
                             f"nothing is known about {out[kind]['name']}; do not read this as healthy")

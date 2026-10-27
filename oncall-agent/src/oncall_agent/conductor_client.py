@@ -218,7 +218,7 @@ class ConductorDispatcher:
         """The next ``n`` health checks after the alert: did it recover or keep failing?"""
         result = self._call(lambda: self._wf.search(
             start=0, size=50, free_text=cluster_id,
-            query=f"workflowType IN (health_check) AND startTime>{at_ms + 60_000}",
+            query=f"workflowType IN (health_check) AND startTime>{at_ms + 60_000} AND startTime<{at_ms + 7_200_000}",
         ))
         runs = sorted(getattr(result, "results", None) or [],
                       key=lambda r: _epoch_ms(getattr(r, "start_time", None)) or 0)[:n]
