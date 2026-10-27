@@ -87,10 +87,22 @@ def get_incident_details(execution_id: str) -> dict:
                           for name, p in pods.items() if isinstance(p, dict) and p.get("healthy") is False}
                 if failed:
                     component_health[ref]["failedPods"] = failed
+    from datetime import datetime, timezone
+    ctx = _context(execution_id)
+    info = _disp().alert_info(execution_id)
+    utc = lambda ms: datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ") if ms else None
+    onset = _disp().failing_since(ctx.get("clusterId"), info["alert_ms"], info["issues"]) if info["alert_ms"] else 0
+    after = _disp().runs_after(ctx.get("clusterId"), info["alert_ms"]) if info["alert_ms"] and ctx.get("clusterId") else []
     return {
         "executionId": execution_id,
         "status": wf.get("status"),
-        "context": _context(execution_id),
+        # When it happened and what came after — judge everything against these, not "now".
+        "alertTimeUtc": utc(info["alert_ms"]),
+        "failingSinceUtc": utc(onset),
+        "runsAfterAlert": after,
+        "recoveredAfterAlert": (None if not after else
+                                next((r["startTime"] for r in after if not r["failing"]), False)),
+        "context": ctx,
         "issues": issues,
         # redis usage + queue sizes + heap/cpu/postgres — almost all you need, no SQL.
         "clusterData": cluster_data,
