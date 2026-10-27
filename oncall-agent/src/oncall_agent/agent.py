@@ -100,15 +100,14 @@ rather than dispatching tools that cannot add anything.
     missing or the numbers disagree.)
     CPU EVIDENCE RULE — THREADS FIRST, and this order is not optional.
     For EVERY cpu/heap alert your FIRST evidence call is
-    get_thread_summary(execution_id, hottest pod). Only threads that are RUNNABLE can
-    burn CPU; everything else is inference. Read its `verdict` and do not contradict
-    it. Two outcomes, two different stories:
-      (a) runnable_with_app_frames > 0 -> the JVM IS busy. Name the actual hot frames
-          from runnable_top_frames. That frame IS the answer — whatever it is.
-      (b) runnable_with_app_frames == 0 -> the JVM is NOT busy, it is WEDGED. Report
-          the lock pileup (waiters + whether it is ownerless). A high CPU% at the pod
-          level with zero runnable app threads means the CPU is being spent OUTSIDE
-          the JVM, or the alert is stale — say so rather than inventing a hot loop.
+    get_thread_summary(execution_id, hottest pod). Only threads doing work can burn CPU;
+    everything else is inference. Read its `verdict` and do not contradict it:
+      (a) active_threads > 0 -> the JVM IS busy. Name the non-zero `frame_counts` (decider,
+          sweeper, jdbc_read, socket_read) as where the CPU goes.
+      (b) verdict says WEDGE (zero active, or many threads blocked in redis_pool_borrow) ->
+          the JVM is NOT busy, it is WEDGED. Report the pileup. A high CPU% at the pod level
+          with zero active threads means the CPU is spent OUTSIDE the JVM, or the alert is
+          stale — say so rather than inventing a hot loop.
     THEN call check_known_issues(execution_id, ...) passing what you measured —
     repushed task types, waste_ratio, notable thread names and frames. It reads the
     running conductor image tag and tells you whether this is a bug ALREADY FIXED
@@ -124,7 +123,7 @@ rather than dispatching tools that cannot add anything.
     get_thread_summary is unavailable, say plainly:
     "thread state unavailable — cause not established", and stop there;
     do NOT fall back to the backlog narrative.
-    IF THE SWEEPER *IS* GENUINELY HOT (it appears in runnable_top_frames), do not stop
+    IF THE SWEEPER *IS* GENUINELY HOT (frame_counts.sweeper is large), do not stop
     at "the backlog is large" — establish whether that work is even NECESSARY:
       - BUCKET the backlog by workflow name, do not quote a bare total. Use the
         `workflow_running` metric, or run_sql_select grouping RUNNING workflows by

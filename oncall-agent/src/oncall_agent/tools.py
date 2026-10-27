@@ -347,7 +347,12 @@ def get_thread_summary(execution_id: str, pod_name: str) -> dict:
         return int(raw) if raw.isdigit() else 0
 
     total = count("^#")
-    parked = count("Unsafe.park")
+    # Every way a thread waits without burning CPU — not just Unsafe.park. Counting only
+    # park left Object.wait / sleep / epoll / accept / unmounted virtual threads as
+    # "active", so the WEDGE verdict could never fire.
+    parked = sum(count(p) for p in ("Unsafe.park", "Object.wait", "Thread.sleep",
+                                    "EPoll.wait", "KQueue.poll", "Net.accept",
+                                    "VirtualThread.park", "Continuation.yield"))
     counts = {
         "redis_pool_borrow": count("GenericObjectPool.borrowObject"),
         "lock_acquire": count("ReentrantLock.lock"),
