@@ -476,7 +476,7 @@ def get_azure_events(execution_id: str) -> dict:
         return {"error": "alert time not found on the execution"}
     onset_ms = _disp().failing_since(ctx.get("clusterId"), info["alert_ms"], info["issues"])
     try:
-        return azure_events(ctx.get("clusterName"), onset_ms)
+        return azure_events(ctx.get("clusterId"), onset_ms)
     except Exception as exc:
         return {"error": "azure_lookup_failed", "detail": str(exc)[:300]}
 

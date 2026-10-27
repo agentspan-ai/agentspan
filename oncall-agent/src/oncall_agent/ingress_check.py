@@ -70,7 +70,7 @@ def check_ingresses(ingress_text: str, class_text: str, cert_text: str,
         ingresses.append(ing)
         if name.startswith("cm-acme-http-solver"):
             continue
-        if klass != "<none>" and klass not in classes:
+        if klass != "<none>" and classes and klass not in classes:
             problems.append(f"ingress {name} uses class '{klass}', which no IngressClass defines "
                             f"(have {sorted(classes)}): NO controller serves {', '.join(hosts)}")
         for host in hosts:
@@ -86,5 +86,8 @@ def check_ingresses(ingress_text: str, class_text: str, cert_text: str,
     for r in _rows(cert_text):
         if len(r) >= 3 and r[2] != "True":
             problems.append(f"Certificate {r[0]}/{r[1]} is not Ready: {' '.join(r[3:])}")
+    if not classes:
+        problems.append("IngressClass list could not be read (empty or Forbidden) — "
+                        "whether a controller serves each ingress is UNKNOWN, not established")
     return {"healthy": not problems, "problems": problems, "ingresses": ingresses,
             "ingressClasses": sorted(classes), "servedCertificates": served}

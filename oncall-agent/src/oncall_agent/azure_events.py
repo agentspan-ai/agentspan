@@ -26,11 +26,11 @@ def _run(args: list[str], timeout: int = 120) -> str:
     return p.stdout
 
 
-def resolve(cluster: str) -> dict:
-    """Azure Redis and Postgres (name, resource group, subscription) for a cluster."""
+def resolve(cluster_id: str) -> dict:
+    """Azure Redis and Postgres (name, resource group, subscription) for a cluster id."""
     sql = f"""
     WITH c AS (SELECT azure_redis_instance_id rid, azure_db_instance_id did FROM `{_SAAS}.clusters`
-               WHERE snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY) AND name = @cluster
+               WHERE snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY) AND id = @cluster
                QUALIFY ROW_NUMBER() OVER (ORDER BY snapshot_date DESC) = 1)
     SELECT 'redis' kind, r.name, r.resource_group, r.subscription_id FROM `{_SAAS}.azure_redis_instances` r, c
       WHERE r.snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY) AND r.id = c.rid
@@ -38,7 +38,7 @@ def resolve(cluster: str) -> dict:
     SELECT 'postgres', d.name, d.resource_group, d.subscription_id FROM `{_SAAS}.azure_db_instances` d, c
       WHERE d.snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY) AND d.id = c.did"""
     out = _run(["bq", f"--project_id={_BQ_PROJECT}", "query", "--use_legacy_sql=false", "--format=json",
-                f"--parameter=cluster::{cluster}", sql])
+                f"--parameter=cluster::{cluster_id}", sql])
     found = {}
     for row in json.loads(out or "[]"):
         found.setdefault(row["kind"], row)
@@ -85,15 +85,15 @@ def activity(rid: str, start: str, end: str) -> list[dict]:
              "caller": r.get("caller")} for r in rows][:20]
 
 
-def azure_events(cluster: str, onset_ms: int, before_min: int = 60, after_min: int = 30) -> dict:
+def azure_events(cluster_id: str, onset_ms: int, before_min: int = 60, after_min: int = 30) -> dict:
     """Redis errors, Postgres liveness and activity-log events around the failure onset."""
     onset = datetime.fromtimestamp(onset_ms / 1000, tz=timezone.utc)
     start = (onset - timedelta(minutes=before_min)).strftime("%Y-%m-%dT%H:%M:%SZ")
     end = (onset + timedelta(minutes=after_min)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    res = resolve(cluster)
+    res = resolve(cluster_id)
     if not res:
         return {"error": "not_azure_or_unresolved",
-                "detail": f"no Azure Redis/Postgres found for {cluster} in the saas DB replica"}
+                "detail": f"no Azure Redis/Postgres found for cluster {cluster_id} in the saas DB replica"}
     out: dict = {"window": [start, end], "failureOnset": onset.isoformat()}
     for kind, r in res.items():
         r = {**r, "kind": kind}
@@ -115,5 +115,9 @@ def azure_events(cluster: str, onset_ms: int, before_min: int = 60, after_min: i
                            if e["type"] == "AOF" else " — Redis failover (patching/maintenance)" if e["type"] == "Failover" else ""))
     for t in out.get("postgres", {}).get("notAliveWindows", []):
         findings.append(f"Azure Postgres {out['postgres']['name']}: not alive in the 5 min from {t} (restart/failover)")
+    for kind in ("redis", "postgres"):
+        if out.get(kind, {}).get("error"):
+            findings.append(f"Azure {kind} lookup FAILED ({out[kind]['error'][:120]}) — "
+                            f"nothing is known about {out[kind]['name']}; do not read this as healthy")
     out["findings"] = findings or ["Azure reported no Redis errors, no Postgres downtime in the window"]
     return out
