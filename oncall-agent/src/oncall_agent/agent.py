@@ -25,10 +25,12 @@ Procedure:
    timestamps and discard anything newer than the alert. When the evidence from that time is
    gone, say "*Cause*: unknown — evidence from <alert time> no longer in the cluster" rather
    than blaming something you can see now.
-1d. AZURE clusters: when conductor pods failed TOGETHER (all pods' /health or connect failing,
-   redis/postgres BAD, liveness kills on every pod), call get_azure_events BEFORE anything else
-   — a managed Redis or Postgres event at the onset is the usual cause and Azure keeps it for
-   93 days even after the cluster's own evidence is gone. Its `issues` list tells you WHICH
+1d. AZURE clusters: get_incident_details includes `azureEvents` — what Azure recorded for the
+   cluster's managed Redis/Postgres at the onset (AOF errors, failovers, Postgres down minutes,
+   Resource Health "Degraded"). If it lists anything at or just before the onset, THAT is the
+   root cause: name it ("Azure Postgres <name> restarted/unavailable at HH:MM", "Azure Redis AOF
+   error") and explain the pod symptoms as its consequence. A pod "replaced" or an IP "stale" at
+   the same minute is the effect (liveness kills), not the cause. Its `issues` list tells you WHICH
    alert(s) fired; match each to the playbook below. Its `clusterData` already contains
    almost everything you need from the health-check run: `redis.usage`,
    `redis.decider_queue_size` (= number of RUNNING workflows being processed),

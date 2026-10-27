@@ -49,6 +49,17 @@ def _context(execution_id: str) -> dict:
     return _ctx_cache[execution_id]
 
 
+def _azure_findings(cluster_id: str | None, onset_ms: int) -> list[str] | None:
+    """Azure findings for an Azure cluster, None for other clouds or when unavailable."""
+    if not cluster_id or not onset_ms:
+        return None
+    try:
+        res = azure_events(cluster_id, onset_ms)
+    except Exception as exc:
+        return [f"Azure lookup failed: {str(exc)[:150]}"]
+    return None if res.get("error") == "not_azure_or_unresolved" else res.get("findings")
+
+
 @tool(timeout_seconds=_T)
 def get_incident_details(execution_id: str) -> dict:
     """Fetch the failing health_check execution: the detected issues (with severity),
@@ -102,6 +113,9 @@ def get_incident_details(execution_id: str) -> dict:
         "runsAfterAlert": after,
         "recoveredAfterAlert": (None if not after else
                                 next((r["startTime"] for r in after if not r["failing"]), False)),
+        # Managed Redis/Postgres events at the onset, always included: the model skipped the
+        # separate tool on exactly the incidents it explains (eval 2026-10-27).
+        "azureEvents": _azure_findings(ctx.get("clusterId"), onset or info["alert_ms"]),
         "context": ctx,
         "issues": issues,
         # redis usage + queue sizes + heap/cpu/postgres — almost all you need, no SQL.
