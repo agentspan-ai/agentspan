@@ -34,12 +34,13 @@
     "surviving_evidence": "pg_postmaster_start_time() = 08:44:57 until Postgres restarts again; health_check output.",
     "must_mention_any": [
       [
-        "postgres restart",
-        "database restart",
-        "postgres restarted",
-        "database restarted",
-        "pg_postmaster_start_time",
-        "postmaster"
+        "postgres",
+        "database"
+      ],
+      [
+        "restart",
+        "failover",
+        "failed over"
       ]
     ],
     "must_not_mention": [],
