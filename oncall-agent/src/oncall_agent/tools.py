@@ -156,7 +156,7 @@ def get_alert_recurrence(execution_id: str, alert_signature: str) -> dict:
     Args:
         execution_id: incident execution id (used to resolve the cluster).
         alert_signature: a SHORT, STABLE phrase identifying the alert TYPE — e.g.
-            "Conductor Server CPU usage", "Redis instance is at", "has failed",
+            "Conductor Server CPU usage", "Redis instance is at", "Conductor has failed",
             "Prometheus is down". Do NOT include the varying numbers (percentages,
             pod ids) — that would defeat the match. Take it from the issues text.
     """

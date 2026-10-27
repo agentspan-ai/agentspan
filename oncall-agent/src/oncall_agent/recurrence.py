@@ -106,10 +106,15 @@ def summarize_recurrence(runs: list[dict], alert_signature: str) -> RecurrenceRe
     sig = bool(sig_tokens)
     sample_size = len(runs)
 
+    # Match against the ISSUE lines only: the first line ("The health-checking has FAILED
+    # for ...") is shared by every alert, so a signature like "has failed" matched them all.
+    def _issue_text(reason: str) -> str:
+        return "\n".join(reason.splitlines()[1:])
+
     matched = [
         r
         for r in runs
-        if sig and sig_tokens <= _tokens(str(r.get("reason") or ""))
+        if sig and sig_tokens <= _tokens(_issue_text(str(r.get("reason") or "")))
     ]
     matched_count = len(matched)
     fraction = (matched_count / sample_size) if sample_size else 0.0
