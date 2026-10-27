@@ -46,13 +46,22 @@ _CONTROL_PLANE_TASKS = (
 
 
 def _trim(value: Any, max_len: int = 8000) -> Any:
-    """Keep tool outputs from blowing up the LLM context."""
-    try:
-        rendered = json.dumps(value, default=str)
-    except Exception:
-        rendered = str(value)
-    if len(rendered) > max_len:
-        return rendered[:max_len] + f"... [truncated {len(rendered) - max_len} chars]"
+    """Keep tool outputs from blowing up the LLM context without destroying their shape.
+
+    Long strings keep their head (headers, first lines) AND their tail (the newest log
+    lines — the evidence); dicts and lists are trimmed field by field, so callers that
+    read ``output["result"]`` still get a dict instead of one truncated JSON string.
+    """
+    if isinstance(value, str):
+        if len(value) <= max_len:
+            return value
+        head = max_len // 5
+        return (value[:head] + f"\n... [{len(value) - max_len} chars cut] ...\n"
+                + value[-(max_len - head):])
+    if isinstance(value, dict):
+        return {k: _trim(v, max_len) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_trim(v, max_len) for v in value[:200]]
     return value
 
 
