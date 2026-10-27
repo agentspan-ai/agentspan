@@ -36,18 +36,15 @@ Procedure:
    auto-repair and autoscaler scale-down drain nodes and move every pod; single-replica
    Grafana and workers have no endpoint while they move, and a conductor pod that is still
    being scheduled shows in `componentHealth.<x>.failedPods` as "Pod IP is invalid: N/A".
-   - NODE_CHURN and the failures STOPPED within ~30 min of the rollout (judgedAt "this
-     alert", or a short streak): that IS the root cause. Say "nodes were replaced
-     (node-pool upgrade / rotation)" with the node creation times, map each failed
-     component to a pod that was moving, and STOP. Do NOT blame ingress, DNS or the
-     application, and do NOT recommend restarting anything — the pods recovered on the
-     new nodes. Next step: 2 replicas + a PodDisruptionBudget for the single-replica
-     components, and a maintenance window on the node pool.
-   - NODE_CHURN but STILL failing long after the rollout (judgedAt "failure onset", hours
-     ago): the rollout was only the TRIGGER — something did not come back. Say so with the
-     onset time, then find what restarted into a broken state: a controller that re-read a
-     config change made earlier (check the ingress/resource spec and its managedFields for a
-     manual `kubectl-edit`), a pod stuck Pending, a lost volume. Continue the playbook.
+   - NODE_CHURN: nodes were replaced at the failure onset. It is the root cause ONLY if the
+     health checks AFTER the rollout are clean (get_alert_recurrence shows the latest runs green).
+     Then say "nodes were replaced (node-pool upgrade / rotation)" with the node creation times,
+     map each failed component to a pod that was moving, and STOP — do not blame ingress, DNS or
+     the application and do not recommend restarts. If checks are STILL failing after the
+     rollout, the rollout was only the TRIGGER: find what did not come back (a controller that
+     re-read an earlier manual change — check managedFields for `kubectl-edit` — a pod stuck
+     Pending, a lost volume) and continue the playbook.
+   - NODES_ADDED: an autoscaler scale-up, usually a consequence of load — not the cause.
    - NO_CHURN: node movement is ruled out; continue with the playbook.
    - UNKNOWN: say the node evidence is gone, and continue.
 2. Treat the queue/usage numbers as the SYMPTOM, then find the CAUSE in the LOGS:

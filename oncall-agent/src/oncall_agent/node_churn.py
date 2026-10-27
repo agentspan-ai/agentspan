@@ -66,27 +66,35 @@ def summarize_node_churn(nodes_text: str, events_text: str, alert_ms: int) -> di
         if at is not None and -_BEFORE_S <= (at - alert).total_seconds() <= _AFTER_S:
             events.append({"time": row[0], "reason": row[1], "node": row[2]})
 
+    onset_age_s = (datetime.now(timezone.utc) - alert).total_seconds()
     if not nodes:
         verdict = "UNKNOWN"
         detail = "node list unavailable; cannot tell whether nodes changed"
-    elif fresh and (len(fresh) == len(nodes) or len(fresh) >= 2 or events):
+    elif fresh and (len(fresh) == len(nodes) or events):
         verdict = "NODE_CHURN"
         detail = (f"{len(fresh)} of {len(nodes)} nodes were created within "
-                  f"{_BEFORE_S // 60} min before / {_AFTER_S // 60} min after the alert"
+                  f"{_BEFORE_S // 60} min before / {_AFTER_S // 60} min after the failure onset"
                   + (f", with {len(events)} node drain/removal events" if events else "")
-                  + ": a node-pool upgrade, auto-repair or scale-down moved the pods.")
-    elif fresh or events:
+                  + ": nodes were REPLACED (node-pool upgrade, auto-repair or scale-down moved the pods).")
+    elif fresh:
+        verdict = "NODES_ADDED"
+        detail = (f"{len(fresh)} node(s) were added near the onset with no node removal recorded — "
+                  "likely an autoscaler scale-up (a consequence of load), not a cause.")
+    elif events:
         verdict = "PARTIAL_CHURN"
-        detail = (f"{len(fresh)} node(s) created and {len(events)} node event(s) near the alert; "
-                  "one node replaced — pods on it moved.")
+        detail = f"{len(events)} node drain/removal event(s) near the onset; pods on those nodes moved."
     elif any(n["createdMinutesFromAlert"] * 60 > _AFTER_S for n in nodes):
         verdict = "UNKNOWN"
-        detail = ("nodes were replaced AFTER the alert, so the nodes present at alert time are gone; "
-                  "node churn at the alert can no longer be judged from the cluster.")
+        detail = ("nodes were replaced AFTER the onset, so the nodes present then are gone; "
+                  "node churn at the onset can no longer be judged from the cluster.")
+    elif onset_age_s > 3600:
+        verdict = "UNKNOWN"
+        detail = ("no new nodes near the onset, but it is over an hour old: node events have expired "
+                  "and a removed (scaled-down) node leaves no trace — churn cannot be ruled out.")
     else:
         verdict = "NO_CHURN"
         newest = max(n["createdMinutesFromAlert"] for n in nodes)
-        detail = (f"every node predates the alert (newest created {abs(newest):.0f} min before it); "
-                  "node movement did not cause this alert.")
+        detail = (f"every node predates the onset (newest created {abs(newest):.0f} min before it) and "
+                  "no node events: node movement did not cause this alert.")
     return {"verdict": verdict, "detail": detail, "freshNodes": fresh,
             "nodeEvents": events, "nodeCount": len(nodes)}
