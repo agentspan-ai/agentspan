@@ -9,6 +9,16 @@ from oncall_agent import slack_app
 from oncall_agent.config import Config
 from oncall_agent.slack_app import run_once
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolated_state(tmp_path, monkeypatch):
+    # _load_state falls back to the legacy /tmp state file when the configured one
+    # is missing — never let a real listener's state leak into these tests.
+    monkeypatch.setattr(slack_app, "_LEGACY_STATE", tmp_path / "no-legacy-state.json")
+
+
 CHANNEL = "C123"
 ALERT = (
     "[CRITICAL] The health-checking has FAILED for the Vizient's prod viz-stage cluster:\n"
@@ -29,19 +39,19 @@ class FakeSlack:
 
 
 class FakeResult:
-    output = "*Issue*: redis high\n*Likely root cause*: queue backlog"
+    output = "*Cause*: queue backlog\n*Action*: none\n*Evidence*: redis high"
 
 
 class DictOutputResult:
     """Mirrors the real AgentRuntime result: ``.output`` is a dict with the
     agent's text under ``result`` (seen live against the server, 2026-07-22).
     The text often leads with narration despite instructions — the posted
-    reply must start at *Issue*:."""
+    reply must start at *Cause*:."""
 
     output = {
         "result": (
             "I have all the data I need. Let me compile the summary.\n\n---\n\n"
-            "*Issue*: pod failed\n*Likely root cause*: stale pod from rollout"
+            "*Cause*: stale pod from rollout\n*Action*: none\n*Evidence*: pod failed"
         ),
         "finishReason": "COMPLETED",
         "context": {},
@@ -79,9 +89,9 @@ def _cfg(tmp_path) -> Config:
 
 def test_only_alert_messages_are_triaged(tmp_path):
     slack = FakeSlack([
-        {"type": "message", "ts": "1.0", "text": "morning all"},
-        {"type": "message", "ts": "2.0", "text": ALERT},
-        {"type": "message", "ts": "3.0", "text": "lunch?"},
+        {"type": "message", "bot_id": "B1", "ts": "1.0", "text": "morning all"},
+        {"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT},
+        {"type": "message", "bot_id": "B1", "ts": "3.0", "text": "lunch?"},
     ])
     runtime = FakeRuntime()
     handled = run_once(_cfg(tmp_path), slack, runtime, agent=object())
@@ -92,12 +102,12 @@ def test_only_alert_messages_are_triaged(tmp_path):
     assert "364b459a-689f-11f1-94b6-de01f12a4ed9" in runtime.calls[0]
     # Two replies (starting + summary), both threaded under the alert message ts "2.0".
     assert [p[1] for p in slack.posts] == ["2.0", "2.0"]
-    assert any("Likely root cause" in p[2] for p in slack.posts)
+    assert any("*Cause*: queue backlog" in p[2] for p in slack.posts)
 
 
 def test_dedup_across_polls(tmp_path):
     cfg = _cfg(tmp_path)
-    msgs = [{"type": "message", "ts": "2.0", "text": ALERT}]
+    msgs = [{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}]
     runtime = FakeRuntime()
 
     first = run_once(cfg, FakeSlack(msgs), runtime, agent=object())
@@ -111,21 +121,21 @@ def test_dedup_across_polls(tmp_path):
 def test_dict_output_result_posts_summary_text(tmp_path):
     """The runtime's result.output is a dict — the thread reply must carry the
     agent's text, not a stringified dict or a 'Triage failed' error."""
-    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    slack = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}])
     handled = run_once(_cfg(tmp_path), slack, DictOutputRuntime(), agent=object())
 
     assert handled == 1
     assert not any("Triage failed" in p[2] for p in slack.posts)
     summary = slack.posts[-1][2]
-    assert "Likely root cause" in summary
+    assert "*Cause*: stale pod from rollout" in summary
     assert "finishReason" not in summary  # not a dumped dict
-    # LLM preamble before *Issue*: is stripped deterministically (seen twice live).
+    # LLM preamble before *Cause*: is stripped deterministically (seen twice live).
     assert "all the data I need" not in summary
-    assert summary.splitlines()[1].startswith("*Issue*:")  # line 0 is the dry-run header
+    assert summary.splitlines()[1].startswith("*Cause*:")  # line 0 is the dry-run header
 
 
 def test_triage_failure_is_reported_not_raised(tmp_path):
-    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    slack = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}])
     handled = run_once(_cfg(tmp_path), slack, FailingRuntime(), agent=object())
 
     assert handled == 1
@@ -171,8 +181,8 @@ def test_channels_property_splits_and_strips():
 def test_both_channels_polled_and_replies_stay_in_their_channel(tmp_path):
     # Distinct incidents per channel — identical ones are signature-suppressed.
     slack = MultiChannelSlack({
-        "C1": [{"type": "message", "ts": "1.0", "text": ALERT}],
-        "C2": [{"type": "message", "ts": "2.0", "text": OTHER_ALERT}],
+        "C1": [{"type": "message", "bot_id": "B1", "ts": "1.0", "text": ALERT}],
+        "C2": [{"type": "message", "bot_id": "B1", "ts": "2.0", "text": OTHER_ALERT}],
     })
     runtime = FakeRuntime()
     handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
@@ -186,8 +196,8 @@ def test_same_ts_in_different_channels_is_not_cross_deduped(tmp_path):
     # ts values are per-channel in Slack; identical ts in two channels must both
     # run (distinct incidents — identical ones are signature-suppressed instead).
     slack = MultiChannelSlack({
-        "C1": [{"type": "message", "ts": "5.0", "text": ALERT}],
-        "C2": [{"type": "message", "ts": "5.0", "text": OTHER_ALERT}],
+        "C1": [{"type": "message", "bot_id": "B1", "ts": "5.0", "text": ALERT}],
+        "C2": [{"type": "message", "bot_id": "B1", "ts": "5.0", "text": OTHER_ALERT}],
     })
     runtime = FakeRuntime()
     handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
@@ -197,8 +207,8 @@ def test_same_ts_in_different_channels_is_not_cross_deduped(tmp_path):
 def test_same_incident_across_channels_is_triaged_once(tmp_path):
     # The digest and raw channel carry the SAME incident — one triage total.
     slack = MultiChannelSlack({
-        "C1": [{"type": "message", "ts": "1.0", "text": ALERT}],
-        "C2": [{"type": "message", "ts": "2.0", "text": ALERT_B}],
+        "C1": [{"type": "message", "bot_id": "B1", "ts": "1.0", "text": ALERT}],
+        "C2": [{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT_B}],
     })
     runtime = FakeRuntime()
     handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
@@ -223,9 +233,9 @@ OTHER_ALERT = (
 def test_same_signature_within_cooldown_is_not_retriaged(tmp_path):
     cfg = _cfg(tmp_path)
     runtime = FakeRuntime()
-    first = run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]),
+    first = run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "1.0", "text": ALERT}]),
                      runtime, agent=object())
-    slack2 = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}])
+    slack2 = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT_B}])
     second = run_once(cfg, slack2, runtime, agent=object())
 
     assert first == 1
@@ -237,8 +247,8 @@ def test_same_signature_within_cooldown_is_not_retriaged(tmp_path):
 def test_different_signature_is_triaged(tmp_path):
     cfg = _cfg(tmp_path)
     runtime = FakeRuntime()
-    run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]), runtime, agent=object())
-    handled = run_once(cfg, FakeSlack([{"type": "message", "ts": "2.0", "text": OTHER_ALERT}]),
+    run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "1.0", "text": ALERT}]), runtime, agent=object())
+    handled = run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": OTHER_ALERT}]),
                        runtime, agent=object())
     assert handled == 1
     assert len(runtime.calls) == 2
@@ -254,9 +264,12 @@ def test_signature_handled_after_cooldown_expires(tmp_path, monkeypatch):
     runtime = FakeRuntime()
     clock = {"now": 1000.0}
     monkeypatch.setattr(app.time, "time", lambda: clock["now"])
-    run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]), runtime, agent=object())
+    # The cluster has failed continuously since the stored diagnosis (normally read
+    # from the dispatch server) -> the memory entry applies.
+    monkeypatch.setattr(app, "_same_incident", lambda prior, execution_id: True)
+    run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "1.0", "text": ALERT}]), runtime, agent=object())
     clock["now"] += app._SIGNATURE_COOLDOWN_S + 1
-    slack2 = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}])
+    slack2 = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT_B}])
     handled = run_once(cfg, slack2, runtime, agent=object())
     assert handled == 1
     assert len(runtime.calls) == 1          # memory answered; no second LLM run
@@ -283,8 +296,8 @@ def test_same_execution_id_across_channels_is_triaged_once(tmp_path):
     assert alert_signature(raw_fmt) != alert_signature(digest_fmt)  # precondition of the bug
 
     slack = MultiChannelSlack({
-        "C1": [{"type": "message", "ts": "1.0", "text": raw_fmt}],
-        "C2": [{"type": "message", "ts": "2.0", "text": digest_fmt}],
+        "C1": [{"type": "message", "bot_id": "B1", "ts": "1.0", "text": raw_fmt}],
+        "C2": [{"type": "message", "bot_id": "B1", "ts": "2.0", "text": digest_fmt}],
     })
     runtime = FakeRuntime()
     handled = run_once(_cfg_multi(tmp_path), slack, runtime, agent=object())
@@ -297,8 +310,24 @@ def test_signature_arm_is_persisted_before_the_triage_runs(tmp_path):
     post) was absorbed by the per-channel guard AFTER the in-memory signature/
     execution arm but BEFORE the save — the arm was lost and later firings of
     the same incident re-triaged. The arm must hit disk before the LLM runs."""
-    import json
+    cfg = _cfg(tmp_path)
+    on_disk = {}
 
+    class SnapshottingRuntime(FakeRuntime):
+        def run(self, agent, prompt, **kwargs):
+            on_disk.update(json.loads(Path(cfg.state_file).read_text()))
+            return super().run(agent, prompt, **kwargs)
+
+    run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}]),
+             SnapshottingRuntime(), agent=object())
+
+    assert on_disk.get("signatures"), "signature arm must be persisted pre-triage"
+    assert "364b459a-689f-11f1-94b6-de01f12a4ed9" in on_disk.get("executions", {})
+
+
+def test_failed_start_post_unmarks_the_alert_for_retry(tmp_path):
+    """If the ':mag:' post itself fails, the seen-marks are rolled back so the next
+    poll retries the alert instead of skipping it as already handled."""
     cfg = _cfg(tmp_path)
 
     class CrashingSlack(FakeSlack):
@@ -306,13 +335,14 @@ def test_signature_arm_is_persisted_before_the_triage_runs(tmp_path):
             raise RuntimeError("slack hiccup")  # crashes on the ':mag:' post
 
     runtime = FakeRuntime()
-    handled = run_once(cfg, CrashingSlack([{"type": "message", "ts": "2.0", "text": ALERT}]),
+    handled = run_once(cfg, CrashingSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}]),
                        runtime, agent=object())
 
-    assert handled == 0            # the triage never completed
+    assert handled == 0            # the triage never started
+    assert runtime.calls == []
     state = json.loads(open(cfg.state_file).read())
-    assert state.get("signatures"), "signature arm must be persisted pre-triage"
-    assert "364b459a-689f-11f1-94b6-de01f12a4ed9" in state.get("executions", {})
+    assert not state.get("signatures")
+    assert "364b459a-689f-11f1-94b6-de01f12a4ed9" not in state.get("executions", {})
 
 
 # ── incident memory (token burn on repeat firings) ──────────────────────
@@ -324,9 +354,9 @@ def test_signature_arm_is_persisted_before_the_triage_runs(tmp_path):
 # the prior diagnosis included in the prompt.
 
 MEMORY_RESULT = (
-    "*Issue*: CPU pinned\n*Findings*:\n- stuff\n"
-    "*Likely root cause*: sweeper timeout storm against stale peer IPs\n"
-    "*Suggested next step*: rolling restart"
+    "*Cause*: sweeper timeout storm against stale peer IPs\n"
+    "*Action*: rolling restart\n"
+    "*Evidence*: CPU pinned"
 )
 
 
@@ -348,14 +378,15 @@ def test_repeat_firing_within_interval_replies_from_memory_without_llm(tmp_path,
     cfg = _cfg(tmp_path)
     clock = {"now": 1000.0}
     monkeypatch.setattr(app.time, "time", lambda: clock["now"])
+    monkeypatch.setattr(app, "_same_incident", lambda prior, execution_id: True)
     runtime = MemoryRuntime()
 
-    first = run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]),
+    first = run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "1.0", "text": ALERT}]),
                      runtime, agent=object())
     assert first == 1 and len(runtime.calls) == 1
 
     clock["now"] += app._SIGNATURE_COOLDOWN_S + 1  # cooldown expired, interval not
-    slack2 = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}])
+    slack2 = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT_B}])
     second = run_once(cfg, slack2, runtime, agent=object())
 
     assert len(runtime.calls) == 1          # NO new LLM run
@@ -371,12 +402,13 @@ def test_full_retriage_after_interval_includes_prior_diagnosis(tmp_path, monkeyp
     cfg = _cfg(tmp_path)
     clock = {"now": 1000.0}
     monkeypatch.setattr(app.time, "time", lambda: clock["now"])
+    monkeypatch.setattr(app, "_same_incident", lambda prior, execution_id: True)
     runtime = MemoryRuntime()
 
-    run_once(cfg, FakeSlack([{"type": "message", "ts": "1.0", "text": ALERT}]),
+    run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "1.0", "text": ALERT}]),
              runtime, agent=object())
     clock["now"] += app._FULL_TRIAGE_INTERVAL_S + 1
-    run_once(cfg, FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT_B}]),
+    run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT_B}]),
              runtime, agent=object())
 
     assert len(runtime.calls) == 2           # full re-triage ran
@@ -406,7 +438,7 @@ class HangingRuntime:
 
 def test_hung_triage_does_not_wedge_the_loop(tmp_path, monkeypatch):
     monkeypatch.setattr(slack_app, "_TRIAGE_DEADLINE_S", 1)
-    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    slack = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}])
     runtime = HangingRuntime()
     try:
         started = time.monotonic()
@@ -417,7 +449,7 @@ def test_hung_triage_does_not_wedge_the_loop(tmp_path, monkeypatch):
         assert elapsed < 10                      # returned on the deadline, not on release
         assert handled == 1                      # counted, so the loop moves on
         assert any("gave up after" in p[2] for p in slack.posts)
-        assert not any("Likely root cause" in p[2] for p in slack.posts)
+        assert not any("*Cause*: queue backlog" in p[2] for p in slack.posts)
     finally:
         runtime.release.set()
 
@@ -439,8 +471,8 @@ def test_loop_keeps_triaging_after_a_timeout(tmp_path, monkeypatch):
             return FakeResult()
 
     slack = MultiChannelSlack({
-        "C1": [{"type": "message", "ts": "1.0", "text": ALERT}],
-        "C2": [{"type": "message", "ts": "2.0", "text": OTHER_ALERT}],
+        "C1": [{"type": "message", "bot_id": "B1", "ts": "1.0", "text": ALERT}],
+        "C2": [{"type": "message", "bot_id": "B1", "ts": "2.0", "text": OTHER_ALERT}],
     })
     runtime = OneHangThenWork()
     try:
@@ -448,7 +480,7 @@ def test_loop_keeps_triaging_after_a_timeout(tmp_path, monkeypatch):
         assert handled == 2
         assert len(runtime.calls) == 2
         assert any("gave up after" in p[2] for p in slack.posts)      # C1 abandoned
-        assert any("Likely root cause" in p[2] for p in slack.posts)  # C2 still triaged
+        assert any("*Cause*: queue backlog" in p[2] for p in slack.posts)  # C2 still triaged
     finally:
         hung.release.set()
 
@@ -463,7 +495,7 @@ def test_deadline_passed_through_to_the_runtime(tmp_path, monkeypatch):
             seen.update(kwargs)
             return FakeResult()
 
-    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    slack = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}])
     run_once(_cfg(tmp_path), slack, RecordingRuntime(), agent=object())
     assert seen.get("timeout") == 77
 
@@ -493,14 +525,13 @@ class TerminatedRuntime:
 
 
 def test_terminated_execution_is_not_posted_as_a_diagnosis(tmp_path):
-    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    slack = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}])
     cfg = _cfg(tmp_path)
     handled = run_once(cfg, slack, TerminatedRuntime(), agent=object())
 
     assert handled == 1
     posted = " ".join(p[2] for p in slack.posts)
-    assert "Triage failed" in posted
-    assert "TERMINATED" in posted
+    assert "without a conclusion" in posted  # a non-answer is reported as such
     # The raw result dict must never reach the thread.
     assert "finishReason" not in posted
     assert "TOOL_CALLS" not in posted
@@ -510,7 +541,7 @@ def test_terminated_execution_is_not_written_to_incident_memory(tmp_path):
     """A poisoned memory entry outlives the incident — it is replayed as the
     'PRIOR DIAGNOSIS' on every later firing of the same signature."""
     cfg = _cfg(tmp_path)
-    run_once(cfg, FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}]),
+    run_once(cfg, FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}]),
              TerminatedRuntime(), agent=object())
 
     state = json.loads(Path(cfg.state_file).read_text())
@@ -526,7 +557,7 @@ def test_terminated_execution_is_not_written_to_incident_memory(tmp_path):
 def test_triage_is_skipped_when_tool_workers_are_dead(tmp_path, monkeypatch):
     monkeypatch.setattr(slack_app, "_poll_ages",
                         lambda url, tts: {t: 3071 * 60 for t in tts})
-    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    slack = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}])
     runtime = FakeRuntime()
     handled = run_once(_cfg(tmp_path), slack, runtime, agent=object())
 
@@ -539,10 +570,10 @@ def test_triage_is_skipped_when_tool_workers_are_dead(tmp_path, monkeypatch):
 
 def test_triage_proceeds_normally_when_workers_are_healthy(tmp_path, monkeypatch):
     monkeypatch.setattr(slack_app, "_poll_ages", lambda url, tts: {t: 0.1 for t in tts})
-    slack = FakeSlack([{"type": "message", "ts": "2.0", "text": ALERT}])
+    slack = FakeSlack([{"type": "message", "bot_id": "B1", "ts": "2.0", "text": ALERT}])
     runtime = FakeRuntime()
     handled = run_once(_cfg(tmp_path), slack, runtime, agent=object())
 
     assert handled == 1
     assert len(runtime.calls) == 1, "healthy workers must not block triage"
-    assert any("Likely root cause" in p[2] for p in slack.posts)
+    assert any("*Cause*: queue backlog" in p[2] for p in slack.posts)

@@ -54,10 +54,6 @@ class TriageTimeout(Exception):
     """A single triage exceeded :data:`_TRIAGE_DEADLINE_S` wall-clock seconds."""
 
 
-class TriageIncomplete(Exception):
-    """The agent execution ended FAILED/TERMINATED — no diagnosis to report."""
-
-
 def _run_with_deadline(runtime: AgentRuntime, agent, prompt: str, deadline_s: int):
     """Run the agent, giving up after ``deadline_s`` wall-clock seconds.
 

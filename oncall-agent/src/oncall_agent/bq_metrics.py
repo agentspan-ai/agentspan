@@ -117,3 +117,24 @@ def _ranges(hours: list[int]) -> str:
         if h is not None:
             start = prev = h
     return ", ".join(out)
+
+
+def restart_timeline(cluster: str, onset_ms: int, days: int = 30) -> dict:
+    """Daily restarts per container over the last ``days`` (survives pod moves, unlike restartCount)."""
+    sql = f"""
+    SELECT DATE(metric_timestamp) d, JSON_VALUE(labels, '$.resource') container,
+           MAX(metric_value) - MIN(metric_value) restarts
+    FROM `{_TABLE}`
+    WHERE metric_timestamp BETWEEN TIMESTAMP_SUB(TIMESTAMP(@onset), INTERVAL {int(days)} DAY)
+                               AND TIMESTAMP_ADD(TIMESTAMP(@onset), INTERVAL 1 HOUR)
+      AND cluster_name = @cluster AND metric_name_base = 'infra_k8s_restartCount'
+    GROUP BY 1, 2 HAVING restarts > 0 ORDER BY 1"""
+    rows = _bq(sql, {"cluster": f"STRING:{cluster}", "onset": f"STRING:{_ts(onset_ms)}"})
+    days_out: dict[str, dict[str, int]] = {}
+    for r in rows:
+        days_out.setdefault(r["d"], {})[r["container"]] = int(float(r["restarts"]))
+    total = sum(sum(v.values()) for v in days_out.values())
+    worst = max(days_out.items(), key=lambda kv: sum(kv[1].values()), default=(None, {}))
+    return {"days": days, "totalRestarts": total, "daysWithRestarts": len(days_out),
+            "worstDay": {"date": worst[0], "restarts": worst[1]} if worst[0] else None,
+            "byDay": days_out}

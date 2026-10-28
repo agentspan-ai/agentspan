@@ -5,3 +5,6 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 eval-report-*.md
+
+# raw customer cluster output from live triages — never commit
+eval/recordings/

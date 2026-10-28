@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from oncall_agent.recurrence import summarize_recurrence
 
-CPU = "Conductor Server CPU usage is at %s%% and exceeded the threshold of 95.0%%"
-REDIS = "Redis instance is at 88%"
+# Real reasons lead with a header line shared by every alert; matching uses only the
+# issue lines below it.
+_HEADER = "The health-checking has FAILED for the Acme's prod acme-prod cluster:\n"
+CPU = _HEADER + "*CRITICAL:* Conductor Server CPU usage is at %s%% and exceeded the threshold of 95.0%%"
+REDIS = _HEADER + "*MAJOR:* Redis instance is at 88%"
 
 _H = 3_600_000  # ms per hour
 

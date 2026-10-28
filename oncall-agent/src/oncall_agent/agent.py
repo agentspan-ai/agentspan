@@ -93,16 +93,20 @@ Procedure:
    cite it as the cause when it shows something.
 3d. DB CONNECTION SATURATION: when conductor pods crash-loop or log they cannot get a DB
    connection (Hikari "Connection is not available", "too many clients", "remaining connection
-   slots are reserved"), check the ceiling FIRST with one run_sql_select:
-     select (select setting::int from pg_settings where name='max_connections') max_conn,
-            count(*) in_use, client_addr, application_name, state, min(backend_start) oldest
-     from pg_stat_activity group by 3,4,5 order by in_use desc limit 10
-   If in_use is at max_conn, the cause is connection exhaustion — name which client IPs/pods hold
-   them (usually workers or a leaked pool) and say restarting THAT deployment frees them (seen on
-   orkes-devops, CCOR-13661: 403/403, worker restart dropped it to 73). Do not blame the DB server.
+   slots are reserved"), call get_db_connections FIRST. It names which POD holds the connections
+   and flags a LEAK (one pod with many connections idle for 10+ min = a pool opened per request
+   and never closed; its last query names the code path). Cause = that pod's leak, Action = restart
+   THAT deployment now + fix the code path (seen on orkes-devops, CCOR-13661: the workers pod's
+   pgvector search held 330 of 403). Do not blame the DB server or the conductor pods.
 3c. ONGOING OR SELF-HEALED: before calling anything "ongoing" or a "kill loop", look at the runs
    AFTER the alert (get_alert_recurrence). One failed run followed by clean runs is a transient that
    self-healed — say so plainly and do not recommend restarts.
+3e. RESTARTS: for any restart / crash-loop / "has failed" / pod-not-ready alert call
+   get_restart_reasons before naming a cause: OOMKilled = memory limit (for a JVM, -Xmx too close
+   to the container limit — say lower -Xmx or raise the limit), exit 137 without OOM = liveness
+   kill, any other exit = the process died (pull_pod_logs on that pod for the pre-crash error,
+   e.g. a DB-connect failure -> step 3d). Its restartTimeline shows whether restarts are new or
+   have been going on for days.
 4. Correlate into the single most likely root cause, citing concrete pod names, log
    lines, and the queue/usage numbers. Be efficient: ~3-6 targeted tool calls. Stop once
    you can name a probable cause. Do not loop.

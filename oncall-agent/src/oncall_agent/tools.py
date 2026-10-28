@@ -17,12 +17,15 @@ from pathlib import Path
 
 from conductor.ai.agents import tool
 
+from . import cassette
 from .conductor_client import ConductorDispatcher
 from .config import Config
 from .recurrence import summarize_recurrence
 from .kubectl_guard import NotReadOnlyKubectlError, ensure_readonly_kubectl
 from .azure_events import azure_events
-from .bq_metrics import daily_cpu_pattern, poll_load
+from .bq_metrics import daily_cpu_pattern, poll_load, restart_timeline
+from .db_connections import SQL as _CONN_SQL, summarize_connections
+from .restarts import COLUMNS as _RESTART_COLUMNS, summarize_restarts
 from .ingress_check import check_ingresses, served_certificate
 from .node_churn import summarize_node_churn
 from .sql_guard import NotReadOnlySQLError, ensure_select
@@ -798,6 +801,63 @@ def find_missing_fixes(execution_id: str, symbol: str, top: int = 8) -> dict:
     return build_report(safe, paths, version, uniq, merges, top=top)
 
 
+
+_ns_cache: dict[str, str] = {}
+
+
+def _namespace(execution_id: str) -> str:
+    """The namespace of the cluster's Conductor deployment (customer clusters name it per cluster)."""
+    if execution_id not in _ns_cache:
+        out = _kubectl_text(execution_id, "get deploy -A -o custom-columns=NS:.metadata.namespace,"
+                                          "NAME:.metadata.name")
+        ns = next((l.split()[0] for l in out.splitlines()
+                   if len(l.split()) > 1 and l.split()[1] == "orkes-conductor-deployment"), None)
+        _ns_cache[execution_id] = ns or _context(execution_id).get("clusterName") or "default"
+    return _ns_cache[execution_id]
+
+
+@tool(timeout_seconds=_T)
+def get_db_connections(execution_id: str) -> dict:
+    """WHO holds the Conductor DB's connections, by POD, and is one of them LEAKING?
+    Call this for any "remaining connection slots are reserved" / "too many clients" /
+    Hikari "Connection is not available" / pods crash-looping on DB connect. Joins
+    pg_stat_activity (client IP, idle count, idle-for-10-min count, last query) with the
+    pods' IPs. Verdict LEAK = one pod holds many connections idle for over 10 minutes (a
+    pool opened per request and never closed): restart THAT deployment to free them and
+    name the code path from its last query. These are counts NOW, not at the alert time.
+
+    Args:
+        execution_id: incident execution id.
+    """
+    try:
+        rows = _sql_rows(execution_id, _CONN_SQL)
+    except RuntimeError as exc:
+        return {"error": "db_connections_read_failed", "detail": str(exc)[:200]}
+    pods = _kubectl_text(execution_id, f"get pods -n {_namespace(execution_id)} -o wide")
+    return summarize_connections(rows, pods)
+
+
+@tool(timeout_seconds=_T)
+def get_restart_reasons(execution_id: str) -> dict:
+    """WHY pods restart: each restarting container's last termination (OOMKilled = memory
+    limit; exit 137 without OOM = liveness-probe kill; other exits = the process crashed —
+    read its previous logs) plus a 30-day per-day restart timeline from BigQuery (restart
+    counts reset when pods move; the timeline does not). Call this for any restart,
+    crash-loop, "has failed" or pod-not-ready alert BEFORE guessing at a cause.
+
+    Args:
+        execution_id: incident execution id.
+    """
+    out = summarize_restarts(_kubectl_text(execution_id,
+                                           f"get pods -n {_namespace(execution_id)} -o {_RESTART_COLUMNS}"))
+    try:
+        info = _disp().alert_info(execution_id)
+        out["restartTimeline"] = restart_timeline(_context(execution_id).get("clusterName"), info["alert_ms"])
+    except Exception as exc:
+        out["restartTimeline"] = {"error": str(exc)[:150]}
+    return out
+
+
 ALL_TOOLS = [
     get_incident_details,
     get_alert_recurrence,
@@ -823,4 +883,10 @@ ALL_TOOLS = [
     get_poll_load,
     get_daily_cpu_pattern,
     run_sql_select,
+    get_db_connections,
+    get_restart_reasons,
 ]
+
+# Every tool records its calls or replays them (see cassette.py); the worker runs ``_tool_def.func``.
+for _t in ALL_TOOLS:
+    _t._tool_def.func = cassette.wrap(_t._tool_def.name, _t._tool_def.func)

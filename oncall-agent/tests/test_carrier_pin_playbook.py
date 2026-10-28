@@ -62,7 +62,7 @@ def test_capture_before_restart():
 def test_cpu_rule_demands_thread_state_first():
     assert "get_thread_summary" in I, "CPU rule must route to the thread summariser"
     assert "threads first" in I, "thread evidence must be ordered FIRST, not last"
-    assert "runnable" in I, "must reason about RUNNABLE threads specifically"
+    assert "active_threads" in I, "must reason about threads actually doing work (active_threads)"
 
 
 def test_backlog_narrative_is_banned_without_evidence():
