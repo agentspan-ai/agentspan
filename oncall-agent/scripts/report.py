@@ -60,10 +60,28 @@ def main() -> int:
     ap.add_argument("--days", type=int, default=7)
     ap.add_argument("--store", default=os.path.expanduser("~/.oncall-agent"))
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--post-dm", action="store_true", help="also send it to the first approver's Slack DM")
     a = ap.parse_args()
     r = build(Path(a.store), a.days)
     print(json.dumps(r, indent=1) if a.json else render(r))
+    if a.post_dm:
+        post_dm(render(r))
     return 0
+
+
+def post_dm(text: str) -> None:
+    import requests
+    from oncall_agent.config import Config
+    cfg = Config.from_env()
+    if not cfg.approvers:
+        raise SystemExit("ONCALL_APPROVERS is empty: nobody to send the report to")
+    h = {"Authorization": f"Bearer {cfg.slack_bot_token}"}
+    ch = requests.post("https://slack.com/api/conversations.open", headers=h,
+                       json={"users": cfg.approvers[0]}, timeout=30).json()["channel"]["id"]
+    r = requests.post("https://slack.com/api/chat.postMessage", headers=h,
+                      json={"channel": ch, "text": text}, timeout=30).json()
+    if not r.get("ok"):
+        raise SystemExit(f"report post failed: {r.get('error')}")
 
 
 if __name__ == "__main__":
