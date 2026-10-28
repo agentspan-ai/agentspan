@@ -567,10 +567,34 @@ def _followup_prompt(q: dict, thread: list[dict]) -> str:
         who = "agent" if m.get("bot_id") else "engineer"
         lines.append(f"[{who}] {(m.get('text') or '').strip()}")
     transcript = "\n".join(lines)[-_THREAD_CHARS:]
+    prior = _prior_findings(q["alert_execution"])
     return (f"FOLLOW-UP QUESTION in the thread of the alert whose failing health_check execution id is "
             f"{q['alert_execution']} (cluster {q.get('cluster') or '?'}).\n\n"
             f"Thread so far (oldest first; the first message is the alert):\n{transcript}\n\n"
-            f"The engineer now asks:\n{q['text']}\n\nAnswer that question.")
+            + (f"PRIOR FINDINGS (tool results from your earlier investigation of this alert):\n{prior}\n\n"
+               if prior else "")
+            + f"The engineer now asks:\n{q['text']}\n\nAnswer that question.")
+
+
+_PRIOR_CHARS = 8000
+
+
+def _prior_findings(alert_execution: str, per_call: int = 900) -> str:
+    """What the earlier triage of this alert already read, from its recording (newest call per tool+args)."""
+    rec_dir = os.environ.get("ONCALL_RECORD_DIR")
+    path = Path(rec_dir) / f"{alert_execution}.jsonl" if rec_dir else None
+    if not path or not path.exists():
+        return ""
+    latest: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        try:
+            c = json.loads(line)
+        except ValueError:
+            continue
+        args = {k: v for k, v in (c.get("args") or {}).items() if k != "execution_id"}
+        body = json.dumps(c.get("result", c.get("error")), default=str)[:per_call]
+        latest[f"{c.get('tool')}({args})"] = body
+    return "\n".join(f"- {k} -> {v}" for k, v in latest.items())[-_PRIOR_CHARS:]
 
 
 def _answer_questions(cfg: Config, slack, runtime, agent, state: dict, save) -> None:

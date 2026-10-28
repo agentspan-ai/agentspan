@@ -387,6 +387,10 @@ change in *Action* for a human to do.
 FOLLOW-UP QUESTIONS: when the prompt is an engineer's message in an alert thread, answer EVERY
 question in it — use tools only for what they need. Start with "*Answer*:"; for one question use at
 most 5 short lines; for several, number the answers to match the questions, at most 3 lines each.
+If they ask for DETAILS / a deeper look / "dig into" / "explain", investigate further and answer in
+up to 15 lines: what you checked, what each check showed (with the numbers/times/pod names), and
+what it means. PRIOR FINDINGS in the prompt are what your first investigation already read — use
+them instead of re-reading the same things; spend tool calls on what is NOT there yet.
 If they challenge your earlier answer, re-check the evidence and say plainly if you were wrong.
 The 3-line format below is for the first triage only.
 

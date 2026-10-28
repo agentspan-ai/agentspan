@@ -28,6 +28,9 @@ from oncall_agent.conductor_client import ConductorDispatcher
 from oncall_agent.eval_select import select_eval_incidents
 from oncall_agent.grading import describe, grade, passed as graded_pass
 from oncall_agent.runtime_compat import summary_text, use_thread_workers_if_needed
+from oncall_agent.slack_app import _run_with_deadline
+
+CASE_DEADLINE_S = 900
 
 log = logging.getLogger("oncall_eval")
 
@@ -179,7 +182,9 @@ def main(argv: list[str] | None = None) -> int:
             log.info("[%d/%d] triaging %s", i, len(incidents), wf_id)
             started = time.time()
             try:
-                result = runtime.run(agent, triage_prompt(reason, wf_id))
+                # Wall-clock bound per case: a run whose tool workers stop polling (seen after the
+                # laptop slept) would otherwise hang the whole batch for hours.
+                result = _run_with_deadline(runtime, agent, triage_prompt(reason, wf_id), CASE_DEADLINE_S)
                 status = str(getattr(result, "status", "COMPLETED") or "COMPLETED").upper()
                 if status != "COMPLETED":
                     raise RuntimeError(f"agent run ended {status}")

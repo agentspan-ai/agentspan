@@ -66,3 +66,14 @@ def test_followup_prompt_carries_the_thread_and_the_question():
     p = _followup_prompt({"alert_execution": "E1", "cluster": "orkes-devops", "text": "why workers?"}, thread)
     assert p.index("[engineer] ALERT orkes-devops") < p.index("[agent] *Cause*: workers leak")
     assert "E1" in p and p.rstrip().endswith("Answer that question.") and "why workers?" in p
+
+
+def test_followup_prompt_includes_prior_findings_from_the_recording(tmp_path, monkeypatch):
+    rec = tmp_path / "E1.jsonl"
+    rec.write_text(json.dumps({"tool": "get_db_connections", "args": {"execution_id": "E1"},
+                               "result": {"verdict": "LEAK", "detail": "workers holds 115"}}) + "\n")
+    monkeypatch.setenv("ONCALL_RECORD_DIR", str(tmp_path))
+    p = _followup_prompt({"alert_execution": "E1", "cluster": "c", "text": "? dig into it"}, [])
+    assert "PRIOR FINDINGS" in p and "get_db_connections({}) -> " in p and "workers holds 115" in p
+    monkeypatch.setenv("ONCALL_RECORD_DIR", str(tmp_path / "none"))
+    assert "PRIOR FINDINGS" not in _followup_prompt({"alert_execution": "E1", "text": "?"}, [])

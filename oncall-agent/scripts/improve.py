@@ -63,8 +63,11 @@ FAILING CASES:
 Reply with ONLY JSON: {{"edits": [{{"old": "...", "new": "...", "why": "..."}}], "reasoning": "..."}}"""
 
 
+SUITE_TIMEOUT_S = 3 * 3600  # each case is already bounded at 15 min; this catches a wedged process
+
+
 def sh(args: list[str], cwd: Path, env: dict | None = None, check=True) -> str:
-    p = subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True)
+    p = subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, timeout=SUITE_TIMEOUT_S)
     if check and p.returncode not in (0, 1):  # eval exits 1 when any case fails
         raise RuntimeError(f"{' '.join(args[:3])} failed: {p.stderr[-800:]}")
     return p.stdout
@@ -179,8 +182,11 @@ def main() -> int:
                 previous = f"YOUR PREVIOUS EDITS WERE INVALID: {exc}\n\n"
                 print(f"attempt {attempt}: invalid edits — {exc}", flush=True)
                 continue
-            src = (HERE / "src" / "oncall_agent" / "agent.py").read_text()
-            (wt_agent / "src" / "oncall_agent" / "agent.py").write_text(src.replace(INSTRUCTIONS, new_playbook))
+            target = wt_agent / "src" / "oncall_agent" / "agent.py"  # the branch's copy, never the live file
+            src = sh(["git", "show", "HEAD:oncall-agent/src/oncall_agent/agent.py"], cwd=wt)
+            if INSTRUCTIONS not in src:
+                raise RuntimeError("playbook in HEAD differs from the one loaded; commit or stash local edits")
+            target.write_text(src.replace(INSTRUCTIONS, new_playbook))
             print(f"attempt {attempt}: {len(proposal['edits'])} edit(s); replaying...", flush=True)
             after = run_all(wt_agent, f"after{attempt}")
             ok, fixed, broke = verdict(before, after)
