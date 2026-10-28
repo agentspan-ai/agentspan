@@ -58,3 +58,13 @@ def use_thread_workers_if_needed() -> None:
     except Exception:
         return
     _patch()
+
+
+def answer_text(result: Any) -> str:
+    """A follow-up answer: the text from its ``*Answer*:`` marker on (whole text if absent)."""
+    output = getattr(result, "output", None)
+    text = output.get("result") if isinstance(output, dict) else output
+    if not isinstance(text, str) or not text.strip():
+        raise TriageIncomplete(f"agent returned no text: {str(output)[:200]}")
+    marker = text.find("*Answer*:")
+    return text[marker:] if marker >= 0 else text.strip()

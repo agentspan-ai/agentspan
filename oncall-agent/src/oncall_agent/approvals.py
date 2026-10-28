@@ -61,7 +61,7 @@ def decision(replies: list[dict], approvers: tuple[str, ...], after: float) -> t
     return None
 
 
-def process_pending(cfg, slack, runtime, state: dict, summary_text, save) -> None:
+def process_pending(cfg, slack, runtime, state: dict, summary_text, save, record=None) -> None:
     """Advance every pending approval / approved execution by one step."""
     pending = state.setdefault("pending_actions", {})
     now = time.time()
@@ -75,7 +75,8 @@ def process_pending(cfg, slack, runtime, state: dict, summary_text, save) -> Non
                 if verdict is None:
                     continue
                 action, user = verdict
-                p.update(phase="executing" if action == "approve" else "done", decided_by=user, decided_at=now)
+                p.update(phase="executing" if action == "approve" else "done", decided_by=user, decided_at=now,
+                         outcome="approved" if action == "approve" else ("expired" if user == "expired" else "rejected"))
                 save()  # recorded before it is sent: never applied twice
                 runtime.respond(exec_id, {"approved": action == "approve",
                                           "reason": f"{action} by {user} in Slack"})
@@ -104,4 +105,6 @@ def process_pending(cfg, slack, runtime, state: dict, summary_text, save) -> Non
             continue
         if p["phase"] == "done":
             pending.pop(exec_id, None)
+            if record:
+                record({"agent_execution": exec_id, **p})
         save()

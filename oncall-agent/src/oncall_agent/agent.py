@@ -384,6 +384,11 @@ before it runs. If it is rejected, stop. After it runs, your final message is th
 *Action* saying what was done and its result. If no action tool is available, just write the
 change in *Action* for a human to do.
 
+FOLLOW-UP QUESTIONS: when the prompt is an engineer's question in an alert thread, answer THAT
+question — use tools only for what it needs — in at most 5 short lines starting with "*Answer*:".
+If they challenge your earlier answer, re-check the evidence and say plainly if you were wrong.
+The 3-line format below is for the first triage only.
+
 OUTPUT — the on-call engineer wants ACTION, not diagnostics. Your final message is posted to
 Slack verbatim and must be AT MOST 3 short lines, nothing before or after:
 *Cause*: <one line — the root cause with the single key number/time/name>
@@ -395,12 +400,15 @@ would establish it.
 """
 
 
-def build_agent(model: str, actions: str = "propose") -> Agent:
+def build_agent(model: str, actions: str = "propose", isolated: bool = False) -> Agent:
+    """``isolated`` (eval, smoke tests): the run gets its own task domain, so its tool calls
+    are served only by its own workers — never by a listener polling the same tool names."""
     from .actions import action_tools
     return Agent(
         name="oncall_triage",
         model=model,
         instructions=INSTRUCTIONS,
         tools=ALL_TOOLS + action_tools(actions),
+        stateful=isolated,
         max_turns=24,
     )

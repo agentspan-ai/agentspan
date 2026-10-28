@@ -17,11 +17,11 @@ from pathlib import Path
 import requests
 from conductor.ai.agents import AgentRuntime
 
-from . import approvals
+from . import approvals, feedback
 from .agent import INSTRUCTIONS, build_agent
 from .alert import Alert, alert_signature, message_text, pagerduty_cluster, parse_alert, signable_text
 from .config import Config
-from .runtime_compat import TriageIncomplete, summary_text
+from .runtime_compat import TriageIncomplete, answer_text, summary_text
 from .worker_health import CRITICAL_TASK_TYPES, evaluate
 
 log = logging.getLogger("oncall_agent")
@@ -171,6 +171,17 @@ class SlackClient:
                 break
         return out
 
+    def bot_user_id(self) -> str | None:
+        """The bot's own user id (people @-mention it to ask a follow-up question)."""
+        if not hasattr(self, "_bot_uid"):
+            try:
+                data = requests.get(f"{_SLACK_API}/auth.test",
+                                    headers={"Authorization": f"Bearer {self._token}"}, timeout=30).json()
+                self._bot_uid = data.get("user_id") if data.get("ok") else None
+            except Exception:
+                return None
+        return self._bot_uid
+
     def read_replies(self, channel: str, thread_ts: str) -> list[dict]:
         """Every message in one thread (the parent included)."""
         resp = requests.get(
@@ -302,11 +313,30 @@ def _memory_update_text(cfg: Config, prior: dict, now: float) -> str:
 
 
 def _header(cfg: Config) -> str:
+    if cfg.actions == "approve":
+        return "*:robot_face: On-call triage* _(read-only; any change waits for your approval)_\n"
     return (
         "*:robot_face: On-call triage (dry-run · read-only)*\n"
         if cfg.dry_run
         else "*:robot_face: On-call triage*\n"
     )
+
+
+def _store(cfg: Config) -> Path:
+    return Path(cfg.state_file).parent
+
+
+def _capture(cfg: Config, state: dict, channel: str, ts: str, alert, cluster, msg, answer: str,
+             agent_execution: str | None = None) -> None:
+    """Log the triage and watch its thread for feedback (the improvement loop's input)."""
+    try:
+        feedback.log_triage(_store(cfg), {
+            "alert_execution": alert.execution_id, "cluster": alert.cluster or cluster,
+            "alert_text": message_text(msg), "answer": answer, "agent_execution": agent_execution,
+            "channel": channel, "thread_ts": ts, "model": cfg.model, "playbook": _PLAYBOOK_VERSION})
+        feedback.watch(state, channel, ts, alert.execution_id, alert.cluster or cluster, time.time())
+    except Exception:  # capture must never break triage
+        log.exception("triage capture failed")
 
 
 def _channel_state(state: dict, channel: str, cfg: Config) -> dict:
@@ -473,6 +503,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 )
                 summary = summary_text(result)
                 slack.post_reply(channel, ts, _header(cfg) + summary)
+                _capture(cfg, state, channel, ts, alert, sig_cluster, msg, answer=summary)
                 if summary.lower().startswith("*cause*: unknown"):
                     raise _NotRemembered()
                 incidents[sig] = {
@@ -495,6 +526,8 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 state.setdefault("pending_actions", {})[wait.execution_id] = {
                     "channel": channel, "thread_ts": ts, "phase": "awaiting", "asked_at": time.time(),
                     "alert_execution": alert.execution_id, "calls": [[n, a] for n, a in calls]}
+                _capture(cfg, state, channel, ts, alert, sig_cluster, msg,
+                         answer=approvals.proposal_text("", calls, ()), agent_execution=wait.execution_id)
                 log.info("awaiting approval channel=%s exec=%s calls=%s", channel, wait.execution_id,
                          [n for n, _ in calls])
             except TriageIncomplete as exc:  # never post or remember a non-answer
@@ -524,6 +557,52 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
     return handled
 
 
+_MAX_QUESTIONS_PER_POLL = 3
+_THREAD_CHARS = 6000
+
+
+def _followup_prompt(q: dict, thread: list[dict]) -> str:
+    lines = []
+    for m in sorted(thread, key=lambda m: float(m.get("ts", 0))):
+        who = "agent" if m.get("bot_id") else "engineer"
+        lines.append(f"[{who}] {(m.get('text') or '').strip()}")
+    transcript = "\n".join(lines)[-_THREAD_CHARS:]
+    return (f"FOLLOW-UP QUESTION in the thread of the alert whose failing health_check execution id is "
+            f"{q['alert_execution']} (cluster {q.get('cluster') or '?'}).\n\n"
+            f"Thread so far (oldest first; the first message is the alert):\n{transcript}\n\n"
+            f"The engineer now asks:\n{q['text']}\n\nAnswer that question.")
+
+
+def _answer_questions(cfg: Config, slack, runtime, agent, state: dict, save) -> None:
+    """Answer queued thread questions, a few per poll, each with the full thread as context."""
+    queue = state.get("questions") or []
+    for q in queue[:_MAX_QUESTIONS_PER_POLL]:
+        queue.remove(q)
+        save()  # dequeued before answering: a crash never answers twice
+        try:
+            thread = slack.read_replies(q["channel"], q["thread_ts"])
+            result = (_start_until_answer if cfg.actions == "approve" else _run_with_deadline)(
+                runtime, agent, _followup_prompt(q, thread), _TRIAGE_DEADLINE_S)
+            text = answer_text(result)
+            slack.post_reply(q["channel"], q["thread_ts"], f"<@{q['user']}> {text}")
+            feedback.log_triage(_store(cfg), {"followup": q, "answer": text})
+        except _AwaitingApproval as wait:
+            calls = approvals.extract_calls(wait.pending)
+            slack.post_reply(q["channel"], q["thread_ts"],
+                             approvals.proposal_text(q.get("cluster") or "?", calls, cfg.approvers))
+            state.setdefault("pending_actions", {})[wait.execution_id] = {
+                "channel": q["channel"], "thread_ts": q["thread_ts"], "phase": "awaiting",
+                "asked_at": time.time(), "alert_execution": q["alert_execution"],
+                "calls": [[n, a] for n, a in calls]}
+        except Exception as exc:
+            log.exception("follow-up failed")
+            try:
+                slack.post_reply(q["channel"], q["thread_ts"], f":warning: Could not answer: `{exc}`")
+            except Exception:
+                pass
+        save()
+
+
 def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> int:
     """Process new messages in every configured channel once. Returns alerts triaged."""
     state_path = Path(cfg.state_file)
@@ -531,7 +610,13 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
     state = _load_state(state_path)
     if state.get("pending_actions"):
         approvals.process_pending(cfg, slack, runtime, state, summary_text,
-                                  lambda: _save_state(state_path, state))
+                                  lambda: _save_state(state_path, state),
+                                  record=lambda r: feedback.log_triage(_store(cfg), {"approval": r}))
+    if state.get("feedback_watch"):
+        feedback.collect(slack, state, _store(cfg), lambda: _save_state(state_path, state),
+                         bot_user_id=slack.bot_user_id() if hasattr(slack, "bot_user_id") else None)
+    if state.get("questions"):
+        _answer_questions(cfg, slack, runtime, agent, state, lambda: _save_state(state_path, state))
     handled = 0
     for channel in cfg.slack_alert_channels:
         try:
@@ -547,6 +632,8 @@ def run(cfg: Config | None = None, loop: bool = False, interval: int | None = No
     from .runtime_compat import use_thread_workers_if_needed
 
     use_thread_workers_if_needed()
+    # Record every live triage's tool calls so any incident can be replayed as an eval case.
+    os.environ.setdefault("ONCALL_RECORD_DIR", str(_store(cfg) / "recordings"))
     if not cfg.slack_alert_channels:
         raise SystemExit(
             "SLACK_ALERT_CHANNEL is required (channel id to poll; comma-separate for several)."

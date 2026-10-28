@@ -72,12 +72,15 @@ def load_cases(path: str, disp: ConductorDispatcher | None, replay: str | None =
     """Ground-truth cases: each alert's execution plus the checks its triage must pass.
 
     Replaying reads the alert from the recording, so no Conductor call is made."""
-    cases = [c for c in json.load(open(path)) if not c.get("retired") and (not only or c["id"] in only)]
-    for case in cases:
+    cases = [c for c in json.load(open(path)) if not c.get("retired") and not c.get("needs_truth")
+             and (not only or c["id"] in only)]
+    for case in list(cases):
         meta = Path(replay or record or ".") / f"{case['execution_id']}.meta.json"
         if replay:
             if not meta.exists():
-                raise SystemExit(f"no recording for case {case['id']} in {replay}")
+                log.warning("skipping %s: no recording in %s (record it live first)", case["id"], replay)
+                cases.remove(case)
+                continue
             alert = json.loads(meta.read_text())
         else:
             wf = disp._wf.get_workflow(case["execution_id"], include_tasks=False)
@@ -170,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     passed = 0
     graded: dict[str, dict] = {}
     with AgentRuntime(server_url=cfg.agentspan_server_url) as runtime:
-        agent = build_agent(cfg.model, actions="propose")  # eval never executes a change
+        agent = build_agent(cfg.model, actions="propose", isolated=True)  # eval never executes a change
         for i, inc in enumerate(incidents, 1):
             wf_id, reason = inc["workflow_id"], str(inc["reason"])
             log.info("[%d/%d] triaging %s", i, len(incidents), wf_id)
@@ -209,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
                 ok_case = graded_pass(result)
                 passed += ok_case
                 graded[inc["id"]] = {"passed": ok_case, "result": describe(result),
-                                     "seconds": round(time.time() - started)}
+                                     "seconds": round(time.time() - started), "answer": summary[:1500]}
                 if args.replay:
                     graded[inc["id"]]["notRecorded"] = replay_misses(args.replay, wf_id)
                 lines += [
