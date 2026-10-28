@@ -352,7 +352,9 @@ def _channel_state(state: dict, channel: str, cfg: Config) -> dict:
         legacy = {}
         if channel == cfg.slack_alert_channels[0] and state.get("last_ts"):
             legacy = {"last_ts": state.get("last_ts"), "processed": state.get("processed") or []}
-        channels[channel] = legacy or {"last_ts": None, "processed": []}
+        # A newly watched channel starts from NOW: its history is old alerts (seen live
+        # 2026-10-28: adding a channel began triaging April alerts into their old threads).
+        channels[channel] = legacy or {"last_ts": f"{time.time():.6f}", "processed": []}
     return channels[channel]
 
 

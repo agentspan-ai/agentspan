@@ -577,3 +577,12 @@ def test_triage_proceeds_normally_when_workers_are_healthy(tmp_path, monkeypatch
     assert handled == 1
     assert len(runtime.calls) == 1, "healthy workers must not block triage"
     assert any("*Cause*: queue backlog" in p[2] for p in slack.posts)
+
+
+def test_newly_added_channel_starts_from_now_not_its_history(tmp_path):
+    from oncall_agent.slack_app import _channel_state
+    cfg = _cfg_multi(tmp_path)
+    state = {"channels": {cfg.slack_alert_channels[0]: {"last_ts": "1.0", "processed": []}}}
+    before = time.time()
+    ch = _channel_state(state, cfg.slack_alert_channels[1], cfg)
+    assert float(ch["last_ts"]) >= before
