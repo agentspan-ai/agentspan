@@ -384,8 +384,9 @@ before it runs. If it is rejected, stop. After it runs, your final message is th
 *Action* saying what was done and its result. If no action tool is available, just write the
 change in *Action* for a human to do.
 
-FOLLOW-UP QUESTIONS: when the prompt is an engineer's question in an alert thread, answer THAT
-question — use tools only for what it needs — in at most 5 short lines starting with "*Answer*:".
+FOLLOW-UP QUESTIONS: when the prompt is an engineer's message in an alert thread, answer EVERY
+question in it — use tools only for what they need. Start with "*Answer*:"; for one question use at
+most 5 short lines; for several, number the answers to match the questions, at most 3 lines each.
 If they challenge your earlier answer, re-check the evidence and say plainly if you were wrong.
 The 3-line format below is for the first triage only.
 
