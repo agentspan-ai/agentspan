@@ -126,6 +126,8 @@ def ask_improver(model: str, server: str, playbook: str, cases: str, previous: s
     with AgentRuntime(server_url=server) as rt:
         out = rt.run(agent, IMPROVER_PROMPT.format(playbook=playbook, cases=cases, previous=previous))
     text = out.output.get("result") if isinstance(out.output, dict) else str(out.output)
+    if isinstance(text, dict):  # the server already parsed the model's JSON
+        return text
     m = re.search(r"\{.*\}", text or "", re.S)
     if not m:
         raise RuntimeError(f"improver returned no JSON: {str(text)[:300]}")

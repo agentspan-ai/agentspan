@@ -52,6 +52,8 @@ def _draft_checks(model: str, server: str, answer: str, verdict: str, cause: str
         out = rt.run(agent, DRAFT_PROMPT.format(answer=answer, verdict=verdict, cause=cause or "-",
                                                 action=action or "-"))
     text = out.output.get("result") if isinstance(out.output, dict) else str(out.output)
+    if isinstance(text, dict):  # the server already parsed the model's JSON
+        return text
     m = re.search(r"\{.*\}", text or "", re.S)
     if not m:
         raise RuntimeError(f"drafter returned no JSON: {str(text)[:200]}")
