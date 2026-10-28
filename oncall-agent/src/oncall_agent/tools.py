@@ -23,7 +23,7 @@ from .config import Config
 from .recurrence import summarize_recurrence
 from .kubectl_guard import NotReadOnlyKubectlError, ensure_readonly_kubectl
 from .azure_events import azure_events
-from .bq_metrics import daily_cpu_pattern, poll_load, restart_timeline
+from .bq_metrics import compare_siblings, daily_cpu_pattern, poll_load, restart_timeline, window_history
 from .db_connections import SQL as _CONN_SQL, summarize_connections
 from .restarts import COLUMNS as _RESTART_COLUMNS, summarize_restarts
 from .ingress_check import check_ingresses, served_certificate
@@ -61,6 +61,18 @@ def _cpu_context(cluster: str | None, onset_ms: int) -> dict:
             out[key] = {k: v for k, v in r.items() if k != "hourProfile"}
         except Exception as exc:
             out[key] = {"error": str(exc)[:150]}
+    # A recurring daily window: WHEN did it start, and do the org's other clusters have it too?
+    hot = (out.get("dailyCpuPattern") or {}).get("dailyHotHoursUtc")
+    if hot:
+        for key, fn in (("windowHistory", window_history), ("siblingClusters", compare_siblings)):
+            try:
+                r = fn(cluster, hot, onset_ms)
+                if key == "siblingClusters":  # keep the answer small: affected ones + a few unaffected
+                    r["clusters"] = [c for c in r["clusters"] if c["daysWithWindow"]] + \
+                                    [c for c in r["clusters"] if not c["daysWithWindow"]][:3]
+                out[key] = r
+            except Exception as exc:
+                out[key] = {"error": str(exc)[:150]}
     return out
 
 

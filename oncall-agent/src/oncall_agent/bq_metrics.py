@@ -147,3 +147,113 @@ def restart_timeline(cluster: str, onset_ms: int, days: int = 30) -> dict:
     return {"days": days, "totalRestarts": total, "daysWithRestarts": len(days_out),
             "worstDay": {"date": worst[0], "restarts": worst[1]} if worst[0] else None,
             "byDay": days_out}
+
+
+_POLLS_PER_DAY_SQL = """
+WITH c AS (
+  SELECT cluster_name cl, DATE(metric_timestamp) d, EXTRACT(HOUR FROM metric_timestamp) h, label_pod_name pod,
+         MAX(metric_value) - MIN(metric_value) x, TIMESTAMP_DIFF(MAX(metric_timestamp), MIN(metric_timestamp), SECOND) s
+  FROM `{table}`
+  WHERE metric_timestamp BETWEEN TIMESTAMP_SUB(TIMESTAMP(@onset), INTERVAL {days} DAY) AND TIMESTAMP(@onset)
+    AND cluster_name IN UNNEST(@clusters) AND metric_name_base = 'task_poll_request_seconds'
+    AND metric_type_tag = 'timer_count'
+  GROUP BY 1, 2, 3, 4),
+hr AS (SELECT cl, d, h, SUM(x / NULLIF(s, 0)) r FROM c WHERE x >= 0 GROUP BY 1, 2, 3)
+SELECT cl, CAST(d AS STRING) d,
+       APPROX_QUANTILES(IF(h IN UNNEST(@hot), r, NULL), 2)[OFFSET(1)] win,
+       APPROX_QUANTILES(IF(h NOT IN UNNEST(@hot), r, NULL), 2)[OFFSET(1)] rest
+FROM hr GROUP BY 1, 2 ORDER BY 1, 2"""
+
+_CPU_PER_DAY_SQL = """
+SELECT cluster_name cl, CAST(DATE(metric_timestamp) AS STRING) d,
+       APPROX_QUANTILES(IF(EXTRACT(HOUR FROM metric_timestamp) IN UNNEST(@hot), metric_value, NULL), 2)[OFFSET(1)] win,
+       APPROX_QUANTILES(IF(EXTRACT(HOUR FROM metric_timestamp) NOT IN UNNEST(@hot), metric_value, NULL), 2)[OFFSET(1)] rest
+FROM `{table}`
+WHERE metric_timestamp BETWEEN TIMESTAMP_SUB(TIMESTAMP(@onset), INTERVAL {days} DAY) AND TIMESTAMP(@onset)
+  AND cluster_name IN UNNEST(@clusters) AND metric_name_base = 'process_cpu_usage'
+  AND label_pod_name LIKE 'orkes-conductor-deployment%'
+GROUP BY 1, 2 ORDER BY 1, 2"""
+
+WINDOW_RATIO = 1.5  # a day "has the window" when its hot hours run this much above the rest of the day
+
+
+def _per_day(sql: str, clusters: list[str], hot: list[int], onset_ms: int, days: int) -> dict[str, list[dict]]:
+    rows = _bq(sql.format(table=_TABLE, days=int(days)), {
+        "clusters": "ARRAY<STRING>:" + json.dumps(clusters), "hot": "ARRAY<INT64>:" + json.dumps(hot),
+        "onset": f"STRING:{_ts(onset_ms)}"})
+    out: dict[str, list[dict]] = {}
+    for r in rows:
+        win, rest = r.get("win"), r.get("rest")
+        out.setdefault(r["cl"], []).append({"date": r["d"], "win": float(win) if win else None,
+                                            "rest": float(rest) if rest else None})
+    return out
+
+
+def _streak(days: list[dict]) -> dict:
+    """When did the current run of window days begin, and was the cluster ever without it?"""
+    flags = [(d["date"], bool(d["win"] and d["rest"] and d["win"] > WINDOW_RATIO * d["rest"])) for d in days]
+    with_window = sum(f for _, f in flags)
+    start = None
+    for date, has in reversed(flags):
+        if not has:
+            break
+        start = date
+    first_seen = flags[0][0] if flags else None
+    return {"daysWithWindow": with_window, "daysSeen": len(flags), "currentStreakStartedOn": start,
+            "streakIsAsOldAsTheData": bool(start and start == first_seen)}
+
+
+def window_history(cluster: str, hot_hours: list[int], onset_ms: int, days: int = 45) -> dict:
+    """Since WHEN does the daily window exist? Per-day polls and CPU in the hot hours vs the rest."""
+    polls = _per_day(_POLLS_PER_DAY_SQL, [cluster], hot_hours, onset_ms, days).get(cluster, [])
+    cpu = _per_day(_CPU_PER_DAY_SQL, [cluster], hot_hours, onset_ms, days).get(cluster, [])
+    p, c = _streak(polls), _streak(cpu)
+    started = p["currentStreakStartedOn"] or c["currentStreakStartedOn"]
+    if not started:
+        verdict = f"No daily window in UTC hours {hot_hours} over the last {days} days of data."
+    elif p["streakIsAsOldAsTheData"] and c["streakIsAsOldAsTheData"]:
+        verdict = (f"The window is present on every day of the data (since {polls[0]['date'] if polls else '?'}) — "
+                   "its start is older than the metrics; it is a standing pattern, not a recent change.")
+    else:
+        verdict = (f"The daily window STARTED on {started}: before that the hot hours looked like the rest of the "
+                   f"day. Something changed that day (a customer worker/schedule rollout, a deploy) — ask what.")
+        if p["currentStreakStartedOn"]:
+            verdict += " Poll requests rise in the window too, so it is client load (workers polling harder)."
+    return {"hotHoursUtc": hot_hours, "polls": p, "cpu": c, "startedOn": started, "verdict": verdict,
+            "lastDays": {"polls": polls[-5:], "cpu": cpu[-5:]}}
+
+
+def sibling_clusters(cluster: str) -> list[str]:
+    """Other clusters of the same organization (from the saas DB replica)."""
+    sql = """
+    WITH me AS (SELECT organization_id FROM `data-bi-474617.prod_saas_raw.clusters`
+                WHERE snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY) AND name = @cluster LIMIT 1)
+    SELECT DISTINCT c.name FROM `data-bi-474617.prod_saas_raw.clusters` c, me
+    WHERE c.snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY) AND c.organization_id = me.organization_id
+      AND c.name != @cluster AND c.name NOT LIKE '%-deleted-%'"""
+    return sorted(r["name"] for r in _bq(sql, {"cluster": f"STRING:{cluster}"}))
+
+
+def compare_siblings(cluster: str, hot_hours: list[int], onset_ms: int, days: int = 14) -> dict:
+    """Does the same daily window show on the org's other clusters? Same-day, multi-cluster = client side."""
+    names = [cluster] + sibling_clusters(cluster)[:30]
+    polls = _per_day(_POLLS_PER_DAY_SQL, names, hot_hours, onset_ms, days)
+    cpu = _per_day(_CPU_PER_DAY_SQL, names, hot_hours, onset_ms, days)
+
+    def med(xs):
+        xs = sorted(x for x in xs if x is not None)
+        return round(xs[len(xs) // 2], 2) if xs else None
+
+    table = []
+    for n in names:
+        p, c = polls.get(n, []), cpu.get(n, [])
+        table.append({"cluster": n, "pollsHot": med(d["win"] for d in p), "pollsRest": med(d["rest"] for d in p),
+                      "cpuHot": med(d["win"] for d in c), "cpuRest": med(d["rest"] for d in c),
+                      "daysWithWindow": _streak(p)["daysWithWindow"] if p else None, "days": len(p)})
+    affected = [t["cluster"] for t in table if t["daysWithWindow"]]
+    verdict = (f"{len(affected)} of {len(table)} clusters of this org show the same UTC {hot_hours} window "
+               f"({', '.join(affected)}). " +
+               ("Several of one customer's clusters with the same window point at the CUSTOMER's side (a shared "
+                "worker deployment/schedule); the unaffected ones show where it was not rolled out."
+                if len(affected) > 1 else "Only this cluster has it: look at what is specific to it."))
+    return {"hotHoursUtc": hot_hours, "clusters": table, "affected": affected, "verdict": verdict}

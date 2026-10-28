@@ -132,6 +132,11 @@ rather than dispatching tools that cannot add anything.
     out; the fix is fewer polled task types / lower poll frequency, not more CPU. If
     dailyCpuPattern finds a recurring daily window containing the alert, say it is a daily
     scheduled load in those UTC hours (recurring, not a one-off) and keep the rest light.
+    For a daily window it also carries `windowHistory` (the DATE the window started — name it:
+    "since <date>", that is the change to ask about) and `siblingClusters` (which of the org's
+    other clusters show the same window — several of one customer's clusters = customer-side
+    rollout; name the affected and the unaffected ones). If `pollLoad` cannot split polls by task
+    type, say so; never claim a task-type count it does not report.
     CPU EVIDENCE RULE — THREADS FIRST, and this order is not optional.
     For EVERY cpu/heap alert your FIRST evidence call is
     get_thread_summary(execution_id, hottest pod). Only threads doing work can burn CPU;

@@ -64,3 +64,13 @@ def test_poll_load_without_task_type_labels_does_not_invent_one(monkeypatch):
     out = bq_metrics.poll_load("auditboard-preprod", 1793160000000)
     assert out["taskTypesPolled"].startswith("unknown") and out["pollRequestsPerSec"] == 3232.0
     assert "1 task type" not in out["verdict"]
+
+
+def test_window_streak_finds_the_start_date():
+    from oncall_agent.bq_metrics import _streak
+    days = [{"date": f"2026-09-{d:02d}", "win": 480.0, "rest": 478.0} for d in range(18, 24)] + \
+           [{"date": f"2026-09-{d:02d}", "win": 3200.0, "rest": 478.0} for d in range(24, 31)]
+    s = _streak(days)
+    assert s["currentStreakStartedOn"] == "2026-09-24" and not s["streakIsAsOldAsTheData"]
+    assert s["daysWithWindow"] == 7
+    assert _streak(days[-3:])["streakIsAsOldAsTheData"]
