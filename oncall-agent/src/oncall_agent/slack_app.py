@@ -322,6 +322,11 @@ def _header(cfg: Config) -> str:
     )
 
 
+# Measurement trial (features frozen 2026-10-28 -> 2026-11-11): every answer asks for a verdict.
+_FEEDBACK_ASK = ("\n_Was this right? Reply `correct`, `wrong`, or `cause: <real cause>` — "
+                 "we are measuring accuracy until 2026-11-11._")
+
+
 def _store(cfg: Config) -> Path:
     return Path(cfg.state_file).parent
 
@@ -502,7 +507,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                     runtime, agent, _triage_prompt(alert, prior), _TRIAGE_DEADLINE_S
                 )
                 summary = summary_text(result)
-                slack.post_reply(channel, ts, _header(cfg) + summary)
+                slack.post_reply(channel, ts, _header(cfg) + summary + _FEEDBACK_ASK)
                 _capture(cfg, state, channel, ts, alert, sig_cluster, msg, answer=summary)
                 if summary.lower().startswith("*cause*: unknown"):
                     raise _NotRemembered()
