@@ -91,6 +91,15 @@ Procedure:
    credentials. On AZURE clusters call get_azure_events: it returns what Azure itself recorded for
    the managed Redis/Postgres at the failure onset (AOF errors, failovers, Postgres downtime) —
    cite it as the cause when it shows something.
+3d. DB CONNECTION SATURATION: when conductor pods crash-loop or log they cannot get a DB
+   connection (Hikari "Connection is not available", "too many clients", "remaining connection
+   slots are reserved"), check the ceiling FIRST with one run_sql_select:
+     select (select setting::int from pg_settings where name='max_connections') max_conn,
+            count(*) in_use, client_addr, application_name, state, min(backend_start) oldest
+     from pg_stat_activity group by 3,4,5 order by in_use desc limit 10
+   If in_use is at max_conn, the cause is connection exhaustion — name which client IPs/pods hold
+   them (usually workers or a leaked pool) and say restarting THAT deployment frees them (seen on
+   orkes-devops, CCOR-13661: 403/403, worker restart dropped it to 73). Do not blame the DB server.
 3c. ONGOING OR SELF-HEALED: before calling anything "ongoing" or a "kill loop", look at the runs
    AFTER the alert (get_alert_recurrence). One failed run followed by clean runs is a transient that
    self-healed — say so plainly and do not recommend restarts.
