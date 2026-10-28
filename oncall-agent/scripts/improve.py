@@ -73,22 +73,26 @@ def sh(args: list[str], cwd: Path, env: dict | None = None, check=True) -> str:
     return p.stdout
 
 
-def run_suite(root: Path, cases: Path, recordings: Path, tag: str) -> dict:
+def run_suite(root: Path, cases: Path, recordings: Path, tag: str, only: list[str] | None = None) -> dict:
     """Replay one suite on the code under ``root``; returns {case id: graded result}."""
     if not cases.exists() or not recordings.exists():
         return {}
     hist = Path(tempfile.mkdtemp()) / f"{tag}.jsonl"
     env = {**os.environ, "PYTHONPATH": str(root / "src")}
     sh([sys.executable, "-u", "scripts/eval_batch.py", "--cases", str(cases), "--replay", str(recordings),
-        "--history", str(hist), "--out", str(hist.with_suffix(".md"))], cwd=root, env=env)
+        "--history", str(hist), "--out", str(hist.with_suffix(".md"))]
+       + [a for k in (only or []) for a in ("--only", k)], cwd=root, env=env)
     runs = [json.loads(l) for l in hist.read_text().splitlines() if l.strip()] if hist.exists() else []
     return runs[-1]["cases"] if runs else {}
 
 
-def run_all(root: Path, tag: str) -> dict:
+def run_all(root: Path, tag: str, only: list[str] | None = None) -> dict:
     out = {}
     for i, (cases, rec) in enumerate(SUITES):
-        out.update(run_suite(root, cases, rec, f"{tag}-{i}"))
+        ids = {c["id"] for c in json.loads(cases.read_text())} if cases.exists() else set()
+        if only is not None and not ids & set(only):
+            continue
+        out.update(run_suite(root, cases, rec, f"{tag}-{i}", [k for k in only if k in ids] if only else None))
     return out
 
 
@@ -114,7 +118,11 @@ def failing_context(results: dict) -> str:
             if not r or r["passed"]:
                 continue
             checks = {k: c[k] for k in ("cause_any", "must_mention_any", "action_any", "must_not_mention") if c.get(k)}
+            missing = r.get("notRecorded") or []
             blocks.append(f"### {c['id']}\nKNOWN CAUSE: {c.get('cause')}\nCHECKS: {json.dumps(checks)}\n"
+                          + (f"TOOLS THE AGENT CALLED THAT THE RECORDING NEVER CAPTURED: {sorted(set(missing))} — "
+                             "the evidence they would give is NOT available in replay\n" if missing else "")
+                          +
                           f"GRADE: {r['result']}\nAGENT ANSWER:\n{r.get('answer', '')}\n"
                           f"TOOLS CALLED:\n{trace(rec, c['execution_id'])}\n")
     return "\n".join(blocks)
@@ -192,6 +200,12 @@ def main() -> int:
             print(f"attempt {attempt}: {len(proposal['edits'])} edit(s); replaying...", flush=True)
             after = run_all(wt_agent, f"after{attempt}")
             ok, fixed, broke = verdict(before, after)
+            if fixed and broke:  # LLM runs vary: a regression counts only if it fails again
+                again = run_all(wt_agent, f"after{attempt}-recheck", only=broke)
+                for k, r in again.items():
+                    if r["passed"]:
+                        after[k] = r
+                ok, fixed, broke = verdict(before, after)
             print(f"attempt {attempt}: fixed={fixed} broke={broke}", flush=True)
             if ok:
                 passed = sum(r["passed"] for r in after.values())

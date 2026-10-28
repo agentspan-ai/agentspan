@@ -103,6 +103,30 @@ def replay_misses(replay_dir: str, execution_id: str) -> list[str]:
     return [m["tool"] for m in map(json.loads, path.read_text().splitlines()) if m["execution_id"] == execution_id]
 
 
+# Read once per recorded case even if the agent did not, so a later playbook that asks for them
+# can be judged in replay (a recording without the evidence can never pass, whatever the prompt).
+EVIDENCE_PACK = ("get_incident_details", "get_alert_recurrence", "get_node_churn", "get_pods_data",
+                 "get_restart_reasons", "get_db_connections", "get_cluster_metrics")
+
+
+def record_evidence_pack(execution_id: str, record_dir: str) -> list[str]:
+    from oncall_agent.tools import ALL_TOOLS
+    done = set()
+    path = Path(record_dir) / f"{execution_id}.jsonl"
+    if path.exists():
+        done = {json.loads(l)["tool"] for l in path.read_text().splitlines() if l.strip()}
+    added = []
+    for t in ALL_TOOLS:
+        name = t._tool_def.name
+        if name in EVIDENCE_PACK and name not in done:
+            try:
+                t._tool_def.func(execution_id=execution_id)  # cassette-wrapped: recorded like any call
+                added.append(name)
+            except Exception as exc:
+                log.warning("evidence %s failed for %s: %s", name, execution_id, exc)
+    return added
+
+
 def record_history(path: str, mode: str, model: str, results: dict[str, dict]) -> list[str]:
     """Append this run to the history file; return how it differs from the last run in the same mode."""
     prev = None
@@ -194,6 +218,8 @@ def main(argv: list[str] | None = None) -> int:
                 log.exception("[%d/%d] failed", i, len(incidents))
             else:
                 ok += 1
+            if args.record:
+                log.info("evidence pack recorded: %s", record_evidence_pack(wf_id, args.record))
             lines += [
                 f"## {i}. `{wf_id}`",
                 "",
