@@ -96,3 +96,13 @@ def test_run_kubectl_read_rejects_mutations_before_dispatch(monkeypatch):
     out = tools.run_kubectl_read("exec", "delete pod x -n orkes")
     assert out.get("error") == "rejected_non_readonly_kubectl"
     assert fake.calls == []  # never reached the cluster
+
+
+def test_failed_kubectl_read_is_flagged_with_the_real_namespace(monkeypatch):
+    from oncall_agent import tools
+    monkeypatch.setattr(tools, "_context", lambda e: {"clusterName": "c"})
+    monkeypatch.setattr(tools, "_disp", lambda: type("D", (), {"dispatch": lambda self, *a, **k: {"status": "FAILED"}})())
+    tools._ns_cache["E1"] = "orkeslteeastus-luzqc-ns"
+    raw = tools.run_kubectl_read._tool_def.func.__wrapped__ if hasattr(tools.run_kubectl_read._tool_def.func, "__wrapped__") else tools.run_kubectl_read
+    out = raw("E1", "logs p -n wrong --previous")
+    assert "FAILED" in out["readFailed"] and "orkeslteeastus-luzqc-ns" in out["readFailed"]

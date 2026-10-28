@@ -171,6 +171,9 @@ def get_incident_details(execution_id: str) -> dict:
         # Managed Redis/Postgres events at the onset, always included: the model skipped the
         # separate tool on exactly the incidents it explains (eval 2026-10-27).
         "azureEvents": _azure_findings(ctx.get("clusterId"), onset or info["alert_ms"]),
+        # The real namespace: the agent otherwise guesses (the cloud tag, the cluster name) and a
+        # read against the wrong one fails — seen live 2026-10-28, reported as "logs are gone".
+        "namespace": _safe_namespace(execution_id),
         # CPU alerts: where the load comes from, read from fleet metrics in BigQuery.
         **(_cpu_context(ctx.get("clusterName"), onset or info["alert_ms"])
            if any("cpu" in k for k in info["issues"]) else {}),
@@ -319,12 +322,19 @@ def run_kubectl_read(execution_id: str, command: str) -> dict:
         safe = ensure_readonly_kubectl(command)
     except NotReadOnlyKubectlError as exc:
         return {"error": "rejected_non_readonly_kubectl", "detail": str(exc), "command": command}
-    return _disp().dispatch(
+    out = _disp().dispatch(
         "KUBECTL_UNRESTRICTED",
         "kubectl_unrestricted",
         _context(execution_id),
         {"unrestrictedCommand": safe},
     )
+    if isinstance(out, dict) and str(out.get("status", "")).upper() != "COMPLETED":
+        ns = _ns_cache.get(execution_id)
+        out["readFailed"] = ("this kubectl read FAILED — it says nothing about what exists. "
+                             + (f"The cluster's namespace is {ns!r}; " if ns else
+                                "The cluster's namespace is in get_incident_details `namespace`; ")
+                             + "check the command and retry.")
+    return out
 
 
 @tool(timeout_seconds=_T)
@@ -815,6 +825,13 @@ def find_missing_fixes(execution_id: str, symbol: str, top: int = 8) -> dict:
 
 
 _ns_cache: dict[str, str] = {}
+
+
+def _safe_namespace(execution_id: str) -> str | None:
+    try:
+        return _namespace(execution_id)
+    except Exception:
+        return None
 
 
 def _namespace(execution_id: str) -> str:
