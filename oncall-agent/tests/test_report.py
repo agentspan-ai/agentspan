@@ -11,8 +11,8 @@ _spec.loader.exec_module(report)
 
 def test_report_counts_judged_accuracy_and_approvals(tmp_path):
     now = time.time()
-    tri = [{"at": now, "alert_execution": "A1", "cluster": "c1", "answer": "*Cause*: x"},
-           {"at": now, "alert_execution": "A2", "cluster": "c1", "answer": "*Cause*: unknown — y"},
+    tri = [{"at": now, "alert_execution": "A1", "cluster": "c1", "answer": "*Cause*: x", "playbook": "v1aaaaaaaa"},
+           {"at": now, "alert_execution": "A2", "cluster": "c1", "answer": "*Cause*: unknown — y", "playbook": "v2bbbbbbbb"},
            {"at": now - 30 * 86400, "alert_execution": "OLD", "answer": "*Cause*: z"},
            {"at": now, "approval": {"outcome": "approved"}}, {"at": now, "approval": {"outcome": "expired"}}]
     fb = [{"at": now, "alert_execution": "A1", "verdict": "correct"},
@@ -24,3 +24,4 @@ def test_report_counts_judged_accuracy_and_approvals(tmp_path):
     assert (r["triages"], r["causeUnknown"], r["accuracy"], r["followUpQuestions"]) == (2, 1, 0.5, 1)
     assert r["approvalOutcomes"] == {"approved": 1, "expired": 1}
     assert "accuracy 50%" in report.render(r)
+    assert r["byPlaybookVersion"] == {"v1aaaaaaaa": {"correct": 1, "wrong": 0}, "v2bbbbbbbb": {"correct": 0, "wrong": 1}}

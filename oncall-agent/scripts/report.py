@@ -33,6 +33,10 @@ def build(store: Path, days: int, now: float | None = None) -> dict:
             verdicts[f["alert_execution"]] = f["verdict"]
     judged = Counter(verdicts.values())
     approvals = Counter(t["approval"].get("outcome", "?") for t in triages if t.get("approval"))
+    version_of = {t["alert_execution"]: t.get("playbook") or "?" for t in answers}
+    by_version: dict[str, Counter] = {}
+    for alert, v in verdicts.items():
+        by_version.setdefault(version_of.get(alert, "?"), Counter())[v] += 1
     unknown = sum(1 for t in answers if t["answer"].lower().startswith("*cause*: unknown"))
     clusters = Counter(t.get("cluster") for t in answers).most_common(5)
     return {
@@ -43,6 +47,7 @@ def build(store: Path, days: int, now: float | None = None) -> dict:
         "followUpQuestions": sum(1 for f in feedback if f.get("question")),
         "changesProposed": sum(1 for t in answers if "Approval needed" in t["answer"] or "will:" in t["answer"]),
         "approvalOutcomes": dict(approvals), "topClusters": clusters,
+        "byPlaybookVersion": {v: {"correct": c["correct"], "wrong": c["wrong"]} for v, c in by_version.items()},
     }
 
 
@@ -52,7 +57,9 @@ def render(r: dict) -> str:
             f"• {r['triages']} triages ({r['causeUnknown']} with cause unknown)\n"
             f"• judged {r['withFeedback']}: {r['correct']} correct / {r['wrong']} wrong → accuracy {acc}\n"
             f"• {r['followUpQuestions']} follow-up questions · {r['changesProposed']} changes proposed\n"
-            f"• busiest: {', '.join(f'{c} ({n})' for c, n in r['topClusters']) or '-'}")
+            f"• busiest: {', '.join(f'{c} ({n})' for c, n in r['topClusters']) or '-'}"
+            + "".join(f"\n• playbook {v[:8]}: {c['correct']} correct / {c['wrong']} wrong"
+                      for v, c in r.get("byPlaybookVersion", {}).items()))
 
 
 def main() -> int:

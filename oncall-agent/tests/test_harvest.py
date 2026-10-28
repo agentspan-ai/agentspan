@@ -37,3 +37,16 @@ def test_feedback_becomes_cases_with_replayable_alert(tmp_path):
     # idempotent: a second harvest adds nothing
     assert harvest_cases.harvest(tmp_path, draft) == []
     assert len(json.loads((tmp_path / "cases.json").read_text())) == 3
+
+
+def test_confirmed_causes_become_incidents_once(tmp_path):
+    cases = [{"id": "c1", "execution_id": "A1", "cause": "workers pgvector leak", "cause_any": [["pgvector", "leak"]],
+              "human": {"cluster": "orkes-devops", "action": "restart workers"}},
+             {"id": "c2", "execution_id": "A2", "cause": "*Cause*: node upgrade\n*Action*: none", "cause_any": [],
+              "human": {"cluster": "pentest"}},
+             {"id": "c3", "execution_id": "A3", "cause": "(not given)", "needs_truth": True, "human": {}}]
+    assert harvest_cases.add_incidents(tmp_path, cases) == 2
+    assert harvest_cases.add_incidents(tmp_path, cases) == 0
+    rows = [json.loads(l) for l in (tmp_path / "incidents.jsonl").read_text().splitlines()]
+    assert rows[0]["symptoms"] == ["leak", "pgvector"] and rows[0]["fix"] == "restart workers"
+    assert rows[1]["cause"] == "node upgrade"

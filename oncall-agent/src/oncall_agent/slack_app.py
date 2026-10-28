@@ -264,6 +264,11 @@ def _triage_prompt(alert: Alert, prior: dict | None = None) -> str:
             "moved? new failure mode?) rather than rediscovering from scratch — keep "
             "the investigation to the few reads that confirm or refute it.\n"
         )
+    try:
+        from .kb import leads_for_alert
+        prompt += leads_for_alert(alert.raw, alert.cluster)
+    except Exception:  # the knowledge base must never break a triage
+        log.exception("knowledge-base lookup failed")
     prompt += "Investigate (read-only) and produce the triage summary."
     return prompt
 

@@ -62,11 +62,14 @@ def collect_alerting_runs(disp: ConductorDispatcher, hours: int) -> list[dict]:
 
 
 def triage_prompt(reason: str, execution_id: str) -> str:
+    from oncall_agent.kb import leads_for_alert
     return (
         "A cluster health-check alert fired.\n\n"
         f"Alert text:\n{reason}\n\n"
         f"The failing health_check execution id is: {execution_id}\n"
-        "Investigate (read-only) and produce the triage summary."
+        # same prompt as the listener, with this case's own incident hidden (leave-one-out)
+        + (leads_for_alert(reason, exclude_execution=execution_id) if os.environ.get("ONCALL_EVAL_KB", "1") == "1" else "")
+        + "Investigate (read-only) and produce the triage summary."
     )
 
 
@@ -167,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["ONCALL_RECORD_DIR"] = os.path.abspath(args.record)
     if args.replay:
         os.environ["ONCALL_REPLAY_DIR"] = os.path.abspath(args.replay)
+        (Path(args.replay) / "_misses.jsonl").unlink(missing_ok=True)  # misses of THIS run only
 
     logging.basicConfig(level=logging.INFO)
     use_thread_workers_if_needed()

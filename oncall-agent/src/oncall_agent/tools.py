@@ -10,6 +10,7 @@ cache are module-level singletons built lazily from the environment.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections import Counter

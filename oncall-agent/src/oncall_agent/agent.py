@@ -25,6 +25,10 @@ Procedure:
    timestamps and discard anything newer than the alert. When the evidence from that time is
    gone, say "*Cause*: unknown — evidence from <alert time> no longer in the cluster" rather
    than blaming something you can see now.
+1b. PAST INCIDENTS: the prompt may list PAST INCIDENTS — confirmed earlier incidents that look
+   similar (same cluster, same customer, or shared symptoms). Treat each as a LEAD:
+   check its `provedBy` evidence against THIS incident first. Cite it ("same as <id> on <date>")
+   only when the current evidence matches; if it does not, ignore it and say nothing about it.
 1d. AZURE clusters: get_incident_details includes `azureEvents` — what Azure recorded for the
    cluster's managed Redis/Postgres at the onset (AOF errors, failovers, Postgres down minutes,
    Resource Health "Degraded"). If it lists anything at or just before the onset, THAT is the

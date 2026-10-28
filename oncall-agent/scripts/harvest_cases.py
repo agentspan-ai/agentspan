@@ -103,7 +103,30 @@ def harvest(store: Path, draft, dry_run: bool = False) -> list[dict]:
         new.append(case)
     if new and not dry_run:
         cases_path.write_text(json.dumps(cases + new, indent=1) + "\n")
+        add_incidents(store, new)
     return new
+
+
+def add_incidents(store: Path, cases: list[dict]) -> int:
+    """Confirmed causes become knowledge-base incidents (looked up in future triages)."""
+    path = store / "incidents.jsonl"
+    known = {e for r in _rows(path) for e in (r.get("alert_executions") or [])}
+    added = 0
+    with open(path, "a") as fh:
+        for c in cases:
+            if c.get("needs_truth") or c["execution_id"] in known:
+                continue
+            cause = c["cause"]
+            if cause.startswith("*Cause*:"):  # 'correct' verdict: the agent's own cause line
+                cause = cause.split("\n")[0].removeprefix("*Cause*:").strip()
+            terms = sorted({t for g in c.get("cause_any", []) for t in g})
+            fh.write(json.dumps({"id": c["id"], "date": None, "clusters": [c["human"].get("cluster")],
+                                 "customer": None, "symptoms": terms, "cause": cause,
+                                 "fix": c["human"].get("action") or "", "evidence": "",
+                                 "alert_executions": [c["execution_id"]], "source": "on-call feedback",
+                                 "confirmed": True}) + "\n")
+            added += 1
+    return added
 
 
 def main() -> int:
