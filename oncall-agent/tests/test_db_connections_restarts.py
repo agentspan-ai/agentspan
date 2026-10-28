@@ -54,3 +54,13 @@ def test_restart_reasons_explain_each_exit():
     assert "previous container's logs" in out["rw9p7"]["meaning"]
     assert "liveness" in out["6cl7q"]["meaning"]
     assert out["rw9p7"]["lastFinishedAt"] == "2026-10-27T21:44:25Z"
+
+
+def test_poll_load_without_task_type_labels_does_not_invent_one(monkeypatch):
+    from oncall_agent import bq_metrics
+    monkeypatch.setattr(bq_metrics, "_bq", lambda sql, p: [
+        {"m": "task_poll_request_seconds", "tt": None, "per_s": 3232.0},
+        {"m": "task_queue_wait_time_seconds", "tt": None, "per_s": 0.0}])
+    out = bq_metrics.poll_load("auditboard-preprod", 1793160000000)
+    assert out["taskTypesPolled"].startswith("unknown") and out["pollRequestsPerSec"] == 3232.0
+    assert "1 task type" not in out["verdict"]

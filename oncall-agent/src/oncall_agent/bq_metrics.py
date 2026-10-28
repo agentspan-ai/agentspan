@@ -53,6 +53,15 @@ def poll_load(cluster: str, onset_ms: int, window_min: int = 30) -> dict:
     if not polls:
         return {"error": "no_poll_metrics", "detail": f"no task_poll metrics for {cluster} before the onset"}
     total_polls, total_handed = sum(polls.values()), sum(handed.values())
+    if set(polls) <= {None}:
+        # Some server versions export the poll timer without a taskType label: the totals are
+        # real, but which task types are polled (and whether they have work) is not knowable here.
+        return {"window": f"{window_min} min before {_ts(onset_ms)} UTC",
+                "pollRequestsPerSec": round(total_polls, 1), "tasksHandedOutPerSec": round(total_handed, 2),
+                "taskTypesPolled": "unknown (metric has no taskType label on this cluster)",
+                "verdict": (f"{total_polls:.0f} poll requests/s before the onset. The per-task-type split is not "
+                            "exported by this server — compare with get_daily_cpu_pattern / the same hour on "
+                            "other days, and read /api/tasks/queue/polldata/all in the cluster to see WHO polls.")}
     empty_types = [t for t, r in polls.items() if r > 0 and handed.get(t, 0) == 0]
     top = sorted(polls.items(), key=lambda kv: -kv[1])[:5]
     empty_share = 1 - min(total_handed / total_polls, 1) if total_polls else None
