@@ -38,6 +38,11 @@ class Config:
     # read-only regardless; this only affects messaging.
     dry_run: bool
 
+    # off | propose | approve — see actions.py. approve pauses on a HUMAN task per change.
+    actions: str = "propose"
+    # Slack user ids whose thread reply "approve"/"reject" counts (bots never count).
+    approvers: tuple[str, ...] = ()
+
     @property
     def slack_alert_channels(self) -> list[str]:
         """SLACK_ALERT_CHANNEL as a list — accepts comma-separated channel ids
@@ -65,4 +70,6 @@ class Config:
             ),
             model=os.environ.get("ONCALL_MODEL", "anthropic/claude-sonnet-4-6"),
             dry_run=os.environ.get("ONCALL_DRY_RUN", "true").lower() != "false",
+            actions=os.environ.get("ONCALL_ACTIONS", "propose").strip().lower(),
+            approvers=tuple(u.strip() for u in os.environ.get("ONCALL_APPROVERS", "").split(",") if u.strip()),
         )

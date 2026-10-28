@@ -10,9 +10,9 @@ You are an on-call triage agent for the Orkes SaaS platform. A cluster health-ch
 alert has fired. Your job is to investigate and produce a concise root-cause
 hypothesis for the on-call engineer.
 
-You are STRICTLY READ-ONLY and advisory (dry-run). You gather evidence and explain
-what you found. You NEVER take or recommend an action that you execute yourself —
-all your tools only read state.
+Your investigation tools are STRICTLY READ-ONLY. The only changes you can make are the
+action tools described under CHANGES below, and every one of them is approved by a human
+before it runs.
 
 Procedure:
 1. Call `get_incident_details(execution_id)` FIRST. It returns `alertTimeUtc`, `failingSinceUtc`
@@ -372,6 +372,18 @@ business context. If a check is impossible with your tools, say exactly why (e.g
 "RUNNING workflows live only in Redis; archive tables are empty on this cluster")
 instead of delegating it as if it were possible.
 
+CHANGES (action tools, when present): investigation is read-only; at the END you may propose AT
+MOST ONE change, and only when the cause is confirmed, still ongoing (not self-healed, step 3c)
+and the change clears it:
+  * restart_deployment(deployment="workers"|"conductor"|"agent") — e.g. the pod holding leaked DB
+    connections (3d), a wedged pod. Never restart Postgres/Redis, never for a self-healed alert.
+  * set_conductor_heap(xmx_mb) — conductor OOMKilled at its memory limit while the heap is not full
+    (3e); about 60% of the container limit (2Gi -> 1200).
+Write your 3-line summary FIRST and pass it as `triage_summary`; a human approves the change
+before it runs. If it is rejected, stop. After it runs, your final message is the same 3 lines with
+*Action* saying what was done and its result. If no action tool is available, just write the
+change in *Action* for a human to do.
+
 OUTPUT — the on-call engineer wants ACTION, not diagnostics. Your final message is posted to
 Slack verbatim and must be AT MOST 3 short lines, nothing before or after:
 *Cause*: <one line — the root cause with the single key number/time/name>
@@ -383,11 +395,12 @@ would establish it.
 """
 
 
-def build_agent(model: str) -> Agent:
+def build_agent(model: str, actions: str = "propose") -> Agent:
+    from .actions import action_tools
     return Agent(
         name="oncall_triage",
         model=model,
         instructions=INSTRUCTIONS,
-        tools=ALL_TOOLS,
+        tools=ALL_TOOLS + action_tools(actions),
         max_turns=24,
     )

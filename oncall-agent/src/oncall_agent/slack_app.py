@@ -17,6 +17,7 @@ from pathlib import Path
 import requests
 from conductor.ai.agents import AgentRuntime
 
+from . import approvals
 from .agent import INSTRUCTIONS, build_agent
 from .alert import Alert, alert_signature, message_text, pagerduty_cluster, parse_alert, signable_text
 from .config import Config
@@ -52,6 +53,31 @@ class _NotRemembered(Exception):
 
 class TriageTimeout(Exception):
     """A single triage exceeded :data:`_TRIAGE_DEADLINE_S` wall-clock seconds."""
+
+
+class _AwaitingApproval(Exception):
+    """The agent proposed a change and its execution is paused on a HUMAN task."""
+
+    def __init__(self, execution_id: str, pending: dict | None):
+        super().__init__(execution_id)
+        self.execution_id, self.pending = execution_id, pending or {}
+
+
+def _start_until_answer(runtime: AgentRuntime, agent, prompt: str, deadline_s: int):
+    """Like _run_with_deadline, but returns control when the agent pauses for approval
+    instead of blocking the poll loop on a human (ONCALL_ACTIONS=approve)."""
+    handle = runtime.start(agent, prompt)
+    end = time.time() + deadline_s
+    while time.time() < end:
+        st = runtime.get_status(handle.execution_id)
+        if st.is_waiting:
+            raise _AwaitingApproval(handle.execution_id, st.pending_tool)
+        if st.is_complete:
+            if str(st.status).upper() != "COMPLETED":
+                raise TriageIncomplete(f"agent run ended {st.status}")
+            return st
+        time.sleep(5)
+    raise TriageTimeout(f"triage exceeded {deadline_s}s and was abandoned")
 
 
 def _run_with_deadline(runtime: AgentRuntime, agent, prompt: str, deadline_s: int):
@@ -144,6 +170,19 @@ class SlackClient:
             if not data.get("has_more") or not cursor:
                 break
         return out
+
+    def read_replies(self, channel: str, thread_ts: str) -> list[dict]:
+        """Every message in one thread (the parent included)."""
+        resp = requests.get(
+            f"{_SLACK_API}/conversations.replies",
+            headers={"Authorization": f"Bearer {self._token}"},
+            params={"channel": channel, "ts": thread_ts, "limit": 200},
+            timeout=30,
+        )
+        data = resp.json()
+        if not data.get("ok"):
+            raise RuntimeError(f"conversations.replies failed: {data.get('error')}")
+        return data.get("messages", [])
 
     def post_reply(self, channel: str, thread_ts: str, text: str) -> None:
         resp = requests.post(
@@ -429,7 +468,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 _save_state(state_path, state)
                 raise
             try:
-                result = _run_with_deadline(
+                result = (_start_until_answer if cfg.actions == "approve" else _run_with_deadline)(
                     runtime, agent, _triage_prompt(alert, prior), _TRIAGE_DEADLINE_S
                 )
                 summary = summary_text(result)
@@ -449,6 +488,15 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                     )
             except _NotRemembered:  # posted, but an "unknown" cause is not worth replaying
                 pass
+            except _AwaitingApproval as wait:  # the change waits for a human; the loop moves on
+                calls = approvals.extract_calls(wait.pending)
+                slack.post_reply(channel, ts, _header(cfg) + approvals.proposal_text(
+                    alert.cluster or sig_cluster or "?", calls, cfg.approvers))
+                state.setdefault("pending_actions", {})[wait.execution_id] = {
+                    "channel": channel, "thread_ts": ts, "phase": "awaiting", "asked_at": time.time(),
+                    "alert_execution": alert.execution_id, "calls": [[n, a] for n, a in calls]}
+                log.info("awaiting approval channel=%s exec=%s calls=%s", channel, wait.execution_id,
+                         [n for n, _ in calls])
             except TriageIncomplete as exc:  # never post or remember a non-answer
                 state.get("signatures", {}).pop(sig, None)  # let the next firing get a real triage
                 log.error("triage incomplete channel=%s exec=%s: %s", channel, alert.execution_id, exc)
@@ -481,6 +529,9 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
     state_path = Path(cfg.state_file)
     _acquire_single_instance_lock(state_path)
     state = _load_state(state_path)
+    if state.get("pending_actions"):
+        approvals.process_pending(cfg, slack, runtime, state, summary_text,
+                                  lambda: _save_state(state_path, state))
     handled = 0
     for channel in cfg.slack_alert_channels:
         try:
@@ -504,7 +555,7 @@ def run(cfg: Config | None = None, loop: bool = False, interval: int | None = No
     slack = SlackClient(cfg.slack_bot_token)
 
     with AgentRuntime(server_url=cfg.agentspan_server_url) as runtime:
-        agent = build_agent(cfg.model)
+        agent = build_agent(cfg.model, cfg.actions)
         log.info(
             "on-call agent polling channels=%s (loop=%s, interval=%ss, dry_run=%s, model=%s)",
             ",".join(cfg.slack_alert_channels), loop, interval, cfg.dry_run, cfg.model,

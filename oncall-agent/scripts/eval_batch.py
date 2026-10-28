@@ -170,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     passed = 0
     graded: dict[str, dict] = {}
     with AgentRuntime(server_url=cfg.agentspan_server_url) as runtime:
-        agent = build_agent(cfg.model)
+        agent = build_agent(cfg.model, actions="propose")  # eval never executes a change
         for i, inc in enumerate(incidents, 1):
             wf_id, reason = inc["workflow_id"], str(inc["reason"])
             log.info("[%d/%d] triaging %s", i, len(incidents), wf_id)

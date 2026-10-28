@@ -22,7 +22,7 @@ def triage_once(execution_id: str) -> str:
 
     use_thread_workers_if_needed()
     cfg = Config.from_env()
-    agent = build_agent(cfg.model)
+    agent = build_agent(cfg.model, cfg.actions)
     prompt = (
         f"A cluster health-check alert fired for execution id {execution_id}. "
         "Investigate (read-only) and produce the triage summary."
