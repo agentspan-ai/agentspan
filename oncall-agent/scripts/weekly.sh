@@ -8,6 +8,6 @@ export PYTHONPATH=src
 PY=.venv/bin/python
 echo "=== $(date -u +%FT%TZ) weekly run"
 $PY -u scripts/harvest_cases.py
-# FROZEN for the accuracy trial (2026-10-28 -> 2026-11-11): measure, do not change the agent.
-# $PY -u scripts/improve.py --attempts 2
+$PY -u scripts/build_release_index.py
+$PY -u scripts/improve.py --attempts 2   # opens a PR only when a fix passes the eval; a human merges
 $PY -u scripts/report.py --days 7 --post-dm

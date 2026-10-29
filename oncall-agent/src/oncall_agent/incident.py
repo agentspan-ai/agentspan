@@ -183,9 +183,19 @@ class IncidentWorkers:
             return {"answer": text, "pending": wait.execution_id}
         summary = summary_text(result)
         self.slack.post_reply(ch, th, _header(self.cfg) + summary + _FEEDBACK_ASK)
+        self._record_evidence(alert.execution_id, summary)
         feedback.log_triage(_store(self.cfg), {**record, "answer": summary,
                                                "usage": usage.tokens(self.base, getattr(result, "execution_id", None))})
         return {"answer": summary, "pending": ""}
+
+    def _record_evidence(self, execution_id: str, answer: str) -> None:
+        """After answering, record the standard evidence (background) so a wrong answer can later be
+        fixed and proven in replay. Skipped when the cluster's agent is down (reads cannot answer)."""
+        if "not polling ah5r" in answer:
+            return
+        from .tools import record_evidence_pack
+        threading.Thread(target=record_evidence_pack, args=(execution_id,), daemon=True,
+                         name="evidence-pack").start()
 
     # ---- task: handle one event ---------------------------------------------------------
     def handle(self, inp: dict) -> dict:

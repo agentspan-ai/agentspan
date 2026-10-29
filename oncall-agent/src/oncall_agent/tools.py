@@ -954,6 +954,32 @@ ALL_TOOLS = [
     get_restart_reasons,
 ]
 
+# Read once per incident even if the agent did not, so the learning loop can later judge a better
+# playbook in replay: a recording without the evidence can never pass, whatever the prompt.
+EVIDENCE_PACK = ("get_incident_details", "get_alert_recurrence", "get_node_churn", "get_pods_data",
+                 "get_restart_reasons", "get_db_connections", "get_cluster_metrics")
+
+
+def record_evidence_pack(execution_id: str, record_dir: str | None = None) -> list[str]:
+    """Run the evidence-pack tools the recording does not hold yet (recorded like any call)."""
+    record_dir = record_dir or os.environ.get("ONCALL_RECORD_DIR")
+    if not record_dir:
+        return []
+    import json as _json
+    path = Path(record_dir) / f"{execution_id}.jsonl"
+    done = {_json.loads(l)["tool"] for l in path.read_text().splitlines() if l.strip()} if path.exists() else set()
+    added = []
+    for t in ALL_TOOLS:
+        name = t._tool_def.name
+        if name in EVIDENCE_PACK and name not in done:
+            try:
+                t._tool_def.func(execution_id=execution_id)
+                added.append(name)
+            except Exception:
+                pass
+    return added
+
+
 # Every tool records its calls or replays them (see cassette.py); the worker runs ``_tool_def.func``.
 for _t in ALL_TOOLS:
     _t._tool_def.func = cassette.wrap(_t._tool_def.name, _t._tool_def.func)
