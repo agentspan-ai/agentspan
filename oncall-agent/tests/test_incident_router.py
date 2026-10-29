@@ -75,7 +75,7 @@ def test_new_alert_starts_a_workflow_and_a_second_one_joins_it(monkeypatch):
     assert server.started[0]["correlationId"] == "C:100.0" and server.started[0]["input"]["cluster"] == "c1"
     again = r.on_alert("C", {"ts": "200.0", "text": "alert again"}, SimpleNamespace(execution_id="E2", cluster="c1"))
     assert again == wid and len(server.started) == 1
-    assert state["outbox"]["C:100.0"][0]["kind"] == "firing" and "<link>" in slack.posts[-1]
+    assert state["outbox"]["C:100.0"][0]["kind"] == "firing" and slack.posts == []  # repeats are silent
 
 
 def test_replies_wait_in_the_outbox_until_the_workflow_is_waiting(monkeypatch):

@@ -167,9 +167,8 @@ class IncidentWorkers:
             return {"open": False, "pending": ""}
         if kind == "close":
             return {"open": False, "pending": ""}
-        if kind == "firing":
-            self.slack.post_reply(ch, th, f":repeat: Fired again at {ev.get('at', '?')} — same incident, "
-                                          f"tracking here. Reply `? …` to have it re-checked.")
+        if kind == "firing":  # a repeat of this incident: recorded, never posted (no thread spam)
+            feedback.log_triage(store, {"firing": {**inc, "at": ev.get("at"), "alert_execution": ev.get("alert_execution")}})
             return {"open": True, "pending": pending}
         if kind in ("approve", "reject"):
             return self._decide(inc, ev, pending)

@@ -52,9 +52,8 @@ class Router:
             key, inc = existing
             self._queue(key, {"kind": "firing", "at": time.strftime("%H:%M UTC", time.gmtime(float(ts))),
                               "alert_execution": alert.execution_id})
-            link = self._permalink(inc["channel"], inc["thread_ts"])
-            self.slack.post_reply(channel, ts, f":link: Same open incident on `{alert.cluster}` — tracked in "
-                                               f"{link or 'the earlier thread'}.")
+            # Silent: health-check channels repost a failing cluster every 5 minutes; replying to
+            # each repeat would flood the alert threads. The open incident keeps the count.
             return inc["workflow_id"]
         wid = requests.post(f"{self.base}/workflow", timeout=30, json={
             "name": incident.WORKFLOW, "version": 1, "correlationId": f"{channel}:{ts}",
