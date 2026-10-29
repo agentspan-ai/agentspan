@@ -365,7 +365,10 @@ def _channel_state(state: dict, channel: str, cfg: Config) -> dict:
 
 def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                   channel: str, state: dict, state_path: Path, router=None) -> int:
+    new_channel = channel not in state.get("channels", {})
     ch_state = _channel_state(state, channel, cfg)
+    if new_channel:  # persist the start point now, or every poll would start again from "now"
+        _save_state(state_path, state)
     processed = set(ch_state.get("processed") or [])
 
     # Slack returns newest-first; process oldest-first so the window advances cleanly.

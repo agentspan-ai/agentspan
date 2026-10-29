@@ -586,3 +586,11 @@ def test_newly_added_channel_starts_from_now_not_its_history(tmp_path):
     before = time.time()
     ch = _channel_state(state, cfg.slack_alert_channels[1], cfg)
     assert float(ch["last_ts"]) >= before
+
+
+def test_new_channel_start_point_is_saved_before_any_message(tmp_path):
+    from oncall_agent.slack_app import _load_state
+    cfg = _cfg_multi(tmp_path)
+    run_once(cfg, FakeSlack([]), FakeRuntime(), agent=object())
+    state = _load_state(tmp_path / "state.json") if (tmp_path / "state.json").exists() else _load_state(__import__("pathlib").Path(cfg.state_file))
+    assert all(ch in state["channels"] for ch in cfg.slack_alert_channels)
