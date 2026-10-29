@@ -70,11 +70,19 @@ def watch(state: dict, channel: str, thread_ts: str, alert_execution: str, clust
 _DECISION = re.compile(r"^(approve|approved|reject|rejected)\b", re.I)
 
 
+_ASK = re.compile(r"^(can|could|would|will|please|pls|why|what|how|where|when|which|who|is|are|was|were|"
+                  r"do|does|did|should|check|investigate|dig|explain|show|look|find|verify|confirm|tell)\b", re.I)
+
+
 def is_question(text: str, bot_user_id: str | None) -> bool:
-    """A reply addressed to the agent: it @-mentions the bot or starts with '?'."""
+    """A reply addressed to the agent in its own alert thread: it asks something ('?' anywhere),
+    reads as a request ('can you…', 'why…', 'investigate…'), or @-mentions the bot. Approvals and
+    feedback words are not questions. (The first rule — must START with '?' — missed every real
+    question people typed, seen live 2026-10-29.)"""
     t = (text or "").strip()
-    return bool(t) and not _DECISION.match(t) and (
-        t.startswith("?") or bool(bot_user_id and f"<@{bot_user_id}>" in t))
+    if not t or _DECISION.match(t) or parse(t):
+        return False
+    return "?" in t or bool(_ASK.match(t)) or bool(bot_user_id and f"<@{bot_user_id}>" in t)
 
 
 def collect(slack, state: dict, store: Path, save, bot_user_id: str | None = None) -> int:

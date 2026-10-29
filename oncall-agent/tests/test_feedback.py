@@ -34,7 +34,12 @@ def test_questions_need_a_mention_or_question_mark_and_are_not_decisions():
     assert feedback.is_question(f"<@{BOT}> why not the conductor pods?", BOT)
     assert feedback.is_question("? which pod holds the connections", BOT)
     assert not feedback.is_question("approve", BOT)
-    assert not feedback.is_question("why is this happening", BOT)  # people talking to each other
+    # how people actually ask (seen live 2026-10-29)
+    assert feedback.is_question("are you sur ethere are 967k running workflows?", BOT)
+    assert feedback.is_question("can you investigate this further", BOT)
+    assert feedback.is_question("why is this happening", BOT)
+    assert not feedback.is_question("correct", BOT) and not feedback.is_question("cause: node upgrade", BOT)
+    assert not feedback.is_question("ok thanks", BOT)
 
 
 def test_collect_records_feedback_and_queues_questions_once(tmp_path):
