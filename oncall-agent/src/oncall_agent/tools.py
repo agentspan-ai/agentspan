@@ -174,7 +174,9 @@ def get_incident_details(execution_id: str) -> dict:
         "azureEvents": _azure_findings(ctx.get("clusterId"), onset or info["alert_ms"]),
         # The real namespace: the agent otherwise guesses (the cloud tag, the cluster name) and a
         # read against the wrong one fails — seen live 2026-10-28, reported as "logs are gone".
-        "namespace": _safe_namespace(execution_id),
+        "clusterAgent": _agent_reachability(wf, ctx, onset),
+        # Only look the namespace up when the cluster can answer (it is a cluster read).
+        "namespace": _safe_namespace(execution_id) if _agent_reachability(wf, ctx, onset)["polling"] else None,
         # CPU alerts: where the load comes from, read from fleet metrics in BigQuery.
         **(_cpu_context(ctx.get("clusterName"), onset or info["alert_ms"])
            if any("cpu" in k for k in info["issues"]) else {}),
@@ -826,6 +828,26 @@ def find_missing_fixes(execution_id: str, symbol: str, top: int = 8) -> dict:
 
 
 _ns_cache: dict[str, str] = {}
+
+
+def _agent_reachability(wf: dict, ctx: dict, onset_ms: int) -> dict:
+    """Is the in-cluster agent picking up ah5r work? A health-check task routed to the cluster's
+    domain that TIMED_OUT with zero polls means nothing in the cluster is polling: every cluster
+    read (kubectl/SQL/logs) will only wait for its own timeout. Seen live 2026-10-29 on
+    manan-testing: a triage spent 32 min on reads that could never answer."""
+    for t in wf.get("tasks", []):
+        dom = str(t.get("domain") or "")
+        if "#-#" in dom and str(t.get("status")).upper() in ("TIMED_OUT", "FAILED") and not t.get("pollCount"):
+            from datetime import datetime, timezone
+            since = datetime.fromtimestamp(onset_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC") \
+                if onset_ms else "unknown"
+            return {"polling": False, "stuckTask": t.get("ref"), "domain": dom, "failingSince": since,
+                    "verdict": (f"The cluster's in-cluster agent is NOT polling ah5r: health-check task "
+                                f"`{t.get('ref')}` was never picked up (0 polls) in domain {dom}, failing since "
+                                f"{since}. No cluster read can answer — do not call kubectl/SQL/log tools. "
+                                "Typical causes: agent pod down/crash-looping, its ah5r API key revoked or "
+                                "rotated (401), network to ah5r. A human must check the agent pod directly.")}
+    return {"polling": True}
 
 
 def _safe_namespace(execution_id: str) -> str | None:

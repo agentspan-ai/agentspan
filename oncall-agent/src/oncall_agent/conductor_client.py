@@ -360,6 +360,8 @@ class ConductorDispatcher:
                     "type": getattr(t, "task_type", None),
                     "status": getattr(t, "status", None),
                     "reason": getattr(t, "reason_for_incompletion", None),
+                    "domain": getattr(t, "domain", None),
+                    "pollCount": getattr(t, "poll_count", None),
                     "output": _trim(getattr(t, "output_data", None)),
                 }
             )

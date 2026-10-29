@@ -106,3 +106,13 @@ def test_failed_kubectl_read_is_flagged_with_the_real_namespace(monkeypatch):
     raw = tools.run_kubectl_read._tool_def.func.__wrapped__ if hasattr(tools.run_kubectl_read._tool_def.func, "__wrapped__") else tools.run_kubectl_read
     out = raw("E1", "logs p -n wrong --previous")
     assert "FAILED" in out["readFailed"] and "orkeslteeastus-luzqc-ns" in out["readFailed"]
+
+
+def test_cluster_agent_not_polling_is_detected_from_the_alert():
+    from oncall_agent.tools import _agent_reachability
+    wf = {"tasks": [{"ref": "verify_jwt_token_ref", "status": "TIMED_OUT", "pollCount": 0,
+                     "domain": "72bc0d2b-c8ea-44d4-96a9-866990ebbb41#-#manan-testing"}]}
+    out = _agent_reachability(wf, {}, 1793242037000)
+    assert out["polling"] is False and "0 polls" in out["verdict"] and out["failingSince"].startswith("2026-10-29")
+    assert _agent_reachability({"tasks": [{"ref": "x", "status": "COMPLETED", "pollCount": 1,
+                                           "domain": "a#-#b"}]}, {}, 0) == {"polling": True}

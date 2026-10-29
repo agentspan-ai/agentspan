@@ -25,6 +25,11 @@ Procedure:
    timestamps and discard anything newer than the alert. When the evidence from that time is
    gone, say "*Cause*: unknown — evidence from <alert time> no longer in the cluster" rather
    than blaming something you can see now.
+1a. CLUSTER AGENT DOWN: if get_incident_details says `clusterAgent.polling: false`, the cluster cannot
+   answer any read. Do NOT call kubectl/SQL/log/thread/heap tools. Answer at once:
+   Cause = the in-cluster agent is not polling ah5r since `failingSince`; Action = check the agent
+   pod directly (logs for 401 "Invalid Access Key" -> rotate its key; CrashLoopBackOff; node gone);
+   Evidence = the stuck task with 0 polls. BigQuery tools (no cluster access) are still fine.
 1b. PAST INCIDENTS: the prompt may list PAST INCIDENTS — confirmed earlier incidents that look
    similar (same cluster, same customer, or shared symptoms). Treat each as a LEAD:
    check its `provedBy` evidence against THIS incident first. Cite it ("same as <id> on <date>")

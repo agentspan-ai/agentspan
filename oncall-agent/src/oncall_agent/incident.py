@@ -118,9 +118,16 @@ class IncidentWorkers:
     def _run(self, fn, task: dict) -> None:
         try:
             out, status = fn(task.get("inputData") or {}), "COMPLETED"
-        except Exception as exc:  # report into the workflow; never leave a task hanging
+        except Exception as exc:  # report into the workflow AND the thread; never leave either hanging
             log.exception("%s failed", task.get("taskDefName"))
             out, status = {"error": str(exc)[:500], "open": True, "pending": ""}, "FAILED"
+            inc = (task.get("inputData") or {}).get("incident") or {}
+            if inc.get("channel"):
+                try:
+                    self.slack.post_reply(inc["channel"], inc["thread_ts"],
+                                          f":warning: The investigation could not finish (`{str(exc)[:160]}`) — needs a human.")
+                except Exception:
+                    log.exception("could not post the failure")
         finally:
             self.free.release()
         try:
