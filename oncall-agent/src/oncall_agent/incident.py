@@ -63,9 +63,9 @@ WORKFLOW_DEF = {
 }
 
 TASK_DEFS = [
-    {"name": TRIAGE_TASK, "retryCount": 0, "timeoutSeconds": 3600, "responseTimeoutSeconds": 3000,
+    {"name": TRIAGE_TASK, "retryCount": 1, "retryLogic": "FIXED", "retryDelaySeconds": 0, "timeoutSeconds": 3600, "responseTimeoutSeconds": 3000,
      "ownerEmail": "oncall@orkes.io", "timeoutPolicy": "TIME_OUT_WF"},
-    {"name": HANDLE_TASK, "retryCount": 0, "timeoutSeconds": 3600, "responseTimeoutSeconds": 3000,
+    {"name": HANDLE_TASK, "retryCount": 1, "retryLogic": "FIXED", "retryDelaySeconds": 0, "timeoutSeconds": 3600, "responseTimeoutSeconds": 3000,
      "ownerEmail": "oncall@orkes.io", "timeoutPolicy": "ALERT_ONLY"},
 ]
 
@@ -91,7 +91,31 @@ class IncidentWorkers:
         self.stop = threading.Event()
 
     def start(self) -> None:
+        self.requeue_orphans()
         threading.Thread(target=self._poll_loop, name="incident-poller", daemon=True).start()
+
+    def requeue_orphans(self) -> int:
+        """Tasks a previous listener process was running died with it; fail them now so their one
+        retry runs at once instead of after the 50-min response timeout (seen live 2026-10-29: a
+        restart mid-triage left the manan-testing incident hanging until it TIMED_OUT)."""
+        n = 0
+        try:
+            r = requests.get(f"{self.base}/workflow/search", timeout=30, params={
+                "start": 0, "size": 100, "query": f"workflowType IN ({WORKFLOW}) AND status IN (RUNNING)"})
+            for summary in (r.json().get("results") or []) if r.ok else []:
+                wf = requests.get(f"{self.base}/workflow/{summary['workflowId']}",
+                                  params={"includeTasks": "true"}, timeout=30).json()
+                for t in wf.get("tasks", []):
+                    if t.get("taskDefName") in (TRIAGE_TASK, HANDLE_TASK) and t.get("status") == "IN_PROGRESS":
+                        requests.post(f"{self.base}/tasks", timeout=30, json={
+                            "workflowInstanceId": wf["workflowId"], "taskId": t["taskId"], "status": "FAILED",
+                            "reasonForIncompletion": "listener restarted while this task ran; retrying"})
+                        n += 1
+        except Exception:
+            log.exception("orphan requeue failed")
+        if n:
+            log.info("requeued %d task(s) left running by the previous listener", n)
+        return n
 
     def _poll_loop(self) -> None:
         handlers = {TRIAGE_TASK: self.triage, HANDLE_TASK: self.handle}

@@ -151,3 +151,26 @@ def test_handle_feedback_is_recorded(tmp_path, monkeypatch):
                                          "meaning": {"verdict": "correct"}}, "pending": ""})
     assert '"verdict": "correct"' in (tmp_path / "feedback.jsonl").read_text()
     assert "Noted" in slack.posts[-1]
+
+
+def test_tasks_left_running_by_a_dead_listener_are_retried(monkeypatch):
+    calls = []
+
+    class R:
+        def __init__(self, data): self.ok, self._d = True, data
+        def json(self): return self._d
+
+    def get(url, params=None, timeout=None):
+        if url.endswith("/workflow/search"):
+            return R({"results": [{"workflowId": "W1"}]})
+        return R({"workflowId": "W1", "tasks": [
+            {"taskDefName": incident.TRIAGE_TASK, "status": "IN_PROGRESS", "taskId": "T1"},
+            {"taskDefName": "await_event", "status": "IN_PROGRESS", "taskId": "T2"}]})
+
+    monkeypatch.setattr(incident.requests, "get", get)
+    monkeypatch.setattr(incident.requests, "post", lambda url, json=None, timeout=None: calls.append(json))
+    w = IncidentWorkers(SimpleNamespace(agentspan_server_url="http://x/api"), None, None, None, parallel=1)
+    assert w.requeue_orphans() == 1
+    assert calls == [{"workflowInstanceId": "W1", "taskId": "T1", "status": "FAILED",
+                      "reasonForIncompletion": "listener restarted while this task ran; retrying"}]
+    assert all(t["retryCount"] == 1 for t in incident.TASK_DEFS)
