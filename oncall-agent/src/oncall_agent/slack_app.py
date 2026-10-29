@@ -364,7 +364,7 @@ def _channel_state(state: dict, channel: str, cfg: Config) -> dict:
 
 
 def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
-                  channel: str, state: dict, state_path: Path) -> int:
+                  channel: str, state: dict, state_path: Path, router=None) -> int:
     ch_state = _channel_state(state, channel, cfg)
     processed = set(ch_state.get("processed") or [])
 
@@ -458,7 +458,7 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             # a new incident (seen live 2026-10-27: a stale wrong diagnosis was replayed).
             if prior and not _same_incident(prior, alert.execution_id):
                 prior = None
-            if prior and (now - prior.get("last_full_ts", 0)) < _FULL_TRIAGE_INTERVAL_S:
+            if cfg.mode != "workflow" and prior and (now - prior.get("last_full_ts", 0)) < _FULL_TRIAGE_INTERVAL_S:
                 log.info("memory update (no LLM) channel=%s exec=%s firings=%d",
                          channel, alert.execution_id, prior.get("firings", 0) + 1)
                 prior["firings"] = prior.get("firings", 1) + 1
@@ -492,6 +492,15 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 _save_state(state_path, state)
                 continue
 
+            if router is not None:  # workflow mode: the incident workflow does the work
+                import dataclasses
+                router.on_alert(channel, msg, dataclasses.replace(alert, cluster=alert.cluster or sig_cluster))
+                handled += 1
+                processed.add(ts)
+                ch_state["processed"] = list(processed)[-500:]
+                ch_state["last_ts"] = ts
+                _save_state(state_path, state)
+                continue
             log.info("triage channel=%s exec=%s cluster=%s sev=%s",
                      channel, alert.execution_id, alert.cluster, alert.severity)
             try:
@@ -644,11 +653,16 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
     state_path = Path(cfg.state_file)
     _acquire_single_instance_lock(state_path)
     state = _load_state(state_path)
+    router = None
+    if cfg.mode == "workflow":
+        from .router import Router
+        router = Router(cfg, slack, state, lambda: _save_state(state_path, state))
+        router.poll_threads()
     if state.get("pending_actions"):
         approvals.process_pending(cfg, slack, runtime, state, summary_text,
                                   lambda: _save_state(state_path, state),
                                   record=lambda r: feedback.log_triage(_store(cfg), {"approval": r}))
-    if state.get("feedback_watch"):
+    if state.get("feedback_watch"):  # threads answered by the old loop, until they expire
         feedback.collect(slack, state, _store(cfg), lambda: _save_state(state_path, state),
                          bot_user_id=slack.bot_user_id() if hasattr(slack, "bot_user_id") else None)
     if state.get("questions"):
@@ -656,7 +670,7 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
     handled = 0
     for channel in cfg.slack_alert_channels:
         try:
-            handled += _poll_channel(cfg, slack, runtime, agent, channel, state, state_path)
+            handled += _poll_channel(cfg, slack, runtime, agent, channel, state, state_path, router)
         except Exception:  # one bad channel must not starve the other
             log.exception("poll failed for channel %s", channel)
     return handled
@@ -679,6 +693,11 @@ def run(cfg: Config | None = None, loop: bool = False, interval: int | None = No
 
     with AgentRuntime(server_url=cfg.agentspan_server_url) as runtime:
         agent = build_agent(cfg.model, cfg.actions)
+        if cfg.mode == "workflow":
+            from . import incident
+            incident.register(cfg.agentspan_server_url)
+            incident.IncidentWorkers(cfg, slack, runtime, agent).start()
+            log.info("workflow mode: every alert runs as its own %s workflow", incident.WORKFLOW)
         log.info(
             "on-call agent polling channels=%s (loop=%s, interval=%ss, dry_run=%s, model=%s)",
             ",".join(cfg.slack_alert_channels), loop, interval, cfg.dry_run, cfg.model,

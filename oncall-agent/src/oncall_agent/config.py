@@ -42,6 +42,9 @@ class Config:
     actions: str = "propose"
     # Slack user ids whose thread reply "approve"/"reject" counts (bots never count).
     approvers: tuple[str, ...] = ()
+    # loop: one listener loop triages alerts one at a time (original).
+    # workflow: every alert is its own durable oncall_incident workflow (incident.py, router.py).
+    mode: str = "loop"
 
     @property
     def slack_alert_channels(self) -> list[str]:
@@ -72,4 +75,5 @@ class Config:
             dry_run=os.environ.get("ONCALL_DRY_RUN", "true").lower() != "false",
             actions=os.environ.get("ONCALL_ACTIONS", "propose").strip().lower(),
             approvers=tuple(u.strip() for u in os.environ.get("ONCALL_APPROVERS", "").split(",") if u.strip()),
+            mode=os.environ.get("ONCALL_MODE", "loop").strip().lower(),
         )
