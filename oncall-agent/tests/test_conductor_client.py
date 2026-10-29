@@ -157,3 +157,11 @@ def test_dispatcher_raises_when_rebuild_also_fails():
     d = ConductorDispatcher("url", "k", "s", client_factory=_AlwaysBroken())
     with pytest.raises(OSError):
         d.get_context("exec-1")
+
+
+def test_timed_out_health_checks_count_as_failing():
+    from types import SimpleNamespace as N
+    from oncall_agent.conductor_client import _run_failing
+    assert _run_failing(N(status="TIMED_OUT", reason_for_incompletion="Task poll timed out after 20 seconds"))
+    assert _run_failing(N(status="FAILED", reason_for_incompletion=None))
+    assert not _run_failing(N(status="COMPLETED", reason_for_incompletion=None))

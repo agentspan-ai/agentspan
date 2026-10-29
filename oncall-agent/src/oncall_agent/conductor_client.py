@@ -88,6 +88,15 @@ def issue_keys(reason: str | None) -> set[str]:
     return keys
 
 
+def _run_failing(run) -> bool:
+    """A health check failed if it reported issues OR never finished: a TIMED_OUT/FAILED run
+    has no issue lines (seen live 2026-10-29: manan-testing's agent stopped polling, 70 runs
+    timed out, and the agent reported "self-healed" because none listed an issue)."""
+    status = str(getattr(run, "status", "") or "").upper()
+    return status in ("TIMED_OUT", "FAILED", "TERMINATED") or \
+        bool(issue_keys(getattr(run, "reason_for_incompletion", None)))
+
+
 def _epoch_ms(value: Any) -> int | None:
     """Search results carry start_time as epoch ms or an ISO-8601 string."""
     if isinstance(value, (int, float)):
@@ -207,7 +216,7 @@ class ConductorDispatcher:
                           key=lambda r: _epoch_ms(getattr(r, "start_time", None)) or 0, reverse=True)
             for r in runs:
                 keys = issue_keys(getattr(r, "reason_for_incompletion", None))
-                if not keys or (issues and not keys & issues):
+                if not _run_failing(r) or (issues and keys and not keys & issues):
                     return onset
                 ms = _epoch_ms(getattr(r, "start_time", None))
                 if ms is not None:
@@ -222,10 +231,10 @@ class ConductorDispatcher:
         ))
         runs = sorted(getattr(result, "results", None) or [],
                       key=lambda r: _epoch_ms(getattr(r, "start_time", None)) or 0)[:n]
-        return [{"startTime": getattr(r, "start_time", None),
-                 "failing": bool(issue_keys(getattr(r, "reason_for_incompletion", None))),
+        return [{"startTime": getattr(r, "start_time", None), "status": str(getattr(r, "status", "") or ""),
+                 "failing": _run_failing(r),
                  "issues": sorted(issue_keys(getattr(r, "reason_for_incompletion", None)))}
-                for r in runs]
+                for r in runs if str(getattr(r, "status", "")).upper() != "RUNNING"]
 
     def recent_health_checks(self, cluster_id: str, size: int = 100) -> list[dict]:
         """Recent ``health_check`` runs for ONE cluster, newest first.
