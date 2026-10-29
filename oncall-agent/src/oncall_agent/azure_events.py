@@ -16,6 +16,7 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 
 _BQ_PROJECT = "data-bi-474617"
+_METRIC_DELAY_MIN = 5
 _SAAS = f"{_BQ_PROJECT}.prod_saas_raw"
 
 
@@ -73,10 +74,12 @@ def summarize_redis_errors(timeseries: list) -> list[dict]:
 
 def summarize_db_alive(timeseries: list) -> list[str]:
     """Minutes where Postgres was not alive: is_db_alive minimum 0, or most of the minute's
-    liveness samples missing (a short restart shows up only as a sample gap)."""
+    liveness samples missing (a short restart shows up only as a sample gap). A minute with NO
+    samples at all is unknown (not yet ingested), never "down" — seen live 2026-10-28 on poc-cfc:
+    minutes after the triage started were reported as a 30-minute outage that never happened."""
     return [p["timeStamp"] for ts in timeseries for p in ts["data"]
             if (p.get("minimum") is not None and p["minimum"] < 1)
-            or (p.get("count") is not None and p["count"] < 4)]
+            or (p.get("count") and p["count"] < 4)]
 
 
 def health_events(rid: str, start: str, end: str) -> list[dict]:
@@ -109,7 +112,9 @@ def azure_events(cluster_id: str, onset_ms: int, before_min: int = 60, after_min
     """Redis errors, Postgres liveness and activity-log events around the failure onset."""
     onset = datetime.fromtimestamp(onset_ms / 1000, tz=timezone.utc)
     start = (onset - timedelta(minutes=before_min)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    end = (onset + timedelta(minutes=after_min)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Azure metrics land a few minutes late: never read past now minus that delay.
+    latest = datetime.now(timezone.utc) - timedelta(minutes=_METRIC_DELAY_MIN)
+    end = min(onset + timedelta(minutes=after_min), latest).strftime("%Y-%m-%dT%H:%M:%SZ")
     res = resolve(cluster_id)
     if not res:
         return {"error": "not_azure_or_unresolved",
