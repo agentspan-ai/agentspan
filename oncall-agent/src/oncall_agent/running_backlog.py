@@ -58,9 +58,18 @@ def _as_date(epoch_ms) -> str | None:
         return None
 
 
+STALE_RATIO = 3  # archive RUNNING this many times the live decider queue = mostly stale rows
+
+
 def build_backlog_report(plan: dict, status_rows: list[dict], bucket_rows: list[dict],
-                         top: int = 8) -> dict:
-    """Scale the sampled counts and name the dominant definitions."""
+                         top: int = 8, live_running: int | None = None) -> dict:
+    """Scale the sampled counts and name the dominant definitions.
+
+    ``live_running`` = Redis ``decider_queue_size`` from the health check: the workflows the
+    server is actually processing. The archive keeps RUNNING rows for workflows that already
+    finished in Redis, so its count (scaled from one shard on big fleets) can be far larger —
+    seen live 2026-10-29 on one-staging: ~967K in the archive vs 12,131 live, reported as
+    "confirmed"."""
     scale = plan.get("scale", 1)
     estimated = plan.get("mode") == "sampled"
 
@@ -80,6 +89,14 @@ def build_backlog_report(plan: dict, status_rows: list[dict], bucket_rows: list[
         })
 
     top2 = sum(b["running"] for b in buckets[:2])
+    stale = bool(live_running is not None and live_running >= 0 and running > STALE_RATIO * max(live_running, 1))
+    verdict = _verdict(running, failed, total_all, buckets, top2, estimated)
+    if stale:
+        verdict = (f"The archive's RUNNING count ({running:,}{', estimated from one shard' if estimated else ''}) "
+                   f"is {running // max(live_running, 1):,}x the LIVE backlog: Redis decider_queue_size = "
+                   f"{live_running:,}. Most archive RUNNING rows are stale (finished in Redis, never updated "
+                   f"in the archive) — lead with {live_running:,}; the archive count is not the backlog and must "
+                   f"not be called confirmed. Where the stale rows sit: " + verdict)
     return {
         "mode": plan.get("mode"),
         "estimated": estimated,
@@ -89,7 +106,9 @@ def build_backlog_report(plan: dict, status_rows: list[dict], bucket_rows: list[
         "failed_total": failed,
         "failure_rate_pct": round(100 * failed / total_all, 2) if total_all else None,
         "buckets": buckets,
-        "verdict": _verdict(running, failed, total_all, buckets, top2, estimated),
+        "live_running": live_running,
+        "archive_inflated": stale,
+        "verdict": verdict,
     }
 
 

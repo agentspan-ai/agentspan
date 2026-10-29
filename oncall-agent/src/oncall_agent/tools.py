@@ -704,7 +704,22 @@ def _running_backlog_buckets(execution_id: str, top: int) -> dict:
         f"""SELECT workflow_name, count(*) AS running, min(created_on) AS oldest
             FROM ({union}) x WHERE status='RUNNING'
             GROUP BY workflow_name ORDER BY running DESC LIMIT {int(top)}""")
-    return build_backlog_report(plan, status_rows, bucket_rows, top=top)
+    return build_backlog_report(plan, status_rows, bucket_rows, top=top,
+                                live_running=_live_running(execution_id))
+
+
+def _live_running(execution_id: str) -> int | None:
+    """Redis decider_queue_size from the alert's health check (the live RUNNING count)."""
+    try:
+        for t in _disp().get_execution(execution_id).get("tasks", []):
+            if t.get("ref") == "parse_conductor_cluster_data_ref":
+                out = t.get("output") or {}
+                data = out.get("result", out) if isinstance(out, dict) else {}
+                q = ((data or {}).get("redis") or {}).get("decider_queue_size")
+                return int(q) if q is not None else None
+    except Exception:
+        return None
+    return None
 
 
 

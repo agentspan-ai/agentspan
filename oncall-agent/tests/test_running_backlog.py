@@ -76,3 +76,17 @@ def test_fleet_size_comes_from_the_count_not_the_fetched_rows():
     assert plan["mode"] == "sampled"
     assert plan["scale"] == 301, "must scale by the true fleet size, not the fetched rows"
     assert plan["shard_count"] == 301
+
+
+def test_archive_count_far_above_the_live_queue_is_called_stale():
+    from oncall_agent.running_backlog import build_backlog_report
+    plan = {"mode": "sampled", "shards": ["workflow_archive_shard_7"], "shard_count": 394, "scale": 394}
+    status = [{"status": "RUNNING", "n": 2455}, {"status": "COMPLETED", "n": 900}]
+    buckets = [{"workflow_name": "wf_a", "running": 2000, "oldest": "2025-01-01"}]
+    out = build_backlog_report(plan, status, buckets, live_running=12131)
+    assert out["archive_inflated"] is True and out["live_running"] == 12131
+    assert out["verdict"].startswith("The archive's RUNNING count (967,270, estimated from one shard)")
+    assert "must not be called confirmed" in out["verdict"]
+    same = build_backlog_report({"mode": "exact", "shards": ["s"], "shard_count": 1, "scale": 1},
+                                [{"status": "RUNNING", "n": 12000}], buckets, live_running=12131)
+    assert same["archive_inflated"] is False
