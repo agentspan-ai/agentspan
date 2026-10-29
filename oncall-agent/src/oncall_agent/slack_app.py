@@ -328,8 +328,8 @@ def _header(cfg: Config) -> str:
 
 
 # Measurement trial (features frozen 2026-10-28 -> 2026-11-11): every answer asks for a verdict.
-_FEEDBACK_ASK = ("\n_Was this right? Reply `correct`, `wrong`, or `cause: <real cause>` — "
-                 "we are measuring accuracy until 2026-11-11._")
+_FEEDBACK_ASK = ("\n_Was this right? Reply `correct` or `wrong` — add `cause: <real cause>` if you know it. "
+                 "We are measuring the agent's accuracy._")
 
 
 def _store(cfg: Config) -> Path:

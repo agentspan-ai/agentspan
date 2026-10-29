@@ -30,21 +30,24 @@ WATCH_S = 3 * 86400
 MAX_THREADS_PER_POLL = 15
 _CORRECT = re.compile(r"^(?:(?:correct|right|good|accurate)\b|:white_check_mark:|:heavy_check_mark:|✅|👍|:\+1:)", re.I)
 _WRONG = re.compile(r"^(wrong|incorrect|:x:|❌|👎|:-1:)", re.I)
-_FIELD = re.compile(r"^(cause|action)\s*:\s*(.+)", re.I | re.S)
 
 
 def parse(text: str) -> dict | None:
     """A feedback reply's meaning, or None when the message is not feedback."""
     t = (text or "").strip()
-    m = _FIELD.match(t)
-    if m:
-        field, value = m.group(1).lower(), m.group(2).strip()
-        return {"verdict": "wrong", "cause": value} if field == "cause" else {"action": value}
+    # A verdict comes only from an explicit word; "cause: …" / "action: …" add the truth but are
+    # NOT a verdict (seen live 2026-10-29: a teammate explained the cause of an alert the agent had
+    # got right, and it was counted as wrong).
+    out: dict = {}
     if _CORRECT.match(t):
-        return {"verdict": "correct"}
-    if _WRONG.match(t):
-        return {"verdict": "wrong", "note": t}
-    return None
+        out["verdict"] = "correct"
+    elif _WRONG.match(t):
+        out.update(verdict="wrong", note=t)
+    for field in ("cause", "action"):
+        m = re.search(rf"\b{field}\s*:\s*(.+?)(?=\n\s*(?:cause|action)\s*:|\Z)", t, re.I | re.S)
+        if m:
+            out[field] = m.group(1).strip()
+    return out or None
 
 
 def _append(path: Path, record: dict) -> None:

@@ -22,8 +22,11 @@ def test_parse_feedback_words():
     assert feedback.parse("correct") == {"verdict": "correct"}
     assert feedback.parse("✅ spot on")["verdict"] == "correct"
     assert feedback.parse("wrong, it was redis") == {"verdict": "wrong", "note": "wrong, it was redis"}
-    assert feedback.parse("Cause: workers pgvector pool leak") == {"verdict": "wrong", "cause": "workers pgvector pool leak"}
+    # a cause alone is the truth, NOT a verdict
+    assert feedback.parse("Cause: workers pgvector pool leak") == {"cause": "workers pgvector pool leak"}
     assert feedback.parse("action: restart workers") == {"action": "restart workers"}
+    assert feedback.parse("correct\ncause: node upgrade") == {"verdict": "correct", "cause": "node upgrade"}
+    assert feedback.parse("wrong — cause: cold image pull after 5.5.11 upgrade")["cause"] == "cold image pull after 5.5.11 upgrade"
     assert feedback.parse("looking into it") is None
 
 
@@ -47,7 +50,7 @@ def test_collect_records_feedback_and_queues_questions_once(tmp_path):
     assert feedback.collect(slack, state, tmp_path, lambda: None, bot_user_id=BOT) == 2
     assert feedback.collect(slack, state, tmp_path, lambda: None, bot_user_id=BOT) == 0  # seen once
     rows = [json.loads(l) for l in (tmp_path / "feedback.jsonl").read_text().splitlines()]
-    assert rows[0]["cause"] == "workers leak" and rows[0]["alert_execution"] == "ALERT1"
+    assert rows[0]["cause"] == "workers leak" and "verdict" not in rows[0]
     assert rows[1]["question"].endswith("which pod?")
     assert [q["text"] for q in state["questions"]] == [f"<@{BOT}> which pod?"]
     assert len(slack.posts) == 1  # only the feedback is acknowledged; the question gets an answer
