@@ -38,6 +38,10 @@ def build(store: Path, days: int, now: float | None = None) -> dict:
     for alert, v in verdicts.items():
         by_version.setdefault(version_of.get(alert, "?"), Counter())[v] += 1
     unknown = sum(1 for t in answers if t["answer"].lower().startswith("*cause*: unknown"))
+    from oncall_agent.usage import usd
+    spent = [t["usage"] for t in triages if t.get("usage")]
+    t_in, t_out = sum(u["tokens_in"] for u in spent), sum(u["tokens_out"] for u in spent)
+    per = sorted(u["tokens_in"] + u["tokens_out"] for u in spent)
     clusters = Counter(t.get("cluster") for t in answers).most_common(5)
     return {
         "days": days, "triages": len(answers), "causeUnknown": unknown,
@@ -47,6 +51,8 @@ def build(store: Path, days: int, now: float | None = None) -> dict:
         "followUpQuestions": sum(1 for f in feedback if f.get("question")),
         "changesProposed": sum(1 for t in answers if "Approval needed" in t["answer"] or "will:" in t["answer"]),
         "approvalOutcomes": dict(approvals), "topClusters": clusters,
+        "tokens": {"in": t_in, "out": t_out, "runs": len(spent),
+                   "medianPerRun": per[len(per) // 2] if per else None, "usd": usd(t_in, t_out)},
         "byPlaybookVersion": {v: {"correct": c["correct"], "wrong": c["wrong"]} for v, c in by_version.items()},
     }
 
@@ -58,6 +64,10 @@ def render(r: dict) -> str:
             f"• judged {r['withFeedback']}: {r['correct']} correct / {r['wrong']} wrong → accuracy {acc}\n"
             f"• {r['followUpQuestions']} follow-up questions · {r['changesProposed']} changes proposed\n"
             f"• busiest: {', '.join(f'{c} ({n})' for c, n in r['topClusters']) or '-'}"
+            + (f"\n• LLM: {r['tokens']['in'] + r['tokens']['out']:,} tokens over {r['tokens']['runs']} runs "
+               f"(median {r['tokens']['medianPerRun']:,}/run)"
+               + (f" ≈ ${r['tokens']['usd']:,.2f}" if r['tokens']['usd'] is not None else "")
+               if r.get("tokens", {}).get("runs") else "")
             + "".join(f"\n• playbook {v[:8]}: {c['correct']} correct / {c['wrong']} wrong"
                       for v, c in r.get("byPlaybookVersion", {}).items()))
 

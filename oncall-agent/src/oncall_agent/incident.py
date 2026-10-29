@@ -27,7 +27,7 @@ from types import SimpleNamespace
 
 import requests
 
-from . import approvals, feedback
+from . import approvals, feedback, usage
 
 log = logging.getLogger(__name__)
 
@@ -183,7 +183,8 @@ class IncidentWorkers:
             return {"answer": text, "pending": wait.execution_id}
         summary = summary_text(result)
         self.slack.post_reply(ch, th, _header(self.cfg) + summary + _FEEDBACK_ASK)
-        feedback.log_triage(_store(self.cfg), {**record, "answer": summary})
+        feedback.log_triage(_store(self.cfg), {**record, "answer": summary,
+                                               "usage": usage.tokens(self.base, getattr(result, "execution_id", None))})
         return {"answer": summary, "pending": ""}
 
     # ---- task: handle one event ---------------------------------------------------------
@@ -258,7 +259,8 @@ class IncidentWorkers:
             return {"open": True, "pending": wait.execution_id}
         text = answer_text(result)
         self.slack.post_reply(ch, th, f"<@{ev.get('user')}> {text}")
-        feedback.log_triage(_store(self.cfg), {"followup": {**q, "user": ev.get("user")}, "answer": text})
+        feedback.log_triage(_store(self.cfg), {"followup": {**q, "user": ev.get("user")}, "answer": text,
+                                               "usage": usage.tokens(self.base, getattr(result, "execution_id", None))})
         return {"open": True, "pending": pending}
 
 
