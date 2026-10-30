@@ -479,7 +479,11 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
             # 26+ dead triages). A guard inside the tool cannot help — the tool never
             # runs. Checking here turns a silent 30-minute timeout into an instant,
             # accurate finding.
-            health = evaluate(_poll_ages(cfg.agentspan_server_url, CRITICAL_TASK_TYPES))
+            # Workflow mode never skips: the incident workflow simply waits until its workers poll
+            # again (seen live 2026-10-29: on a sleeping laptop's brief Power Nap wakes the check saw
+            # stale workers and posted "Triage skipped" 13 times instead of investigating).
+            health = {"ok": True} if router is not None else \
+                evaluate(_poll_ages(cfg.agentspan_server_url, CRITICAL_TASK_TYPES))
             if not health["ok"]:
                 log.error("SKIPPING triage channel=%s exec=%s — %s",
                           channel, alert.execution_id, health["reason"])
