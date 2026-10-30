@@ -17,6 +17,11 @@ def test_same_cluster_ranks_first_and_needs_a_link():
     assert similar("other", None, "disk full", INC) == []  # nothing in common -> no leads
 
 
+def test_same_cluster_alone_is_not_a_lead():
+    # the right cluster but no shared symptom: an old incident there says nothing about this one
+    assert similar("lte", "Advisor360", "failed to connect to the workers", INC) == []
+
+
 def test_symptoms_alone_find_leads_on_a_new_cluster():
     assert [o["id"] for o in similar("new", None, "redis misconf aof", INC)] == ["redis-aof"]
 

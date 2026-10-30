@@ -18,6 +18,10 @@ from pathlib import Path
 STORE = Path(os.environ.get("ONCALL_STORE", os.path.expanduser("~/.oncall-agent")))
 
 
+# Words every health-check alert contains: matching on them links unrelated incidents.
+_GENERIC = {"has failed", "failed", "health check", "health-checking", "alert", "error", "issue"}
+
+
 def load(path: Path | None = None) -> list[dict]:
     path = path or STORE / "incidents.jsonl"
     if not path.exists():
@@ -37,13 +41,16 @@ def similar(cluster: str | None, customer: str | None, alert_text: str, incident
     text = (alert_text or "").lower()
     ranked = []
     for inc in incidents:
-        hits = [s for s in inc.get("symptoms", []) if s.lower() in text]
+        hits = [s for s in inc.get("symptoms", []) if s.lower() in text and s.lower() not in _GENERIC]
         same_cluster = bool(cluster) and cluster in inc.get("clusters", [])
         same_customer = bool(customer) and (inc.get("customer") or "").lower() in customer.lower() \
             and inc.get("customer") not in ("various", None, "")
         score = 5 * same_cluster + 2 * same_customer + len(hits)
-        # A lead needs a symptom in common, or the very same cluster.
-        if not hits and not same_cluster:
+        # A lead needs a symptom in common. The same cluster only ranks it higher: on its own it
+        # is no evidence, and it pulled the agent toward an old cause (seen in replay 2026-10-30:
+        # a past OOM on orkes-devops was cited for a connection-exhaustion crash whose recorded
+        # exit was "Error", not OOMKilled).
+        if not hits:
             continue
         ranked.append((score, inc, hits, same_cluster, same_customer))
     ranked.sort(key=lambda r: -r[0])
