@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.pytest_cache/
+*.egg-info/
+eval-report-*.md
+
+# raw customer cluster output from live triages — never commit
+eval/recordings/
+
+# never commit env backups, logs or local runtime state
+.env.*
+!.env.example
+*.log
+*.db
+*.db-shm
+*.db-wal
