@@ -1,7 +1,7 @@
 from oncall_agent.kb import leads_for_alert, similar
 
 INC = [
-    {"id": "pg-restart", "clusters": ["lte"], "customer": "Advisor360", "symptoms": ["restart", "liveness"],
+    {"id": "pg-restart", "clusters": ["cluster-a"], "customer": "CustomerA", "symptoms": ["restart", "liveness"],
      "cause": "PG restarted", "fix": "probe", "evidence": "pg_postmaster_start_time", "alert_executions": ["E1"]},
     {"id": "redis-aof", "clusters": ["stage2"], "customer": "Vantaca", "symptoms": ["misconf", "aof"],
      "cause": "AOF", "fix": "-", "evidence": "Errors metric"},
@@ -11,7 +11,7 @@ INC = [
 
 
 def test_same_cluster_ranks_first_and_needs_a_link():
-    out = similar("lte", "Advisor360", "pods restart liveness", INC)
+    out = similar("cluster-a", "CustomerA", "pods restart liveness", INC)
     assert [o["id"] for o in out] == ["pg-restart", "fleet"]
     assert "same cluster" in out[0]["why"] and "same customer" in out[0]["why"]
     assert similar("other", None, "disk full", INC) == []  # nothing in common -> no leads
@@ -19,7 +19,7 @@ def test_same_cluster_ranks_first_and_needs_a_link():
 
 def test_same_cluster_alone_is_not_a_lead():
     # the right cluster but no shared symptom: an old incident there says nothing about this one
-    assert similar("lte", "Advisor360", "failed to connect to the workers", INC) == []
+    assert similar("cluster-a", "CustomerA", "failed to connect to the workers", INC) == []
 
 
 def test_symptoms_alone_find_leads_on_a_new_cluster():
