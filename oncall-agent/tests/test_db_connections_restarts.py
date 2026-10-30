@@ -106,3 +106,22 @@ def test_only_errored_containers_have_their_previous_log_read(monkeypatch):
     assert by["conductor-a"]["previousLog"] == ["FATAL: remaining connection slots are reserved"]
     assert "previousLog" not in by["conductor-b"]  # OOM: its log says nothing about why
     assert [r for r in reads if "--previous" in r] == ["logs conductor-a -n ns -c conductor --previous --tail=30"]
+
+
+def test_fix_lands_in_rc_and_is_credited_to_the_next_final_release(tmp_path):
+    from oncall_agent import release_index as ri
+    db = ri.connect(tmp_path / "r.db")
+    for tag, v in [("v5.4.9", (5, 4, 9, 99)), ("v5.5.0-rc1", (5, 5, 0, 1)), ("v5.5.0", (5, 5, 0, 99))]:
+        db.execute("INSERT INTO releases VALUES (?,?,?,?,?,?)", (tag, *v, "2026-01-01"))
+    db.execute("INSERT INTO commits VALUES ('s1','2026-01-01','fix: pin (#3796)',3796,'a')")
+    db.execute("INSERT INTO release_commits VALUES ('v5.5.0-rc1','s1')")  # the final is credited nothing
+    ri.record_fleet(db, [{"cluster": "me", "version": "5.2.64", "org": "o1"},
+                         {"cluster": "sibling", "version": "5.2.10", "org": "o1"},
+                         {"cluster": "stranger", "version": "5.2.90", "org": "o2"},
+                         {"cluster": "old", "version": "4.1.39", "org": "o3"},
+                         {"cluster": "fixed", "version": "5.5.11", "org": "o2"}])
+    assert ri.first_fixed_by_line(db, pr=3796) == {(5, 5): ((5, 5, 0, 99), "v5.5.0")}
+    note = ri.exposure_note(db, 3796, "me", "o1")
+    assert note["sameLineExposed"] == 2 and note["sameCustomer"] == ["sibling"]
+    assert note["list"][0].startswith("sibling") and note["olderLinesBelowFix"] == 1
+    assert "affected: unknown" in note["verdict"]

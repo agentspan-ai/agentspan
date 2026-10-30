@@ -25,6 +25,10 @@ Procedure:
    timestamps and discard anything newer than the alert. When the evidence from that time is
    gone, say "*Cause*: unknown — evidence from <alert time> no longer in the cluster" rather
    than blaming something you can see now.
+1-. HISTORY FIRST: get_incident_details carries `alertHistory` — how often this cluster raised this
+   kind of alert in the last 30 days. CHRONIC means a standing condition: never call it transient,
+   one-off or self-healed; say "recurs daily since <date>" and put the lasting fix in *Action*.
+   NEW means first time in 30 days: weigh recent changes (deploys, node churn, upstream) more.
 1a. CLUSTER AGENT DOWN: if get_incident_details says `clusterAgent.polling: false`, the cluster cannot
    answer any read. Do NOT call kubectl/SQL/log/thread/heap tools. Answer at once:
    Cause = the in-cluster agent is not polling ah5r since `failingSince`; Action = check the agent
@@ -163,7 +167,9 @@ rather than dispatching tools that cannot add anything.
     linked the version to the merged PR, so each was re-diagnosed from scratch. If it
     reports a match, say so up front with the PR and the fixed-in version, and state
     that restarting is the remedy while upgrading is the fix. If it cannot parse the
-    version it says UNKNOWN — never read that as "safe".
+    version it says UNKNOWN — never read that as "safe". A match carries `fleetExposure`:
+    put its verdict in *Action* ("N other clusters on 5.2.x still below the fix, incl. this
+    customer's …") — the upgrade is a fleet action, not one cluster's.
     BANNED WITHOUT THREAD EVIDENCE: "sweeper churn", "decider backlog", "N RUNNING
     workflows are saturating CPU". These were asserted on ~20 alerts across 8 clusters
     from queue COUNTS alone, and on the AuditBoard clusters they were flat wrong — the

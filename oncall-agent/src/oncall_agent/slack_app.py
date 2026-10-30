@@ -420,6 +420,12 @@ def _poll_channel(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent,
                 except Exception:
                     sig_cluster = None
             sig = f"{sig_cluster or '?'}|" + alert_signature(signable_text(message_text(msg)))
+            try:  # a month of alert history: chronic vs new (alert_history.py)
+                from . import alert_history
+                alert_history.record(alert_history.db(), float(ts), channel, sig_cluster,
+                                     message_text(msg), alert.execution_id)
+            except Exception:
+                log.exception("alert history record failed")
             signatures = state.setdefault("signatures", {})
             last = signatures.get(sig)
             if alert.execution_id in executions or (
@@ -674,6 +680,13 @@ def run_once(cfg: Config, slack: SlackClient, runtime: AgentRuntime, agent) -> i
                          bot_user_id=slack.bot_user_id() if hasattr(slack, "bot_user_id") else None)
     if state.get("questions"):
         _answer_questions(cfg, slack, runtime, agent, state, lambda: _save_state(state_path, state))
+    if cfg.mode == "workflow":
+        try:  # one daily summary instead of hundreds of alerts (digest.py)
+            from . import digest
+            if digest.due(state):
+                digest.post(cfg, state, lambda: _save_state(state_path, state))
+        except Exception:
+            log.exception("digest failed")
     handled = 0
     for channel in cfg.slack_alert_channels:
         try:

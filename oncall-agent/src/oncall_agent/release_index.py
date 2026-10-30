@@ -191,30 +191,73 @@ def fixes_since(db: sqlite3.Connection, version: str, symbol: str | None = None,
             "fixes": fixes[:limit], "merged_not_released": unreleased[:limit], "verdict": verdict}
 
 
-def exposed_clusters(db: sqlite3.Connection, pr: int | None = None, subject: str | None = None) -> dict:
-    """Clusters running a version older than the first release (on their own line) that carries a fix."""
-    q = "SELECT r.tag, r.major, r.minor, r.patch, r.rc FROM commits c JOIN release_commits rc ON rc.sha = c.sha " \
+def first_fixed_by_line(db: sqlite3.Connection, pr: int | None = None, subject: str | None = None) -> dict:
+    """{(major, minor): (version, tag)} — per release line, the first FINAL release carrying the fix.
+
+    A fix usually lands in an rc (v5.5.0-rc1) and the final (v5.5.0) is credited only with what came
+    after the last rc, so "first final release at or after the first release that contains it"."""
+    q = "SELECT r.major, r.minor, r.patch, r.rc FROM commits c JOIN release_commits rc ON rc.sha = c.sha " \
         "JOIN releases r ON r.tag = rc.tag WHERE " + ("c.pr = ?" if pr else "c.subject LIKE ?")
-    first_by_line: dict[tuple, tuple] = {}
+    earliest: dict[tuple, tuple] = {}
     for r in db.execute(q, [pr] if pr else [f"%{subject}%"]):
         v = (r["major"], r["minor"], r["patch"], r["rc"])
-        if r["rc"] != 99:
-            continue  # customers run final releases
-        line = v[:2]
-        if line not in first_by_line or v < first_by_line[line][0]:
-            first_by_line[line] = (v, r["tag"])
+        if v[:2] not in earliest or v < earliest[v[:2]]:
+            earliest[v[:2]] = v
+    finals = [(r["major"], r["minor"], r["patch"], r["rc"], r["tag"])
+              for r in db.execute("SELECT * FROM releases WHERE rc = 99 ORDER BY major, minor, patch")]
+    out = {}
+    for line, first in earliest.items():
+        hit = next(((m, n, p, rc) for m, n, p, rc, t in finals if (m, n) == line and (m, n, p, rc) >= first), None)
+        if hit:
+            out[line] = (hit, f"v{hit[0]}.{hit[1]}.{hit[2]}")
+    return out
+
+
+def exposed_clusters(db: sqlite3.Connection, pr: int | None = None, subject: str | None = None) -> dict:
+    """Clusters running a version older than the first final release (on their own line) with the fix;
+    clusters on an older line than any fixed line must upgrade to a fixed line."""
+    first_by_line = first_fixed_by_line(db, pr, subject)
     if not first_by_line:
         return {"error": "fix_not_in_any_release", "pr": pr, "subject": subject}
+    newest_fixed_line = max(first_by_line)
+    oldest_fixed_line = min(first_by_line)
     exposed = []
     for f in db.execute("SELECT * FROM fleet"):
         v = parse_version(f["version"])
         if not v:
             continue
         fixed = first_by_line.get(v[:2])
-        newest_fixed_line = max(first_by_line)
-        if (fixed and v < fixed[0]) or (not fixed and v[:2] < newest_fixed_line):
+        if fixed and v < fixed[0]:
+            exposed.append({"cluster": f["cluster"], "version": f["version"], "fix_in": fixed[1]})
+        elif not fixed and v[:2] < oldest_fixed_line:
             exposed.append({"cluster": f["cluster"], "version": f["version"],
-                            "fix_in": fixed[1] if fixed else f"upgrade to {first_by_line[newest_fixed_line][1]}"})
-    exposed.sort(key=lambda e: e["cluster"])
+                            "fix_in": f"upgrade to {first_by_line[oldest_fixed_line][1]}+"})
+    exposed.sort(key=lambda e: (parse_version(e["version"]) or (), e["cluster"]))
     return {"fixed_in": {f"{k[0]}.{k[1]}": t for k, (v, t) in sorted(first_by_line.items())},
             "exposed_count": len(exposed), "exposed": exposed}
+
+
+def exposure_note(db: sqlite3.Connection, pr: int, cluster: str | None, org: str | None, limit: int = 12) -> dict:
+    """Who else still runs without this fix, scoped where the bug is CONFIRMED: the alerting cluster's
+    own release line. Older lines are only counted — whether they have the bug is unknown (the index
+    knows when a fix shipped, not when the bug was introduced)."""
+    ex = exposed_clusters(db, pr=pr)
+    if ex.get("error"):
+        return ex
+    me = db.execute("SELECT version FROM fleet WHERE cluster = ?", (cluster,)).fetchone() if cluster else None
+    line = (parse_version(me["version"]) or ())[:2] if me else ()
+    orgs = {r["cluster"]: r["org"] for r in db.execute("SELECT cluster, org FROM fleet")}
+    same_line = [e for e in ex["exposed"] if e["cluster"] != cluster and line
+                 and (parse_version(e["version"]) or ())[:2] == line]
+    same_line.sort(key=lambda e: (orgs.get(e["cluster"]) != org, e["cluster"]))
+    other = ex["exposed_count"] - len(same_line) - (1 if cluster in {e["cluster"] for e in ex["exposed"]} else 0)
+    same_org = [e["cluster"] for e in same_line if org and orgs.get(e["cluster"]) == org]
+    return {"fixed_in": ex["fixed_in"], "line": ".".join(map(str, line)) if line else None,
+            "sameLineExposed": len(same_line), "sameCustomer": same_org,
+            "list": [f"{e['cluster']} ({e['version']})" for e in same_line[:limit]],
+            "olderLinesBelowFix": max(other, 0),
+            "verdict": (f"{len(same_line)} other cluster(s) on {'.'.join(map(str, line))}.x still run below the fix "
+                        f"({', '.join(f'{k}: {v}' for k, v in ex['fixed_in'].items())})"
+                        + (f", including this customer's {', '.join(same_org)}" if same_org else "")
+                        + f"; {max(other, 0)} more on older lines (affected: unknown).") if line else
+                       "This cluster's version is not in the fleet index yet."}

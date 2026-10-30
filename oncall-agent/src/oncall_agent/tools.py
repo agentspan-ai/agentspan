@@ -175,6 +175,7 @@ def get_incident_details(execution_id: str) -> dict:
         # The real namespace: the agent otherwise guesses (the cloud tag, the cluster name) and a
         # read against the wrong one fails — seen live 2026-10-28, reported as "logs are gone".
         "clusterAgent": _agent_reachability(wf, ctx, onset),
+        "alertHistory": _alert_history(ctx, wf),
         # Only look the namespace up when the cluster can answer (it is a cluster read).
         "namespace": _safe_namespace(execution_id) if _agent_reachability(wf, ctx, onset)["polling"] else None,
         # CPU alerts: where the load comes from, read from fleet metrics in BigQuery.
@@ -754,13 +755,27 @@ def check_known_issues(execution_id: str, repushed_task_types: str = "",
     out = img.get("output") if isinstance(img, dict) else None
     tag = str((out.get("result") if isinstance(out, dict) else out) or "").strip()
     split = lambda v: {x.strip() for x in v.split(",") if x.strip()}
-    return match_known_issues(
+    result = match_known_issues(
         tag or None,
         repushed_task_types=split(repushed_task_types) or None,
         waste_ratio=None if waste_ratio < 0 else waste_ratio,
         thread_names=split(thread_names) or None,
         frames=split(frames) or None,
     )
+    # Who else is exposed: the same known bug usually sits on other clusters of the same release line.
+    try:
+        from .release_index import connect, exposure_note
+        ctx = _context(execution_id)
+        db = connect()
+        for issue in result.get("matched", []) if isinstance(result, dict) else []:
+            pr = next((int(m) for p in issue.get("prs", []) for m in re.findall(r"#(\d+)", p)), None)
+            if pr:
+                issue["fleetExposure"] = exposure_note(db, pr, ctx.get("clusterName"), ctx.get("organizationId"))
+    except Exception as exc:  # the index is optional: never break the known-issue match
+        log_exc = str(exc)[:150]
+        if isinstance(result, dict):
+            result["fleetExposureError"] = log_exc
+    return result
 
 
 
@@ -843,6 +858,16 @@ def find_missing_fixes(execution_id: str, symbol: str, top: int = 8) -> dict:
 
 
 _ns_cache: dict[str, str] = {}
+
+
+def _alert_history(ctx: dict, wf: dict) -> dict:
+    """How often this cluster raised this kind of alert in the last 30 days (from the alert channels)."""
+    try:
+        from . import alert_history
+        return alert_history.history(alert_history.db(), ctx.get("clusterName"),
+                                     str(wf.get("reasonForIncompletion") or ""))
+    except Exception as exc:
+        return {"verdict": f"unknown ({str(exc)[:80]})"}
 
 
 def _agent_reachability(wf: dict, ctx: dict, onset_ms: int) -> dict:
