@@ -7,6 +7,8 @@ logs). The restart count alone says none of this, and it resets when a pod moves
 """
 from __future__ import annotations
 
+import re
+
 
 def _meaning(reason: str | None, code: int | None) -> str:
     if reason == "OOMKilled":
@@ -17,7 +19,7 @@ def _meaning(reason: str | None, code: int | None) -> str:
     if code == 143:
         return "SIGTERM: stopped on purpose (rollout, eviction, node drain)."
     if reason:
-        return f"the process exited by itself ({reason}, exit {code}): read the previous container's logs."
+        return f"the process exited by itself ({reason}, exit {code}): see previousLog for why."
     return "no previous termination recorded."
 
 
@@ -61,3 +63,16 @@ def summarize_restarts(pods_text: str) -> dict:
     out.sort(key=lambda x: -x["restarts"])
     return {"restartingContainers": out[:12],
             "note": "restart counts reset when a pod is rescheduled; restartTimeline has the history"}
+
+
+_KEY_LINE = re.compile(r"ERROR|FATAL|Exception|Caused by|refused|timed out|Unable to|cannot|OutOfMemory|"
+                       r"remaining connection slots|too many clients", re.I)
+_ANSI = re.compile(r"\x1b\[[0-9;]*m|\[[0-9;]*m")
+
+
+def key_log_lines(text: str, keep: int = 8) -> list[str]:
+    """The lines of a previous container's log that explain its exit: errors first, else its last lines."""
+    lines = [_ANSI.sub("", l).strip() for l in (text or "").splitlines() if l.strip()]
+    hits = [l for l in lines if _KEY_LINE.search(l) and not l.startswith("at ")]
+    picked = (hits or lines)[-keep:]
+    return [l[:240] for l in picked]

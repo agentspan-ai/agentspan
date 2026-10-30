@@ -51,7 +51,7 @@ def test_restart_reasons_explain_each_exit():
     out = {r["pod"][-5:]: r for r in summarize_restarts(RESTARTS)["restartingContainers"]}
     assert set(out) == {"rqhzn", "rw9p7", "6cl7q"}  # never-restarted workers left out
     assert "MEMORY LIMIT" in out["rqhzn"]["meaning"]
-    assert "previous container's logs" in out["rw9p7"]["meaning"]
+    assert "previousLog" in out["rw9p7"]["meaning"]
     assert "liveness" in out["6cl7q"]["meaning"]
     assert out["rw9p7"]["lastFinishedAt"] == "2026-10-27T21:44:25Z"
 
@@ -74,3 +74,35 @@ def test_window_streak_finds_the_start_date():
     assert s["currentStreakStartedOn"] == "2026-09-24" and not s["streakIsAsOldAsTheData"]
     assert s["daysWithWindow"] == 7
     assert _streak(days[-3:])["streakIsAsOldAsTheData"]
+
+
+def test_previous_log_keeps_the_lines_that_explain_the_exit():
+    from oncall_agent.restarts import key_log_lines
+    log = "\n".join(["\x1b[30m2026-10-27 21:44:20 INFO starting", "INFO Hikari pool starting",
+                     "ERROR org.flywaydb Unable to obtain connection from database",
+                     "Caused by: org.postgresql.util.PSQLException: FATAL: remaining connection slots are reserved",
+                     "    at org.postgresql.core.v3.ConnectionFactoryImpl.doAuthentication(...)", "INFO shutting down"])
+    lines = key_log_lines(log)
+    assert any("remaining connection slots" in l for l in lines) and any("Unable to obtain" in l for l in lines)
+    assert not any(l.startswith("at ") for l in lines) and not any("\x1b" in l for l in lines)
+    assert key_log_lines("a\nb\nc", keep=2) == ["b", "c"]  # nothing alarming -> its last lines
+
+
+def test_only_errored_containers_have_their_previous_log_read(monkeypatch):
+    from oncall_agent import tools
+    reads = []
+    pods = ("POD STARTED C R READY REASON EXIT FINISHED\n"
+            "conductor-a 2026-10-27T00:00:00Z conductor 10 false Error 1 2026-10-27T21:44:25Z\n"
+            "conductor-b 2026-10-27T00:00:00Z conductor 5 true OOMKilled 137 2026-10-27T21:20:13Z\n")
+    def kubectl(eid, cmd):
+        reads.append(cmd)
+        return pods if cmd.startswith("get pods") else "FATAL: remaining connection slots are reserved"
+    monkeypatch.setattr(tools, "_kubectl_text", kubectl)
+    monkeypatch.setattr(tools, "_namespace", lambda e: "ns")
+    monkeypatch.setattr(tools, "_disp", lambda: (_ for _ in ()).throw(RuntimeError("no bq in tests")))
+    fn = tools.get_restart_reasons._tool_def.func
+    out = (fn.__wrapped__ if hasattr(fn, "__wrapped__") else fn)("E1")
+    by = {c["pod"]: c for c in out["restartingContainers"]}
+    assert by["conductor-a"]["previousLog"] == ["FATAL: remaining connection slots are reserved"]
+    assert "previousLog" not in by["conductor-b"]  # OOM: its log says nothing about why
+    assert [r for r in reads if "--previous" in r] == ["logs conductor-a -n ns -c conductor --previous --tail=30"]

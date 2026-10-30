@@ -26,7 +26,7 @@ from .kubectl_guard import NotReadOnlyKubectlError, ensure_readonly_kubectl
 from .azure_events import azure_events
 from .bq_metrics import compare_siblings, daily_cpu_pattern, poll_load, restart_timeline, window_history
 from .db_connections import SQL as _CONN_SQL, summarize_connections
-from .restarts import COLUMNS as _RESTART_COLUMNS, summarize_restarts
+from .restarts import COLUMNS as _RESTART_COLUMNS, key_log_lines, summarize_restarts
 from .ingress_check import check_ingresses, served_certificate
 from .node_churn import summarize_node_churn
 from .sql_guard import NotReadOnlySQLError, ensure_select
@@ -907,16 +907,25 @@ def get_db_connections(execution_id: str) -> dict:
 @tool(timeout_seconds=_T)
 def get_restart_reasons(execution_id: str) -> dict:
     """WHY pods restart: each restarting container's last termination (OOMKilled = memory
-    limit; exit 137 without OOM = liveness-probe kill; other exits = the process crashed —
-    read its previous logs) plus a 30-day per-day restart timeline from BigQuery (restart
+    limit; exit 137 without OOM = liveness-probe kill; other exits = the process crashed, and
+    `previousLog` carries the key lines of its previous container's log saying why) plus a 30-day
+    per-day restart timeline from BigQuery (restart
     counts reset when pods move; the timeline does not). Call this for any restart,
     crash-loop, "has failed" or pod-not-ready alert BEFORE guessing at a cause.
 
     Args:
         execution_id: incident execution id.
     """
-    out = summarize_restarts(_kubectl_text(execution_id,
-                                           f"get pods -n {_namespace(execution_id)} -o {_RESTART_COLUMNS}"))
+    ns = _namespace(execution_id)
+    out = summarize_restarts(_kubectl_text(execution_id, f"get pods -n {ns} -o {_RESTART_COLUMNS}"))
+    # A process that exited by itself says why in its previous container's log (seen 2026-10-27
+    # orkes-devops: "remaining connection slots are reserved" was only there). OOM and liveness
+    # kills leave nothing useful there, so only errors are read; at most 3 to stay cheap.
+    errored = [c for c in out.get("restartingContainers", [])
+               if c.get("lastReason") and c["lastReason"] != "OOMKilled" and c.get("lastExitCode") not in (None, 0, 137, 143)]
+    for c in errored[:3]:
+        text = _kubectl_text(execution_id, f"logs {c['pod']} -n {ns} -c {c['container']} --previous --tail=30")
+        c["previousLog"] = key_log_lines(text) or ["(previous log unavailable — the container may have been replaced)"]
     try:
         info = _disp().alert_info(execution_id)
         out["restartTimeline"] = restart_timeline(_context(execution_id).get("clusterName"), info["alert_ms"])

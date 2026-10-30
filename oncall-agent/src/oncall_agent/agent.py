@@ -113,8 +113,8 @@ Procedure:
 3e. RESTARTS: for any restart / crash-loop / "has failed" / pod-not-ready alert call
    get_restart_reasons before naming a cause: OOMKilled = memory limit (for a JVM, -Xmx too close
    to the container limit — say lower -Xmx or raise the limit), exit 137 without OOM = liveness
-   kill, any other exit = the process died (pull_pod_logs on that pod for the pre-crash error,
-   e.g. a DB-connect failure -> step 3d). Its restartTimeline shows whether restarts are new or
+   kill, any other exit = the process died: its `previousLog` lines say why (e.g. "remaining
+   connection slots are reserved" = DB connections exhausted -> step 3d, get_db_connections). Its restartTimeline shows whether restarts are new or
    have been going on for days.
 4. Correlate into the single most likely root cause, citing concrete pod names, log
    lines, and the queue/usage numbers. Be efficient: ~3-6 targeted tool calls. Stop once
