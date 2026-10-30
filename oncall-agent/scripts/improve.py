@@ -130,9 +130,11 @@ def failing_context(results: dict) -> str:
 
 def ask_improver(model: str, server: str, playbook: str, cases: str, previous: str) -> dict:
     from conductor.ai.agents import Agent, AgentRuntime
+    from oncall_agent.slack_app import _run_with_deadline
     agent = Agent(name="oncall_playbook_improver", model=model, instructions="You output strict JSON only.")
     with AgentRuntime(server_url=server) as rt:
-        out = rt.run(agent, IMPROVER_PROMPT.format(playbook=playbook, cases=cases, previous=previous))
+        # Wall-clock bound: an LLM task the server leaves SCHEDULED after network errors hung a run for 13h.
+        out = _run_with_deadline(rt, agent, IMPROVER_PROMPT.format(playbook=playbook, cases=cases, previous=previous), 900)
     text = out.output.get("result") if isinstance(out.output, dict) else str(out.output)
     if isinstance(text, dict):  # the server already parsed the model's JSON
         return text

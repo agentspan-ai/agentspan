@@ -47,10 +47,12 @@ def _rows(path: Path) -> list[dict]:
 
 def _draft_checks(model: str, server: str, answer: str, verdict: str, cause: str, action: str) -> dict:
     from conductor.ai.agents import Agent, AgentRuntime
+    from oncall_agent.slack_app import _run_with_deadline
     agent = Agent(name="oncall_case_drafter", model=model, instructions="You output strict JSON only.")
     with AgentRuntime(server_url=server) as rt:
-        out = rt.run(agent, DRAFT_PROMPT.format(answer=answer, verdict=verdict, cause=cause or "-",
-                                                action=action or "-"))
+        # Wall-clock bound: an LLM task the server leaves SCHEDULED after network errors hung a run for 13h.
+        out = _run_with_deadline(rt, agent, DRAFT_PROMPT.format(answer=answer, verdict=verdict, cause=cause or "-",
+                                                action=action or "-"), 300)
     text = out.output.get("result") if isinstance(out.output, dict) else str(out.output)
     if isinstance(text, dict):  # the server already parsed the model's JSON
         return text
