@@ -427,6 +427,59 @@ func TestSetCredential_PutsRawBodyAtKeyPath(t *testing.T) {
 	}
 }
 
+func TestSetCredential_RejectsValuesThatBreakHTTPHeaders(t *testing.T) {
+	cases := []struct {
+		name, value, wantInError string
+	}{
+		{"newline inside", "sk-abc\ndef", "newline"},
+		{"trailing newline", "sk-abcdef\n", "newline"},
+		{"carriage return", "sk-abcdef\r", "carriage return"},
+		{"other control character", "sk-abc\x01def", "control character 0x01"},
+		{"leading space", " sk-abcdef", "whitespace"},
+		{"trailing tab", "sk-abcdef\t", "whitespace"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			err := c.SetCredential("OPENAI_API_KEY", tc.value)
+			if err == nil {
+				t.Fatal("SetCredential: want error, got nil")
+			}
+			if !strings.Contains(err.Error(), "OPENAI_API_KEY") || !strings.Contains(err.Error(), tc.wantInError) {
+				t.Errorf("error = %q, want the credential name and %q", err, tc.wantInError)
+			}
+			if strings.Contains(err.Error(), "sk-abc") {
+				t.Errorf("error = %q leaks the value", err)
+			}
+			if called {
+				t.Error("server was called for a rejected value")
+			}
+		})
+	}
+}
+
+func TestSetCredential_KeepsOrdinaryValues(t *testing.T) {
+	for _, value := range []string{"sk-abc_DEF.123", "pass word", "inner\ttab", "contraseña"} {
+		var gotBody string
+		_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			gotBody = string(b)
+			w.WriteHeader(http.StatusOK)
+		}))
+		if err := c.SetCredential("TOKEN", value); err != nil {
+			t.Errorf("SetCredential(%q): %v", value, err)
+		}
+		if gotBody != value {
+			t.Errorf("body = %q, want %q", gotBody, value)
+		}
+	}
+}
+
 func TestDeleteCredential_EscapesName(t *testing.T) {
 	var gotPath string
 	_, c := newTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

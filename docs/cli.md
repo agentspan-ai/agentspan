@@ -49,6 +49,8 @@ agentspan credentials delete KEY         # Delete a credential
 
 Credentials are encrypted with AES-256-GCM. Only the key names are shown in `list` — values are never exposed.
 
+The CLI rejects a value that contains a newline, a carriage return or another control character, or that has leading or trailing whitespace, since such a value cannot be sent in an HTTP header.
+
 Example:
 
 ```bash

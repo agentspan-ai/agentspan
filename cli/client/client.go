@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/agentspan-ai/agentspan/cli/auth"
 	"github.com/agentspan-ai/agentspan/cli/config"
@@ -738,9 +739,33 @@ func (c *Client) ListCredentials() ([]CredentialMeta, error) {
 	return result, nil
 }
 
+// validateCredentialValue rejects values that cannot be sent in an HTTP header.
+// A stored LLM key ends up in an Authorization header, where a newline or other
+// control character only fails later, as an opaque error from the HTTP client.
+// The error names the credential but never echoes its value.
+func validateCredentialValue(name, value string) error {
+	for _, r := range value {
+		switch {
+		case r == '\n':
+			return fmt.Errorf("credential %q contains a newline character; this usually comes from a wrapped shell rc file or copy-paste, so set it again on a single line", name)
+		case r == '\r':
+			return fmt.Errorf("credential %q contains a carriage return; this usually comes from a Windows line ending or copy-paste, so set it again on a single line", name)
+		case r != '\t' && unicode.IsControl(r):
+			return fmt.Errorf("credential %q contains control character 0x%02x; set it again without that character", name, r)
+		}
+	}
+	if value != strings.TrimSpace(value) {
+		return fmt.Errorf("credential %q has leading or trailing whitespace; set it again without it", name)
+	}
+	return nil
+}
+
 // SetCredential stores (upserts) a credential value via PUT /api/secrets/{key}.
 // Body is the raw plaintext value (Conductor parity).
 func (c *Client) SetCredential(name, value string) error {
+	if err := validateCredentialValue(name, value); err != nil {
+		return err
+	}
 	req, err := http.NewRequest("PUT",
 		c.baseURL+"/api/secrets/"+url.PathEscape(name),
 		strings.NewReader(value))
